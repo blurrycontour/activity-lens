@@ -1,0 +1,16 @@
+# Build context excludes — keep the image small and builds reproducible.
+.git
+.github
+**/node_modules
+frontend/build
+frontend/.svelte-kit
+backend/internal/web/dist
+data
+*.db
+*.db-shm
+*.db-wal
+*.log
+.env
+.env.*
+README.md
+LICENSE

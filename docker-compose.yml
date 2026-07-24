@@ -1,0 +1,18 @@
+services:
+  activity-lens:
+    restart: unless-stopped
+    image: activity-lens:latest
+    container_name: activity-lens
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${VERSION:-dev}
+    # Run as the host user that owns ./ch_data so the bind mount is writable.
+    user: "1000:1000"
+    environment:
+
+    volumes:
+      - ./.data:/data
+    ports:
+      - 9090:8080
