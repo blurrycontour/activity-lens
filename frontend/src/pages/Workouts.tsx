@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
-import { workouts, fmtDuration, fmtDist, fmtPace, TYPE_COLOR, TYPE_ICON, type WorkoutType, type Workout } from '../data/workouts'
+import { fmtDuration, fmtDist, fmtPace, TYPE_COLOR, TYPE_ICON, type WorkoutType, type Workout } from '../data/workouts'
+import { useWorkouts } from '../context/WorkoutsContext'
 import { Search, ChevronRight, Clock, Mountain, Flame, Download, Plus } from 'lucide-react'
 import TypeDropdown from '../components/TypeDropdown'
 
@@ -9,6 +10,7 @@ interface WorkoutsProps {
 }
 
 export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
+  const { workouts, loading } = useWorkouts()
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState<WorkoutType | 'All'>('All')
   const [sortBy, setSortBy] = useState<'date' | 'distance' | 'duration'>('date')
@@ -30,7 +32,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
       return b.duration - a.duration
     })
     return result
-  }, [search, typeFilter, sortBy, dateRange])
+  }, [workouts, search, typeFilter, sortBy, dateRange])
 
   return (
     <div>
@@ -76,8 +78,8 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
       <div className="page-content" style={{ padding: '16px 24px' }}>
         {filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-3)' }}>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>🔍</div>
-            <p style={{ fontSize: 14 }}>No workouts found</p>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>{loading ? '⏳' : '🔍'}</div>
+            <p style={{ fontSize: 14 }}>{loading ? 'Loading workouts…' : 'No workouts found'}</p>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

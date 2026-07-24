@@ -1,4 +1,7 @@
+import { useState } from 'react'
 import { X, Check } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
+import { api, ApiError } from '../lib/api'
 
 interface SettingsModalProps {
   onClose: () => void
@@ -24,9 +27,49 @@ export function applyAccent(value: string) {
 }
 
 export default function SettingsModal({ onClose, accent, onAccentChange }: SettingsModalProps) {
+  const { user, setUser } = useAuth()
+  const [displayName, setDisplayName] = useState(user?.displayName ?? '')
+  const [email, setEmail] = useState(user?.email ?? '')
+  const [profileMsg, setProfileMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [profileBusy, setProfileBusy] = useState(false)
+
+  const [currentPw, setCurrentPw] = useState('')
+  const [newPw, setNewPw] = useState('')
+  const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [pwBusy, setPwBusy] = useState(false)
+
   function handleAccent(value: string) {
     onAccentChange(value)
     applyAccent(value)
+  }
+
+  async function saveProfile() {
+    setProfileBusy(true)
+    setProfileMsg(null)
+    try {
+      const { user: updated } = await api.updateProfile(displayName.trim(), email.trim())
+      setUser(updated)
+      setProfileMsg({ ok: true, text: 'Profile updated' })
+    } catch (err) {
+      setProfileMsg({ ok: false, text: err instanceof ApiError ? err.message : 'Update failed' })
+    } finally {
+      setProfileBusy(false)
+    }
+  }
+
+  async function changePassword() {
+    setPwBusy(true)
+    setPwMsg(null)
+    try {
+      await api.changePassword(currentPw, newPw)
+      setCurrentPw('')
+      setNewPw('')
+      setPwMsg({ ok: true, text: 'Password changed' })
+    } catch (err) {
+      setPwMsg({ ok: false, text: err instanceof ApiError ? err.message : 'Change failed' })
+    } finally {
+      setPwBusy(false)
+    }
   }
 
   return (
@@ -37,10 +80,56 @@ export default function SettingsModal({ onClose, accent, onAccentChange }: Setti
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
             <div>
               <h2 style={{ fontSize: 16, fontWeight: 700 }}>Settings</h2>
-              <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>Preferences & appearance</p>
+              <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>Account & appearance</p>
             </div>
             <button className="btn-icon" onClick={onClose}><X size={16} /></button>
           </div>
+
+          {/* Account */}
+          <section style={{ marginBottom: 24 }}>
+            <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Account</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div>
+                <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Display Name</label>
+                <input className="input" style={{ width: '100%' }} value={displayName} onChange={e => setDisplayName(e.target.value)} />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Email</label>
+                <input className="input" type="email" style={{ width: '100%' }} value={email} onChange={e => setEmail(e.target.value)} />
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
+              <button className="btn btn-primary" onClick={saveProfile} disabled={profileBusy} style={{ opacity: profileBusy ? 0.5 : 1 }}>
+                {profileBusy ? 'Saving…' : 'Save Profile'}
+              </button>
+              {profileMsg && (
+                <span style={{ fontSize: 12, color: profileMsg.ok ? 'var(--primary)' : '#ef4444' }}>{profileMsg.text}</span>
+              )}
+            </div>
+          </section>
+
+          {/* Password */}
+          <section style={{ marginBottom: 24 }}>
+            <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Change Password</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div>
+                <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Current Password</label>
+                <input className="input" type="password" autoComplete="current-password" style={{ width: '100%' }} value={currentPw} onChange={e => setCurrentPw(e.target.value)} />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>New Password</label>
+                <input className="input" type="password" autoComplete="new-password" style={{ width: '100%' }} value={newPw} onChange={e => setNewPw(e.target.value)} />
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
+              <button className="btn btn-ghost" onClick={changePassword} disabled={pwBusy || !currentPw || !newPw} style={{ opacity: (pwBusy || !currentPw || !newPw) ? 0.5 : 1 }}>
+                {pwBusy ? 'Updating…' : 'Update Password'}
+              </button>
+              {pwMsg && (
+                <span style={{ fontSize: 12, color: pwMsg.ok ? 'var(--primary)' : '#ef4444' }}>{pwMsg.text}</span>
+              )}
+            </div>
+          </section>
 
           {/* Accent color */}
           <section style={{ marginBottom: 24 }}>
@@ -128,8 +217,7 @@ export default function SettingsModal({ onClose, accent, onAccentChange }: Setti
           </section>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 24 }}>
-            <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-            <button className="btn btn-primary" onClick={onClose}>Save Settings</button>
+            <button className="btn btn-primary" onClick={onClose}>Done</button>
           </div>
         </div>
       </div>

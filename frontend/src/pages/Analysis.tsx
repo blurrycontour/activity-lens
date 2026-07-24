@@ -1,50 +1,57 @@
-import { workouts, TYPE_COLOR, type WorkoutType } from '../data/workouts'
+import { useMemo } from 'react'
+import { TYPE_COLOR, type WorkoutType, type Workout } from '../data/workouts'
+import { useWorkouts } from '../context/WorkoutsContext'
 import {
   ScatterChart, Scatter, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   BarChart, Bar,
 } from 'recharts'
 import { TrendingUp, Award, Target, Zap } from 'lucide-react'
 
-// Personal records per type
-const PRs: Partial<Record<WorkoutType, { longest: typeof workouts[0]; fastest: typeof workouts[0] | null; highest: typeof workouts[0] }>> = {}
-for (const type of ['Run', 'Ride', 'Hike', 'Swim', 'Strength'] as WorkoutType[]) {
-  const tw = workouts.filter(w => w.type === type)
-  if (tw.length === 0) continue
-  PRs[type] = {
-    longest: tw.reduce((a, b) => a.distance > b.distance ? a : b),
-    fastest: tw.filter(w => w.avgPace).length > 0 ? tw.filter(w => w.avgPace).reduce((a, b) => a.avgPace < b.avgPace ? a : b) : null,
-    highest: tw.reduce((a, b) => a.elevationGain > b.elevationGain ? a : b),
-  }
-}
-
-// HR vs Pace scatter data (runs only)
-const scatterData = workouts
-  .filter(w => w.type === 'Run' && w.avgPace > 0)
-  .map(w => ({ hr: w.avgHR, pace: Math.round(w.avgPace / 6) / 10, name: w.name, date: w.date, dist: (w.distance / 1000).toFixed(1) }))
-
-// Calories by type bar
-const calByType = (['Run', 'Ride', 'Hike', 'Swim', 'Strength'] as WorkoutType[]).map(t => ({
-  type: t,
-  total: Math.round(workouts.filter(w => w.type === t).reduce((a, w) => a + w.calories, 0)),
-  count: workouts.filter(w => w.type === t).length,
-  fill: TYPE_COLOR[t],
-})).filter(d => d.count > 0)
-
-// Training load (CTL simulation)
-const trainingLoad = (() => {
-  const result = []
-  for (let i = 60; i >= 0; i--) {
-    const d = new Date()
-    d.setDate(d.getDate() - i)
-    const ds = d.toISOString().split('T')[0]
-    const dayW = workouts.filter(w => w.date === ds)
-    const tss = dayW.reduce((a, w) => a + Math.round(w.duration / 3600 * w.avgHR / 150 * 100), 0)
-    result.push({ date: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), tss, load: Math.round(tss * 0.85 + Math.random() * 5) })
-  }
-  return result
-})()
+type PR = { longest: Workout; fastest: Workout | null; highest: Workout }
 
 export default function Analysis() {
+  const { workouts } = useWorkouts()
+
+  const { PRs, scatterData, calByType, trainingLoad } = useMemo(() => {
+    // Personal records per type
+    const PRs: Partial<Record<WorkoutType, PR>> = {}
+    for (const type of ['Run', 'Ride', 'Hike', 'Swim', 'Strength'] as WorkoutType[]) {
+      const tw = workouts.filter(w => w.type === type)
+      if (tw.length === 0) continue
+      PRs[type] = {
+        longest: tw.reduce((a, b) => a.distance > b.distance ? a : b),
+        fastest: tw.filter(w => w.avgPace).length > 0 ? tw.filter(w => w.avgPace).reduce((a, b) => a.avgPace < b.avgPace ? a : b) : null,
+        highest: tw.reduce((a, b) => a.elevationGain > b.elevationGain ? a : b),
+      }
+    }
+
+    // HR vs Pace scatter data (runs only)
+    const scatterData = workouts
+      .filter(w => w.type === 'Run' && w.avgPace > 0)
+      .map(w => ({ hr: w.avgHR, pace: Math.round(w.avgPace / 6) / 10, name: w.name, date: w.date, dist: (w.distance / 1000).toFixed(1) }))
+
+    // Calories by type bar
+    const calByType = (['Run', 'Ride', 'Hike', 'Swim', 'Strength'] as WorkoutType[]).map(t => ({
+      type: t,
+      total: Math.round(workouts.filter(w => w.type === t).reduce((a, w) => a + w.calories, 0)),
+      count: workouts.filter(w => w.type === t).length,
+      fill: TYPE_COLOR[t],
+    })).filter(d => d.count > 0)
+
+    // Training load (TSS-equivalent, 60 days)
+    const trainingLoad: { date: string; tss: number; load: number }[] = []
+    for (let i = 60; i >= 0; i--) {
+      const dt = new Date()
+      dt.setDate(dt.getDate() - i)
+      const ds = dt.toISOString().split('T')[0]
+      const dayW = workouts.filter(w => w.date === ds)
+      const tss = dayW.reduce((a, w) => a + Math.round(w.duration / 3600 * w.avgHR / 150 * 100), 0)
+      trainingLoad.push({ date: dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), tss, load: Math.round(tss * 0.85) })
+    }
+
+    return { PRs, scatterData, calByType, trainingLoad }
+  }, [workouts])
+
   return (
     <div>
       <div className="page-header">

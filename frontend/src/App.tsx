@@ -12,7 +12,10 @@ import Heatmap from './pages/Heatmap'
 import Timeline from './pages/Timeline'
 import Analysis from './pages/Analysis'
 import Help from './pages/Help'
+import Login from './pages/Login'
 import { type Workout } from './data/workouts'
+import { useAuth } from './context/AuthContext'
+import { WorkoutsProvider } from './context/WorkoutsContext'
 
 type Page = 'dashboard' | 'workouts' | 'heatmap' | 'timeline' | 'analysis' | 'help'
 
@@ -33,6 +36,7 @@ function applyTheme(mode: ThemeMode) {
 }
 
 export default function App() {
+  const { user, loading, logout } = useAuth()
   const [page, setPage] = useState<Page>('dashboard')
   const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -129,8 +133,21 @@ export default function App() {
     sidebarCollapsed && !isMobile ? 'collapsed' : '',
   ].filter(Boolean).join(' ')
 
+  if (loading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', color: 'var(--text-3)', fontSize: 13 }}>
+        Loading…
+      </div>
+    )
+  }
+
+  if (!user) {
+    return <Login />
+  }
+
   return (
-    <div className={layoutClass}>
+    <WorkoutsProvider>
+      <div className={layoutClass}>
       <TopBar
         onToggleSidebar={toggleSidebar}
         themeMode={themeMode}
@@ -179,6 +196,8 @@ export default function App() {
         <UserMenu
           onClose={() => setShowUserMenu(false)}
           onSettings={() => setShowSettings(true)}
+          onLogout={logout}
+          user={user}
         />
       )}
       {showImport && <ImportModal onClose={() => setShowImport(false)} />}
@@ -189,6 +208,7 @@ export default function App() {
           onAccentChange={setAccent}
         />
       )}
-    </div>
+      </div>
+    </WorkoutsProvider>
   )
 }

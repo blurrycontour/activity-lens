@@ -4,14 +4,24 @@ services:
     image: activity-lens:latest
     container_name: activity-lens
     build:
+      # Self-contained: go-authkit is pulled from the Go module proxy, so the
+      # build needs only this directory and works the same locally and in CI.
       context: .
       dockerfile: Dockerfile
       args:
         VERSION: ${VERSION:-dev}
-    # Run as the host user that owns ./ch_data so the bind mount is writable.
+    # Run as the host user that owns ./.data so the bind mount is writable.
     user: "1000:1000"
     environment:
-
+      AL_ADDR: ":8080"
+      AL_DATA_DIR: "/data"
+      # Bootstrap admin, created on first run if it does not exist.
+      AL_ADMIN_USER: "${AL_ADMIN_USER:-admin}"
+      AL_ADMIN_EMAIL: "${AL_ADMIN_EMAIL:-admin@example.com}"
+      AL_ADMIN_PASS: "${AL_ADMIN_PASS:-changeme}"
+      # Set to true when serving over HTTPS (behind a TLS-terminating proxy).
+      AL_SECURE_COOKIES: "${AL_SECURE_COOKIES:-false}"
+      AL_ALLOW_REGISTRATION: "${AL_ALLOW_REGISTRATION:-false}"
     volumes:
       - ./.data:/data
     ports:

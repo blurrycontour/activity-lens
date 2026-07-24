@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react'
-import { workouts, type WorkoutType } from '../data/workouts'
+import { type WorkoutType } from '../data/workouts'
+import { useWorkouts } from '../context/WorkoutsContext'
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 export default function Heatmap() {
+  const { workouts } = useWorkouts()
   const [hoveredDay, setHoveredDay] = useState<{ date: string; count: number; duration: number } | null>(null)
   const [typeFilter, setTypeFilter] = useState<WorkoutType | 'All'>('All')
 

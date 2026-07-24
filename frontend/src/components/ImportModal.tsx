@@ -1,5 +1,7 @@
 import { useState, useRef } from 'react'
 import { Upload, X, CheckCircle, FileText, AlertCircle } from 'lucide-react'
+import { useWorkouts } from '../context/WorkoutsContext'
+import { api, ApiError } from '../lib/api'
 
 interface ImportModalProps {
   onClose: () => void
@@ -7,11 +9,26 @@ interface ImportModalProps {
 
 type Tab = 'file' | 'manual'
 
+const SUPPORTED = ['gpx', 'tcx']
+
+// parseDuration turns "mm:ss" or "h:mm:ss" into seconds (0 when empty/invalid).
+function parseDuration(v: string): number {
+  const parts = v.split(':').map(p => parseInt(p, 10))
+  if (parts.some(isNaN)) return 0
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2]
+  if (parts.length === 2) return parts[0] * 60 + parts[1]
+  if (parts.length === 1) return parts[0]
+  return 0
+}
+
 export default function ImportModal({ onClose }: ImportModalProps) {
+  const { refresh } = useWorkouts()
   const [tab, setTab] = useState<Tab>('file')
   const [dragging, setDragging] = useState(false)
   const [file, setFile] = useState<File | null>(null)
   const [done, setDone] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   // Manual form state
@@ -22,6 +39,7 @@ export default function ImportModal({ onClose }: ImportModalProps) {
 
   function handleFile(f: File) {
     setFile(f)
+    setError(null)
   }
 
   function handleDrop(e: React.DragEvent) {
@@ -36,11 +54,38 @@ export default function ImportModal({ onClose }: ImportModalProps) {
     if (f) handleFile(f)
   }
 
-  function handleImport() {
-    setDone(true)
+  async function handleImport() {
+    setBusy(true)
+    setError(null)
+    try {
+      if (tab === 'file') {
+        if (!file) return
+        await api.importWorkout(file, form.type)
+      } else {
+        await api.createWorkout({
+          name: form.name.trim(),
+          type: form.type,
+          date: form.date,
+          duration: parseDuration(form.duration),
+          distance: form.distance ? Math.round(parseFloat(form.distance) * 1000) : 0,
+          avgHR: form.hr ? parseInt(form.hr, 10) : 0,
+          maxHR: 0,
+          elevationGain: form.elevation ? parseFloat(form.elevation) : 0,
+          calories: 0,
+          notes: form.notes.trim(),
+        })
+      }
+      await refresh()
+      setDone(true)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Import failed')
+    } finally {
+      setBusy(false)
+    }
   }
 
   const ext = file?.name.split('.').pop()?.toUpperCase() ?? ''
+  const fileSupported = SUPPORTED.includes((file?.name.split('.').pop() ?? '').toLowerCase())
 
   return (
     <>
@@ -104,8 +149,8 @@ export default function ImportModal({ onClose }: ImportModalProps) {
                       <Upload size={32} color={dragging ? 'var(--primary)' : 'var(--text-3)'} style={{ margin: '0 auto 12px' }} />
                       <p style={{ fontWeight: 600, fontSize: 14 }}>Drop your file here</p>
                       <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>or click to browse</p>
-                      <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8, fontFamily: 'var(--font-mono)' }}>.gpx · .tcx · .fit · .kml</p>
-                      <input ref={fileRef} type="file" accept=".gpx,.tcx,.fit,.kml" onChange={handleFileInput} style={{ display: 'none' }} />
+                      <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8, fontFamily: 'var(--font-mono)' }}>.gpx · .tcx</p>
+                      <input ref={fileRef} type="file" accept=".gpx,.tcx" onChange={handleFileInput} style={{ display: 'none' }} />
                     </div>
                   ) : (
                     <div style={{ border: '1px solid var(--border)', borderRadius: 12, padding: 16, background: 'var(--bg-3)' }}>
@@ -124,29 +169,17 @@ export default function ImportModal({ onClose }: ImportModalProps) {
                         </div>
                         <button className="btn-icon" onClick={() => setFile(null)}><X size={14} /></button>
                       </div>
-                      {['gpx', 'tcx', 'fit', 'kml'].includes(ext.toLowerCase()) ? (
+                      {fileSupported ? (
                         <div style={{ display: 'flex', gap: 6, marginTop: 12, alignItems: 'center', color: 'var(--primary)', fontSize: 12 }}>
                           <CheckCircle size={14} /> Format supported — ready to import
                         </div>
                       ) : (
                         <div style={{ display: 'flex', gap: 6, marginTop: 12, alignItems: 'center', color: '#ef4444', fontSize: 12 }}>
-                          <AlertCircle size={14} /> Unsupported format. Use .gpx, .tcx, .fit, or .kml
+                          <AlertCircle size={14} /> Unsupported format. Use .gpx or .tcx
                         </div>
                       )}
                     </div>
                   )}
-
-                  {/* Connect services */}
-                  <div style={{ marginTop: 16 }}>
-                    <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 8 }}>Or connect a service for automatic sync</p>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                      {['Garmin Connect', 'Strava', 'Wahoo', 'Polar'].map(s => (
-                        <button key={s} className="btn btn-ghost" style={{ justifyContent: 'center', fontSize: 12 }}>
-                          Connect {s}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
                 </>
               ) : (
                 /* Manual entry form */
@@ -240,15 +273,21 @@ export default function ImportModal({ onClose }: ImportModalProps) {
                 </div>
               )}
 
+              {error && (
+                <div style={{ display: 'flex', gap: 6, marginTop: 16, alignItems: 'center', color: '#ef4444', fontSize: 12 }}>
+                  <AlertCircle size={14} /> {error}
+                </div>
+              )}
+
               <div style={{ display: 'flex', gap: 8, marginTop: 20, justifyContent: 'flex-end' }}>
-                <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+                <button className="btn btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
                 <button
                   className="btn btn-primary"
                   onClick={handleImport}
-                  disabled={tab === 'file' ? (!file || !['gpx','tcx','fit','kml'].includes((file?.name.split('.').pop() ?? '').toLowerCase())) : !form.name}
-                  style={{ opacity: (tab === 'file' ? (!file || !['gpx','tcx','fit','kml'].includes((file?.name.split('.').pop() ?? '').toLowerCase())) : !form.name) ? 0.4 : 1 }}
+                  disabled={busy || (tab === 'file' ? (!file || !fileSupported) : !form.name.trim())}
+                  style={{ opacity: (busy || (tab === 'file' ? (!file || !fileSupported) : !form.name.trim())) ? 0.4 : 1 }}
                 >
-                  Import Workout
+                  {busy ? 'Importing…' : 'Import Workout'}
                 </button>
               </div>
             </>

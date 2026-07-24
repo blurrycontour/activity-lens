@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
-import { workouts, fmtPace, type WorkoutType } from '../data/workouts'
+import { fmtPace, type WorkoutType } from '../data/workouts'
+import { useWorkouts } from '../context/WorkoutsContext'
 import TypeDropdown from '../components/TypeDropdown'
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -18,6 +19,7 @@ const METRICS: { id: Metric; label: string; color: string; unit: string; format?
 ]
 
 export default function Timeline() {
+  const { workouts } = useWorkouts()
   const [typeFilter, setTypeFilter] = useState<WorkoutType | 'All'>('Run')
   const [selectedMetrics, setSelectedMetrics] = useState<Metric[]>(['pace', 'hr'])
 
@@ -38,7 +40,7 @@ export default function Timeline() {
         name: w.name,
         type: w.type,
       }))
-  }, [typeFilter])
+  }, [workouts, typeFilter])
 
   function toggleMetric(m: Metric) {
     setSelectedMetrics(prev =>

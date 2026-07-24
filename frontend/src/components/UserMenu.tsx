@@ -1,12 +1,15 @@
 import { useEffect, useRef } from 'react'
-import { User, Settings, Shield, LogOut, CreditCard, X } from 'lucide-react'
+import { User, Settings, Shield, LogOut, X } from 'lucide-react'
+import type { ApiUser } from '../lib/api'
 
 interface UserMenuProps {
   onClose: () => void
   onSettings: () => void
+  onLogout: () => void | Promise<void>
+  user: ApiUser
 }
 
-export default function UserMenu({ onClose, onSettings }: UserMenuProps) {
+export default function UserMenu({ onClose, onSettings, onLogout, user }: UserMenuProps) {
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -17,11 +20,17 @@ export default function UserMenu({ onClose, onSettings }: UserMenuProps) {
     return () => document.removeEventListener('mousedown', handle)
   }, [onClose])
 
+  const initials = (user.displayName || user.username || '?')
+    .split(/\s+/)
+    .map(s => s[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase()
+
   const items = [
-    { icon: <User size={15} />, label: 'User Details', sub: 'Jane Doe · jane@runlab.io', action: onClose },
-    { icon: <CreditCard size={15} />, label: 'Account', sub: 'Pro plan · Renews Aug 2026', action: onClose },
-    { icon: <Settings size={15} />, label: 'Settings', sub: 'Appearance, units, zones', action: () => { onClose(); onSettings() } },
-    { icon: <Shield size={15} />, label: 'Admin Panel', sub: 'Manage users & data', action: onClose },
+    { icon: <User size={15} />, label: 'User Details', sub: `${user.displayName || user.username} · ${user.email}`, action: onClose },
+    { icon: <Settings size={15} />, label: 'Settings', sub: 'Appearance, profile, security', action: () => { onClose(); onSettings() } },
+    ...(user.isAdmin ? [{ icon: <Shield size={15} />, label: 'Role', sub: `Administrator`, action: onClose }] : []),
   ]
 
   return (
@@ -53,11 +62,11 @@ export default function UserMenu({ onClose, onSettings }: UserMenuProps) {
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 18, fontWeight: 700, color: '#fff', flexShrink: 0,
           }}>
-            JD
+            {initials}
           </div>
           <div>
-            <div style={{ fontWeight: 600, fontSize: 14 }}>Jane Doe</div>
-            <div style={{ fontSize: 12, color: 'var(--text-3)' }}>jane@runlab.io</div>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>{user.displayName || user.username}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-3)' }}>{user.email}</div>
           </div>
           <button className="btn-icon" onClick={onClose} style={{ marginLeft: 'auto' }}>
             <X size={15} />
@@ -89,6 +98,7 @@ export default function UserMenu({ onClose, onSettings }: UserMenuProps) {
 
         <div style={{ padding: 8, borderTop: '1px solid var(--border)' }}>
           <button
+            onClick={() => { onClose(); void onLogout() }}
             style={{
               width: '100%', display: 'flex', alignItems: 'center', gap: 12,
               padding: '10px 12px', borderRadius: 8, background: 'transparent',

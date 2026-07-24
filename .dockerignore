@@ -1,16 +1,39 @@
-# Build context excludes — keep the image small and builds reproducible.
+# Build context is this directory (activity-lens). Keep the image small and the
+# build reproducible. go-authkit is fetched from the Go module proxy, so it does
+# not need to be in the context.
 .git
 .github
+.gitignore
+.dockerignore
+
+# Local env and secrets
+.env
+.env.*
+!.env.example
+
+# Go: local dev workspace and build/test artifacts (deps come from the proxy)
+**/go.work
+**/go.work.sum
+*.test
+*.out
+coverage.*
+
+# Node / frontend build artifacts (rebuilt inside the image)
 **/node_modules
-frontend/build
-frontend/.svelte-kit
+frontend/dist
+frontend/.vite
+
+# Backend embedded assets (regenerated during the build)
 backend/internal/web/dist
+
+# Runtime data and databases
+.data
 data
 *.db
 *.db-shm
 *.db-wal
 *.log
-.env
-.env.*
+
+# Docs (not needed in the image)
 README.md
 LICENSE
