@@ -19,7 +19,7 @@ export default function Settings({ accent, onAccentChange }: SettingsProps) {
         <p style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 4 }}>Appearance & preferences</p>
       </div>
 
-      <div className="page-content" style={{ maxWidth: 720, display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <div className="page-content" style={{ maxWidth: 720, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
         {/* Accent color */}
         <section className="card">
           <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Accent Color</h3>

@@ -410,11 +410,21 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
 /* ── Responsive ── */
 @media (max-width: 768px) {
   :root { --bottombar-h: 64px; }
 
   .app-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .charts-grid {
     grid-template-columns: 1fr;
   }
 

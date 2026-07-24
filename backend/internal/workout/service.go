@@ -85,9 +85,13 @@ func (s *Service) Update(ctx context.Context, userID int64, id string, p Patch) 
 	if p.Notes != nil {
 		w.Notes = strings.TrimSpace(*p.Notes)
 	}
+	if p.StartTime != nil {
+		w.StartTime = p.StartTime.UTC()
+	}
 	if err := s.repo.Update(ctx, w); err != nil {
 		return nil, err
 	}
+	w.Date = w.StartTime.Format("2006-01-02")
 	return w, nil
 }
 

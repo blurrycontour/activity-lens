@@ -8,7 +8,7 @@ interface WorkoutsState {
   error: string | null
   refresh: () => Promise<void>
   removeWorkout: (id: string) => Promise<void>
-  updateWorkout: (id: string, patch: { name?: string; type?: string; notes?: string }) => Promise<Workout>
+  updateWorkout: (id: string, patch: { name?: string; type?: string; notes?: string; date?: string }) => Promise<Workout>
 }
 
 const WorkoutsContext = createContext<WorkoutsState | null>(null)
@@ -41,7 +41,7 @@ export function WorkoutsProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const updateWorkout = useCallback(
-    async (id: string, patch: { name?: string; type?: string; notes?: string }) => {
+    async (id: string, patch: { name?: string; type?: string; notes?: string; date?: string }) => {
       const updated = await api.patchWorkout(id, patch)
       setWorkouts(prev => prev.map(w => (w.id === id ? updated : w)))
       return updated

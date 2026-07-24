@@ -21,6 +21,26 @@ services:
       # Set to true when serving over HTTPS (behind a TLS-terminating proxy).
       AL_SECURE_COOKIES: "${AL_SECURE_COOKIES:-true}"
       AL_ALLOW_REGISTRATION: "${AL_ALLOW_REGISTRATION:-false}"
+      # OIDC / SSO. Any value set here overrides the same setting made via the
+      # Admin GUI.
+      AL_OIDC_ENABLED: "${AL_OIDC_ENABLED:-}"
+      AL_OIDC_ISSUER_URL: "${AL_OIDC_ISSUER_URL:-}"
+      AL_OIDC_CLIENT_ID: "${AL_OIDC_CLIENT_ID:-}"
+      AL_OIDC_CLIENT_SECRET: "${AL_OIDC_CLIENT_SECRET:-}"
+      AL_OIDC_REDIRECT_URL: "${AL_OIDC_REDIRECT_URL:-}"
+      AL_OIDC_ADMIN_GROUP: "${AL_OIDC_ADMIN_GROUP:-}"
+      AL_OIDC_PROVIDER_NAME: "${AL_OIDC_PROVIDER_NAME:-}"
+      AL_OIDC_ALLOW_REGISTRATION: "${AL_OIDC_ALLOW_REGISTRATION:-}"
+      AL_OIDC_SCOPES: "${AL_OIDC_SCOPES:-}"
+      # SMTP (transactional email). Any value set here overrides the same
+      # setting made via the Admin GUI.
+      AL_SMTP_HOST: "${AL_SMTP_HOST:-}"
+      AL_SMTP_PORT: "${AL_SMTP_PORT:-}"
+      AL_SMTP_USERNAME: "${AL_SMTP_USERNAME:-}"
+      AL_SMTP_PASSWORD: "${AL_SMTP_PASSWORD:-}"
+      AL_SMTP_FROM: "${AL_SMTP_FROM:-}"
+      AL_SMTP_FROM_NAME: "${AL_SMTP_FROM_NAME:-}"
+      AL_SMTP_ENCRYPTION: "${AL_SMTP_ENCRYPTION:-}"
     volumes:
       - ./.data:/data
     ports:

@@ -87,6 +87,7 @@ func (s *Server) handlePatchWorkout(w http.ResponseWriter, r *http.Request) {
 		Name  *string `json:"name"`
 		Type  *string `json:"type"`
 		Notes *string `json:"notes"`
+		Date  *string `json:"date"` // YYYY-MM-DD
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -96,6 +97,14 @@ func (s *Server) handlePatchWorkout(w http.ResponseWriter, r *http.Request) {
 	if req.Type != nil {
 		t := workout.Type(*req.Type)
 		patch.Type = &t
+	}
+	if req.Date != nil {
+		t, err := time.Parse("2006-01-02", *req.Date)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid date")
+			return
+		}
+		patch.StartTime = &t
 	}
 	wk, err := s.workout.Update(r.Context(), user.ID, r.PathValue("id"), patch)
 	if err != nil {

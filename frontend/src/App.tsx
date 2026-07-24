@@ -171,7 +171,7 @@ export default function App() {
 
       <main className="main-content">
         {selectedWorkout ? (
-          <WorkoutDetail workout={selectedWorkout} onBack={() => setSelectedWorkout(null)} />
+          <WorkoutDetail key={selectedWorkout.id} workout={selectedWorkout} onBack={() => setSelectedWorkout(null)} />
         ) : page === 'dashboard' ? (
           <Dashboard />
         ) : page === 'workouts' ? (
@@ -209,7 +209,12 @@ export default function App() {
           user={user}
         />
       )}
-      {showImport && <ImportModal onClose={() => setShowImport(false)} />}
+      {showImport && (
+        <ImportModal
+          onClose={() => setShowImport(false)}
+          onViewWorkout={w => { setSelectedWorkout(w); setShowImport(false) }}
+        />
+      )}
       </div>
     </WorkoutsProvider>
   )

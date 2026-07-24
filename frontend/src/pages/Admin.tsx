@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Mail, KeyRound, Users, Send, Plus, Trash2, Lock } from 'lucide-react'
+import { Mail, KeyRound, Users, Send, Plus, Trash2, Lock, Pencil, Check, X as XIcon } from 'lucide-react'
 import {
   api,
   ApiError,
@@ -8,6 +8,7 @@ import {
   type SmtpInput,
   type OidcInput,
 } from '../lib/api'
+import { useAuth } from '../context/AuthContext'
 
 const ROLES = ['administrator', 'editor', 'reader']
 const ENCRYPTIONS = ['starttls', 'tls', 'none']
@@ -71,7 +72,7 @@ export default function Admin() {
         <p style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 4 }}>Server configuration and user management</p>
       </div>
 
-      <div className="page-content" style={{ maxWidth: 860, display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <div className="page-content" style={{ maxWidth: 860, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
         {loadErr && <div className="card" style={{ color: 'var(--red, #dc2626)' }}>{loadErr}</div>}
         {settings && <SmtpSection settings={settings} onSaved={setSettings} />}
         {settings && <OidcSection settings={settings} onSaved={setSettings} />}
@@ -260,16 +261,27 @@ function OidcSection({ settings, onSaved }: { settings: AdminSettings; onSaved: 
 }
 
 function UsersSection({ users, onChanged }: { users: AdminUser[]; onChanged: () => void }) {
+  const { user: me } = useAuth()
   const [showCreate, setShowCreate] = useState(false)
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [draftRole, setDraftRole] = useState<string>('')
+  const [draftActive, setDraftActive] = useState(true)
   const [msg, setMsg] = useState<Msg>(null)
 
-  async function updateUser(u: AdminUser, patch: { role?: string; isActive?: boolean }) {
+  const activeAdminCount = users.filter(u => u.role === 'administrator' && u.isActive).length
+
+  function startEdit(u: AdminUser) {
+    setDraftRole(u.role)
+    setDraftActive(u.isActive)
+    setMsg(null)
+    setEditingId(u.id)
+  }
+
+  async function saveEdit(u: AdminUser) {
     setMsg(null)
     try {
-      await api.updateUser(u.id, {
-        role: patch.role ?? u.role,
-        isActive: patch.isActive ?? u.isActive,
-      })
+      await api.updateUser(u.id, { role: draftRole, isActive: draftActive })
+      setEditingId(null)
       onChanged()
     } catch (e) {
       setMsg({ ok: false, text: e instanceof ApiError ? e.message : 'Update failed' })
@@ -293,12 +305,18 @@ function UsersSection({ users, onChanged }: { users: AdminUser[]; onChanged: () 
         <h3 style={{ fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
           <Users size={15} /> User Management
         </h3>
-        <button className="btn btn-ghost" onClick={() => setShowCreate(v => !v)}>
-          <Plus size={14} /> Add user
-        </button>
+        {showCreate ? (
+          <button className="btn btn-ghost" onClick={() => setShowCreate(false)}>
+            <XIcon size={14} /> Cancel
+          </button>
+        ) : (
+          <button className="btn btn-ghost" onClick={() => setShowCreate(true)}>
+            <Plus size={14} /> Add user
+          </button>
+        )}
       </div>
 
-      {showCreate && <CreateUser onDone={() => { setShowCreate(false); onChanged() }} />}
+      {showCreate && <CreateUser onDone={() => { setShowCreate(false); onChanged() }} onCancel={() => setShowCreate(false)} />}
       {msg && <div style={{ marginBottom: 10 }}><StatusText msg={msg} /></div>}
 
       <div style={{ overflowX: 'auto' }}>
@@ -327,19 +345,65 @@ function UsersSection({ users, onChanged }: { users: AdminUser[]; onChanged: () 
                   </div>
                 </td>
                 <td style={{ padding: '8px 10px' }}>
-                  <select className="input" value={u.role} onChange={e => updateUser(u, { role: e.target.value })}>
-                    {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-                  </select>
+                  {editingId === u.id ? (
+                    <select className="input" value={draftRole} onChange={e => setDraftRole(e.target.value)}>
+                      {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                  ) : (
+                    <span>{u.role}</span>
+                  )}
                 </td>
                 <td style={{ padding: '8px 10px' }}>
-                  <input type="checkbox" checked={u.isActive} onChange={e => updateUser(u, { isActive: e.target.checked })} />
+                  {editingId === u.id ? (
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: u.id === me?.id ? 'not-allowed' : 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={draftActive}
+                        disabled={u.id === me?.id}
+                        title={u.id === me?.id ? 'You cannot deactivate your own account' : undefined}
+                        onChange={e => setDraftActive(e.target.checked)}
+                      />
+                      <span style={{ fontSize: 12, color: draftActive ? 'var(--green, #16a34a)' : 'var(--red, #dc2626)' }}>
+                        {draftActive ? 'Active' : 'Inactive'}
+                      </span>
+                    </label>
+                  ) : (
+                    <span style={{ fontSize: 12, fontWeight: 600, color: u.isActive ? 'var(--green, #16a34a)' : 'var(--red, #dc2626)' }}>
+                      {u.isActive ? 'Active' : 'Inactive'}
+                    </span>
+                  )}
                 </td>
                 <td style={{ padding: '8px 10px', color: 'var(--text-3)' }}>{fmtDate(u.lastLoginAt)}</td>
                 <td style={{ padding: '8px 10px', textAlign: 'right' }}>
-                  <button className="btn btn-ghost" onClick={() => removeUser(u)} title="Delete user"
-                    style={{ color: 'var(--red, #dc2626)' }}>
-                    <Trash2 size={14} />
-                  </button>
+                  {editingId === u.id ? (
+                    <>
+                      <button className="btn btn-primary" onClick={() => saveEdit(u)} title="Save">
+                        <Check size={14} />
+                      </button>
+                      <button className="btn btn-ghost" onClick={() => setEditingId(null)} title="Cancel" style={{ marginLeft: 6 }}>
+                        <XIcon size={14} />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        className="btn btn-ghost"
+                        onClick={() => startEdit(u)}
+                        title={u.role === 'administrator' && u.isActive && activeAdminCount <= 1 ? 'Last administrator — role/status locked' : 'Edit user'}
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button
+                        className="btn btn-ghost"
+                        onClick={() => removeUser(u)}
+                        title={u.id === me?.id ? 'You cannot delete your own account' : 'Delete user'}
+                        disabled={u.id === me?.id}
+                        style={{ color: 'var(--red, #dc2626)', marginLeft: 6 }}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </>
+                  )}
                 </td>
               </tr>
             ))}
@@ -350,7 +414,7 @@ function UsersSection({ users, onChanged }: { users: AdminUser[]; onChanged: () 
   )
 }
 
-function CreateUser({ onDone }: { onDone: () => void }) {
+function CreateUser({ onDone, onCancel }: { onDone: () => void; onCancel: () => void }) {
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [displayName, setDisplayName] = useState('')
@@ -392,6 +456,7 @@ function CreateUser({ onDone }: { onDone: () => void }) {
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}>
         <button className="btn btn-primary" onClick={create} disabled={busy} style={{ opacity: busy ? 0.5 : 1 }}>Create user</button>
+        <button className="btn btn-ghost" onClick={onCancel} disabled={busy}>Cancel</button>
         <StatusText msg={msg} />
       </div>
     </div>

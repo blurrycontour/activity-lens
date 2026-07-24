@@ -12,8 +12,11 @@ import (
 // gpxFile mirrors the subset of the GPX 1.1 schema we consume, including the
 // Garmin TrackPointExtension for heart rate.
 type gpxFile struct {
-	XMLName xml.Name `xml:"gpx"`
-	Tracks  []struct {
+	XMLName  xml.Name `xml:"gpx"`
+	Metadata struct {
+		Time string `xml:"time"`
+	} `xml:"metadata"`
+	Tracks []struct {
 		Name     string `xml:"name"`
 		Type     string `xml:"type"`
 		Segments []struct {
@@ -66,7 +69,13 @@ func parseGPX(data []byte, defaultType workout.Type) (workout.Input, error) {
 	if name == "" {
 		name = "Imported Activity"
 	}
-	return buildInput(name, mapType(trk.Type, defaultType), points, 0), nil
+	var fallbackStart time.Time
+	if f.Metadata.Time != "" {
+		if ts, err := time.Parse(time.RFC3339, f.Metadata.Time); err == nil {
+			fallbackStart = ts
+		}
+	}
+	return buildInput(name, mapType(trk.Type, defaultType), points, 0, fallbackStart), nil
 }
 
 // mapType maps a GPX/TCX activity type string onto our Type set, falling back

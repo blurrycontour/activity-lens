@@ -41,8 +41,10 @@ func Parse(filename string, data []byte, defaultType workout.Type) (workout.Inpu
 }
 
 // buildInput turns a sequence of track points into a workout.Input, deriving
-// distance, elevation gain, duration, and per-metric timelines.
-func buildInput(name string, typ workout.Type, points []trackPoint, calories int) workout.Input {
+// distance, elevation gain, duration, and per-metric timelines. fallbackStart
+// is used as the activity start time when no track point carries a timestamp
+// (e.g. a route-only GPX file); when zero, time.Now() is used as a last resort.
+func buildInput(name string, typ workout.Type, points []trackPoint, calories int, fallbackStart time.Time) workout.Input {
 	in := workout.Input{
 		Name:     name,
 		Type:     typ,
@@ -50,7 +52,11 @@ func buildInput(name string, typ workout.Type, points []trackPoint, calories int
 		Route:    []workout.LatLng{},
 	}
 	if len(points) == 0 {
-		in.StartTime = time.Now().UTC()
+		if !fallbackStart.IsZero() {
+			in.StartTime = fallbackStart.UTC()
+		} else {
+			in.StartTime = time.Now().UTC()
+		}
 		return in
 	}
 
@@ -109,6 +115,8 @@ func buildInput(name string, typ workout.Type, points []trackPoint, calories int
 		if last.HasTime {
 			in.Duration = int(last.Time.Sub(start).Seconds())
 		}
+	} else if !fallbackStart.IsZero() {
+		in.StartTime = fallbackStart.UTC()
 	} else {
 		in.StartTime = time.Now().UTC()
 	}

@@ -280,6 +280,34 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid role")
 		return
 	}
+	if caller.ID == targetID && !req.IsActive {
+		writeError(w, http.StatusBadRequest, "cannot deactivate your own account")
+		return
+	}
+	if req.Role != auth.RoleAdministrator || !req.IsActive {
+		users, err := s.auth.ListUsers(r.Context())
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "could not load users")
+			return
+		}
+		activeAdmins := 0
+		for _, u := range users {
+			if u.Role == auth.RoleAdministrator && u.IsActive {
+				activeAdmins++
+			}
+		}
+		var target *auth.User
+		for i := range users {
+			if users[i].ID == targetID {
+				target = &users[i]
+				break
+			}
+		}
+		if target != nil && target.Role == auth.RoleAdministrator && target.IsActive && activeAdmins <= 1 {
+			writeError(w, http.StatusBadRequest, "cannot remove the last administrator account")
+			return
+		}
+	}
 	user, err := s.auth.AdminUpdateUser(r.Context(), caller.ID, targetID, req.Role, req.IsActive)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -293,6 +321,10 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	targetID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+	if caller.ID == targetID {
+		writeError(w, http.StatusBadRequest, "cannot delete your own account")
 		return
 	}
 	if err := s.auth.AdminDeleteUser(r.Context(), caller.ID, targetID); err != nil {

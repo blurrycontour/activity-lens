@@ -1,6 +1,8 @@
-import { type Workout, fmtDuration, fmtDist, fmtPace, TYPE_COLOR, TYPE_ICON } from '../data/workouts'
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
-import { ArrowLeft, Heart, Mountain, Zap, Clock, TrendingUp, Navigation, Download } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { type Workout, type WorkoutType, WORKOUT_TYPES, fmtDuration, fmtDist, fmtPace, TYPE_COLOR, TYPE_ICON } from '../data/workouts'
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from 'recharts'
+import { ArrowLeft, Heart, Mountain, Zap, Clock, TrendingUp, Navigation, Download, Pencil, Trash2, Gauge, Check, X as XIcon } from 'lucide-react'
+import { useWorkouts } from '../context/WorkoutsContext'
 
 function exportGPX(w: Workout) {
   const gpx = `<?xml version="1.0" encoding="UTF-8"?>
@@ -26,6 +28,24 @@ ${w.route.map(([lat, lng]) => `      <trkpt lat="${lat.toFixed(6)}" lon="${lng.t
 interface WorkoutDetailProps {
   workout: Workout
   onBack: () => void
+}
+
+type Metric = 'hr' | 'pace' | 'speed' | 'elevation'
+
+const HR_ZONE_COLORS = ['#60a5fa', '#34d399', '#fbbf24', '#ef4444', '#a855f7']
+const HR_ZONE_LABELS = ['Zone 1 (<60%)', 'Zone 2 (60-70%)', 'Zone 3 (70-80%)', 'Zone 4 (80-90%)', 'Zone 5 (90-100%)']
+
+function hrZoneBuckets(hrTimeline: { t: number; hr: number }[], maxHR: number) {
+  if (hrTimeline.length === 0 || maxHR <= 0) return []
+  const counts = [0, 0, 0, 0, 0]
+  for (let i = 0; i < hrTimeline.length; i++) {
+    const pct = (hrTimeline[i].hr / maxHR) * 100
+    const idx = pct < 60 ? 0 : pct < 70 ? 1 : pct < 80 ? 2 : pct < 90 ? 3 : 4
+    counts[idx]++
+  }
+  const total = counts.reduce((a, b) => a + b, 0)
+  if (total === 0) return []
+  return counts.map((c, i) => ({ name: HR_ZONE_LABELS[i], value: c, pct: Math.round((c / total) * 100), color: HR_ZONE_COLORS[i] })).filter(z => z.value > 0)
 }
 
 function RouteMap({ route, color }: { route: Array<[number, number]>; color: string }) {
@@ -91,8 +111,62 @@ function ChartTooltip({ active, payload, label, unit }: { active?: boolean; payl
   )
 }
 
-export default function WorkoutDetail({ workout: w, onBack }: WorkoutDetailProps) {
+export default function WorkoutDetail({ workout: w0, onBack }: WorkoutDetailProps) {
+  const { updateWorkout, removeWorkout } = useWorkouts()
+  const [w, setW] = useState(w0)
   const color = TYPE_COLOR[w.type]
+
+  const [editing, setEditing] = useState(false)
+  const [editName, setEditName] = useState(w.name)
+  const [editDate, setEditDate] = useState(w.date)
+  const [editType, setEditType] = useState<WorkoutType>(w.type)
+  const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [saveErr, setSaveErr] = useState<string | null>(null)
+
+  const [selectedMetrics, setSelectedMetrics] = useState<Metric[]>(['hr', 'pace', 'elevation'])
+  function toggleMetric(m: Metric) {
+    setSelectedMetrics(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m])
+  }
+
+  const speedTimeline = useMemo(
+    () => w.paceTimeline.filter(p => p.pace > 0).map(p => ({ t: p.t, speed: Math.round((3600 / p.pace) * 10) / 10 })),
+    [w.paceTimeline],
+  )
+  const hrZones = useMemo(() => hrZoneBuckets(w.hrTimeline, w.maxHR), [w.hrTimeline, w.maxHR])
+
+  function startEdit() {
+    setEditName(w.name)
+    setEditDate(w.date)
+    setEditType(w.type)
+    setSaveErr(null)
+    setEditing(true)
+  }
+
+  async function saveEdit() {
+    setSaving(true)
+    setSaveErr(null)
+    try {
+      const updated = await updateWorkout(w.id, { name: editName.trim(), type: editType, date: editDate })
+      setW(updated)
+      setEditing(false)
+    } catch (err) {
+      setSaveErr(err instanceof Error ? err.message : 'Failed to save changes')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (!confirm(`Delete "${w.name}"? This cannot be undone.`)) return
+    setDeleting(true)
+    try {
+      await removeWorkout(w.id)
+      onBack()
+    } catch {
+      setDeleting(false)
+    }
+  }
 
   const stats = [
     { icon: <Navigation size={14} />, label: 'Distance', value: fmtDist(w.distance) },
@@ -110,23 +184,47 @@ export default function WorkoutDetail({ workout: w, onBack }: WorkoutDetailProps
       <div className="page-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button className="btn-icon" onClick={onBack}><ArrowLeft size={18} /></button>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <h1 style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em' }}>{w.name}</h1>
-              <span className={`badge tag-${w.type.toLowerCase()}`}>{TYPE_ICON[w.type]} {w.type}</span>
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
-              {new Date(w.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-            </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {editing ? (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                <input className="input" style={{ minWidth: 160 }} value={editName} onChange={e => setEditName(e.target.value)} placeholder="Workout name" />
+                <select className="select" value={editType} onChange={e => setEditType(e.target.value as WorkoutType)}>
+                  {WORKOUT_TYPES.map(t => <option key={t} value={t}>{TYPE_ICON[t]} {t}</option>)}
+                </select>
+                <input className="input" type="date" value={editDate} onChange={e => setEditDate(e.target.value)} />
+                <button className="btn btn-primary" onClick={saveEdit} disabled={saving || !editName.trim()} title="Save">
+                  <Check size={14} /> {saving ? 'Saving…' : 'Save'}
+                </button>
+                <button className="btn btn-ghost" onClick={() => setEditing(false)} disabled={saving} title="Cancel">
+                  <XIcon size={14} />
+                </button>
+                {saveErr && <span style={{ fontSize: 12, color: '#ef4444' }}>{saveErr}</span>}
+              </div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <h1 style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em' }}>{w.name}</h1>
+                  <span className={`badge tag-${w.type.toLowerCase()}`}>{TYPE_ICON[w.type]} {w.type}</span>
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
+                  {new Date(w.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                </div>
+              </>
+            )}
           </div>
-          <button
-            className="btn btn-ghost"
-            onClick={() => exportGPX(w)}
-            style={{ marginLeft: 'auto', flexShrink: 0, gap: 6 }}
-            title="Export as GPX"
-          >
-            <Download size={14} /> Export GPX
-          </button>
+          {!editing && (
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, flexShrink: 0 }}>
+              <button className="btn btn-ghost" onClick={startEdit} title="Edit workout">
+                <Pencil size={14} /> Edit
+              </button>
+              <button className="btn btn-ghost" onClick={() => exportGPX(w)} title="Export as GPX">
+                <Download size={14} /> Export GPX
+              </button>
+              <button className="btn btn-ghost" onClick={handleDelete} disabled={deleting} style={{ color: 'var(--red, #dc2626)' }} title="Delete workout">
+                <Trash2 size={14} /> {deleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -159,33 +257,60 @@ export default function WorkoutDetail({ workout: w, onBack }: WorkoutDetailProps
           </div>
         </div>
 
+        {/* Metric toggle row */}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+          {([
+            { id: 'hr' as Metric, label: 'Heart Rate', color: '#ef4444', available: w.hrTimeline.length > 0 },
+            { id: 'pace' as Metric, label: 'Pace', color: color, available: w.paceTimeline.length > 0 },
+            { id: 'speed' as Metric, label: 'Speed', color: 'var(--blue)', available: speedTimeline.length > 0 },
+            { id: 'elevation' as Metric, label: 'Elevation', color: 'var(--hike)', available: w.elevTimeline.length > 0 },
+          ]).filter(m => m.available).map(m => (
+            <button
+              key={m.id}
+              onClick={() => toggleMetric(m.id)}
+              className="btn"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 8, fontSize: 12,
+                border: `1px solid ${selectedMetrics.includes(m.id) ? m.color : 'var(--border)'}`,
+                background: selectedMetrics.includes(m.id) ? `${m.color}18` : 'transparent',
+                color: selectedMetrics.includes(m.id) ? m.color : 'var(--text-3)',
+              }}
+            >
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: m.color, opacity: selectedMetrics.includes(m.id) ? 1 : 0.3 }} />
+              {m.label}
+            </button>
+          ))}
+        </div>
+
         {/* Charts */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
+        <div className="charts-grid">
           {/* Heart Rate chart */}
-          <div className="card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><Heart size={14} color="#ef4444" /> Heart Rate</h3>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)' }}>Avg {w.avgHR} · Max {w.maxHR}</span>
+          {selectedMetrics.includes('hr') && w.hrTimeline.length > 0 && (
+            <div className="card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><Heart size={14} color="#ef4444" /> Heart Rate</h3>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)' }}>Avg {w.avgHR} · Max {w.maxHR}</span>
+              </div>
+              <ResponsiveContainer width="100%" height={140}>
+                <AreaChart data={w.hrTimeline} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="hrGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
+                  <XAxis dataKey="t" tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} tickFormatter={v => `${Math.floor(v / 60)}m`} interval="preserveStartEnd" />
+                  <YAxis tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} domain={['auto', 'auto']} />
+                  <Tooltip content={<ChartTooltip unit="bpm" />} />
+                  <Area type="monotone" dataKey="hr" stroke="#ef4444" strokeWidth={2} fill="url(#hrGrad)" dot={false} />
+                </AreaChart>
+              </ResponsiveContainer>
             </div>
-            <ResponsiveContainer width="100%" height={140}>
-              <AreaChart data={w.hrTimeline} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="hrGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="t" tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} tickFormatter={v => `${Math.floor(v / 60)}m`} interval="preserveStartEnd" />
-                <YAxis tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} domain={['auto', 'auto']} />
-                <Tooltip content={<ChartTooltip unit="bpm" />} />
-                <Area type="monotone" dataKey="hr" stroke="#ef4444" strokeWidth={2} fill="url(#hrGrad)" dot={false} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+          )}
 
           {/* Pace chart */}
-          {w.paceTimeline.length > 0 && (
+          {selectedMetrics.includes('pace') && w.paceTimeline.length > 0 && (
             <div className="card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                 <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><TrendingUp size={14} color={color} /> Pace</h3>
@@ -209,28 +334,82 @@ export default function WorkoutDetail({ workout: w, onBack }: WorkoutDetailProps
             </div>
           )}
 
-          {/* Elevation chart */}
-          <div className="card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><Mountain size={14} color="var(--hike)" /> Elevation</h3>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)' }}>+{w.elevationGain} m gain</span>
+          {/* Speed chart */}
+          {selectedMetrics.includes('speed') && speedTimeline.length > 0 && (
+            <div className="card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><Gauge size={14} color="var(--blue)" /> Speed</h3>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)' }}>Avg {w.avgSpeed.toFixed(1)} km/h</span>
+              </div>
+              <ResponsiveContainer width="100%" height={140}>
+                <AreaChart data={speedTimeline} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="speedGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="var(--blue)" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="var(--blue)" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
+                  <XAxis dataKey="t" tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} tickFormatter={v => `${Math.floor(v / 60)}m`} interval="preserveStartEnd" />
+                  <YAxis tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} domain={['auto', 'auto']} />
+                  <Tooltip content={<ChartTooltip unit="km/h" />} />
+                  <Area type="monotone" dataKey="speed" stroke="var(--blue)" strokeWidth={2} fill="url(#speedGrad)" dot={false} />
+                </AreaChart>
+              </ResponsiveContainer>
             </div>
-            <ResponsiveContainer width="100%" height={140}>
-              <AreaChart data={w.elevTimeline} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="elevGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="var(--hike)" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="var(--hike)" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="t" tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} tickFormatter={v => `${Math.floor(v / 60)}m`} interval="preserveStartEnd" />
-                <YAxis tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} domain={['auto', 'auto']} />
-                <Tooltip content={<ChartTooltip unit="m" />} />
-                <Area type="monotone" dataKey="elev" stroke="var(--hike)" strokeWidth={2} fill="url(#elevGrad)" dot={false} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+          )}
+
+          {/* Elevation chart */}
+          {selectedMetrics.includes('elevation') && w.elevTimeline.length > 0 && (
+            <div className="card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><Mountain size={14} color="var(--hike)" /> Elevation</h3>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)' }}>+{w.elevationGain} m gain</span>
+              </div>
+              <ResponsiveContainer width="100%" height={140}>
+                <AreaChart data={w.elevTimeline} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="elevGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="var(--hike)" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="var(--hike)" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
+                  <XAxis dataKey="t" tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} tickFormatter={v => `${Math.floor(v / 60)}m`} interval="preserveStartEnd" />
+                  <YAxis tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} domain={['auto', 'auto']} />
+                  <Tooltip content={<ChartTooltip unit="m" />} />
+                  <Area type="monotone" dataKey="elev" stroke="var(--hike)" strokeWidth={2} fill="url(#elevGrad)" dot={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* Heart rate zones */}
+          {selectedMetrics.includes('hr') && hrZones.length > 0 && (
+            <div className="card">
+              <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+                <Heart size={14} color="#ef4444" /> Heart Rate Zones
+              </h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+                  {hrZones.map(z => (
+                    <div key={z.name} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-2)' }}>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: z.color, flexShrink: 0 }} />
+                      <span style={{ whiteSpace: 'nowrap' }}>{z.name} · {z.pct}%</span>
+                    </div>
+                  ))}
+                </div>
+                <ResponsiveContainer width="100%" height={160}>
+                  <PieChart>
+                    <Pie data={hrZones} dataKey="value" nameKey="name" innerRadius={40} outerRadius={70} paddingAngle={2}>
+                      {hrZones.map(z => <Cell key={z.name} fill={z.color} />)}
+                    </Pie>
+                    <Tooltip formatter={(v: unknown, _n: unknown, entry: any) => [`${v} samples (${entry.payload.pct}%)`, entry.payload.name]} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
         </div>
 
         {w.notes && (

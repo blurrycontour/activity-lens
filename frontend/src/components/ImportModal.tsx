@@ -1,10 +1,12 @@
 import { useState, useRef } from 'react'
-import { Upload, X, CheckCircle, FileText, AlertCircle } from 'lucide-react'
+import { Upload, X, CheckCircle, FileText, AlertCircle, ArrowRight } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { api, ApiError } from '../lib/api'
+import { type Workout } from '../data/workouts'
 
 interface ImportModalProps {
   onClose: () => void
+  onViewWorkout?: (workout: Workout) => void
 }
 
 type Tab = 'file' | 'manual'
@@ -21,12 +23,13 @@ function parseDuration(v: string): number {
   return 0
 }
 
-export default function ImportModal({ onClose }: ImportModalProps) {
+export default function ImportModal({ onClose, onViewWorkout }: ImportModalProps) {
   const { refresh } = useWorkouts()
   const [tab, setTab] = useState<Tab>('file')
   const [dragging, setDragging] = useState(false)
   const [file, setFile] = useState<File | null>(null)
   const [done, setDone] = useState(false)
+  const [created, setCreated] = useState<Workout | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -58,11 +61,12 @@ export default function ImportModal({ onClose }: ImportModalProps) {
     setBusy(true)
     setError(null)
     try {
+      let workout: Workout
       if (tab === 'file') {
         if (!file) return
-        await api.importWorkout(file, form.type)
+        workout = await api.importWorkout(file, form.type)
       } else {
-        await api.createWorkout({
+        workout = await api.createWorkout({
           name: form.name.trim(),
           type: form.type,
           date: form.date,
@@ -76,6 +80,7 @@ export default function ImportModal({ onClose }: ImportModalProps) {
         })
       }
       await refresh()
+      setCreated(workout)
       setDone(true)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Import failed')
@@ -107,7 +112,14 @@ export default function ImportModal({ onClose }: ImportModalProps) {
               <p style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 6 }}>
                 {tab === 'file' ? file?.name : form.name || 'New Workout'} has been added to your library.
               </p>
-              <button className="btn btn-primary" style={{ marginTop: 20 }} onClick={onClose}>Done</button>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 20 }}>
+                <button className="btn btn-ghost" onClick={onClose}>Done</button>
+                {created && onViewWorkout && (
+                  <button className="btn btn-primary" onClick={() => onViewWorkout(created)}>
+                    View Workout <ArrowRight size={14} />
+                  </button>
+                )}
+              </div>
             </div>
           ) : (
             <>

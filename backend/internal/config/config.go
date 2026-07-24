@@ -94,12 +94,6 @@ func Load() (Config, error) {
 	}
 	c.SessionTTL = ttl
 
-	if c.OIDC.Enabled {
-		if c.OIDC.IssuerURL == "" || c.OIDC.ClientID == "" || c.OIDC.RedirectURL == "" {
-			return Config{}, fmt.Errorf("oidc enabled but AL_OIDC_ISSUER_URL, AL_OIDC_CLIENT_ID and AL_OIDC_REDIRECT_URL are required")
-		}
-	}
-
 	c.SMTP = SMTPConfig{
 		Host:       os.Getenv("AL_SMTP_HOST"),
 		Port:       intEnv("AL_SMTP_PORT", 587),

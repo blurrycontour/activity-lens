@@ -16,8 +16,9 @@ type tcxFile struct {
 		Activity []struct {
 			Sport string `xml:"Sport,attr"`
 			Laps  []struct {
-				Calories int `xml:"Calories"`
-				Tracks   []struct {
+				StartTime string `xml:"StartTime,attr"`
+				Calories  int    `xml:"Calories"`
+				Tracks    []struct {
 					Points []tcxPoint `xml:"Trackpoint"`
 				} `xml:"Track"`
 			} `xml:"Lap"`
@@ -49,8 +50,14 @@ func parseTCX(data []byte, defaultType workout.Type) (workout.Input, error) {
 	act := f.Activities.Activity[0]
 	points := make([]trackPoint, 0)
 	calories := 0
+	var fallbackStart time.Time
 	for _, lap := range act.Laps {
 		calories += lap.Calories
+		if fallbackStart.IsZero() && lap.StartTime != "" {
+			if ts, err := time.Parse(time.RFC3339, lap.StartTime); err == nil {
+				fallbackStart = ts
+			}
+		}
 		for _, trk := range lap.Tracks {
 			for _, p := range trk.Points {
 				tp := trackPoint{}
@@ -79,5 +86,5 @@ func parseTCX(data []byte, defaultType workout.Type) (workout.Input, error) {
 	} else {
 		name += " Activity"
 	}
-	return buildInput(name, mapType(act.Sport, defaultType), points, calories), nil
+	return buildInput(name, mapType(act.Sport, defaultType), points, calories, fallbackStart), nil
 }

@@ -95,9 +95,10 @@ type Input struct {
 // Patch carries optional edits to an existing workout. Nil fields are left
 // unchanged.
 type Patch struct {
-	Name  *string
-	Type  *Type
-	Notes *string
+	Name      *string
+	Type      *Type
+	Notes     *string
+	StartTime *time.Time
 }
 
 // Stats is the aggregate dashboard summary for a user's library.

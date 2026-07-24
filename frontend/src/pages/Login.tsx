@@ -85,9 +85,16 @@ export default function Login() {
           </button>
 
           {oidc && (
-            <a className="btn btn-ghost" href="/api/auth/oidc/login" style={{ justifyContent: 'center', textDecoration: 'none' }}>
-              Continue with {features?.oidcProviderName || 'SSO'}
-            </a>
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '2px 0' }}>
+                <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+                <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>Or continue with</span>
+                <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+              </div>
+              <a className="btn btn-ghost" href="/api/auth/oidc/login" style={{ justifyContent: 'center', textDecoration: 'none' }}>
+                Continue with {features?.oidcProviderName || 'SSO'}
+              </a>
+            </>
           )}
         </form>
 

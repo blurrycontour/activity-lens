@@ -199,7 +199,7 @@ export const api = {
   getWorkout: (id: string) => request<import('../data/workouts').Workout>(`/api/workouts/${id}`),
   createWorkout: (payload: ManualWorkoutInput) =>
     request<import('../data/workouts').Workout>('/api/workouts', { method: 'POST', body: payload }),
-  patchWorkout: (id: string, patch: { name?: string; type?: string; notes?: string }) =>
+  patchWorkout: (id: string, patch: { name?: string; type?: string; notes?: string; date?: string }) =>
     request<import('../data/workouts').Workout>(`/api/workouts/${id}`, { method: 'PATCH', body: patch }),
   deleteWorkout: (id: string) => request<unknown>(`/api/workouts/${id}`, { method: 'DELETE' }),
   importWorkout: (file: File, type?: string, name?: string) => {
