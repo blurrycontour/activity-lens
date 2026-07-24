@@ -1,8 +1,14 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { type Workout, type WorkoutType, WORKOUT_TYPES, fmtDuration, fmtDist, fmtPace, TYPE_COLOR, TYPE_ICON } from '../data/workouts'
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from 'recharts'
-import { ArrowLeft, Heart, Mountain, Zap, Clock, TrendingUp, Navigation, Download, Pencil, Trash2, Gauge, Check, X as XIcon } from 'lucide-react'
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ReferenceDot } from 'recharts'
+import {
+  ArrowLeft, Heart, Mountain, Zap, Clock, TrendingUp, Navigation, Download, Pencil, Trash2, Gauge,
+  Check, X as XIcon, Play, Pause, RotateCcw, Maximize2,
+} from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
+import { MapContainer, TileLayer, Polyline, CircleMarker, useMap, useMapEvents } from 'react-leaflet'
+import 'leaflet/dist/leaflet.css'
+import type { LatLngBoundsExpression } from 'leaflet'
 
 function exportGPX(w: Workout) {
   const gpx = `<?xml version="1.0" encoding="UTF-8"?>
@@ -48,57 +54,121 @@ function hrZoneBuckets(hrTimeline: { t: number; hr: number }[], maxHR: number) {
   return counts.map((c, i) => ({ name: HR_ZONE_LABELS[i], value: c, pct: Math.round((c / total) * 100), color: HR_ZONE_COLORS[i] })).filter(z => z.value > 0)
 }
 
-function RouteMap({ route, color }: { route: Array<[number, number]>; color: string }) {
+function nearestRouteIndex(route: Array<[number, number]>, lat: number, lng: number): number {
+  let best = 0
+  let bestDist = Infinity
+  for (let i = 0; i < route.length; i++) {
+    const dLat = route[i][0] - lat
+    const dLng = route[i][1] - lng
+    const dist = dLat * dLat + dLng * dLng
+    if (dist < bestDist) {
+      bestDist = dist
+      best = i
+    }
+  }
+  return best
+}
+
+function FitBounds({ route }: { route: Array<[number, number]> }) {
+  const map = useMap()
+  useEffect(() => {
+    if (route.length === 0) return
+    if (route.length === 1) {
+      map.setView(route[0], 15)
+      return
+    }
+    const bounds = route as unknown as LatLngBoundsExpression
+    map.fitBounds(bounds, { padding: [24, 24] })
+  }, [route, map])
+  return null
+}
+
+function MapClickHandler({ route, duration, onScrub }: { route: Array<[number, number]>; duration: number; onScrub: (t: number) => void }) {
+  useMapEvents({
+    click(e) {
+      if (route.length < 2 || duration <= 0) return
+      const idx = nearestRouteIndex(route, e.latlng.lat, e.latlng.lng)
+      onScrub((idx / (route.length - 1)) * duration)
+    },
+  })
+  return null
+}
+
+function RouteMap({
+  route, color, duration, currentTime, onScrub, height,
+}: {
+  route: Array<[number, number]>
+  color: string
+  duration: number
+  currentTime: number
+  onScrub: (t: number) => void
+  height: number
+}) {
   if (route.length < 2) {
     return (
-      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-3)', fontSize: 13 }}>
+      <div style={{ width: '100%', height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-3)', fontSize: 13 }}>
         No route data
       </div>
     )
   }
-  const lats = route.map(p => p[0])
-  const lngs = route.map(p => p[1])
-  const minLat = Math.min(...lats), maxLat = Math.max(...lats)
-  const minLng = Math.min(...lngs), maxLng = Math.max(...lngs)
-  const pad = 0.1
-  const W = 400, H = 250
-
-  function toSvg(lat: number, lng: number): [number, number] {
-    const x = ((lng - minLng) / ((maxLng - minLng) || 1)) * (W * (1 - pad * 2)) + W * pad
-    const y = H - (((lat - minLat) / ((maxLat - minLat) || 1)) * (H * (1 - pad * 2)) + H * pad)
-    return [x, y]
-  }
-
-  const points = route.map(p => toSvg(p[0], p[1]))
-  const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' ')
-  const [sx, sy] = points[0]
-  const [ex, ey] = points[points.length - 1]
+  const fraction = duration > 0 ? Math.max(0, Math.min(1, currentTime / duration)) : 0
+  const idx = Math.round(fraction * (route.length - 1))
+  const current = route[idx]
+  const start = route[0]
+  const end = route[route.length - 1]
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: '100%' }}>
-      <defs>
-        <linearGradient id="routeGrad" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor={color} stopOpacity="0.4" />
-          <stop offset="100%" stopColor={color} stopOpacity="1" />
-        </linearGradient>
-        <filter id="glow">
-          <feGaussianBlur stdDeviation="2" result="blur" />
-          <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-        </filter>
-      </defs>
-      {/* Shadow path */}
-      <path d={pathD} fill="none" stroke={color} strokeWidth="6" strokeOpacity="0.12" strokeLinecap="round" strokeLinejoin="round" />
-      {/* Main path */}
-      <path d={pathD} fill="none" stroke="url(#routeGrad)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" filter="url(#glow)" />
-      {/* Start marker */}
-      <circle cx={sx} cy={sy} r="5" fill="var(--bg-2)" stroke={color} strokeWidth="2" />
-      <circle cx={sx} cy={sy} r="2.5" fill={color} />
-      {/* End marker */}
-      <circle cx={ex} cy={ey} r="6" fill={color} stroke="var(--bg-2)" strokeWidth="2" />
-      <circle cx={ex} cy={ey} r="3" fill="var(--bg-2)" />
-    </svg>
+    <div style={{ width: '100%', height }}>
+      <MapContainer center={current} zoom={14} style={{ width: '100%', height: '100%' }} scrollWheelZoom>
+        <TileLayer
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        />
+        <FitBounds route={route} />
+        <MapClickHandler route={route} duration={duration} onScrub={onScrub} />
+        <Polyline positions={route} pathOptions={{ color, weight: 4, opacity: 0.85 }} />
+        <CircleMarker center={start} radius={5} pathOptions={{ color, fillColor: 'var(--bg-2)', fillOpacity: 1, weight: 2 }} />
+        <CircleMarker center={end} radius={6} pathOptions={{ color: 'var(--bg-2)', fillColor: color, fillOpacity: 1, weight: 2 }} />
+        <CircleMarker center={current} radius={7} pathOptions={{ color: '#fff', fillColor: color, fillOpacity: 1, weight: 2 }} />
+      </MapContainer>
+    </div>
   )
 }
+
+function PlaybackBar({
+  playing, currentTime, duration, onPlayPause, onReset, onScrub,
+}: {
+  playing: boolean
+  currentTime: number
+  duration: number
+  onPlayPause: () => void
+  onReset: () => void
+  onScrub: (t: number) => void
+}) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <button className="btn-icon" onClick={onPlayPause} title={playing ? 'Pause' : 'Play'}>
+        {playing ? <Pause size={16} /> : <Play size={16} />}
+      </button>
+      <button className="btn-icon" onClick={onReset} title="Reset">
+        <RotateCcw size={16} />
+      </button>
+      <input
+        type="range"
+        min={0}
+        max={Math.max(1, Math.round(duration))}
+        step={1}
+        value={Math.round(currentTime)}
+        onChange={e => onScrub(Number(e.target.value))}
+        style={{ flex: 1, accentColor: 'var(--primary)' }}
+      />
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)', minWidth: 88, textAlign: 'right' }}>
+        {fmtDuration(currentTime)} / {fmtDuration(duration)}
+      </span>
+    </div>
+  )
+}
+
 
 function ChartTooltip({ active, payload, label, unit }: { active?: boolean; payload?: any[]; label?: string; unit: string }) {
   if (!active || !payload?.length) return null
@@ -108,6 +178,34 @@ function ChartTooltip({ active, payload, label, unit }: { active?: boolean; payl
       <div style={{ color: 'var(--text-3)', marginBottom: 2 }}>{mins}m</div>
       <div style={{ color: 'var(--text)', fontWeight: 600 }}>{payload[0].value} {unit}</div>
     </div>
+  )
+}
+
+function HRZoneTooltip({ active, payload }: { active?: boolean; payload?: any[] }) {
+  if (!active || !payload?.length) return null
+  const d = payload[0].payload
+  return (
+    <div className="custom-tooltip">
+      <div style={{ color: 'var(--text-3)', marginBottom: 2 }}>{d.name}</div>
+      <div style={{ color: 'var(--text)', fontWeight: 600 }}>{d.value} samples ({d.pct}%)</div>
+    </div>
+  )
+}
+
+function ExpandModal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <>
+      <div className="overlay" onClick={onClose} />
+      <div className="modal">
+        <div className="modal-box" style={{ maxWidth: 900, width: '95vw' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <h3 style={{ fontSize: 15, fontWeight: 700 }}>{title}</h3>
+            <button className="btn-icon" onClick={onClose} title="Close"><XIcon size={18} /></button>
+          </div>
+          {children}
+        </div>
+      </div>
+    </>
   )
 }
 
@@ -134,6 +232,79 @@ export default function WorkoutDetail({ workout: w0, onBack }: WorkoutDetailProp
     [w.paceTimeline],
   )
   const hrZones = useMemo(() => hrZoneBuckets(w.hrTimeline, w.maxHR), [w.hrTimeline, w.maxHR])
+
+  // --- Playback: drives the map marker and the "draw up to here" chart cursor ---
+  const [currentTime, setCurrentTime] = useState(w.duration)
+  const [playing, setPlaying] = useState(false)
+  const [expanded, setExpanded] = useState<null | 'map' | Metric | 'hrzones'>(null)
+
+  useEffect(() => {
+    if (!playing || w.duration <= 0) return
+    const totalMs = 15000 // full playback takes 15s of wall-clock time
+    const startWall = performance.now()
+    const startT = currentTime
+    let raf = 0
+    function tick(now: number) {
+      const elapsed = now - startWall
+      const t = Math.min(w.duration, startT + (elapsed / totalMs) * w.duration)
+      setCurrentTime(t)
+      if (t >= w.duration) {
+        setPlaying(false)
+        return
+      }
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playing])
+
+  function handlePlayPause() {
+    if (playing) {
+      setPlaying(false)
+      return
+    }
+    if (currentTime >= w.duration) setCurrentTime(0)
+    setPlaying(true)
+  }
+
+  function handleReset() {
+    setPlaying(false)
+    setCurrentTime(0)
+  }
+
+  function handleScrub(t: number) {
+    setPlaying(false)
+    setCurrentTime(Math.max(0, Math.min(w.duration, t)))
+  }
+
+  function domainOf(data: number[]): [number, number] {
+    if (!data.length) return [0, 1]
+    const min = Math.min(...data)
+    const max = Math.max(...data)
+    const pad = (max - min) * 0.15 || 1
+    return [Math.floor(min - pad), Math.ceil(max + pad)]
+  }
+
+  function valueAtTime<T extends { t: number }>(data: T[], key: keyof T, t: number): number | null {
+    if (data.length === 0) return null
+    let best = data[0]
+    let bestDiff = Math.abs(data[0].t - t)
+    for (const d of data) {
+      const diff = Math.abs(d.t - t)
+      if (diff < bestDiff) {
+        bestDiff = diff
+        best = d
+      }
+    }
+    return best[key] as unknown as number
+  }
+
+  function visibleUpTo<T extends { t: number }>(data: T[], t: number): T[] {
+    if (data.length === 0) return []
+    const visible = data.filter(d => d.t <= t)
+    return visible.length ? visible : [data[0]]
+  }
 
   function startEdit() {
     setEditName(w.name)
@@ -178,6 +349,95 @@ export default function WorkoutDetail({ workout: w0, onBack }: WorkoutDetailProp
     { icon: <TrendingUp size={14} />, label: w.avgPace ? 'Avg Pace' : 'Avg Speed', value: w.avgPace ? fmtPace(w.avgPace) + ' /km' : `${w.avgSpeed.toFixed(1)} km/h` },
     { icon: <TrendingUp size={14} />, label: 'Max Speed', value: `${(w.avgSpeed * 1.18).toFixed(1)} km/h` },
   ]
+
+  function areaChart(opts: {
+    data: Array<{ t: number;[k: string]: number }>
+    dataKey: string
+    stroke: string
+    gradId: string
+    unit: string
+    reversed?: boolean
+    yTickFormatter?: (v: number) => string
+    height: number
+  }) {
+    const { data, dataKey, stroke, gradId, unit, reversed, yTickFormatter, height } = opts
+    const visible = visibleUpTo(data, currentTime)
+    const yDomain = domainOf(data.map(d => d[dataKey]))
+    const cursorVal = valueAtTime(data, dataKey as any, currentTime)
+    return (
+      <ResponsiveContainer width="100%" height={height}>
+        <AreaChart
+          data={visible}
+          margin={{ top: 4, right: 4, left: -24, bottom: 0 }}
+          onClick={(e: any) => { if (e && e.activeLabel != null) handleScrub(Number(e.activeLabel)) }}
+        >
+          <defs>
+            <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor={stroke} stopOpacity={0.3} />
+              <stop offset="95%" stopColor={stroke} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
+          <XAxis
+            dataKey="t" type="number" domain={[0, w.duration || 1]}
+            tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}
+            axisLine={false} tickLine={false} tickFormatter={v => `${Math.floor(v / 60)}m`} interval="preserveStartEnd"
+          />
+          <YAxis
+            tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}
+            axisLine={false} tickLine={false} domain={yDomain} reversed={reversed} tickFormatter={yTickFormatter}
+          />
+          <Tooltip content={<ChartTooltip unit={unit} />} />
+          <Area type="monotone" dataKey={dataKey} stroke={stroke} strokeWidth={2} fill={`url(#${gradId})`} dot={false} isAnimationActive={false} />
+          {currentTime > 0 && <ReferenceLine x={currentTime} stroke="var(--text-2)" strokeDasharray="3 3" />}
+          {cursorVal != null && <ReferenceDot x={currentTime} y={cursorVal} r={4} fill={stroke} stroke="var(--bg-2)" strokeWidth={2} />}
+        </AreaChart>
+      </ResponsiveContainer>
+    )
+  }
+
+  function hrChart(height: number) {
+    return areaChart({ data: w.hrTimeline as any, dataKey: 'hr', stroke: '#ef4444', gradId: 'hrGrad', unit: 'bpm', height })
+  }
+  function paceChart(height: number) {
+    return areaChart({ data: w.paceTimeline as any, dataKey: 'pace', stroke: color, gradId: 'paceGrad', unit: 's/km', reversed: true, yTickFormatter: v => fmtPace(v), height })
+  }
+  function speedChart(height: number) {
+    return areaChart({ data: speedTimeline as any, dataKey: 'speed', stroke: 'var(--blue)', gradId: 'speedGrad', unit: 'km/h', height })
+  }
+  function elevChart(height: number) {
+    return areaChart({ data: w.elevTimeline as any, dataKey: 'elev', stroke: 'var(--hike)', gradId: 'elevGrad', unit: 'm', height })
+  }
+
+  function hrZoneChart(height: number) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+          {hrZones.map(z => (
+            <div key={z.name} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-2)' }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: z.color, flexShrink: 0 }} />
+              <span style={{ whiteSpace: 'nowrap' }}>{z.name} · {z.pct}%</span>
+            </div>
+          ))}
+        </div>
+        <ResponsiveContainer width="100%" height={height}>
+          <PieChart>
+            <Pie data={hrZones} dataKey="value" nameKey="name" innerRadius={height * 0.25} outerRadius={height * 0.44} paddingAngle={2}>
+              {hrZones.map(z => <Cell key={z.name} fill={z.color} />)}
+            </Pie>
+            <Tooltip content={<HRZoneTooltip />} />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+    )
+  }
+
+  function mapCard(height: number) {
+    return (
+      <RouteMap route={w.route} color={color} duration={w.duration} currentTime={currentTime} onScrub={handleScrub} height={height} />
+    )
+  }
+
 
   return (
     <div>
@@ -230,11 +490,10 @@ export default function WorkoutDetail({ workout: w0, onBack }: WorkoutDetailProp
 
       <div className="page-content">
         {/* Map + stats row */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: 16, marginBottom: 16 }}>
-          <div className="card" style={{ height: 280, padding: 0, overflow: 'hidden', position: 'relative', background: 'var(--bg-3)' }}>
-            <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(ellipse at 50% 50%, ${color}08 0%, transparent 70%)` }} />
-            <RouteMap route={w.route} color={color} />
-            <div style={{ position: 'absolute', bottom: 12, left: 12, display: 'flex', gap: 8 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: 16, marginBottom: 12 }}>
+          <div className="card" style={{ padding: 0, overflow: 'hidden', position: 'relative', background: 'var(--bg-3)' }}>
+            {mapCard(280)}
+            <div style={{ position: 'absolute', bottom: 12, left: 12, display: 'flex', gap: 8, zIndex: 500, pointerEvents: 'none' }}>
               <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 8px', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-3)' }}>
                 ● Start
               </div>
@@ -242,6 +501,14 @@ export default function WorkoutDetail({ workout: w0, onBack }: WorkoutDetailProp
                 ■ Finish
               </div>
             </div>
+            <button
+              className="btn-icon"
+              onClick={() => setExpanded('map')}
+              title="Expand map"
+              style={{ position: 'absolute', top: 10, right: 10, zIndex: 500, background: 'var(--bg-2)', border: '1px solid var(--border)' }}
+            >
+              <Maximize2 size={14} />
+            </button>
           </div>
 
           <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -255,6 +522,18 @@ export default function WorkoutDetail({ workout: w0, onBack }: WorkoutDetailProp
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Playback controls: drives the map marker + chart cursors below */}
+        <div className="card" style={{ marginBottom: 16 }}>
+          <PlaybackBar
+            playing={playing}
+            currentTime={currentTime}
+            duration={w.duration}
+            onPlayPause={handlePlayPause}
+            onReset={handleReset}
+            onScrub={handleScrub}
+          />
         </div>
 
         {/* Metric toggle row */}
@@ -289,23 +568,12 @@ export default function WorkoutDetail({ workout: w0, onBack }: WorkoutDetailProp
             <div className="card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                 <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><Heart size={14} color="#ef4444" /> Heart Rate</h3>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)' }}>Avg {w.avgHR} · Max {w.maxHR}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)' }}>Avg {w.avgHR} · Max {w.maxHR}</span>
+                  <button className="btn-icon" onClick={() => setExpanded('hr')} title="Expand"><Maximize2 size={13} /></button>
+                </div>
               </div>
-              <ResponsiveContainer width="100%" height={140}>
-                <AreaChart data={w.hrTimeline} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="hrGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
-                  <XAxis dataKey="t" tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} tickFormatter={v => `${Math.floor(v / 60)}m`} interval="preserveStartEnd" />
-                  <YAxis tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} domain={['auto', 'auto']} />
-                  <Tooltip content={<ChartTooltip unit="bpm" />} />
-                  <Area type="monotone" dataKey="hr" stroke="#ef4444" strokeWidth={2} fill="url(#hrGrad)" dot={false} />
-                </AreaChart>
-              </ResponsiveContainer>
+              {hrChart(140)}
             </div>
           )}
 
@@ -314,23 +582,12 @@ export default function WorkoutDetail({ workout: w0, onBack }: WorkoutDetailProp
             <div className="card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                 <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><TrendingUp size={14} color={color} /> Pace</h3>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)' }}>Avg {fmtPace(w.avgPace)} /km</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)' }}>Avg {fmtPace(w.avgPace)} /km</span>
+                  <button className="btn-icon" onClick={() => setExpanded('pace')} title="Expand"><Maximize2 size={13} /></button>
+                </div>
               </div>
-              <ResponsiveContainer width="100%" height={140}>
-                <AreaChart data={w.paceTimeline} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="paceGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={color} stopOpacity={0.3} />
-                      <stop offset="95%" stopColor={color} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
-                  <XAxis dataKey="t" tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} tickFormatter={v => `${Math.floor(v / 60)}m`} interval="preserveStartEnd" />
-                  <YAxis tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} domain={['auto', 'auto']} reversed tickFormatter={v => fmtPace(v)} />
-                  <Tooltip content={<ChartTooltip unit="s/km" />} />
-                  <Area type="monotone" dataKey="pace" stroke={color} strokeWidth={2} fill="url(#paceGrad)" dot={false} />
-                </AreaChart>
-              </ResponsiveContainer>
+              {paceChart(140)}
             </div>
           )}
 
@@ -339,23 +596,12 @@ export default function WorkoutDetail({ workout: w0, onBack }: WorkoutDetailProp
             <div className="card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                 <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><Gauge size={14} color="var(--blue)" /> Speed</h3>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)' }}>Avg {w.avgSpeed.toFixed(1)} km/h</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)' }}>Avg {w.avgSpeed.toFixed(1)} km/h</span>
+                  <button className="btn-icon" onClick={() => setExpanded('speed')} title="Expand"><Maximize2 size={13} /></button>
+                </div>
               </div>
-              <ResponsiveContainer width="100%" height={140}>
-                <AreaChart data={speedTimeline} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="speedGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--blue)" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="var(--blue)" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
-                  <XAxis dataKey="t" tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} tickFormatter={v => `${Math.floor(v / 60)}m`} interval="preserveStartEnd" />
-                  <YAxis tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} domain={['auto', 'auto']} />
-                  <Tooltip content={<ChartTooltip unit="km/h" />} />
-                  <Area type="monotone" dataKey="speed" stroke="var(--blue)" strokeWidth={2} fill="url(#speedGrad)" dot={false} />
-                </AreaChart>
-              </ResponsiveContainer>
+              {speedChart(140)}
             </div>
           )}
 
@@ -364,50 +610,25 @@ export default function WorkoutDetail({ workout: w0, onBack }: WorkoutDetailProp
             <div className="card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                 <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><Mountain size={14} color="var(--hike)" /> Elevation</h3>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)' }}>+{w.elevationGain} m gain</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)' }}>+{w.elevationGain} m gain</span>
+                  <button className="btn-icon" onClick={() => setExpanded('elevation')} title="Expand"><Maximize2 size={13} /></button>
+                </div>
               </div>
-              <ResponsiveContainer width="100%" height={140}>
-                <AreaChart data={w.elevTimeline} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="elevGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--hike)" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="var(--hike)" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
-                  <XAxis dataKey="t" tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} tickFormatter={v => `${Math.floor(v / 60)}m`} interval="preserveStartEnd" />
-                  <YAxis tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} domain={['auto', 'auto']} />
-                  <Tooltip content={<ChartTooltip unit="m" />} />
-                  <Area type="monotone" dataKey="elev" stroke="var(--hike)" strokeWidth={2} fill="url(#elevGrad)" dot={false} />
-                </AreaChart>
-              </ResponsiveContainer>
+              {elevChart(140)}
             </div>
           )}
 
           {/* Heart rate zones */}
           {selectedMetrics.includes('hr') && hrZones.length > 0 && (
             <div className="card">
-              <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
-                <Heart size={14} color="#ef4444" /> Heart Rate Zones
-              </h3>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
-                  {hrZones.map(z => (
-                    <div key={z.name} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-2)' }}>
-                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: z.color, flexShrink: 0 }} />
-                      <span style={{ whiteSpace: 'nowrap' }}>{z.name} · {z.pct}%</span>
-                    </div>
-                  ))}
-                </div>
-                <ResponsiveContainer width="100%" height={160}>
-                  <PieChart>
-                    <Pie data={hrZones} dataKey="value" nameKey="name" innerRadius={40} outerRadius={70} paddingAngle={2}>
-                      {hrZones.map(z => <Cell key={z.name} fill={z.color} />)}
-                    </Pie>
-                    <Tooltip formatter={(v: unknown, _n: unknown, entry: any) => [`${v} samples (${entry.payload.pct}%)`, entry.payload.name]} />
-                  </PieChart>
-                </ResponsiveContainer>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Heart size={14} color="#ef4444" /> Heart Rate Zones
+                </h3>
+                <button className="btn-icon" onClick={() => setExpanded('hrzones')} title="Expand"><Maximize2 size={13} /></button>
               </div>
+              {hrZoneChart(160)}
             </div>
           )}
         </div>
@@ -419,6 +640,52 @@ export default function WorkoutDetail({ workout: w0, onBack }: WorkoutDetailProp
           </div>
         )}
       </div>
+
+      {expanded === 'map' && (
+        <ExpandModal title="Route" onClose={() => setExpanded(null)}>
+          <div style={{ marginBottom: 12 }}>
+            {mapCard(Math.round(window.innerHeight * 0.6))}
+          </div>
+          <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onScrub={handleScrub} />
+        </ExpandModal>
+      )}
+      {expanded === 'hr' && (
+        <ExpandModal title="Heart Rate" onClose={() => setExpanded(null)}>
+          {hrChart(400)}
+          <div style={{ marginTop: 12 }}>
+            <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onScrub={handleScrub} />
+          </div>
+        </ExpandModal>
+      )}
+      {expanded === 'pace' && (
+        <ExpandModal title="Pace" onClose={() => setExpanded(null)}>
+          {paceChart(400)}
+          <div style={{ marginTop: 12 }}>
+            <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onScrub={handleScrub} />
+          </div>
+        </ExpandModal>
+      )}
+      {expanded === 'speed' && (
+        <ExpandModal title="Speed" onClose={() => setExpanded(null)}>
+          {speedChart(400)}
+          <div style={{ marginTop: 12 }}>
+            <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onScrub={handleScrub} />
+          </div>
+        </ExpandModal>
+      )}
+      {expanded === 'elevation' && (
+        <ExpandModal title="Elevation" onClose={() => setExpanded(null)}>
+          {elevChart(400)}
+          <div style={{ marginTop: 12 }}>
+            <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onScrub={handleScrub} />
+          </div>
+        </ExpandModal>
+      )}
+      {expanded === 'hrzones' && (
+        <ExpandModal title="Heart Rate Zones" onClose={() => setExpanded(null)}>
+          {hrZoneChart(320)}
+        </ExpandModal>
+      )}
     </div>
   )
 }

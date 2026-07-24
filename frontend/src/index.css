@@ -282,7 +282,7 @@ body {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.6);
-  z-index: 80;
+  z-index: 1100;
   backdrop-filter: blur(2px);
 }
 
@@ -292,7 +292,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 90;
+  z-index: 1101;
   padding: 16px;
   pointer-events: none;
 }
