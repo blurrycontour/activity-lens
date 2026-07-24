@@ -7,8 +7,10 @@
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
     "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
     "format": "oxfmt"
   },
+  "packageManager": "pnpm@11.17.0",
   "dependencies": {
     "lucide-react": "^1.26.0",
     "react": "^19.0.0",
