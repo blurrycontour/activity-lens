@@ -38,6 +38,17 @@ func Handler() (http.Handler, error) {
 		}
 		if f, err := assets.Open(p); err == nil {
 			_ = f.Close()
+			// Static assets are content-hashed and never need byte-range
+			// serving (no audio/video). Some reverse proxies compress
+			// responses on the fly (e.g. Caddy's "encode" directive); if
+			// they also honor a client's Range/If-Range request against the
+			// advertised Accept-Ranges/Content-Length of the *uncompressed*
+			// body, the two lengths disagree mid-stream and the proxy resets
+			// the HTTP/2 stream (curl: "stream was not closed cleanly").
+			// Dropping these headers keeps every asset response a plain,
+			// single, fully-buffered 200 that compresses safely.
+			r.Header.Del("Range")
+			r.Header.Del("If-Range")
 			fileServer.ServeHTTP(w, r)
 			return
 		}
