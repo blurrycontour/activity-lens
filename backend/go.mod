@@ -3,7 +3,7 @@ module github.com/blurrycontour/activity-lens/backend
 go 1.26
 
 require (
-	github.com/blurrycontour/go-authkit v0.0.0-20260717095002-528730d9d0f3
+	github.com/blurrycontour/go-authkit v1.0.0
 	modernc.org/sqlite v1.54.0
 )
 

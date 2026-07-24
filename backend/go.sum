@@ -1,5 +1,5 @@
-github.com/blurrycontour/go-authkit v0.0.0-20260717095002-528730d9d0f3 h1:fdhoNw874XNufSPTQxXWdMqVLxD80zPLTmJlKaXItzk=
-github.com/blurrycontour/go-authkit v0.0.0-20260717095002-528730d9d0f3/go.mod h1:zZydeN+25V3xn8wnyYt8JRjXUFFCKFn8Oi6wl/c7akA=
+github.com/blurrycontour/go-authkit v1.0.0 h1:JxHHC2cRo4JRIqa5GfuTJ9WyxsRCkELjY4LMCzWRBlI=
+github.com/blurrycontour/go-authkit v1.0.0/go.mod h1:zZydeN+25V3xn8wnyYt8JRjXUFFCKFn8Oi6wl/c7akA=
 github.com/coreos/go-oidc/v3 v3.20.0 h1:EtE0WIBHk03N+DqGkY4+UONzzZHk7amKt6IyNd7OsZE=
 github.com/coreos/go-oidc/v3 v3.20.0/go.mod h1:DYCf24+ncYi+XkIH97GY1+dqoRlbaSI26KVTCI9SrY4=
 github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=
