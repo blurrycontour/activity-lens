@@ -34,6 +34,20 @@ type Config struct {
 
 	// OIDC
 	OIDC OIDCConfig
+
+	// SMTP (transactional email)
+	SMTP SMTPConfig
+}
+
+// SMTPConfig holds outbound email settings.
+type SMTPConfig struct {
+	Host       string
+	Port       int
+	Username   string
+	Password   string
+	From       string
+	FromName   string
+	Encryption string // "none", "starttls", or "tls"
 }
 
 // OIDCConfig holds the optional OpenID Connect settings.
@@ -86,6 +100,16 @@ func Load() (Config, error) {
 		}
 	}
 
+	c.SMTP = SMTPConfig{
+		Host:       os.Getenv("AL_SMTP_HOST"),
+		Port:       intEnv("AL_SMTP_PORT", 587),
+		Username:   os.Getenv("AL_SMTP_USERNAME"),
+		Password:   os.Getenv("AL_SMTP_PASSWORD"),
+		From:       os.Getenv("AL_SMTP_FROM"),
+		FromName:   env("AL_SMTP_FROM_NAME", "Activity Lens"),
+		Encryption: env("AL_SMTP_ENCRYPTION", "starttls"),
+	}
+
 	return c, nil
 }
 
@@ -94,6 +118,18 @@ func env(key, def string) string {
 		return v
 	}
 	return def
+}
+
+func intEnv(key string, def int) int {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return def
+	}
+	return n
 }
 
 func boolEnv(key string, def bool) bool {

@@ -17,6 +17,9 @@ import (
 //go:embed migrations/0001_init.sql
 var appSchema string
 
+//go:embed migrations/0002_admin.sql
+var adminSchema string
+
 // OpenSQLite opens (and pings) a pure-Go SQLite database at dbPath with
 // foreign keys and WAL enabled for concurrency and integrity.
 func OpenSQLite(dbPath string) (*sql.DB, error) {
@@ -40,6 +43,9 @@ func OpenSQLite(dbPath string) (*sql.DB, error) {
 func MigrateApp(ctx context.Context, db *sql.DB) error {
 	if _, err := db.ExecContext(ctx, appSchema); err != nil {
 		return fmt.Errorf("apply app schema: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, adminSchema); err != nil {
+		return fmt.Errorf("apply admin schema: %w", err)
 	}
 	return nil
 }

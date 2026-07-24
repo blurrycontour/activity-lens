@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -20,11 +21,16 @@ type authResponse struct {
 
 // handleAuthConfig exposes the auth features the frontend should render
 // (registration availability, OIDC button + label). Public endpoint.
-func (s *Server) handleAuthConfig(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) handleAuthConfig(w http.ResponseWriter, r *http.Request) {
+	oidcCfg, _, err := s.settings.EffectiveOIDC(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load settings")
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"allowRegistration": s.cfg.AllowRegistration,
-		"oidcEnabled":       s.oidc != nil,
-		"oidcProviderName":  s.cfg.OIDC.ProviderName,
+		"oidcEnabled":       oidcCfg.Enabled,
+		"oidcProviderName":  oidcCfg.ProviderName,
 	})
 }
 
@@ -134,6 +140,9 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 
 // startSession sets session + CSRF cookies and returns the user.
 func (s *Server) startSession(w http.ResponseWriter, r *http.Request, user *auth.User, sid string, exp time.Time) {
+	if err := s.settings.RecordLogin(r.Context(), user.ID, time.Now()); err != nil {
+		slog.Warn("record last login", "error", err, "user", user.ID)
+	}
 	secure := s.secure(r)
 	http.SetCookie(w, s.auth.SessionCookie(sid, exp, secure))
 	csrf, err := s.mw.IssueCSRFCookie(r)
@@ -156,9 +165,13 @@ func (s *Server) writeLoginError(w http.ResponseWriter, err error) {
 	}
 }
 
-// oidcConfig builds the effective OIDC config from server configuration.
-func (s *Server) oidcConfig(context.Context) (oidc.Config, error) {
-	c := s.cfg.OIDC
+// oidcConfig builds the effective OIDC config from database + environment
+// settings (environment values take precedence).
+func (s *Server) oidcConfig(ctx context.Context) (oidc.Config, error) {
+	c, _, err := s.settings.EffectiveOIDC(ctx)
+	if err != nil {
+		return oidc.Config{}, err
+	}
 	return oidc.Config{
 		Enabled:           c.Enabled,
 		IssuerURL:         c.IssuerURL,
@@ -174,7 +187,12 @@ func (s *Server) oidcConfig(context.Context) (oidc.Config, error) {
 
 // oidcOnSuccess sets cookies after a successful OIDC login and redirects to the
 // SPA root.
-func (s *Server) oidcOnSuccess(w http.ResponseWriter, r *http.Request, _ *auth.User, sid string, exp time.Time) {
+func (s *Server) oidcOnSuccess(w http.ResponseWriter, r *http.Request, user *auth.User, sid string, exp time.Time) {
+	if user != nil {
+		if err := s.settings.RecordLogin(r.Context(), user.ID, time.Now()); err != nil {
+			slog.Warn("record last login", "error", err, "user", user.ID)
+		}
+	}
 	secure := s.secure(r)
 	http.SetCookie(w, s.auth.SessionCookie(sid, exp, secure))
 	if csrf, err := s.mw.IssueCSRFCookie(r); err == nil {

@@ -1,7 +1,6 @@
 import { useRef, useCallback } from 'react'
 import { LayoutDashboard, Dumbbell, MapIcon, BarChart2, Activity, HelpCircle, Upload } from 'lucide-react'
-
-type Page = 'dashboard' | 'workouts' | 'heatmap' | 'timeline' | 'analysis' | 'help'
+import { type Page } from '../lib/nav'
 
 interface SidebarProps {
   currentPage: Page

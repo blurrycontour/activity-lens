@@ -19,6 +19,79 @@ export interface AuthFeatures {
   oidcProviderName: string
 }
 
+export interface SessionInfo {
+  id: string
+  userAgent: string
+  ip: string
+  createdAt: string
+  expiresAt: string
+  current: boolean
+}
+
+export interface SmtpSettings {
+  host: string
+  port: number
+  username: string
+  passwordSet: boolean
+  from: string
+  fromName: string
+  encryption: string
+  overridden: Record<string, boolean>
+}
+
+export interface OidcSettings {
+  enabled: boolean
+  issuerUrl: string
+  clientId: string
+  clientSecretSet: boolean
+  redirectUrl: string
+  adminGroup: string
+  providerName: string
+  allowRegistration: boolean
+  scopes: string[]
+  overridden: Record<string, boolean>
+}
+
+export interface AdminSettings {
+  smtp: SmtpSettings
+  oidc: OidcSettings
+}
+
+export interface SmtpInput {
+  host: string
+  port: number
+  username: string
+  password: string
+  from: string
+  fromName: string
+  encryption: string
+}
+
+export interface OidcInput {
+  enabled: boolean
+  issuerUrl: string
+  clientId: string
+  clientSecret: string
+  redirectUrl: string
+  adminGroup: string
+  providerName: string
+  allowRegistration: boolean
+  scopes: string[]
+}
+
+export interface AdminUser {
+  id: number
+  username: string
+  email: string
+  displayName: string
+  avatarPath: string
+  isAdmin: boolean
+  isActive: boolean
+  role: string
+  hasPassword: boolean
+  lastLoginAt: string
+}
+
 const CSRF_COOKIE = 'authkit_csrf'
 const CSRF_HEADER = 'X-CSRF-Token'
 
@@ -90,6 +163,36 @@ export const api = {
     request<{ user: ApiUser }>('/api/auth/profile', { method: 'PATCH', body: { displayName, email } }),
   changePassword: (currentPassword: string, newPassword: string) =>
     request<unknown>('/api/auth/password', { method: 'POST', body: { currentPassword, newPassword } }),
+  uploadAvatar: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return request<{ user: ApiUser }>('/api/auth/avatar', { method: 'POST', raw: form })
+  },
+  listSessions: () => request<{ sessions: SessionInfo[] }>('/api/auth/sessions'),
+  revokeOtherSessions: () =>
+    request<{ revoked: number }>('/api/auth/sessions/revoke-others', { method: 'POST' }),
+  revokeSession: (id: string) =>
+    request<unknown>(`/api/auth/sessions/${id}`, { method: 'DELETE' }),
+  requestAccountDeletion: () =>
+    request<{ status: string; email: string }>('/api/auth/account/deletion/request', { method: 'POST' }),
+  confirmAccountDeletion: (code: string) =>
+    request<{ status: string }>('/api/auth/account/deletion', { method: 'POST', body: { code } }),
+
+  // --- Admin ---
+  getAdminSettings: () => request<AdminSettings>('/api/admin/settings'),
+  saveSMTP: (payload: SmtpInput) =>
+    request<AdminSettings>('/api/admin/settings/smtp', { method: 'PUT', body: payload }),
+  saveOIDC: (payload: OidcInput) =>
+    request<AdminSettings>('/api/admin/settings/oidc', { method: 'PUT', body: payload }),
+  testEmail: (to: string) =>
+    request<{ status: string; to: string }>('/api/admin/settings/smtp/test', { method: 'POST', body: { to } }),
+  listAdminUsers: () => request<{ users: AdminUser[] }>('/api/admin/users'),
+  createUser: (payload: { username: string; email: string; displayName: string; password: string; role: string }) =>
+    request<{ user: ApiUser }>('/api/admin/users', { method: 'POST', body: payload }),
+  updateUser: (id: number, payload: { role: string; isActive: boolean }) =>
+    request<{ user: ApiUser }>(`/api/admin/users/${id}`, { method: 'PATCH', body: payload }),
+  deleteUser: (id: number) =>
+    request<{ status: string }>(`/api/admin/users/${id}`, { method: 'DELETE' }),
 
   // --- Workouts ---
   listWorkouts: () => request<import('../data/workouts').Workout[]>('/api/workouts'),

@@ -4,12 +4,14 @@ import type { ApiUser } from '../lib/api'
 
 interface UserMenuProps {
   onClose: () => void
+  onAccount: () => void
   onSettings: () => void
+  onAdmin: () => void
   onLogout: () => void | Promise<void>
   user: ApiUser
 }
 
-export default function UserMenu({ onClose, onSettings, onLogout, user }: UserMenuProps) {
+export default function UserMenu({ onClose, onAccount, onSettings, onAdmin, onLogout, user }: UserMenuProps) {
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -28,9 +30,9 @@ export default function UserMenu({ onClose, onSettings, onLogout, user }: UserMe
     .toUpperCase()
 
   const items = [
-    { icon: <User size={15} />, label: 'User Details', sub: `${user.displayName || user.username} · ${user.email}`, action: onClose },
-    { icon: <Settings size={15} />, label: 'Settings', sub: 'Appearance, profile, security', action: () => { onClose(); onSettings() } },
-    ...(user.isAdmin ? [{ icon: <Shield size={15} />, label: 'Role', sub: `Administrator`, action: onClose }] : []),
+    { icon: <User size={15} />, label: 'Account', sub: 'Profile, password, sessions', action: () => { onClose(); onAccount() } },
+    { icon: <Settings size={15} />, label: 'Settings', sub: 'Appearance & preferences', action: () => { onClose(); onSettings() } },
+    ...(user.isAdmin ? [{ icon: <Shield size={15} />, label: 'Admin Panel', sub: 'Users, email, SSO', action: () => { onClose(); onAdmin() } }] : []),
   ]
 
   return (
@@ -56,14 +58,18 @@ export default function UserMenu({ onClose, onSettings, onLogout, user }: UserMe
         }}
       >
         <div style={{ padding: '16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{
-            width: 44, height: 44, borderRadius: '50%',
-            background: 'linear-gradient(135deg, var(--primary) 0%, var(--blue) 100%)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 18, fontWeight: 700, color: '#fff', flexShrink: 0,
-          }}>
-            {initials}
-          </div>
+          {user.avatarPath ? (
+            <img src={user.avatarPath} alt="Avatar" style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+          ) : (
+            <div style={{
+              width: 44, height: 44, borderRadius: '50%',
+              background: 'linear-gradient(135deg, var(--primary) 0%, var(--blue) 100%)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 18, fontWeight: 700, color: '#fff', flexShrink: 0,
+            }}>
+              {initials}
+            </div>
+          )}
           <div>
             <div style={{ fontWeight: 600, fontSize: 14 }}>{user.displayName || user.username}</div>
             <div style={{ fontSize: 12, color: 'var(--text-3)' }}>{user.email}</div>

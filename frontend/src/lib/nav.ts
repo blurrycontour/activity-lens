@@ -1,0 +1,10 @@
+export type Page =
+  | 'dashboard'
+  | 'workouts'
+  | 'heatmap'
+  | 'timeline'
+  | 'analysis'
+  | 'help'
+  | 'settings'
+  | 'account'
+  | 'admin'

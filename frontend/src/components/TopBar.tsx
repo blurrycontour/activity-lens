@@ -1,4 +1,5 @@
 import { Menu, Sun, Moon, Monitor, Activity, HelpCircle } from 'lucide-react'
+import type { ApiUser } from '../lib/api'
 
 export type ThemeMode = 'dark' | 'light' | 'system'
 
@@ -9,6 +10,7 @@ interface TopBarProps {
   onUserMenu: () => void
   onHelp: () => void
   isMobile: boolean
+  user: ApiUser
 }
 
 const THEME_ICONS: Record<ThemeMode, React.ReactNode> = {
@@ -23,12 +25,20 @@ const THEME_LABELS: Record<ThemeMode, string> = {
   system: 'System theme',
 }
 
-export default function TopBar({ onToggleSidebar, themeMode, onCycleTheme, onUserMenu, onHelp, isMobile }: TopBarProps) {
+export default function TopBar({ onToggleSidebar, themeMode, onCycleTheme, onUserMenu, onHelp, isMobile, user }: TopBarProps) {
+  const initials = (user.displayName || user.username || '?')
+    .split(/\s+/)
+    .map(s => s[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase()
   return (
     <header className="topbar">
-      <button className="btn-icon" onClick={onToggleSidebar} title="Toggle sidebar">
-        <Menu size={18} />
-      </button>
+      {!isMobile && (
+        <button className="btn-icon" onClick={onToggleSidebar} title="Toggle sidebar">
+          <Menu size={18} />
+        </button>
+      )}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <div style={{
@@ -66,19 +76,21 @@ export default function TopBar({ onToggleSidebar, themeMode, onCycleTheme, onUse
         onClick={onUserMenu}
         style={{
           width: 32, height: 32, borderRadius: '50%',
-          background: 'linear-gradient(135deg, var(--primary) 0%, var(--blue) 100%)',
+          background: user.avatarPath ? 'transparent' : 'linear-gradient(135deg, var(--primary) 0%, var(--blue) 100%)',
           border: '2px solid var(--border)',
           cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 13, fontWeight: 700, color: '#fff',
           transition: 'transform 0.15s, box-shadow 0.15s',
-          flexShrink: 0,
+          flexShrink: 0, overflow: 'hidden', padding: 0,
         }}
         onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.08)'; e.currentTarget.style.boxShadow = '0 0 0 3px var(--primary-glow)' }}
         onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = 'none' }}
         title="User menu"
       >
-        JD
+        {user.avatarPath
+          ? <img src={user.avatarPath} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          : initials}
       </button>
     </header>
   )

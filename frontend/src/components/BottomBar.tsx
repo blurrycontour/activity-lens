@@ -1,6 +1,6 @@
 import { LayoutDashboard, Dumbbell, MapIcon, Activity, BarChart2 } from 'lucide-react'
 
-type Page = 'dashboard' | 'workouts' | 'heatmap' | 'timeline' | 'analysis' | 'help'
+import { type Page } from '../lib/nav'
 
 interface BottomBarProps {
   currentPage: Page

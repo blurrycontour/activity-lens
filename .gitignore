@@ -43,3 +43,5 @@ go.work.sum
 /frontend/node_modules/
 /frontend/dist/
 /frontend/.vite/
+
+.vscode/chats

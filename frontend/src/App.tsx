@@ -4,7 +4,7 @@ import Sidebar from './components/Sidebar'
 import BottomBar from './components/BottomBar'
 import UserMenu from './components/UserMenu'
 import ImportModal from './components/ImportModal'
-import SettingsModal, { applyAccent, ACCENTS } from './components/SettingsModal'
+import { applyAccent, ACCENTS } from './lib/theme'
 import Dashboard from './pages/Dashboard'
 import Workouts from './pages/Workouts'
 import WorkoutDetail from './pages/WorkoutDetail'
@@ -12,12 +12,14 @@ import Heatmap from './pages/Heatmap'
 import Timeline from './pages/Timeline'
 import Analysis from './pages/Analysis'
 import Help from './pages/Help'
+import Settings from './pages/Settings'
+import Account from './pages/Account'
+import Admin from './pages/Admin'
 import Login from './pages/Login'
 import { type Workout } from './data/workouts'
 import { useAuth } from './context/AuthContext'
 import { WorkoutsProvider } from './context/WorkoutsContext'
-
-type Page = 'dashboard' | 'workouts' | 'heatmap' | 'timeline' | 'analysis' | 'help'
+import { type Page } from './lib/nav'
 
 const SIDEBAR_KEY = 'al_sidebar_w'
 const THEME_KEY = 'al_theme'
@@ -52,7 +54,6 @@ export default function App() {
   })
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showImport, setShowImport] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
 
   // Detect mobile
@@ -117,7 +118,6 @@ export default function App() {
         setSelectedWorkout(null)
         setShowUserMenu(false)
         setShowImport(false)
-        setShowSettings(false)
       }
       if ((e.metaKey || e.ctrlKey) && e.key === 'i') {
         e.preventDefault()
@@ -155,6 +155,7 @@ export default function App() {
         onUserMenu={() => setShowUserMenu(v => !v)}
         onHelp={() => navigate('help')}
         isMobile={isMobile}
+        user={user}
       />
 
       {/* Desktop sidebar — hidden on mobile via CSS */}
@@ -181,6 +182,12 @@ export default function App() {
           <Timeline />
         ) : page === 'analysis' ? (
           <Analysis />
+        ) : page === 'settings' ? (
+          <Settings accent={accent} onAccentChange={setAccent} />
+        ) : page === 'account' ? (
+          <Account />
+        ) : page === 'admin' ? (
+          <Admin />
         ) : (
           <Help />
         )}
@@ -195,19 +202,14 @@ export default function App() {
       {showUserMenu && (
         <UserMenu
           onClose={() => setShowUserMenu(false)}
-          onSettings={() => setShowSettings(true)}
+          onAccount={() => navigate('account')}
+          onSettings={() => navigate('settings')}
+          onAdmin={() => navigate('admin')}
           onLogout={logout}
           user={user}
         />
       )}
       {showImport && <ImportModal onClose={() => setShowImport(false)} />}
-      {showSettings && (
-        <SettingsModal
-          onClose={() => setShowSettings(false)}
-          accent={accent}
-          onAccentChange={setAccent}
-        />
-      )}
       </div>
     </WorkoutsProvider>
   )
