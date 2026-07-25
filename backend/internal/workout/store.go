@@ -42,11 +42,11 @@ type SQLiteRepository struct {
 func NewSQLiteRepository(db *sql.DB) *SQLiteRepository { return &SQLiteRepository{db: db} }
 
 const workoutCols = `id, user_id, name, type, start_time, duration, distance, avg_hr, max_hr,
-	elevation_gain, calories, avg_pace, avg_speed, route, hr_timeline, pace_timeline,
+	elevation_gain, calories, steps, avg_pace, avg_speed, route, hr_timeline, pace_timeline,
 	elev_timeline, notes`
 
 const workoutSummaryCols = `id, user_id, name, type, start_time, duration, distance, avg_hr, max_hr,
-	elevation_gain, calories, avg_pace, avg_speed, notes`
+	elevation_gain, calories, steps, avg_pace, avg_speed, notes`
 
 func (r *SQLiteRepository) Create(ctx context.Context, w *Workout) error {
 	route, hr, pace, elev, err := marshalSeries(w)
@@ -55,9 +55,9 @@ func (r *SQLiteRepository) Create(ctx context.Context, w *Workout) error {
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	_, err = r.db.ExecContext(ctx, `INSERT INTO workouts (`+workoutCols+`, created_at, updated_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		w.ID, w.UserID, w.Name, string(w.Type), w.StartTime.UTC().Format(time.RFC3339),
-		w.Duration, w.Distance, w.AvgHR, w.MaxHR, w.ElevationGain, w.Calories,
+		w.Duration, w.Distance, w.AvgHR, w.MaxHR, w.ElevationGain, w.Calories, w.Steps,
 		w.AvgPace, w.AvgSpeed, route, hr, pace, elev, w.Notes, now, now)
 	if err != nil {
 		return fmt.Errorf("insert workout: %w", err)
@@ -114,11 +114,11 @@ func (r *SQLiteRepository) Update(ctx context.Context, w *Workout) error {
 		return err
 	}
 	res, err := r.db.ExecContext(ctx, `UPDATE workouts SET name=?, type=?, start_time=?, duration=?,
-		distance=?, avg_hr=?, max_hr=?, elevation_gain=?, calories=?, avg_pace=?, avg_speed=?,
+		distance=?, avg_hr=?, max_hr=?, elevation_gain=?, calories=?, steps=?, avg_pace=?, avg_speed=?,
 		route=?, hr_timeline=?, pace_timeline=?, elev_timeline=?, notes=?, updated_at=?
 		WHERE id=? AND user_id=?`,
 		w.Name, string(w.Type), w.StartTime.UTC().Format(time.RFC3339), w.Duration, w.Distance,
-		w.AvgHR, w.MaxHR, w.ElevationGain, w.Calories, w.AvgPace, w.AvgSpeed, route, hr, pace, elev,
+		w.AvgHR, w.MaxHR, w.ElevationGain, w.Calories, w.Steps, w.AvgPace, w.AvgSpeed, route, hr, pace, elev,
 		w.Notes, time.Now().UTC().Format(time.RFC3339), w.ID, w.UserID)
 	if err != nil {
 		return fmt.Errorf("update workout: %w", err)
@@ -217,7 +217,7 @@ func scanWorkout(row interface{ Scan(...any) error }) (*Workout, error) {
 		pace, elev []byte
 	)
 	if err := row.Scan(&w.ID, &w.UserID, &w.Name, &typ, &startTime, &w.Duration, &w.Distance,
-		&w.AvgHR, &w.MaxHR, &w.ElevationGain, &w.Calories, &w.AvgPace, &w.AvgSpeed,
+		&w.AvgHR, &w.MaxHR, &w.ElevationGain, &w.Calories, &w.Steps, &w.AvgPace, &w.AvgSpeed,
 		&route, &hr, &pace, &elev, &w.Notes); err != nil {
 		return nil, err
 	}
@@ -246,7 +246,7 @@ func scanWorkoutSummary(row interface{ Scan(...any) error }) (*Workout, error) {
 		startTime string
 	)
 	if err := row.Scan(&w.ID, &w.UserID, &w.Name, &typ, &startTime, &w.Duration, &w.Distance,
-		&w.AvgHR, &w.MaxHR, &w.ElevationGain, &w.Calories, &w.AvgPace, &w.AvgSpeed, &w.Notes); err != nil {
+		&w.AvgHR, &w.MaxHR, &w.ElevationGain, &w.Calories, &w.Steps, &w.AvgPace, &w.AvgSpeed, &w.Notes); err != nil {
 		return nil, err
 	}
 	if err := applyScalarFields(&w, typ, startTime); err != nil {

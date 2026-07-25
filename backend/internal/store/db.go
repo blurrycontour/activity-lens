@@ -10,6 +10,7 @@ import (
 	_ "embed"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	_ "modernc.org/sqlite"
 )
@@ -22,6 +23,15 @@ var adminSchema string
 
 //go:embed migrations/0003_raw_uploads.sql
 var rawUploadsSchema string
+
+//go:embed migrations/0004_user_prefs.sql
+var userPrefsSchema string
+
+//go:embed migrations/0005_workout_steps.sql
+var workoutStepsSchema string
+
+//go:embed migrations/0006_user_prefs_hr.sql
+var userPrefsHRSchema string
 
 // OpenSQLite opens (and pings) a pure-Go SQLite database at dbPath with
 // foreign keys and WAL enabled for concurrency and integrity.
@@ -52,6 +62,33 @@ func MigrateApp(ctx context.Context, db *sql.DB) error {
 	}
 	if _, err := db.ExecContext(ctx, rawUploadsSchema); err != nil {
 		return fmt.Errorf("apply raw uploads schema: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, userPrefsSchema); err != nil {
+		return fmt.Errorf("apply user prefs schema: %w", err)
+	}
+	// ALTER TABLE ADD COLUMN is not idempotent in SQLite; ignore the
+	// duplicate-column error so this remains safe to run on every startup.
+	if _, err := db.ExecContext(ctx, workoutStepsSchema); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("apply workout steps schema: %w", err)
+	}
+	// Backfill user_prefs columns on older databases. Each ALTER is executed
+	// individually so a duplicate-column error on one does not abort the rest.
+	var sqlOnly strings.Builder
+	for _, line := range strings.Split(userPrefsHRSchema, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "--") {
+			continue
+		}
+		sqlOnly.WriteString(line)
+		sqlOnly.WriteString("\n")
+	}
+	for _, stmt := range strings.Split(sqlOnly.String(), ";") {
+		stmt = strings.TrimSpace(stmt)
+		if stmt == "" {
+			continue
+		}
+		if _, err := db.ExecContext(ctx, stmt); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+			return fmt.Errorf("apply user prefs hr schema: %w", err)
+		}
 	}
 	return nil
 }

@@ -446,7 +446,7 @@ body {
   border: 1px solid var(--border-strong);
   border-radius: calc(var(--radius) * 1.5);
   padding: 4px;
-  z-index: 60;
+  z-index: 1200;
   min-width: 170px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
@@ -509,8 +509,8 @@ body {
 .route-pin { background: none !important; border: none !important; display: grid; place-items: center; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5)); }
 .map-shade-select {
   position: absolute;
-  bottom: 26px;
-  left: 10px;
+  bottom: 8px;
+  left: 8px;
   z-index: 1000;
   background: var(--bg-2);
   border: 1px solid var(--border);

@@ -62,7 +62,7 @@ function StatChip({ icon, label, value, calculated }: { icon?: React.ReactNode; 
   )
 }
 
-function OptionsMenu({ onEdit, onExport, onDelete, deleting }: { onEdit: () => void; onExport: () => void; onDelete: () => void; deleting: boolean }) {
+function OptionsMenu({ onEdit, onExport, onRecalculate, onDelete, deleting }: { onEdit: () => void; onExport: () => void; onRecalculate: () => void; onDelete: () => void; deleting: boolean }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -83,6 +83,9 @@ function OptionsMenu({ onEdit, onExport, onDelete, deleting }: { onEdit: () => v
         <div className="options-menu" style={{ animation: 'fadeIn 0.12s ease' }}>
           <button className="options-menu-item" onClick={() => { setOpen(false); onEdit() }}>
             <Pencil size={14} /> Edit workout
+          </button>
+          <button className="options-menu-item" onClick={() => { setOpen(false); onRecalculate() }}>
+            <RotateCcw size={14} /> Recalculate
           </button>
           <button className="options-menu-item" onClick={() => { setOpen(false); onExport() }}>
             <Download size={14} /> Export GPX
@@ -268,26 +271,14 @@ function RouteMap({
     localStorage.setItem(MAP_LAYER_KEY, layer)
   }, [layer])
 
-  if (route.length < 2) {
-    return (
-      <div style={{ width: '100%', height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-3)', fontSize: 13 }}>
-        No route data
-      </div>
-    )
-  }
-  const fraction = duration > 0 ? Math.max(0, Math.min(1, currentTime / duration)) : 0
-  const idx = Math.round(fraction * (route.length - 1))
-  const current = route[idx]
-  const start = route[0]
-  const end = route[route.length - 1]
-  const activeLayer = MAP_LAYERS[layer]
   const timeAt = (index: number) => (index / Math.max(route.length - 1, 1)) * duration
-  const sampleAt = <T extends { t: number }>(samples: T[], index: number) => samples.reduce<T | null>((closest, sample) => !closest || Math.abs(sample.t - timeAt(index)) < Math.abs(closest.t - timeAt(index)) ? sample : closest, null)
 
   // Shading is precomputed once per route/metric (never per playback tick) and
   // capped to a fixed number of segments so long, high-frequency tracks stay
   // smooth. The metric min/max is computed a single time rather than
   // re-scanned for every segment (which was O(n^2) and caused the lag).
+  // NOTE: this hook must run unconditionally (before the early return below)
+  // to keep hook order stable when route data loads asynchronously.
   const shadedSegments = useMemo(() => {
     if (shading === 'accent' || route.length < 2) {
       return [{ positions: route, color }]
@@ -315,6 +306,21 @@ function RouteMap({
     return segs
   }, [route, shading, hrTimeline, paceTimeline, elevTimeline, duration, color])
 
+  if (route.length < 2) {
+    return (
+      <div style={{ width: '100%', height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-3)', fontSize: 13 }}>
+        No route data
+      </div>
+    )
+  }
+  const fraction = duration > 0 ? Math.max(0, Math.min(1, currentTime / duration)) : 0
+  const idx = Math.round(fraction * (route.length - 1))
+  const current = route[idx]
+  const start = route[0]
+  const end = route[route.length - 1]
+  const activeLayer = MAP_LAYERS[layer]
+  const sampleAt = <T extends { t: number }>(samples: T[], index: number) => samples.reduce<T | null>((closest, sample) => !closest || Math.abs(sample.t - timeAt(index)) < Math.abs(closest.t - timeAt(index)) ? sample : closest, null)
+
   const selectedTime = selectedPoint == null ? 0 : timeAt(selectedPoint)
   const selectedHR = selectedPoint == null ? null : sampleAt(hrTimeline, selectedPoint)?.hr
   const selectedPace = selectedPoint == null ? null : sampleAt(paceTimeline, selectedPoint)?.pace
@@ -329,11 +335,10 @@ function RouteMap({
         <option value="pace">Pace / Speed</option>
         <option value="elevation">Elevation</option>
       </select>
-      <MapContainer center={current} zoom={14} style={{ width: '100%', height: '100%' }} scrollWheelZoom>
+      <MapContainer center={current} zoom={14} style={{ width: '100%', height: '100%' }} scrollWheelZoom attributionControl={false}>
         <TileLayer
           key={layer}
           url={activeLayer.url}
-          attribution={activeLayer.attribution}
           maxZoom={activeLayer.maxZoom}
         />
         <FitBounds route={route} />
@@ -341,7 +346,7 @@ function RouteMap({
         {shadedSegments.map((seg, index) => <Polyline key={index} positions={seg.positions} pathOptions={{ color: seg.color, weight: 4, opacity: 0.85 }} />)}
         <Marker position={start} icon={START_MARKER} interactive={false} />
         <Marker position={end} icon={FINISH_MARKER} interactive={false} />
-        <CircleMarker center={current} radius={7} pathOptions={{ color: '#fff', fillColor: color, fillOpacity: 1, weight: 2 }} />
+        <CircleMarker center={current} radius={7} pane="markerPane" pathOptions={{ color: '#fff', fillColor: color, fillOpacity: 1, weight: 2 }} />
         {selectedPoint != null && <Popup position={route[selectedPoint]} closeButton={false} autoPan><div style={{ fontSize: 12, lineHeight: 1.6 }}><strong>{fmtDuration(selectedTime)}</strong><br />Distance {fmtDist((selectedPoint / Math.max(route.length - 1, 1)) * distance)}<br />HR {selectedHR ?? '—'} bpm<br />Pace {selectedPace ? `${fmtPace(selectedPace)} /km` : '—'}<br />Speed {selectedPace ? `${(3600 / selectedPace).toFixed(1)} km/h` : '—'}<br />Elevation {selectedElev ?? '—'} m</div></Popup>}
       </MapContainer>
     </div>
@@ -450,9 +455,14 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
   const [editName, setEditName] = useState(w.name)
   const [editDate, setEditDate] = useState(w.date)
   const [editType, setEditType] = useState<WorkoutType>(w.type)
+  const [editCalories, setEditCalories] = useState('')
+  const [editSteps, setEditSteps] = useState('')
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [saveErr, setSaveErr] = useState<string | null>(null)
+  const [confirmRecalc, setConfirmRecalc] = useState(false)
+  const [recalculating, setRecalculating] = useState(false)
+  const [recalcErr, setRecalcErr] = useState<string | null>(null)
 
   const [selectedMetrics, setSelectedMetrics] = useState<Metric[]>(['hr', 'pace', 'speed', 'elevation'])
   function toggleMetric(m: Metric) {
@@ -463,7 +473,14 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
     () => w.paceTimeline.filter(p => p.pace > 0).map(p => ({ t: p.t, speed: Math.round((3600 / p.pace) * 10) / 10 })),
     [w.paceTimeline],
   )
-  const hrZones = useMemo(() => hrZoneBuckets(w.hrTimeline, w.maxHR), [w.hrTimeline, w.maxHR])
+  const [prefMaxHr, setPrefMaxHr] = useState(0)
+  useEffect(() => {
+    let cancelled = false
+    api.getPreferences().then(p => { if (!cancelled) setPrefMaxHr(p.maxHr || 0) }).catch(() => {})
+    return () => { cancelled = true }
+  }, [])
+  const effectiveMaxHR = w.maxHR > 0 ? w.maxHR : prefMaxHr
+  const hrZones = useMemo(() => hrZoneBuckets(w.hrTimeline, effectiveMaxHR), [w.hrTimeline, effectiveMaxHR])
 
   // Stats not directly reported by imports (per-point min/max, elevation
   // loss, step estimate) — derived here from the recorded timelines/route.
@@ -582,6 +599,8 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
     setEditName(w.name)
     setEditDate(w.date)
     setEditType(w.type)
+    setEditCalories(w.calories > 0 ? String(w.calories) : '')
+    setEditSteps(w.steps != null && w.steps > 0 ? String(w.steps) : '')
     setSaveErr(null)
     setEditing(true)
   }
@@ -590,13 +609,31 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
     setSaving(true)
     setSaveErr(null)
     try {
-      const updated = await updateWorkout(w.id, { name: editName.trim(), type: editType, date: editDate })
+      const updated = await updateWorkout(w.id, {
+        name: editName.trim(), type: editType, date: editDate,
+        calories: Math.max(0, Math.round(Number(editCalories) || 0)),
+        steps: Math.max(0, Math.round(Number(editSteps) || 0)),
+      })
       setW(updated)
       setEditing(false)
     } catch (err) {
       setSaveErr(err instanceof Error ? err.message : 'Failed to save changes')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleRecalculate() {
+    setRecalculating(true)
+    setRecalcErr(null)
+    try {
+      const updated = await api.recalcWorkout(w.id)
+      setW(updated)
+      setConfirmRecalc(false)
+    } catch (err) {
+      setRecalcErr(err instanceof Error ? err.message : 'Failed to recalculate')
+    } finally {
+      setRecalculating(false)
     }
   }
 
@@ -703,6 +740,32 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
 
   return (
     <div>
+      {confirmRecalc && (
+        <div
+          onClick={() => { if (!recalculating) setConfirmRecalc(false) }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'grid', placeItems: 'center', padding: 16 }}
+        >
+          <div className="card" onClick={e => e.stopPropagation()} style={{ maxWidth: 420, width: '100%' }}>
+            <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <RotateCcw size={16} /> Recalculate workout?
+            </h3>
+            <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6, marginBottom: 20 }}>
+              This recomputes all derived metrics (calories, steps, heart-rate, pace, speed and elevation)
+              from the recorded track and your calorie settings. Any values you entered manually will be
+              <strong> overwritten</strong>. The workout's name, type and date are not affected.
+            </p>
+            {recalcErr && (
+              <p style={{ fontSize: 13, color: 'var(--danger, #e5484d)', marginBottom: 12 }}>{recalcErr}</p>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button className="btn btn-ghost" onClick={() => setConfirmRecalc(false)} disabled={recalculating}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleRecalculate} disabled={recalculating}>
+                {recalculating ? 'Recalculating…' : 'Recalculate'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="page-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button className="btn-icon" onClick={onBack}><ArrowLeft size={18} /></button>
@@ -714,6 +777,8 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
                   {WORKOUT_TYPES.map(t => <option key={t} value={t}>{TYPE_ICON[t]} {t}</option>)}
                 </select>
                 <input className="input" type="date" value={editDate} onChange={e => setEditDate(e.target.value)} />
+                <input className="input" style={{ width: 130 }} type="number" min="0" value={editCalories} onChange={e => setEditCalories(e.target.value)} placeholder="Calories" title="Calories (kcal)" />
+                <input className="input" style={{ width: 130 }} type="number" min="0" value={editSteps} onChange={e => setEditSteps(e.target.value)} placeholder="Steps" title="Step count" />
                 <button className="btn btn-primary" onClick={saveEdit} disabled={saving || !editName.trim()} title="Save">
                   <Check size={14} /> {saving ? 'Saving…' : 'Save'}
                 </button>
@@ -736,7 +801,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
           </div>
           {!editing && (
             <div style={{ marginLeft: 'auto', flexShrink: 0 }}>
-              <OptionsMenu onEdit={startEdit} onExport={() => exportGPX(w)} onDelete={handleDelete} deleting={deleting} />
+              <OptionsMenu onEdit={startEdit} onExport={() => exportGPX(w)} onRecalculate={() => { setRecalcErr(null); setConfirmRecalc(true) }} onDelete={handleDelete} deleting={deleting} />
             </div>
           )}
         </div>
@@ -803,7 +868,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
             <div className="stat-grid-3">
               <StatChip icon={<Mountain size={12} color="var(--hike)" />} label="Elev. Gain" value={w.elevTimeline.length > 0 ? `${Math.round(w.elevationGain)} m` : '—'} />
               <StatChip icon={<Mountain size={12} color="var(--hike)" />} label="Elev. Loss" value={w.elevTimeline.length > 0 ? `${derived.elevLoss} m` : '—'} calculated={w.elevTimeline.length > 0} />
-              <StatChip icon={<Footprints size={12} />} label="Steps" value={derived.steps != null ? derived.steps.toLocaleString() : '—'} calculated={derived.steps != null} />
+              <StatChip icon={<Footprints size={12} />} label="Steps" value={(w.steps ?? 0) > 0 ? w.steps!.toLocaleString() : (derived.steps != null ? derived.steps.toLocaleString() : '—')} calculated={(w.steps ?? 0) === 0 && derived.steps != null} />
             </div>
           </div>
         </div>

@@ -8,7 +8,7 @@ interface WorkoutsState {
   error: string | null
   refresh: () => Promise<void>
   removeWorkout: (id: string) => Promise<void>
-  updateWorkout: (id: string, patch: { name?: string; type?: string; notes?: string; date?: string }) => Promise<Workout>
+  updateWorkout: (id: string, patch: { name?: string; type?: string; notes?: string; date?: string; calories?: number; steps?: number }) => Promise<Workout>
 }
 
 const WorkoutsContext = createContext<WorkoutsState | null>(null)

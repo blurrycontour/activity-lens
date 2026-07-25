@@ -133,6 +133,7 @@ export default function Dashboard() {
                     <XAxis dataKey="week" tick={{ fontSize: 11, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fontSize: 11, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} />
                     <Tooltip
+                      cursor={{ fill: 'var(--bg-3)', opacity: 0.5 }}
                       content={({ active, payload }) => {
                         if (!active || !payload?.length) return null
                         const p = payload[0].payload

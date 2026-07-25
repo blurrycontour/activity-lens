@@ -51,9 +51,18 @@ type Storage struct {
 	// bytes alongside the parsed workout so a future, improved import
 	// pipeline can reprocess history without asking users to re-upload.
 	// Trades additional database size for that flexibility.
-	KeepOriginalUploads bool    `json:"keepOriginalUploads"`
-	CalorieMethod       string  `json:"calorieMethod"`
-	BodyWeightKg        float64 `json:"bodyWeightKg"`
+	KeepOriginalUploads bool `json:"keepOriginalUploads"`
+}
+
+// UserPrefs holds per-user preferences that influence how activity metrics
+// (calorie estimates, heart-rate zones) are computed and displayed.
+type UserPrefs struct {
+	CalorieMethod string  `json:"calorieMethod"`
+	BodyWeightKg  float64 `json:"bodyWeightKg"`
+	MaxHR         int     `json:"maxHr"`
+	RestingHR     int     `json:"restingHr"`
+	ThresholdPace string  `json:"thresholdPace"`
+	FTP           int     `json:"ftp"`
 }
 
 // Store persists settings and per-user last-login timestamps.
@@ -121,7 +130,7 @@ func (s *Store) SaveOIDC(ctx context.Context, v OIDC) error {
 
 // StoredStorage returns the raw storage settings saved in the database.
 func (s *Store) StoredStorage(ctx context.Context) (Storage, error) {
-	v := Storage{CalorieMethod: "heart-rate", BodyWeightKg: 70}
+	v := Storage{}
 	if _, err := s.get(ctx, keyStorage, &v); err != nil {
 		return Storage{}, err
 	}
@@ -131,6 +140,39 @@ func (s *Store) StoredStorage(ctx context.Context) (Storage, error) {
 // SaveStorage persists storage settings.
 func (s *Store) SaveStorage(ctx context.Context, v Storage) error {
 	return s.set(ctx, keyStorage, v)
+}
+
+// UserPreferences returns the calorie-estimation preferences for a user,
+// falling back to sensible defaults when the user has never saved any.
+func (s *Store) UserPreferences(ctx context.Context, userID int64) (UserPrefs, error) {
+	v := UserPrefs{CalorieMethod: "heart-rate", BodyWeightKg: 70}
+	err := s.db.QueryRowContext(ctx,
+		`SELECT calorie_method, body_weight_kg, max_hr, resting_hr, threshold_pace, ftp FROM user_prefs WHERE user_id = ?`, userID).
+		Scan(&v.CalorieMethod, &v.BodyWeightKg, &v.MaxHR, &v.RestingHR, &v.ThresholdPace, &v.FTP)
+	if errors.Is(err, sql.ErrNoRows) {
+		return v, nil
+	}
+	if err != nil {
+		return UserPrefs{}, err
+	}
+	return v, nil
+}
+
+// SaveUserPreferences persists a user's calorie-estimation preferences.
+func (s *Store) SaveUserPreferences(ctx context.Context, userID int64, v UserPrefs) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO user_prefs (user_id, calorie_method, body_weight_kg, max_hr, resting_hr, threshold_pace, ftp, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(user_id) DO UPDATE SET
+		   calorie_method = excluded.calorie_method,
+		   body_weight_kg = excluded.body_weight_kg,
+		   max_hr = excluded.max_hr,
+		   resting_hr = excluded.resting_hr,
+		   threshold_pace = excluded.threshold_pace,
+		   ftp = excluded.ftp,
+		   updated_at = excluded.updated_at`,
+		userID, v.CalorieMethod, v.BodyWeightKg, v.MaxHR, v.RestingHR, v.ThresholdPace, v.FTP, time.Now().UTC().Format(time.RFC3339))
+	return err
 }
 
 // RecordLogin stores the last-login timestamp for a user.

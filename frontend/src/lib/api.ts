@@ -60,8 +60,15 @@ export interface AdminSettings {
 
 export interface StorageSettings {
   keepOriginalUploads: boolean
+}
+
+export interface UserPreferences {
   calorieMethod: 'heart-rate' | 'distance'
   bodyWeightKg: number
+  maxHr: number
+  restingHr: number
+  thresholdPace: string
+  ftp: number
 }
 
 export interface SmtpInput {
@@ -185,6 +192,11 @@ export const api = {
   confirmAccountDeletion: (code: string) =>
     request<{ status: string }>('/api/auth/account/deletion', { method: 'POST', body: { code } }),
 
+  // --- User preferences ---
+  getPreferences: () => request<UserPreferences>('/api/preferences'),
+  savePreferences: (payload: UserPreferences) =>
+    request<UserPreferences>('/api/preferences', { method: 'PUT', body: payload }),
+
   // --- Admin ---
   getAdminSettings: () => request<AdminSettings>('/api/admin/settings'),
   saveSMTP: (payload: SmtpInput) =>
@@ -208,8 +220,10 @@ export const api = {
   getWorkout: (id: string) => request<import('../data/workouts').Workout>(`/api/workouts/${id}`),
   createWorkout: (payload: ManualWorkoutInput) =>
     request<import('../data/workouts').Workout>('/api/workouts', { method: 'POST', body: payload }),
-  patchWorkout: (id: string, patch: { name?: string; type?: string; notes?: string; date?: string }) =>
+  patchWorkout: (id: string, patch: { name?: string; type?: string; notes?: string; date?: string; calories?: number; steps?: number }) =>
     request<import('../data/workouts').Workout>(`/api/workouts/${id}`, { method: 'PATCH', body: patch }),
+  recalcWorkout: (id: string) =>
+    request<import('../data/workouts').Workout>(`/api/workouts/${id}/recalculate`, { method: 'POST' }),
   deleteWorkout: (id: string) => request<unknown>(`/api/workouts/${id}`, { method: 'DELETE' }),
   importWorkout: (file: File, type?: string, name?: string) => {
     const form = new FormData()

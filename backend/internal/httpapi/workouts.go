@@ -4,11 +4,12 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"math"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/blurrycontour/activity-lens/backend/internal/ingest"
+	"github.com/blurrycontour/activity-lens/backend/internal/settings"
 	"github.com/blurrycontour/activity-lens/backend/internal/workout"
 
 	"github.com/blurrycontour/go-authkit/httpmw"
@@ -87,16 +88,18 @@ func (s *Server) handleCreateWorkout(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handlePatchWorkout(w http.ResponseWriter, r *http.Request) {
 	user := httpmw.UserFrom(r)
 	var req struct {
-		Name  *string `json:"name"`
-		Type  *string `json:"type"`
-		Notes *string `json:"notes"`
-		Date  *string `json:"date"` // YYYY-MM-DD
+		Name     *string `json:"name"`
+		Type     *string `json:"type"`
+		Notes    *string `json:"notes"`
+		Date     *string `json:"date"` // YYYY-MM-DD
+		Calories *int    `json:"calories"`
+		Steps    *int    `json:"steps"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	patch := workout.Patch{Name: req.Name, Notes: req.Notes}
+	patch := workout.Patch{Name: req.Name, Notes: req.Notes, Calories: req.Calories, Steps: req.Steps}
 	if req.Type != nil {
 		t := workout.Type(*req.Type)
 		patch.Type = &t
@@ -166,8 +169,8 @@ func (s *Server) handleImportWorkout(w http.ResponseWriter, r *http.Request) {
 		in.Name = name
 	}
 	if in.Calories == 0 {
-		if storage, err := s.settings.StoredStorage(r.Context()); err == nil {
-			in.Calories = estimateCalories(in, storage.CalorieMethod, storage.BodyWeightKg)
+		if prefs, err := s.settings.UserPreferences(r.Context(), user.ID); err == nil {
+			in.Calories = estimateCalories(in, prefs.CalorieMethod, prefs.BodyWeightKg)
 		}
 	}
 
@@ -194,21 +197,23 @@ func (s *Server) handleImportWorkout(w http.ResponseWriter, r *http.Request) {
 }
 
 func estimateCalories(in workout.Input, method string, weightKg float64) int {
-	if in.Duration <= 0 || weightKg <= 0 {
-		return 0
+	return workout.EstimateCalories(in.Type, in.Duration, in.AvgHR, in.Distance, weightKg, method)
+}
+
+func (s *Server) handleRecalculateWorkout(w http.ResponseWriter, r *http.Request) {
+	user := httpmw.UserFrom(r)
+	prefs, err := s.settings.UserPreferences(r.Context(), user.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load preferences")
+		return
 	}
-	if method == "heart-rate" && in.AvgHR > 0 {
-		// A conservative generic HR estimate for adults when sex/age are unavailable.
-		return int(math.Round((0.014*float64(in.AvgHR) + 0.017*weightKg - 1.2) * float64(in.Duration) / 60))
+	wk, err := s.workout.Recalculate(r.Context(), user.ID, r.PathValue("id"), prefs.CalorieMethod, prefs.BodyWeightKg)
+	if err != nil {
+		s.writeWorkoutError(w, err)
+		return
 	}
-	if in.Distance <= 0 {
-		return 0
-	}
-	factor := 1.0
-	if in.Type == workout.TypeRide {
-		factor = 0.35
-	}
-	return int(math.Round(factor * weightKg * in.Distance / 1000))
+	slog.Info("workout recalculated", "workout_id", wk.ID, "user_id", user.ID)
+	writeJSON(w, http.StatusOK, wk)
 }
 
 func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
@@ -219,6 +224,59 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, st)
+}
+
+func (s *Server) handleGetPreferences(w http.ResponseWriter, r *http.Request) {
+	user := httpmw.UserFrom(r)
+	prefs, err := s.settings.UserPreferences(r.Context(), user.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load preferences")
+		return
+	}
+	writeJSON(w, http.StatusOK, prefs)
+}
+
+func (s *Server) handleSavePreferences(w http.ResponseWriter, r *http.Request) {
+	user := httpmw.UserFrom(r)
+	var req struct {
+		CalorieMethod string  `json:"calorieMethod"`
+		BodyWeightKg  float64 `json:"bodyWeightKg"`
+		MaxHR         int     `json:"maxHr"`
+		RestingHR     int     `json:"restingHr"`
+		ThresholdPace string  `json:"thresholdPace"`
+		FTP           int     `json:"ftp"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	method := req.CalorieMethod
+	if method != "heart-rate" && method != "distance" {
+		method = "heart-rate"
+	}
+	weight := req.BodyWeightKg
+	if weight <= 0 {
+		weight = 70
+	}
+	clampNonNeg := func(n int) int {
+		if n < 0 {
+			return 0
+		}
+		return n
+	}
+	prefs := settings.UserPrefs{
+		CalorieMethod: method,
+		BodyWeightKg:  weight,
+		MaxHR:         clampNonNeg(req.MaxHR),
+		RestingHR:     clampNonNeg(req.RestingHR),
+		ThresholdPace: strings.TrimSpace(req.ThresholdPace),
+		FTP:           clampNonNeg(req.FTP),
+	}
+	if err := s.settings.SaveUserPreferences(r.Context(), user.ID, prefs); err != nil {
+		writeError(w, http.StatusInternalServerError, "could not save preferences")
+		return
+	}
+	writeJSON(w, http.StatusOK, prefs)
 }
 
 func (s *Server) writeWorkoutError(w http.ResponseWriter, err error) {

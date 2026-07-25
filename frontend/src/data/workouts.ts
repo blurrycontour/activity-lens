@@ -15,6 +15,7 @@ export interface Workout {
   maxHR: number
   elevationGain: number // meters
   calories: number
+  steps?: number
   avgPace: number // seconds per km (for runs/hikes)
   avgSpeed: number // km/h
   route: Array<[number, number]> // [lat, lng]

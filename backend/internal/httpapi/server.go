@@ -100,8 +100,11 @@ func (s *Server) apiRoutes() http.Handler {
 	mux.Handle("GET /api/workouts/{id}", s.authed(s.handleGetWorkout))
 	mux.Handle("PATCH /api/workouts/{id}", s.authedCSRF(s.handlePatchWorkout))
 	mux.Handle("DELETE /api/workouts/{id}", s.authedCSRF(s.handleDeleteWorkout))
+	mux.Handle("POST /api/workouts/{id}/recalculate", s.authedCSRF(s.handleRecalculateWorkout))
 	mux.Handle("POST /api/workouts/import", s.authedCSRF(s.handleImportWorkout))
 	mux.Handle("GET /api/stats", s.authed(s.handleStats))
+	mux.Handle("GET /api/preferences", s.authed(s.handleGetPreferences))
+	mux.Handle("PUT /api/preferences", s.authedCSRF(s.handleSavePreferences))
 
 	// --- Admin (administrators only) ---
 	mux.Handle("GET /api/admin/settings", s.authedAdmin(s.handleGetSettings))

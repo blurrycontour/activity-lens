@@ -57,8 +57,6 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 		},
 		"storage": map[string]any{
 			"keepOriginalUploads": storage.KeepOriginalUploads,
-			"calorieMethod":       storage.CalorieMethod,
-			"bodyWeightKg":        storage.BodyWeightKg,
 		},
 	})
 }
@@ -185,23 +183,13 @@ func (s *Server) handleSaveOIDC(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleSaveStorage(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		KeepOriginalUploads bool    `json:"keepOriginalUploads"`
-		CalorieMethod       string  `json:"calorieMethod"`
-		BodyWeightKg        float64 `json:"bodyWeightKg"`
+		KeepOriginalUploads bool `json:"keepOriginalUploads"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	method := req.CalorieMethod
-	if method != "heart-rate" && method != "distance" {
-		method = "heart-rate"
-	}
-	weight := req.BodyWeightKg
-	if weight <= 0 {
-		weight = 70
-	}
-	if err := s.settings.SaveStorage(r.Context(), settings.Storage{KeepOriginalUploads: req.KeepOriginalUploads, CalorieMethod: method, BodyWeightKg: weight}); err != nil {
+	if err := s.settings.SaveStorage(r.Context(), settings.Storage{KeepOriginalUploads: req.KeepOriginalUploads}); err != nil {
 		writeError(w, http.StatusInternalServerError, "could not save settings")
 		return
 	}

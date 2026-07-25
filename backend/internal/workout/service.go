@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -39,6 +40,7 @@ func (s *Service) Create(ctx context.Context, userID int64, in Input) (*Workout,
 		MaxHR:         in.MaxHR,
 		ElevationGain: in.ElevationGain,
 		Calories:      in.Calories,
+		Steps:         in.Steps,
 		Route:         in.Route,
 		HRTimeline:    in.HRTimeline,
 		PaceTimeline:  in.PaceTimeline,
@@ -95,6 +97,64 @@ func (s *Service) Update(ctx context.Context, userID int64, id string, p Patch) 
 	if p.StartTime != nil {
 		w.StartTime = p.StartTime.UTC()
 	}
+	if p.Calories != nil {
+		if *p.Calories < 0 {
+			return nil, fmt.Errorf("%w: calories must be non-negative", ErrInvalid)
+		}
+		w.Calories = *p.Calories
+	}
+	if p.Steps != nil {
+		if *p.Steps < 0 {
+			return nil, fmt.Errorf("%w: steps must be non-negative", ErrInvalid)
+		}
+		w.Steps = *p.Steps
+	}
+	if err := s.repo.Update(ctx, w); err != nil {
+		return nil, err
+	}
+	w.Date = w.StartTime.Format("2006-01-02")
+	return w, nil
+}
+
+// Recalculate re-derives every computed metric of a workout from its recorded
+// route/timelines and the given calorie preferences, overwriting any manually
+// entered values. The name, type, date and notes are left untouched.
+func (s *Service) Recalculate(ctx context.Context, userID int64, id, calorieMethod string, weightKg float64) (*Workout, error) {
+	w, err := s.repo.Get(ctx, userID, id)
+	if err != nil {
+		return nil, err
+	}
+	if len(w.HRTimeline) > 0 {
+		var sum, count, max int
+		for _, p := range w.HRTimeline {
+			if p.HR <= 0 {
+				continue
+			}
+			sum += p.HR
+			count++
+			if p.HR > max {
+				max = p.HR
+			}
+		}
+		if count > 0 {
+			w.AvgHR = sum / count
+			w.MaxHR = max
+		}
+	}
+	if len(w.ElevTimeline) > 0 {
+		var gain float64
+		for i := 1; i < len(w.ElevTimeline); i++ {
+			if d := w.ElevTimeline[i].Elev - w.ElevTimeline[i-1].Elev; d > 0 {
+				gain += float64(d)
+			}
+		}
+		w.ElevationGain = gain
+	}
+	w.AvgPace = 0
+	w.AvgSpeed = 0
+	w.Steps = estimateSteps(w.Type, w.Distance)
+	deriveMetrics(w)
+	w.Calories = EstimateCalories(w.Type, w.Duration, w.AvgHR, w.Distance, weightKg, calorieMethod)
 	if err := s.repo.Update(ctx, w); err != nil {
 		return nil, err
 	}
@@ -205,6 +265,47 @@ func deriveMetrics(w *Workout) {
 	sort.Slice(w.HRTimeline, func(i, j int) bool { return w.HRTimeline[i].T < w.HRTimeline[j].T })
 	sort.Slice(w.PaceTimeline, func(i, j int) bool { return w.PaceTimeline[i].T < w.PaceTimeline[j].T })
 	sort.Slice(w.ElevTimeline, func(i, j int) bool { return w.ElevTimeline[i].T < w.ElevTimeline[j].T })
+	if w.Steps == 0 {
+		w.Steps = estimateSteps(w.Type, w.Distance)
+	}
+}
+
+// estimateSteps approximates step count from distance using a per-activity
+// average stride length. Only foot-based activities produce a value.
+func estimateSteps(t Type, distanceMeters float64) int {
+	var stride float64
+	switch t {
+	case TypeRun:
+		stride = 1.0
+	case TypeHike:
+		stride = 0.75
+	default:
+		return 0
+	}
+	if distanceMeters <= 0 {
+		return 0
+	}
+	return int(math.Round(distanceMeters / stride))
+}
+
+// EstimateCalories returns an energy-expenditure estimate (kcal) using a
+// heart-rate formula when average HR is available, otherwise a distance-based
+// approximation. Returns 0 when there is not enough data.
+func EstimateCalories(t Type, duration, avgHR int, distanceMeters, weightKg float64, method string) int {
+	if duration <= 0 || weightKg <= 0 {
+		return 0
+	}
+	if method == "heart-rate" && avgHR > 0 {
+		return int(math.Round((0.014*float64(avgHR) + 0.017*weightKg - 1.2) * float64(duration) / 60))
+	}
+	if distanceMeters <= 0 {
+		return 0
+	}
+	factor := 1.0
+	if t == TypeRide {
+		factor = 0.35
+	}
+	return int(math.Round(factor * weightKg * distanceMeters / 1000))
 }
 
 func newID() string {

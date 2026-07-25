@@ -1,5 +1,7 @@
+import { useEffect, useState } from 'react'
 import { Check } from 'lucide-react'
 import { ACCENTS, applyAccent } from '../lib/theme'
+import { api, ApiError } from '../lib/api'
 
 interface SettingsProps {
   accent: string
@@ -10,6 +12,61 @@ export default function Settings({ accent, onAccentChange }: SettingsProps) {
   function handleAccent(value: string) {
     onAccentChange(value)
     applyAccent(value)
+  }
+
+  const [calorieMethod, setCalorieMethod] = useState<'heart-rate' | 'distance'>('heart-rate')
+  const [bodyWeightKg, setBodyWeightKg] = useState('70')
+  const [calBusy, setCalBusy] = useState(false)
+  const [calMsg, setCalMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  const [maxHr, setMaxHr] = useState('')
+  const [restingHr, setRestingHr] = useState('')
+  const [thresholdPace, setThresholdPace] = useState('')
+  const [ftp, setFtp] = useState('')
+  const [perfBusy, setPerfBusy] = useState(false)
+  const [perfMsg, setPerfMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  useEffect(() => {
+    let active = true
+    api.getPreferences()
+      .then(p => {
+        if (!active) return
+        setCalorieMethod(p.calorieMethod)
+        setBodyWeightKg(String(p.bodyWeightKg))
+        setMaxHr(p.maxHr ? String(p.maxHr) : '')
+        setRestingHr(p.restingHr ? String(p.restingHr) : '')
+        setThresholdPace(p.thresholdPace)
+        setFtp(p.ftp ? String(p.ftp) : '')
+      })
+      .catch(() => { /* fall back to defaults */ })
+    return () => { active = false }
+  }, [])
+
+  async function saveCalories() {
+    setCalBusy(true); setCalMsg(null)
+    try {
+      const updated = await api.savePreferences({
+        calorieMethod, bodyWeightKg: Number(bodyWeightKg) || 70,
+        maxHr: Number(maxHr) || 0, restingHr: Number(restingHr) || 0, thresholdPace, ftp: Number(ftp) || 0,
+      })
+      setBodyWeightKg(String(updated.bodyWeightKg))
+      setCalMsg({ ok: true, text: 'Saved' })
+    } catch (e) {
+      setCalMsg({ ok: false, text: e instanceof ApiError ? e.message : 'Save failed' })
+    } finally { setCalBusy(false) }
+  }
+
+  async function savePerformance() {
+    setPerfBusy(true); setPerfMsg(null)
+    try {
+      await api.savePreferences({
+        calorieMethod, bodyWeightKg: Number(bodyWeightKg) || 70,
+        maxHr: Number(maxHr) || 0, restingHr: Number(restingHr) || 0, thresholdPace, ftp: Number(ftp) || 0,
+      })
+      setPerfMsg({ ok: true, text: 'Saved' })
+    } catch (e) {
+      setPerfMsg({ ok: false, text: e instanceof ApiError ? e.message : 'Save failed' })
+    } finally { setPerfBusy(false) }
   }
 
   return (
@@ -76,22 +133,53 @@ export default function Settings({ accent, onAccentChange }: SettingsProps) {
           </div>
         </section>
 
+        {/* Calorie estimation */}
+        <section className="card">
+          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Calorie Estimation</h3>
+          <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 16 }}>
+            Used to estimate calories burned when an imported workout doesn't already include them.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+            <div style={{ minWidth: 0 }}>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Method</label>
+              <select className="input" style={{ width: '100%' }} value={calorieMethod} onChange={e => setCalorieMethod(e.target.value as typeof calorieMethod)}>
+                <option value="heart-rate">Heart rate, then distance</option>
+                <option value="distance">Distance only</option>
+              </select>
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Body weight (kg)</label>
+              <input className="input" type="number" min="25" max="300" style={{ width: '100%' }} value={bodyWeightKg} onChange={e => setBodyWeightKg(e.target.value)} />
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 16 }}>
+            <button className="btn btn-primary" onClick={saveCalories} disabled={calBusy} style={{ opacity: calBusy ? 0.5 : 1 }}>Save</button>
+            {calMsg && <span style={{ fontSize: 12, color: calMsg.ok ? 'var(--primary)' : 'var(--red, #dc2626)' }}>{calMsg.text}</span>}
+          </div>
+        </section>
+
         {/* HR zones */}
         <section className="card">
-          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Heart Rate & Performance</h3>
+          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Heart Rate & Performance</h3>
+          <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 16 }}>
+            Max HR is used to compute heart-rate zones for workouts that don't report their own.
+          </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
-            {[
-              { label: 'Max HR', value: '185', unit: 'bpm' },
-              { label: 'Resting HR', value: '52', unit: 'bpm' },
-              { label: 'Threshold Pace', value: '5:00', unit: '/km' },
-              { label: 'FTP (Cycling)', value: '240', unit: 'W' },
-            ].map(f => (
+            {([
+              { label: 'Max HR', value: maxHr, set: setMaxHr, unit: 'bpm', type: 'number', placeholder: '185' },
+              { label: 'Resting HR', value: restingHr, set: setRestingHr, unit: 'bpm', type: 'number', placeholder: '52' },
+              { label: 'Threshold Pace', value: thresholdPace, set: setThresholdPace, unit: '/km', type: 'text', placeholder: '5:00' },
+              { label: 'FTP (Cycling)', value: ftp, set: setFtp, unit: 'W', type: 'number', placeholder: '240' },
+            ] as const).map(f => (
               <div key={f.label} style={{ minWidth: 0 }}>
                 <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>{f.label}</label>
                 <div style={{ display: 'flex' }}>
                   <input
                     className="input"
-                    defaultValue={f.value}
+                    type={f.type}
+                    value={f.value}
+                    placeholder={f.placeholder}
+                    onChange={e => f.set(e.target.value)}
                     style={{ borderRadius: '6px 0 0 6px', flex: 1, minWidth: 0 }}
                   />
                   <span style={{
@@ -102,6 +190,10 @@ export default function Settings({ accent, onAccentChange }: SettingsProps) {
                 </div>
               </div>
             ))}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 16 }}>
+            <button className="btn btn-primary" onClick={savePerformance} disabled={perfBusy} style={{ opacity: perfBusy ? 0.5 : 1 }}>Save</button>
+            {perfMsg && <span style={{ fontSize: 12, color: perfMsg.ok ? 'var(--primary)' : 'var(--red, #dc2626)' }}>{perfMsg.text}</span>}
           </div>
         </section>
       </div>

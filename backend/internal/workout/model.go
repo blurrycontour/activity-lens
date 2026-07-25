@@ -64,6 +64,7 @@ type Workout struct {
 	MaxHR         int         `json:"maxHR"`
 	ElevationGain float64     `json:"elevationGain"`
 	Calories      int         `json:"calories"`
+	Steps         int         `json:"steps"`
 	AvgPace       float64     `json:"avgPace"`  // seconds/km
 	AvgSpeed      float64     `json:"avgSpeed"` // km/h
 	Route         []LatLng    `json:"route"`
@@ -85,6 +86,7 @@ type Input struct {
 	MaxHR         int
 	ElevationGain float64
 	Calories      int
+	Steps         int
 	Route         []LatLng
 	HRTimeline    []HRPoint
 	PaceTimeline  []PacePoint
@@ -99,6 +101,8 @@ type Patch struct {
 	Type      *Type
 	Notes     *string
 	StartTime *time.Time
+	Calories  *int
+	Steps     *int
 }
 
 // Stats is the aggregate dashboard summary for a user's library.
