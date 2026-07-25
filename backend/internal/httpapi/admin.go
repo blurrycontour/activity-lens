@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/blurrycontour/activity-lens/backend/internal/settings"
+
 	"github.com/blurrycontour/go-authkit/auth"
 	"github.com/blurrycontour/go-authkit/httpmw"
 )
@@ -21,6 +23,11 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	oidc, oidcOv, err := s.settings.EffectiveOIDC(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load settings")
+		return
+	}
+	storage, err := s.settings.StoredStorage(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not load settings")
 		return
@@ -47,6 +54,9 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 			"allowRegistration": oidc.AllowRegistration,
 			"scopes":            oidc.Scopes,
 			"overridden":        oidcOv,
+		},
+		"storage": map[string]any{
+			"keepOriginalUploads": storage.KeepOriginalUploads,
 		},
 	})
 }
@@ -165,6 +175,21 @@ func (s *Server) handleSaveOIDC(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.settings.SaveOIDC(r.Context(), out); err != nil {
+		writeError(w, http.StatusInternalServerError, "could not save settings")
+		return
+	}
+	s.handleGetSettings(w, r)
+}
+
+func (s *Server) handleSaveStorage(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		KeepOriginalUploads bool `json:"keepOriginalUploads"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := s.settings.SaveStorage(r.Context(), settings.Storage{KeepOriginalUploads: req.KeepOriginalUploads}); err != nil {
 		writeError(w, http.StatusInternalServerError, "could not save settings")
 		return
 	}

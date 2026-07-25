@@ -78,8 +78,9 @@ func run() error {
 
 	workoutSvc := workout.NewService(workout.NewSQLiteRepository(db))
 	settingsStore := settings.New(db)
+	rawUploads := workout.NewRawUploadStore(db)
 
-	apiServer := httpapi.New(cfg, authSvc, workoutSvc, settingsStore)
+	apiServer := httpapi.New(cfg, authSvc, workoutSvc, settingsStore, rawUploads)
 	handler, err := apiServer.Handler()
 	if err != nil {
 		return err

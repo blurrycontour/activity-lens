@@ -55,6 +55,11 @@ export interface OidcSettings {
 export interface AdminSettings {
   smtp: SmtpSettings
   oidc: OidcSettings
+  storage: StorageSettings
+}
+
+export interface StorageSettings {
+  keepOriginalUploads: boolean
 }
 
 export interface SmtpInput {
@@ -184,6 +189,8 @@ export const api = {
     request<AdminSettings>('/api/admin/settings/smtp', { method: 'PUT', body: payload }),
   saveOIDC: (payload: OidcInput) =>
     request<AdminSettings>('/api/admin/settings/oidc', { method: 'PUT', body: payload }),
+  saveStorage: (payload: StorageSettings) =>
+    request<AdminSettings>('/api/admin/settings/storage', { method: 'PUT', body: payload }),
   testEmail: (to: string) =>
     request<{ status: string; to: string }>('/api/admin/settings/smtp/test', { method: 'POST', body: { to } }),
   listAdminUsers: () => request<{ users: AdminUser[] }>('/api/admin/users'),

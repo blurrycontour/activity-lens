@@ -108,87 +108,90 @@ export default function Heatmap() {
       </div>
 
       <div className="page-content">
-        {/* Heatmap grid */}
-        <div className="card" style={{ overflowX: 'auto', padding: '20px' }}>
-          <div style={{ position: 'relative', paddingTop: 20 }}>
-            {/* Month labels */}
-            <div style={{ display: 'flex', position: 'absolute', top: 0, left: 24, right: 0 }}>
-              {months.map((m, i) => (
-                <div
-                  key={i}
-                  style={{
-                    position: 'absolute',
-                    left: m.col * 13,
-                    fontSize: 10,
-                    fontFamily: 'var(--font-mono)',
-                    color: 'var(--text-3)',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {m.label}
+        {/* Heatmap grid: cells stretch to fill the available width, so on
+            wide screens each day becomes a rectangle rather than a fixed
+            11x11 square. */}
+        <div className="card" style={{ padding: '20px', overflowX: 'auto' }}>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {/* Day labels */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingTop: 16, flexShrink: 0 }}>
+              {DAYS.map((d, i) => (
+                <div key={d} style={{
+                  height: 14, lineHeight: '14px',
+                  fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-3)',
+                  opacity: i % 2 === 0 ? 1 : 0,
+                  width: 20, textAlign: 'right',
+                }}>
+                  {d}
                 </div>
               ))}
             </div>
 
-            <div style={{ display: 'flex', gap: 2 }}>
-              {/* Day labels */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingTop: 2, marginRight: 4 }}>
-                {DAYS.map((d, i) => (
-                  <div key={d} style={{
-                    height: 11, lineHeight: '11px',
-                    fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-3)',
-                    opacity: i % 2 === 0 ? 1 : 0,
-                    width: 20, textAlign: 'right',
-                  }}>
-                    {d}
+            <div style={{ flex: 1, minWidth: grid.length * 12 }}>
+              {/* Month labels */}
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${grid.length}, 1fr)`, height: 14, marginBottom: 2 }}>
+                {months.map((m, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      gridColumnStart: m.col + 1,
+                      fontSize: 10,
+                      fontFamily: 'var(--font-mono)',
+                      color: 'var(--text-3)',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {m.label}
                   </div>
                 ))}
               </div>
 
               {/* Weeks */}
-              {grid.map((week, wi) => (
-                <div key={wi} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  {week.map((day, di) => (
-                    <div
-                      key={di}
-                      style={{
-                        width: 11, height: 11, borderRadius: 2,
-                        background: day ? getColor(day.count) : 'transparent',
-                        border: day && day.count > 0 ? `1px solid rgba(255,255,255,0.1)` : 'none',
-                        cursor: day && day.count > 0 ? 'pointer' : 'default',
-                        transition: 'transform 0.1s',
-                        position: 'relative',
-                      }}
-                      onMouseEnter={() => day && day.count > 0 && setHoveredDay(day)}
-                      onMouseLeave={() => setHoveredDay(null)}
-                    />
-                  ))}
-                </div>
-              ))}
-            </div>
-
-            {/* Legend */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12, justifyContent: 'flex-end' }}>
-              <span style={{ fontSize: 10, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>Less</span>
-              {[0, 0.25, 0.5, 0.75, 1].map(v => (
-                <div key={v} style={{ width: 11, height: 11, borderRadius: 2, background: getColor(v === 0 ? 0 : Math.ceil(v * maxCount)) }} />
-              ))}
-              <span style={{ fontSize: 10, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>More</span>
-            </div>
-
-            {hoveredDay && (
-              <div style={{
-                position: 'fixed',
-                bottom: 80, right: 24,
-                background: 'var(--bg-2)', border: '1px solid var(--border-strong)',
-                borderRadius: 8, padding: '10px 14px', zIndex: 100,
-                boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-              }}>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600, color: 'var(--primary)', marginBottom: 4 }}>{hoveredDay.date}</div>
-                <div style={{ fontSize: 12, color: 'var(--text-2)' }}>{hoveredDay.count} activity · {Math.round(hoveredDay.duration / 60)} min</div>
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${grid.length}, 1fr)`, gap: 2 }}>
+                {grid.map((week, wi) => (
+                  <div key={wi} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    {week.map((day, di) => (
+                      <div
+                        key={di}
+                        style={{
+                          width: '100%', height: 14, borderRadius: 2,
+                          background: day ? getColor(day.count) : 'transparent',
+                          border: day && day.count > 0 ? `1px solid rgba(255,255,255,0.1)` : 'none',
+                          cursor: day && day.count > 0 ? 'pointer' : 'default',
+                          transition: 'transform 0.1s',
+                          position: 'relative',
+                        }}
+                        onMouseEnter={() => day && day.count > 0 && setHoveredDay(day)}
+                        onMouseLeave={() => setHoveredDay(null)}
+                      />
+                    ))}
+                  </div>
+                ))}
               </div>
-            )}
+            </div>
           </div>
+
+          {/* Legend */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12, justifyContent: 'flex-end' }}>
+            <span style={{ fontSize: 10, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>Less</span>
+            {[0, 0.25, 0.5, 0.75, 1].map(v => (
+              <div key={v} style={{ width: 14, height: 14, borderRadius: 2, background: getColor(v === 0 ? 0 : Math.ceil(v * maxCount)) }} />
+            ))}
+            <span style={{ fontSize: 10, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>More</span>
+          </div>
+
+          {hoveredDay && (
+            <div style={{
+              position: 'fixed',
+              bottom: 80, right: 24,
+              background: 'var(--bg-2)', border: '1px solid var(--border-strong)',
+              borderRadius: 8, padding: '10px 14px', zIndex: 100,
+              boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+            }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600, color: 'var(--primary)', marginBottom: 4 }}>{hoveredDay.date}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-2)' }}>{hoveredDay.count} activity · {Math.round(hoveredDay.duration / 60)} min</div>
+            </div>
+          )}
         </div>
 
         {/* Monthly breakdown */}

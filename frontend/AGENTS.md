@@ -14,3 +14,6 @@ Frontend uses React + Vite + Tailwind CSS
 ## Styling
 
 This project uses **Tailwind CSS v4** for styling. Use Tailwind utility classes directly in JSX. Tailwind is loaded via the Vite plugin — no PostCSS config needed.
+
+## Development
+Always keep in mind that UI components should be reusable and should work well both on desktop and mobile devices. Use Tailwind's responsive utilities to handle different screen sizes.

@@ -38,6 +38,20 @@ func (r *fakeRepo) List(ctx context.Context, userID int64) ([]Workout, error) {
 	return out, nil
 }
 
+func (r *fakeRepo) ListSummary(ctx context.Context, userID int64) ([]Workout, error) {
+	list, err := r.List(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range list {
+		list[i].Route = nil
+		list[i].HRTimeline = nil
+		list[i].PaceTimeline = nil
+		list[i].ElevTimeline = nil
+	}
+	return list, nil
+}
+
 func (r *fakeRepo) Update(ctx context.Context, w *Workout) error {
 	if _, ok := r.workouts[w.ID]; !ok {
 		return ErrNotFound

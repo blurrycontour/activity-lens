@@ -1,11 +1,14 @@
 package workout
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 )
 
@@ -20,6 +23,12 @@ type Repository interface {
 	Create(ctx context.Context, w *Workout) error
 	Get(ctx context.Context, userID int64, id string) (*Workout, error)
 	List(ctx context.Context, userID int64) ([]Workout, error)
+	// ListSummary is like List but omits the route/HR/pace/elevation
+	// timelines, which can be tens of KB each. List/dashboard views only
+	// need the scalar summary fields, so this avoids deserializing (and
+	// transferring) the full per-point series for every workout just to
+	// render a card or a heatmap cell.
+	ListSummary(ctx context.Context, userID int64) ([]Workout, error)
 	Update(ctx context.Context, w *Workout) error
 	Delete(ctx context.Context, userID int64, id string) error
 }
@@ -35,6 +44,9 @@ func NewSQLiteRepository(db *sql.DB) *SQLiteRepository { return &SQLiteRepositor
 const workoutCols = `id, user_id, name, type, start_time, duration, distance, avg_hr, max_hr,
 	elevation_gain, calories, avg_pace, avg_speed, route, hr_timeline, pace_timeline,
 	elev_timeline, notes`
+
+const workoutSummaryCols = `id, user_id, name, type, start_time, duration, distance, avg_hr, max_hr,
+	elevation_gain, calories, avg_pace, avg_speed, notes`
 
 func (r *SQLiteRepository) Create(ctx context.Context, w *Workout) error {
 	route, hr, pace, elev, err := marshalSeries(w)
@@ -79,6 +91,23 @@ func (r *SQLiteRepository) List(ctx context.Context, userID int64) ([]Workout, e
 	return out, rows.Err()
 }
 
+func (r *SQLiteRepository) ListSummary(ctx context.Context, userID int64) ([]Workout, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT `+workoutSummaryCols+` FROM workouts WHERE user_id = ? ORDER BY start_time DESC`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("query workouts: %w", err)
+	}
+	defer rows.Close()
+	out := make([]Workout, 0)
+	for rows.Next() {
+		w, err := scanWorkoutSummary(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *w)
+	}
+	return out, rows.Err()
+}
+
 func (r *SQLiteRepository) Update(ctx context.Context, w *Workout) error {
 	route, hr, pace, elev, err := marshalSeries(w)
 	if err != nil {
@@ -111,13 +140,16 @@ func (r *SQLiteRepository) Delete(ctx context.Context, userID int64, id string) 
 	return nil
 }
 
-func marshalSeries(w *Workout) (route, hr, pace, elev string, err error) {
-	b := func(v any) (string, error) {
+// marshalSeries JSON-encodes and gzip-compresses each timeline. The JSON is
+// highly repetitive (same few keys per point, smoothly changing numbers), so
+// gzip typically shrinks it several-fold before it hits disk.
+func marshalSeries(w *Workout) (route, hr, pace, elev []byte, err error) {
+	b := func(v any) ([]byte, error) {
 		data, e := json.Marshal(v)
 		if e != nil {
-			return "", fmt.Errorf("marshal series: %w", e)
+			return nil, fmt.Errorf("marshal series: %w", e)
 		}
-		return string(data), nil
+		return gzipBytes(data)
 	}
 	if w.Route == nil {
 		w.Route = []LatLng{}
@@ -144,26 +176,54 @@ func marshalSeries(w *Workout) (route, hr, pace, elev string, err error) {
 	return
 }
 
+func gzipBytes(data []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	gw := gzip.NewWriter(&buf)
+	if _, err := gw.Write(data); err != nil {
+		return nil, fmt.Errorf("gzip series: %w", err)
+	}
+	if err := gw.Close(); err != nil {
+		return nil, fmt.Errorf("gzip series: %w", err)
+	}
+	return buf.Bytes(), nil
+}
+
+// gunzipMaybe transparently decompresses gzip-magic-prefixed data. Rows
+// written before gzip compression was introduced are stored as plain JSON
+// text, so those are returned unchanged (backward compatible, no migration
+// needed for existing data).
+func gunzipMaybe(data []byte) ([]byte, error) {
+	if len(data) < 2 || data[0] != 0x1f || data[1] != 0x8b {
+		return data, nil
+	}
+	gr, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("gunzip series: %w", err)
+	}
+	defer gr.Close()
+	out, err := io.ReadAll(gr)
+	if err != nil {
+		return nil, fmt.Errorf("gunzip series: %w", err)
+	}
+	return out, nil
+}
+
 func scanWorkout(row interface{ Scan(...any) error }) (*Workout, error) {
 	var (
 		w          Workout
 		typ        string
 		startTime  string
-		route, hr  string
-		pace, elev string
+		route, hr  []byte
+		pace, elev []byte
 	)
 	if err := row.Scan(&w.ID, &w.UserID, &w.Name, &typ, &startTime, &w.Duration, &w.Distance,
 		&w.AvgHR, &w.MaxHR, &w.ElevationGain, &w.Calories, &w.AvgPace, &w.AvgSpeed,
 		&route, &hr, &pace, &elev, &w.Notes); err != nil {
 		return nil, err
 	}
-	w.Type = Type(typ)
-	t, err := time.Parse(time.RFC3339, startTime)
-	if err != nil {
-		return nil, fmt.Errorf("parse start_time: %w", err)
+	if err := applyScalarFields(&w, typ, startTime); err != nil {
+		return nil, err
 	}
-	w.StartTime = t
-	w.Date = t.Format("2006-01-02")
 	if err := unmarshalInto(route, &w.Route); err != nil {
 		return nil, err
 	}
@@ -179,11 +239,46 @@ func scanWorkout(row interface{ Scan(...any) error }) (*Workout, error) {
 	return &w, nil
 }
 
-func unmarshalInto(s string, v any) error {
-	if s == "" {
+func scanWorkoutSummary(row interface{ Scan(...any) error }) (*Workout, error) {
+	var (
+		w         Workout
+		typ       string
+		startTime string
+	)
+	if err := row.Scan(&w.ID, &w.UserID, &w.Name, &typ, &startTime, &w.Duration, &w.Distance,
+		&w.AvgHR, &w.MaxHR, &w.ElevationGain, &w.Calories, &w.AvgPace, &w.AvgSpeed, &w.Notes); err != nil {
+		return nil, err
+	}
+	if err := applyScalarFields(&w, typ, startTime); err != nil {
+		return nil, err
+	}
+	w.Route = []LatLng{}
+	w.HRTimeline = []HRPoint{}
+	w.PaceTimeline = []PacePoint{}
+	w.ElevTimeline = []ElevPoint{}
+	return &w, nil
+}
+
+func applyScalarFields(w *Workout, typ, startTime string) error {
+	w.Type = Type(typ)
+	t, err := time.Parse(time.RFC3339, startTime)
+	if err != nil {
+		return fmt.Errorf("parse start_time: %w", err)
+	}
+	w.StartTime = t
+	w.Date = t.Format("2006-01-02")
+	return nil
+}
+
+func unmarshalInto(data []byte, v any) error {
+	if len(data) == 0 {
 		return nil
 	}
-	if err := json.Unmarshal([]byte(s), v); err != nil {
+	raw, err := gunzipMaybe(data)
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(raw, v); err != nil {
 		return fmt.Errorf("unmarshal series: %w", err)
 	}
 	return nil

@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { type Workout, type WorkoutType, WORKOUT_TYPES, fmtDuration, fmtDist, fmtPace, TYPE_COLOR, TYPE_ICON } from '../data/workouts'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ReferenceDot } from 'recharts'
 import {
   ArrowLeft, Heart, Mountain, Zap, Clock, TrendingUp, Navigation, Download, Pencil, Trash2, Gauge,
-  Check, X as XIcon, Play, Pause, RotateCcw, Maximize2,
+  Check, X as XIcon, Play, Pause, RotateCcw, Maximize2, Sigma, Footprints, MoreVertical, Layers,
 } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
+import { api } from '../lib/api'
 import { MapContainer, TileLayer, Polyline, CircleMarker, useMap, useMapEvents } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { LatLngBoundsExpression } from 'leaflet'
@@ -33,7 +34,65 @@ ${w.route.map(([lat, lng]) => `      <trkpt lat="${lat.toFixed(6)}" lon="${lng.t
 
 interface WorkoutDetailProps {
   workout: Workout
+  accent?: string
   onBack: () => void
+}
+
+/** Small marker shown next to stat values that are derived from recorded
+ * samples rather than reported directly by the imported source. */
+function CalcIcon() {
+  return (
+    <span title="Calculated from recorded data" style={{ display: 'inline-flex', opacity: 0.55 }}>
+      <Sigma size={10} />
+    </span>
+  )
+}
+
+function StatChip({ icon, label, value, calculated }: { icon?: React.ReactNode; label: string; value: string; calculated?: boolean }) {
+  return (
+    <div className="stat-grid-item">
+      <span className="stat-label">
+        {icon}
+        {label}
+        {calculated && <CalcIcon />}
+      </span>
+      <span className="stat-value">{value}</span>
+    </div>
+  )
+}
+
+function OptionsMenu({ onEdit, onExport, onDelete, deleting }: { onEdit: () => void; onExport: () => void; onDelete: () => void; deleting: boolean }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handle(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [])
+
+  return (
+    <div className="options-menu-wrap" ref={ref}>
+      <button className="btn-icon" onClick={() => setOpen(o => !o)} title="Workout options">
+        <MoreVertical size={18} />
+      </button>
+      {open && (
+        <div className="options-menu" style={{ animation: 'fadeIn 0.12s ease' }}>
+          <button className="options-menu-item" onClick={() => { setOpen(false); onEdit() }}>
+            <Pencil size={14} /> Edit workout
+          </button>
+          <button className="options-menu-item" onClick={() => { setOpen(false); onExport() }}>
+            <Download size={14} /> Export GPX
+          </button>
+          <button className="options-menu-item danger" onClick={() => { setOpen(false); onDelete() }} disabled={deleting}>
+            <Trash2 size={14} /> {deleting ? 'Deleting…' : 'Delete workout'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
 }
 
 type Metric = 'hr' | 'pace' | 'speed' | 'elevation'
@@ -94,6 +153,74 @@ function MapClickHandler({ route, duration, onScrub }: { route: Array<[number, n
   return null
 }
 
+type MapLayerId = 'street' | 'topo' | 'satellite'
+
+const MAP_LAYER_KEY = 'al_map_layer'
+
+const MAP_LAYERS: Record<MapLayerId, { label: string; url: string; attribution: string; maxZoom: number }> = {
+  street: {
+    label: 'Street',
+    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 19,
+  },
+  topo: {
+    label: 'Topographic',
+    url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+    attribution: 'Map data: &copy; OpenStreetMap contributors, SRTM | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)',
+    maxZoom: 17,
+  },
+  satellite: {
+    label: 'Satellite',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+    maxZoom: 19,
+  },
+}
+
+function LayerSwitcher({ layer, onChange }: { layer: MapLayerId; onChange: (l: MapLayerId) => void }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handle(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [])
+
+  return (
+    <div
+      className="options-menu-wrap"
+      ref={ref}
+      style={{ position: 'absolute', top: 10, right: 46, zIndex: 500 }}
+    >
+      <button
+        className="btn-icon"
+        onClick={() => setOpen(o => !o)}
+        title="Map layer"
+        style={{ background: 'var(--bg-2)', border: '1px solid var(--border)' }}
+      >
+        <Layers size={14} />
+      </button>
+      {open && (
+        <div className="options-menu" style={{ animation: 'fadeIn 0.12s ease' }}>
+          {(Object.keys(MAP_LAYERS) as MapLayerId[]).map(id => (
+            <button
+              key={id}
+              className={`options-menu-item${layer === id ? ' active' : ''}`}
+              onClick={() => { setOpen(false); onChange(id) }}
+            >
+              {MAP_LAYERS[id].label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function RouteMap({
   route, color, duration, currentTime, onScrub, height,
 }: {
@@ -102,8 +229,16 @@ function RouteMap({
   duration: number
   currentTime: number
   onScrub: (t: number) => void
-  height: number
+  height: number | string
 }) {
+  const [layer, setLayer] = useState<MapLayerId>(() => {
+    const stored = localStorage.getItem(MAP_LAYER_KEY)
+    return (stored === 'street' || stored === 'topo' || stored === 'satellite') ? stored : 'street'
+  })
+  useEffect(() => {
+    localStorage.setItem(MAP_LAYER_KEY, layer)
+  }, [layer])
+
   if (route.length < 2) {
     return (
       <div style={{ width: '100%', height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-3)', fontSize: 13 }}>
@@ -116,13 +251,17 @@ function RouteMap({
   const current = route[idx]
   const start = route[0]
   const end = route[route.length - 1]
+  const activeLayer = MAP_LAYERS[layer]
 
   return (
-    <div style={{ width: '100%', height }}>
+    <div style={{ width: '100%', height, position: 'relative' }}>
+      <LayerSwitcher layer={layer} onChange={setLayer} />
       <MapContainer center={current} zoom={14} style={{ width: '100%', height: '100%' }} scrollWheelZoom>
         <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          key={layer}
+          url={activeLayer.url}
+          attribution={activeLayer.attribution}
+          maxZoom={activeLayer.maxZoom}
         />
         <FitBounds route={route} />
         <MapClickHandler route={route} duration={duration} onScrub={onScrub} />
@@ -209,10 +348,23 @@ function ExpandModal({ title, onClose, children }: { title: string; onClose: () 
   )
 }
 
-export default function WorkoutDetail({ workout: w0, onBack }: WorkoutDetailProps) {
+export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDetailProps) {
   const { updateWorkout, removeWorkout } = useWorkouts()
   const [w, setW] = useState(w0)
   const color = TYPE_COLOR[w.type]
+  const trailColor = accent || color
+
+  // List views only carry summary fields (no route/timelines) for
+  // efficiency, so if we were handed a summary-only workout, fetch the full
+  // record before rendering the map/charts (otherwise they'd stay blank
+  // until an unrelated re-render happened to bring in the full data).
+  useEffect(() => {
+    if (w0.route.length > 0 || w0.hrTimeline.length > 0 || w0.paceTimeline.length > 0 || w0.elevTimeline.length > 0) return
+    let cancelled = false
+    api.getWorkout(w0.id).then(full => { if (!cancelled) setW(full) }).catch(() => {})
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const [editing, setEditing] = useState(false)
   const [editName, setEditName] = useState(w.name)
@@ -222,7 +374,7 @@ export default function WorkoutDetail({ workout: w0, onBack }: WorkoutDetailProp
   const [deleting, setDeleting] = useState(false)
   const [saveErr, setSaveErr] = useState<string | null>(null)
 
-  const [selectedMetrics, setSelectedMetrics] = useState<Metric[]>(['hr', 'pace', 'elevation'])
+  const [selectedMetrics, setSelectedMetrics] = useState<Metric[]>(['hr', 'pace', 'speed', 'elevation'])
   function toggleMetric(m: Metric) {
     setSelectedMetrics(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m])
   }
@@ -232,6 +384,32 @@ export default function WorkoutDetail({ workout: w0, onBack }: WorkoutDetailProp
     [w.paceTimeline],
   )
   const hrZones = useMemo(() => hrZoneBuckets(w.hrTimeline, w.maxHR), [w.hrTimeline, w.maxHR])
+
+  // Stats not directly reported by imports (per-point min/max, elevation
+  // loss, step estimate) — derived here from the recorded timelines/route.
+  const derived = useMemo(() => {
+    const hrVals = w.hrTimeline.map(p => p.hr)
+    const paceVals = w.paceTimeline.filter(p => p.pace > 0).map(p => p.pace)
+    const speedVals = speedTimeline.map(p => p.speed)
+    let elevLoss = 0
+    for (let i = 1; i < w.elevTimeline.length; i++) {
+      const d = w.elevTimeline[i].elev - w.elevTimeline[i - 1].elev
+      if (d < 0) elevLoss += -d
+    }
+    const strideLength = w.type === 'Run' ? 1.0 : w.type === 'Hike' ? 0.75 : null
+    const steps = strideLength && w.distance > 0 ? Math.round(w.distance / strideLength) : null
+    return {
+      hrMin: hrVals.length ? Math.min(...hrVals) : null,
+      hrMax: hrVals.length ? Math.max(...hrVals) : (w.maxHR || null),
+      hrAvg: w.avgHR || (hrVals.length ? Math.round(hrVals.reduce((a, b) => a + b, 0) / hrVals.length) : null),
+      paceMin: paceVals.length ? Math.min(...paceVals) : null,
+      paceMax: paceVals.length ? Math.max(...paceVals) : null,
+      speedMin: speedVals.length ? Math.min(...speedVals) : null,
+      speedMax: speedVals.length ? Math.max(...speedVals) : null,
+      elevLoss: Math.round(elevLoss),
+      steps,
+    }
+  }, [w, speedTimeline])
 
   // --- Playback: drives the map marker and the "draw up to here" chart cursor ---
   const [currentTime, setCurrentTime] = useState(w.duration)
@@ -339,17 +517,6 @@ export default function WorkoutDetail({ workout: w0, onBack }: WorkoutDetailProp
     }
   }
 
-  const stats = [
-    { icon: <Navigation size={14} />, label: 'Distance', value: fmtDist(w.distance) },
-    { icon: <Clock size={14} />, label: 'Duration', value: fmtDuration(w.duration) },
-    { icon: <Heart size={14} />, label: 'Avg HR', value: `${w.avgHR} bpm` },
-    { icon: <Heart size={14} />, label: 'Max HR', value: `${w.maxHR} bpm` },
-    { icon: <Mountain size={14} />, label: 'Elevation', value: `${w.elevationGain} m` },
-    { icon: <Zap size={14} />, label: 'Calories', value: `${w.calories} kcal` },
-    { icon: <TrendingUp size={14} />, label: w.avgPace ? 'Avg Pace' : 'Avg Speed', value: w.avgPace ? fmtPace(w.avgPace) + ' /km' : `${w.avgSpeed.toFixed(1)} km/h` },
-    { icon: <TrendingUp size={14} />, label: 'Max Speed', value: `${(w.avgSpeed * 1.18).toFixed(1)} km/h` },
-  ]
-
   function areaChart(opts: {
     data: Array<{ t: number;[k: string]: number }>
     dataKey: string
@@ -432,9 +599,9 @@ export default function WorkoutDetail({ workout: w0, onBack }: WorkoutDetailProp
     )
   }
 
-  function mapCard(height: number) {
+  function mapCard(height: number | string) {
     return (
-      <RouteMap route={w.route} color={color} duration={w.duration} currentTime={currentTime} onScrub={handleScrub} height={height} />
+      <RouteMap route={w.route} color={trailColor} duration={w.duration} currentTime={currentTime} onScrub={handleScrub} height={height} />
     )
   }
 
@@ -473,31 +640,27 @@ export default function WorkoutDetail({ workout: w0, onBack }: WorkoutDetailProp
             )}
           </div>
           {!editing && (
-            <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, flexShrink: 0 }}>
-              <button className="btn btn-ghost" onClick={startEdit} title="Edit workout">
-                <Pencil size={14} /> Edit
-              </button>
-              <button className="btn btn-ghost" onClick={() => exportGPX(w)} title="Export as GPX">
-                <Download size={14} /> Export GPX
-              </button>
-              <button className="btn btn-ghost" onClick={handleDelete} disabled={deleting} style={{ color: 'var(--red, #dc2626)' }} title="Delete workout">
-                <Trash2 size={14} /> {deleting ? 'Deleting…' : 'Delete'}
-              </button>
+            <div style={{ marginLeft: 'auto', flexShrink: 0 }}>
+              <OptionsMenu onEdit={startEdit} onExport={() => exportGPX(w)} onDelete={handleDelete} deleting={deleting} />
             </div>
           )}
         </div>
       </div>
 
       <div className="page-content">
-        {/* Map + stats row */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: 16, marginBottom: 12 }}>
-          <div className="card" style={{ padding: 0, overflow: 'hidden', position: 'relative', background: 'var(--bg-3)' }}>
-            {mapCard(280)}
+        {/* Map (flexible width) + Summary card (fixed, narrower) side by
+            side on desktop; stacked on mobile so the map never gets
+            squeezed. */}
+        <div className="detail-top">
+          <div className="card" style={{ padding: 0, overflow: 'hidden', position: 'relative', background: 'var(--bg-3)', display: 'flex', flexDirection: 'column', minHeight: 280 }}>
+            <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+              {mapCard('100%')}
+            </div>
             <div style={{ position: 'absolute', bottom: 12, left: 12, display: 'flex', gap: 8, zIndex: 500, pointerEvents: 'none' }}>
               <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 8px', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-3)' }}>
                 ● Start
               </div>
-              <div style={{ background: color, borderRadius: 6, padding: '4px 8px', fontSize: 11, fontFamily: 'var(--font-mono)', color: '#0a0b0e', fontWeight: 600 }}>
+              <div style={{ background: trailColor, borderRadius: 6, padding: '4px 8px', fontSize: 11, fontFamily: 'var(--font-mono)', color: '#0a0b0e', fontWeight: 600 }}>
                 ■ Finish
               </div>
             </div>
@@ -511,16 +674,50 @@ export default function WorkoutDetail({ workout: w0, onBack }: WorkoutDetailProp
             </button>
           </div>
 
-          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {stats.slice(0, 6).map(s => (
-              <div key={s.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 8, borderBottom: '1px solid var(--border)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ color: 'var(--text-3)' }}>{s.icon}</span>
-                  <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{s.label}</span>
-                </div>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{s.value}</span>
+          {/* Summary: every headline + derived stat grouped by category.
+              Values that are not reported directly by the import (or that
+              cannot be computed at all) show a dash instead of a misleading
+              zero; values derived from recorded samples (rather than
+              reported directly by the source) carry a small calculated
+              indicator. */}
+          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <h3 style={{ fontSize: 13, fontWeight: 600 }}>Summary</h3>
+
+            <div className="stat-grid-3">
+              <StatChip icon={<Navigation size={12} />} label="Distance" value={w.distance > 0 ? fmtDist(w.distance) : '—'} />
+              <StatChip icon={<Clock size={12} />} label="Duration" value={w.duration > 0 ? fmtDuration(w.duration) : '—'} />
+              <StatChip icon={<Zap size={12} />} label="Calories" value={w.calories > 0 ? `${w.calories} kcal` : '—'} />
+            </div>
+
+            {(w.hrTimeline.length > 0 || w.avgHR > 0) && (
+              <div className="stat-grid-3">
+                <StatChip icon={<Heart size={12} color="#ef4444" />} label="Min HR" value={derived.hrMin != null ? `${derived.hrMin} bpm` : '—'} calculated={derived.hrMin != null} />
+                <StatChip icon={<Heart size={12} color="#ef4444" />} label="Avg HR" value={derived.hrAvg != null ? `${derived.hrAvg} bpm` : '—'} />
+                <StatChip icon={<Heart size={12} color="#ef4444" />} label="Max HR" value={derived.hrMax != null ? `${derived.hrMax} bpm` : '—'} />
               </div>
-            ))}
+            )}
+
+            {w.paceTimeline.length > 0 && (
+              <div className="stat-grid-3">
+                <StatChip icon={<TrendingUp size={12} color={color} />} label="Min Pace" value={derived.paceMin != null ? `${fmtPace(derived.paceMin)} /km` : '—'} calculated={derived.paceMin != null} />
+                <StatChip icon={<TrendingUp size={12} color={color} />} label="Avg Pace" value={w.avgPace ? `${fmtPace(w.avgPace)} /km` : '—'} calculated />
+                <StatChip icon={<TrendingUp size={12} color={color} />} label="Max Pace" value={derived.paceMax != null ? `${fmtPace(derived.paceMax)} /km` : '—'} calculated={derived.paceMax != null} />
+              </div>
+            )}
+
+            {speedTimeline.length > 0 && (
+              <div className="stat-grid-3">
+                <StatChip icon={<Gauge size={12} color="var(--blue)" />} label="Min Speed" value={derived.speedMin != null ? `${derived.speedMin.toFixed(1)} km/h` : '—'} calculated={derived.speedMin != null} />
+                <StatChip icon={<Gauge size={12} color="var(--blue)" />} label="Avg Speed" value={w.avgSpeed > 0 ? `${w.avgSpeed.toFixed(1)} km/h` : '—'} calculated />
+                <StatChip icon={<Gauge size={12} color="var(--blue)" />} label="Max Speed" value={derived.speedMax != null ? `${derived.speedMax.toFixed(1)} km/h` : '—'} calculated={derived.speedMax != null} />
+              </div>
+            )}
+
+            <div className="stat-grid-3">
+              <StatChip icon={<Mountain size={12} color="var(--hike)" />} label="Elev. Gain" value={w.elevTimeline.length > 0 ? `${Math.round(w.elevationGain)} m` : '—'} calculated={w.elevTimeline.length > 0} />
+              <StatChip icon={<Mountain size={12} color="var(--hike)" />} label="Elev. Loss" value={w.elevTimeline.length > 0 ? `${derived.elevLoss} m` : '—'} calculated={w.elevTimeline.length > 0} />
+              <StatChip icon={<Footprints size={12} />} label="Steps" value={derived.steps != null ? derived.steps.toLocaleString() : '—'} calculated={derived.steps != null} />
+            </div>
           </div>
         </div>
 
@@ -569,7 +766,7 @@ export default function WorkoutDetail({ workout: w0, onBack }: WorkoutDetailProp
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                 <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><Heart size={14} color="#ef4444" /> Heart Rate</h3>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)' }}>Avg {w.avgHR} · Max {w.maxHR}</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)' }}>Min {derived.hrMin ?? '—'} · Avg {w.avgHR} · Max {w.maxHR}</span>
                   <button className="btn-icon" onClick={() => setExpanded('hr')} title="Expand"><Maximize2 size={13} /></button>
                 </div>
               </div>
@@ -581,7 +778,7 @@ export default function WorkoutDetail({ workout: w0, onBack }: WorkoutDetailProp
           {selectedMetrics.includes('pace') && w.paceTimeline.length > 0 && (
             <div className="card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><TrendingUp size={14} color={color} /> Pace</h3>
+                <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><TrendingUp size={14} color={color} /> Pace <CalcIcon /></h3>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)' }}>Avg {fmtPace(w.avgPace)} /km</span>
                   <button className="btn-icon" onClick={() => setExpanded('pace')} title="Expand"><Maximize2 size={13} /></button>
@@ -595,7 +792,7 @@ export default function WorkoutDetail({ workout: w0, onBack }: WorkoutDetailProp
           {selectedMetrics.includes('speed') && speedTimeline.length > 0 && (
             <div className="card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><Gauge size={14} color="var(--blue)" /> Speed</h3>
+                <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><Gauge size={14} color="var(--blue)" /> Speed <CalcIcon /></h3>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)' }}>Avg {w.avgSpeed.toFixed(1)} km/h</span>
                   <button className="btn-icon" onClick={() => setExpanded('speed')} title="Expand"><Maximize2 size={13} /></button>

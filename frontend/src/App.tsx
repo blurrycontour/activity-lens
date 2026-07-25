@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import TopBar, { type ThemeMode } from './components/TopBar'
 import Sidebar from './components/Sidebar'
 import BottomBar from './components/BottomBar'
@@ -20,10 +20,28 @@ import { type Workout } from './data/workouts'
 import { useAuth } from './context/AuthContext'
 import { WorkoutsProvider } from './context/WorkoutsContext'
 import { type Page } from './lib/nav'
+import { api } from './lib/api'
 
 const SIDEBAR_KEY = 'al_sidebar_w'
 const THEME_KEY = 'al_theme'
 const ACCENT_KEY = 'al_accent'
+const PAGES: Page[] = ['dashboard', 'workouts', 'heatmap', 'timeline', 'analysis', 'help', 'settings', 'account', 'admin']
+
+// URL <-> app state helpers. Routes are path-based (e.g. /workouts,
+// /workouts/:id, /settings) so a full page reload lands back on the same
+// page/workout instead of always resetting to the dashboard.
+function pathForPage(p: Page): string {
+  return p === 'dashboard' ? '/' : `/${p}`
+}
+
+function parseLocation(): { page: Page; workoutId: string | null } {
+  const segs = window.location.pathname.split('/').filter(Boolean)
+  if (segs.length === 0) return { page: 'dashboard', workoutId: null }
+  if (segs[0] === 'workouts' && segs[1]) return { page: 'workouts', workoutId: segs[1] }
+  const candidate = segs[0] as Page
+  if (PAGES.includes(candidate)) return { page: candidate, workoutId: null }
+  return { page: 'dashboard', workoutId: null }
+}
 
 function resolveTheme(mode: ThemeMode): 'dark' | 'light' {
   if (mode === 'system') {
@@ -39,7 +57,8 @@ function applyTheme(mode: ThemeMode) {
 
 export default function App() {
   const { user, loading, logout } = useAuth()
-  const [page, setPage] = useState<Page>('dashboard')
+  const initialLocation = useRef(parseLocation()).current
+  const [page, setPage] = useState<Page>(initialLocation.page)
   const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [sidebarWidth, setSidebarWidth] = useState(() => {
@@ -89,9 +108,42 @@ export default function App() {
     document.documentElement.style.setProperty('--sidebar-w', `${sidebarWidth}px`)
   }, [sidebarWidth])
 
+  // Resolve a deep-linked workout on first load (e.g. reloading /workouts/abc).
+  useEffect(() => {
+    if (!initialLocation.workoutId || !user) return
+    let cancelled = false
+    api.getWorkout(initialLocation.workoutId)
+      .then(w => { if (!cancelled) setSelectedWorkout(w) })
+      .catch(() => { if (!cancelled) window.history.replaceState(null, '', pathForPage('workouts')) })
+    return () => { cancelled = true }
+    // Only run once, when auth resolves.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user])
+
+  // Keep app state in sync with browser back/forward navigation.
+  useEffect(() => {
+    function onPopState() {
+      const loc = parseLocation()
+      setPage(loc.page)
+      if (loc.workoutId) {
+        api.getWorkout(loc.workoutId).then(setSelectedWorkout).catch(() => setSelectedWorkout(null))
+      } else {
+        setSelectedWorkout(null)
+      }
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [])
+
   const navigate = useCallback((p: Page) => {
     setPage(p)
     setSelectedWorkout(null)
+    window.history.pushState(null, '', pathForPage(p))
+  }, [])
+
+  const selectWorkout = useCallback((w: Workout | null) => {
+    setSelectedWorkout(w)
+    window.history.pushState(null, '', w ? `/workouts/${w.id}` : pathForPage('workouts'))
   }, [])
 
   const toggleSidebar = useCallback(() => {
@@ -115,7 +167,7 @@ export default function App() {
       if (e.key === 'g') { gPressed = true; setTimeout(() => { gPressed = false }, 1000); return }
       if (e.key === '[') toggleSidebar()
       if (e.key === 'Escape') {
-        setSelectedWorkout(null)
+        selectWorkout(null)
         setShowUserMenu(false)
         setShowImport(false)
       }
@@ -126,7 +178,7 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [navigate, toggleSidebar])
+  }, [navigate, toggleSidebar, selectWorkout])
 
   const layoutClass = [
     'app-layout',
@@ -171,11 +223,11 @@ export default function App() {
 
       <main className="main-content">
         {selectedWorkout ? (
-          <WorkoutDetail key={selectedWorkout.id} workout={selectedWorkout} onBack={() => setSelectedWorkout(null)} />
+          <WorkoutDetail key={selectedWorkout.id} workout={selectedWorkout} accent={accent} onBack={() => selectWorkout(null)} />
         ) : page === 'dashboard' ? (
           <Dashboard />
         ) : page === 'workouts' ? (
-          <Workouts onSelect={setSelectedWorkout} onImport={() => setShowImport(true)} />
+          <Workouts onSelect={selectWorkout} onImport={() => setShowImport(true)} />
         ) : page === 'heatmap' ? (
           <Heatmap />
         ) : page === 'timeline' ? (
@@ -212,7 +264,7 @@ export default function App() {
       {showImport && (
         <ImportModal
           onClose={() => setShowImport(false)}
-          onViewWorkout={w => { setSelectedWorkout(w); setShowImport(false) }}
+          onViewWorkout={w => { selectWorkout(w); setShowImport(false) }}
         />
       )}
       </div>

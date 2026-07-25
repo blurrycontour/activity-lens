@@ -63,6 +63,13 @@ func (s *Service) List(ctx context.Context, userID int64) ([]Workout, error) {
 	return s.repo.List(ctx, userID)
 }
 
+// ListSummary returns all of the user's workouts, newest first, without the
+// route/HR/pace/elevation timelines. Use this for list/overview views that
+// only render scalar fields (dashboard cards, the workouts list, heatmap).
+func (s *Service) ListSummary(ctx context.Context, userID int64) ([]Workout, error) {
+	return s.repo.ListSummary(ctx, userID)
+}
+
 // Update applies a partial edit to a workout the user owns.
 func (s *Service) Update(ctx context.Context, userID int64, id string, p Patch) (*Workout, error) {
 	w, err := s.repo.Get(ctx, userID, id)
@@ -102,7 +109,7 @@ func (s *Service) Delete(ctx context.Context, userID int64, id string) error {
 
 // Stats computes aggregate statistics over the user's whole library.
 func (s *Service) Stats(ctx context.Context, userID int64) (*Stats, error) {
-	list, err := s.repo.List(ctx, userID)
+	list, err := s.repo.ListSummary(ctx, userID)
 	if err != nil {
 		return nil, err
 	}

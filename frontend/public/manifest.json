@@ -3,6 +3,7 @@
   "short_name": "Activity Lens",
   "description": "Multi-sport workout tracking and performance analysis",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#0a0b0e",
   "theme_color": "#00e87a",

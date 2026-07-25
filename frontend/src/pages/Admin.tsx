@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Mail, KeyRound, Users, Send, Plus, Trash2, Lock, Pencil, Check, X as XIcon } from 'lucide-react'
+import { Mail, KeyRound, Users, Send, Plus, Trash2, Lock, Pencil, Check, X as XIcon, Database } from 'lucide-react'
 import {
   api,
   ApiError,
@@ -76,6 +76,7 @@ export default function Admin() {
         {loadErr && <div className="card" style={{ color: 'var(--red, #dc2626)' }}>{loadErr}</div>}
         {settings && <SmtpSection settings={settings} onSaved={setSettings} />}
         {settings && <OidcSection settings={settings} onSaved={setSettings} />}
+        {settings && <StorageSection settings={settings} onSaved={setSettings} />}
         <UsersSection users={users} onChanged={load} />
       </div>
     </>
@@ -164,14 +165,16 @@ function SmtpSection({ settings, onSaved }: { settings: AdminSettings; onSaved: 
 
       <div style={{ borderTop: '1px solid var(--border)', marginTop: 18, paddingTop: 16 }}>
         <label style={labelStyle()}>Send a test email</label>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <input className="input" style={{ flex: '1 1 240px' }} type="email"
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <input className="input" style={{ width: '100%' }} type="email"
             placeholder="recipient@example.com (defaults to your email)"
             value={testTo} onChange={e => setTestTo(e.target.value)} />
-          <button className="btn btn-ghost" onClick={sendTest} disabled={testBusy}>
-            <Send size={14} /> {testBusy ? 'Sending…' : 'Send test'}
-          </button>
-          <StatusText msg={testMsg} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <button className="btn btn-ghost" onClick={sendTest} disabled={testBusy}>
+              <Send size={14} /> {testBusy ? 'Sending…' : 'Send test'}
+            </button>
+            <StatusText msg={testMsg} />
+          </div>
         </div>
       </div>
     </section>
@@ -253,6 +256,49 @@ function OidcSection({ settings, onSaved }: { settings: AdminSettings; onSaved: 
       </label>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 16 }}>
+        <button className="btn btn-primary" onClick={save} disabled={busy} style={{ opacity: busy ? 0.5 : 1 }}>Save</button>
+        <StatusText msg={msg} />
+      </div>
+    </section>
+  )
+}
+
+function StorageSection({ settings, onSaved }: { settings: AdminSettings; onSaved: (s: AdminSettings) => void }) {
+  const s = settings.storage
+  const [keepOriginalUploads, setKeepOriginalUploads] = useState(s.keepOriginalUploads)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<Msg>(null)
+
+  async function save() {
+    setBusy(true); setMsg(null)
+    try {
+      const updated = await api.saveStorage({ keepOriginalUploads })
+      onSaved(updated)
+      setMsg({ ok: true, text: 'Saved' })
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof ApiError ? e.message : 'Save failed' })
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <section className="card">
+      <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <Database size={15} /> Storage
+      </h3>
+
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, fontSize: 13 }}>
+        <input type="checkbox" checked={keepOriginalUploads} onChange={e => setKeepOriginalUploads(e.target.checked)} />
+        Keep original uploaded files (GPX/TCX)
+      </label>
+      <p style={{ fontSize: 12, color: 'var(--text-3)', lineHeight: 1.6, marginBottom: 14 }}>
+        <strong>On:</strong> the original file is kept alongside the parsed workout, so future import
+        improvements can reprocess your history without re-uploading — at the cost of extra database
+        storage per import (roughly the size of the original file).<br />
+        <strong>Off</strong> (default): only the parsed data (route, heart rate, pace, etc.) is kept and the
+        original file is discarded right after import, keeping the database as small as possible.
+      </p>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <button className="btn btn-primary" onClick={save} disabled={busy} style={{ opacity: busy ? 0.5 : 1 }}>Save</button>
         <StatusText msg={msg} />
       </div>

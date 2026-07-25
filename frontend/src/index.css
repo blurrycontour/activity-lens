@@ -399,6 +399,78 @@ body {
 .type-dropdown-item:hover { background: var(--bg-3); color: var(--text); }
 .type-dropdown-item.active { color: var(--text); font-weight: 600; }
 
+/* Workout detail summary stat grid: readable multi-column layout that
+ * collapses to 3-per-row on mobile. */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 16px 12px;
+}
+.stat-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px 8px;
+}
+.stat-grid-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.stat-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.stat-value {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+/* Right-anchored options dropdown (workout detail actions) */
+.options-menu-wrap {
+  position: relative;
+  display: inline-block;
+}
+.options-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  background: var(--bg-2);
+  border: 1px solid var(--border-strong);
+  border-radius: calc(var(--radius) * 1.5);
+  padding: 4px;
+  z-index: 60;
+  min-width: 170px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+.options-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-2);
+  transition: background 0.1s, color 0.1s;
+  border: none;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+}
+.options-menu-item:hover { background: var(--bg-3); color: var(--text); }
+.options-menu-item.active { color: var(--text); font-weight: 600; }
+.options-menu-item.danger { color: var(--red, #dc2626); }
+.options-menu-item.danger:hover { background: rgba(220, 38, 38, 0.12); }
+
+
 /* ── Animations ── */
 @keyframes pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
@@ -410,10 +482,23 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .charts-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 16px;
+}
+
+.detail-top {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 16px;
+  margin-bottom: 16px;
+  align-items: stretch;
 }
 
 /* ── Responsive ── */
@@ -425,6 +510,17 @@ body {
   }
 
   .charts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stat-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px 8px;
+  }
+  .stat-label { font-size: 10px; }
+  .stat-value { font-size: 13px; }
+
+  .detail-top {
     grid-template-columns: 1fr;
   }
 

@@ -16,17 +16,18 @@ import (
 
 // Server bundles the dependencies needed to serve the API and SPA.
 type Server struct {
-	cfg      config.Config
-	auth     *auth.Service
-	mw       *httpmw.Middleware
-	oidc     *oidc.Handler
-	workout  *workout.Service
-	settings *settings.Store
+	cfg        config.Config
+	auth       *auth.Service
+	mw         *httpmw.Middleware
+	oidc       *oidc.Handler
+	workout    *workout.Service
+	settings   *settings.Store
+	rawUploads *workout.RawUploadStore
 }
 
 // New constructs a Server and its auth middleware/OIDC handler.
-func New(cfg config.Config, authSvc *auth.Service, workoutSvc *workout.Service, settingsStore *settings.Store) *Server {
-	s := &Server{cfg: cfg, auth: authSvc, workout: workoutSvc, settings: settingsStore}
+func New(cfg config.Config, authSvc *auth.Service, workoutSvc *workout.Service, settingsStore *settings.Store, rawUploads *workout.RawUploadStore) *Server {
+	s := &Server{cfg: cfg, auth: authSvc, workout: workoutSvc, settings: settingsStore, rawUploads: rawUploads}
 	s.mw = &httpmw.Middleware{
 		Auth:   authSvc,
 		Secure: s.secure,
@@ -106,6 +107,7 @@ func (s *Server) apiRoutes() http.Handler {
 	mux.Handle("GET /api/admin/settings", s.authedAdmin(s.handleGetSettings))
 	mux.Handle("PUT /api/admin/settings/smtp", s.authedAdminCSRF(s.handleSaveSMTP))
 	mux.Handle("PUT /api/admin/settings/oidc", s.authedAdminCSRF(s.handleSaveOIDC))
+	mux.Handle("PUT /api/admin/settings/storage", s.authedAdminCSRF(s.handleSaveStorage))
 	mux.Handle("POST /api/admin/settings/smtp/test", s.authedAdminCSRF(s.handleTestEmail))
 	mux.Handle("GET /api/admin/users", s.authedAdmin(s.handleListUsers))
 	mux.Handle("POST /api/admin/users", s.authedAdminCSRF(s.handleCreateUser))

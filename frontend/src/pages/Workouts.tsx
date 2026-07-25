@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react'
 import { fmtDuration, fmtDist, fmtPace, TYPE_COLOR, TYPE_ICON, type WorkoutType, type Workout } from '../data/workouts'
 import { useWorkouts } from '../context/WorkoutsContext'
-import { Search, ChevronRight, Clock, Mountain, Flame, Download, Plus } from 'lucide-react'
+import { Search, ChevronRight, Clock, Mountain, Flame, Download, Plus, RefreshCw } from 'lucide-react'
 import TypeDropdown from '../components/TypeDropdown'
+import { api } from '../lib/api'
 
 interface WorkoutsProps {
   onSelect: (w: Workout) => void
@@ -10,11 +11,21 @@ interface WorkoutsProps {
 }
 
 export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
-  const { workouts, loading } = useWorkouts()
+  const { workouts, loading, refresh } = useWorkouts()
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState<WorkoutType | 'All'>('All')
   const [sortBy, setSortBy] = useState<'date' | 'distance' | 'duration'>('date')
   const [dateRange, setDateRange] = useState<'all' | '7d' | '30d' | '90d'>('all')
+  const [refreshing, setRefreshing] = useState(false)
+
+  async function handleRefresh() {
+    setRefreshing(true)
+    try {
+      await refresh()
+    } finally {
+      setRefreshing(false)
+    }
+  }
 
   const filtered = useMemo(() => {
     let result = [...workouts]
@@ -40,6 +51,15 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 16 }}>
           <h1 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>Workouts</h1>
           <span style={{ fontSize: 12, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>{filtered.length} of {workouts.length}</span>
+          <button
+            className="btn-icon"
+            onClick={handleRefresh}
+            disabled={refreshing || loading}
+            title="Refresh workouts"
+            style={{ marginLeft: 'auto' }}
+          >
+            <RefreshCw size={15} style={{ animation: (refreshing || loading) ? 'spin 0.8s linear infinite' : 'none' }} />
+          </button>
         </div>
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -101,16 +121,19 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
   )
 }
 
-function exportWorkout(w: Workout, e: React.MouseEvent) {
+async function exportWorkout(w: Workout, e: React.MouseEvent) {
   e.stopPropagation()
+  // The list view only carries summary fields (no route) for efficiency, so
+  // fetch the full workout — including its route — on demand when exporting.
+  const full = await api.getWorkout(w.id)
   // Build a minimal GPX string
   const gpx = `<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="Activity Lens">
   <trk>
-    <name>${w.name}</name>
-    <type>${w.type}</type>
+    <name>${full.name}</name>
+    <type>${full.type}</type>
     <trkseg>
-${w.route.map(([lat, lng]) => `      <trkpt lat="${lat.toFixed(6)}" lon="${lng.toFixed(6)}"></trkpt>`).join('\n')}
+${full.route.map(([lat, lng]) => `      <trkpt lat="${lat.toFixed(6)}" lon="${lng.toFixed(6)}"></trkpt>`).join('\n')}
     </trkseg>
   </trk>
 </gpx>`
@@ -118,7 +141,7 @@ ${w.route.map(([lat, lng]) => `      <trkpt lat="${lat.toFixed(6)}" lon="${lng.t
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `${w.name.replace(/\s+/g, '_')}_${w.date}.gpx`
+  a.download = `${full.name.replace(/\s+/g, '_')}_${full.date}.gpx`
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -205,7 +228,7 @@ function WorkoutCard({ workout: w, onClick }: { workout: Workout; onClick: () =>
         <button
           className="btn-icon"
           title="Export as GPX"
-          onClick={e => exportWorkout(w, e)}
+          onClick={e => { void exportWorkout(w, e) }}
           style={{ opacity: 0.6 }}
           onMouseEnter={e => e.currentTarget.style.opacity = '1'}
           onMouseLeave={e => e.currentTarget.style.opacity = '0.6'}

@@ -16,8 +16,9 @@ import (
 )
 
 const (
-	keySMTP = "smtp"
-	keyOIDC = "oidc"
+	keySMTP    = "smtp"
+	keyOIDC    = "oidc"
+	keyStorage = "storage"
 )
 
 // SMTP holds outbound email settings.
@@ -42,6 +43,15 @@ type OIDC struct {
 	ProviderName      string   `json:"providerName"`
 	AllowRegistration bool     `json:"allowRegistration"`
 	Scopes            []string `json:"scopes"`
+}
+
+// Storage holds data-retention preferences for imported activity files.
+type Storage struct {
+	// KeepOriginalUploads, when true, retains the original GPX/TCX file
+	// bytes alongside the parsed workout so a future, improved import
+	// pipeline can reprocess history without asking users to re-upload.
+	// Trades additional database size for that flexibility.
+	KeepOriginalUploads bool `json:"keepOriginalUploads"`
 }
 
 // Store persists settings and per-user last-login timestamps.
@@ -105,6 +115,20 @@ func (s *Store) StoredOIDC(ctx context.Context) (OIDC, error) {
 // SaveOIDC persists OIDC settings.
 func (s *Store) SaveOIDC(ctx context.Context, v OIDC) error {
 	return s.set(ctx, keyOIDC, v)
+}
+
+// StoredStorage returns the raw storage settings saved in the database.
+func (s *Store) StoredStorage(ctx context.Context) (Storage, error) {
+	v := Storage{}
+	if _, err := s.get(ctx, keyStorage, &v); err != nil {
+		return Storage{}, err
+	}
+	return v, nil
+}
+
+// SaveStorage persists storage settings.
+func (s *Store) SaveStorage(ctx context.Context, v Storage) error {
+	return s.set(ctx, keyStorage, v)
 }
 
 // RecordLogin stores the last-login timestamp for a user.

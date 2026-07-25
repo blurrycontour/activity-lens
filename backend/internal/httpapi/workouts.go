@@ -3,6 +3,7 @@ package httpapi
 import (
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -16,7 +17,7 @@ const maxUploadBytes = 25 << 20 // 25 MiB
 
 func (s *Server) handleListWorkouts(w http.ResponseWriter, r *http.Request) {
 	user := httpmw.UserFrom(r)
-	list, err := s.workout.List(r.Context(), user.ID)
+	list, err := s.workout.ListSummary(r.Context(), user.ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not load workouts")
 		return
@@ -166,6 +167,19 @@ func (s *Server) handleImportWorkout(w http.ResponseWriter, r *http.Request) {
 		s.writeWorkoutError(w, err)
 		return
 	}
+
+	if s.rawUploads != nil {
+		if keep, err := s.settings.StoredStorage(r.Context()); err == nil && keep.KeepOriginalUploads {
+			contentType := header.Header.Get("Content-Type")
+			if contentType == "" {
+				contentType = "application/octet-stream"
+			}
+			if err := s.rawUploads.Save(r.Context(), wk.ID, header.Filename, contentType, data); err != nil {
+				slog.Warn("could not save original upload", "workout_id", wk.ID, "error", err)
+			}
+		}
+	}
+
 	writeJSON(w, http.StatusCreated, wk)
 }
 

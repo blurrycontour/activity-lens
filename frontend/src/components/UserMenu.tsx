@@ -38,7 +38,7 @@ export default function UserMenu({ onClose, onAccount, onSettings, onAdmin, onLo
   return (
     <>
       <div
-        style={{ position: 'fixed', inset: 0, zIndex: 150 }}
+        className="overlay"
         onClick={onClose}
       />
       <div
@@ -51,7 +51,7 @@ export default function UserMenu({ onClose, onAccount, onSettings, onAdmin, onLo
           background: 'var(--bg-2)',
           border: '1px solid var(--border-strong)',
           borderRadius: 12,
-          zIndex: 200,
+          zIndex: 1101,
           overflow: 'hidden',
           boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
           animation: 'fadeIn 0.15s ease',

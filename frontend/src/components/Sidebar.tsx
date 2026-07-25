@@ -129,13 +129,7 @@ export default function Sidebar({ currentPage, onNavigate, collapsed, sidebarWid
       {!isMobile && !collapsed && (
         <div style={{ padding: '12px', borderTop: '1px solid var(--border)' }}>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <div style={{
-              width: 8, height: 8, borderRadius: '50%',
-              background: 'var(--primary)',
-              boxShadow: '0 0 6px var(--primary)',
-              animation: 'pulse 2s ease-in-out infinite',
-            }} />
-            <span style={{ fontSize: 11, color: 'var(--text-3)' }}>GPS sync active</span>
+            <span style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>Activity Lens v{__APP_VERSION__}</span>
           </div>
         </div>
       )}

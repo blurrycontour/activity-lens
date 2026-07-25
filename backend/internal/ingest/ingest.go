@@ -61,18 +61,22 @@ func buildInput(name string, typ workout.Type, points []trackPoint, calories int
 	}
 
 	var (
-		start      time.Time
-		haveStart  bool
-		prevLat    float64
-		prevLng    float64
-		havePrev   bool
-		prevElev   float64
-		havePrevEl bool
-		distance   float64
-		elevGain   float64
-		hrSum      int
-		hrCount    int
-		maxHR      int
+		start        time.Time
+		haveStart    bool
+		prevLat      float64
+		prevLng      float64
+		havePrev     bool
+		prevElev     float64
+		havePrevEl   bool
+		distance     float64
+		elevGain     float64
+		hrSum        int
+		hrCount      int
+		maxHR        int
+		prevPaceLat  float64
+		prevPaceLng  float64
+		prevPaceT    int
+		havePrevPace bool
 	)
 
 	for _, p := range points {
@@ -106,6 +110,21 @@ func buildInput(name string, typ workout.Type, points []trackPoint, calories int
 				maxHR = p.HR
 			}
 			in.HRTimeline = append(in.HRTimeline, workout.HRPoint{T: tSec, HR: p.HR})
+		}
+		// Most GPX/TCX exports don't carry a pace/speed field directly, so it
+		// is derived here from consecutive GPS fixes and their timestamps
+		// (distance / elapsed time). A minimum segment distance avoids
+		// division blow-ups from GPS jitter while stationary.
+		if p.HasLL && p.HasTime && haveStart {
+			if havePrevPace {
+				segDist := haversine(prevPaceLat, prevPaceLng, p.Lat, p.Lng)
+				dt := tSec - prevPaceT
+				if dt > 0 && segDist >= 3 {
+					paceSecPerKm := float64(dt) / (segDist / 1000)
+					in.PaceTimeline = append(in.PaceTimeline, workout.PacePoint{T: tSec, Pace: int(math.Round(paceSecPerKm))})
+				}
+			}
+			prevPaceLat, prevPaceLng, prevPaceT, havePrevPace = p.Lat, p.Lng, tSec, true
 		}
 	}
 
