@@ -266,13 +266,15 @@ function OidcSection({ settings, onSaved }: { settings: AdminSettings; onSaved: 
 function StorageSection({ settings, onSaved }: { settings: AdminSettings; onSaved: (s: AdminSettings) => void }) {
   const s = settings.storage
   const [keepOriginalUploads, setKeepOriginalUploads] = useState(s.keepOriginalUploads)
+  const [calorieMethod, setCalorieMethod] = useState(s.calorieMethod)
+  const [bodyWeightKg, setBodyWeightKg] = useState(String(s.bodyWeightKg))
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<Msg>(null)
 
   async function save() {
     setBusy(true); setMsg(null)
     try {
-      const updated = await api.saveStorage({ keepOriginalUploads })
+      const updated = await api.saveStorage({ keepOriginalUploads, calorieMethod, bodyWeightKg: Number(bodyWeightKg) || 70 })
       onSaved(updated)
       setMsg({ ok: true, text: 'Saved' })
     } catch (e) {
@@ -292,11 +294,23 @@ function StorageSection({ settings, onSaved }: { settings: AdminSettings; onSave
       </label>
       <p style={{ fontSize: 12, color: 'var(--text-3)', lineHeight: 1.6, marginBottom: 14 }}>
         <strong>On:</strong> the original file is kept alongside the parsed workout, so future import
-        improvements can reprocess your history without re-uploading — at the cost of extra database
-        storage per import (roughly the size of the original file).<br />
+        improvements can reprocess your history without re-uploading. Files are stored under
+        <code>raw-uploads/</code> in the configured data directory.<br />
         <strong>Off</strong> (default): only the parsed data (route, heart rate, pace, etc.) is kept and the
         original file is discarded right after import, keeping the database as small as possible.
       </p>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 1fr) minmax(120px, 180px)', gap: 12, marginBottom: 16 }}>
+        <Field label="Fallback calorie estimate">
+          <select className="input" style={{ width: '100%' }} value={calorieMethod} onChange={e => setCalorieMethod(e.target.value as typeof calorieMethod)}>
+            <option value="heart-rate">Heart rate, then distance</option>
+            <option value="distance">Distance only</option>
+          </select>
+        </Field>
+        <Field label="Body weight (kg)">
+          <input className="input" type="number" min="25" max="300" style={{ width: '100%' }} value={bodyWeightKg} onChange={e => setBodyWeightKg(e.target.value)} />
+        </Field>
+      </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <button className="btn btn-primary" onClick={save} disabled={busy} style={{ opacity: busy ? 0.5 : 1 }}>Save</button>

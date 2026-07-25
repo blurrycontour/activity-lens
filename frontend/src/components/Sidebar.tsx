@@ -129,7 +129,7 @@ export default function Sidebar({ currentPage, onNavigate, collapsed, sidebarWid
       {!isMobile && !collapsed && (
         <div style={{ padding: '12px', borderTop: '1px solid var(--border)' }}>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>Activity Lens v{__APP_VERSION__}</span>
+            <span style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>⌖ Version: {__APP_VERSION__}</span>
           </div>
         </div>
       )}

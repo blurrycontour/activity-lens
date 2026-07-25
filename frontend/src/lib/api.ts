@@ -60,6 +60,8 @@ export interface AdminSettings {
 
 export interface StorageSettings {
   keepOriginalUploads: boolean
+  calorieMethod: 'heart-rate' | 'distance'
+  bodyWeightKg: number
 }
 
 export interface SmtpInput {

@@ -2,35 +2,49 @@ package workout
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
-	"time"
+	"os"
+	"path/filepath"
 )
 
-// RawUploadStore persists the original bytes of an imported activity file
-// (GPX/TCX), gated by an admin-configurable setting. Kept separate from the
-// workouts table so ordinary workout reads/writes never touch these larger
-// blobs; rows are removed automatically (ON DELETE CASCADE) when the owning
-// workout is deleted.
+// RawUploadStore persists original imported activity files under the configured
+// data directory, gated by an admin-configurable setting.
 type RawUploadStore struct {
-	db *sql.DB
+	dir string
 }
 
-// NewRawUploadStore builds a raw-upload store backed by db.
-func NewRawUploadStore(db *sql.DB) *RawUploadStore { return &RawUploadStore{db: db} }
+// NewRawUploadStore builds a raw-upload store rooted at dataDir.
+func NewRawUploadStore(dataDir string) *RawUploadStore {
+	return &RawUploadStore{dir: filepath.Join(dataDir, "raw-uploads")}
+}
 
-// Save stores (or replaces) the original uploaded file for a workout.
+// Save stores the original file as <workout ID><original extension>.
 func (s *RawUploadStore) Save(ctx context.Context, workoutID, filename, contentType string, data []byte) error {
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO workout_raw_uploads (workout_id, filename, content_type, data, created_at)
-		 VALUES (?, ?, ?, ?, ?)
-		 ON CONFLICT(workout_id) DO UPDATE SET
-			filename = excluded.filename,
-			content_type = excluded.content_type,
-			data = excluded.data,
-			created_at = excluded.created_at`,
-		workoutID, filename, contentType, data, time.Now().UTC().Format(time.RFC3339))
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(s.dir, 0o750); err != nil {
+		return fmt.Errorf("create raw uploads directory: %w", err)
+	}
+	ext := filepath.Ext(filepath.Base(filename))
+	if ext == "" {
+		ext = ".bin"
+	}
+	path := filepath.Join(s.dir, workoutID+ext)
+	tmp, err := os.CreateTemp(s.dir, ".upload-*")
 	if err != nil {
+		return fmt.Errorf("create raw upload: %w", err)
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return fmt.Errorf("write raw upload: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close raw upload: %w", err)
+	}
+	if err := os.Rename(tmpName, path); err != nil {
 		return fmt.Errorf("save raw upload: %w", err)
 	}
 	return nil

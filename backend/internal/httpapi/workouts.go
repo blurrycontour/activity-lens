@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"time"
 
@@ -79,6 +80,7 @@ func (s *Server) handleCreateWorkout(w http.ResponseWriter, r *http.Request) {
 		s.writeWorkoutError(w, err)
 		return
 	}
+	slog.Info("workout created", "workout_id", wk.ID, "user_id", user.ID, "source", "manual")
 	writeJSON(w, http.StatusCreated, wk)
 }
 
@@ -112,6 +114,7 @@ func (s *Server) handlePatchWorkout(w http.ResponseWriter, r *http.Request) {
 		s.writeWorkoutError(w, err)
 		return
 	}
+	slog.Info("workout updated", "workout_id", wk.ID, "user_id", user.ID)
 	writeJSON(w, http.StatusOK, wk)
 }
 
@@ -121,6 +124,7 @@ func (s *Server) handleDeleteWorkout(w http.ResponseWriter, r *http.Request) {
 		s.writeWorkoutError(w, err)
 		return
 	}
+	slog.Info("workout deleted", "workout_id", r.PathValue("id"), "user_id", user.ID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -161,12 +165,18 @@ func (s *Server) handleImportWorkout(w http.ResponseWriter, r *http.Request) {
 	if name := r.FormValue("name"); name != "" {
 		in.Name = name
 	}
+	if in.Calories == 0 {
+		if storage, err := s.settings.StoredStorage(r.Context()); err == nil {
+			in.Calories = estimateCalories(in, storage.CalorieMethod, storage.BodyWeightKg)
+		}
+	}
 
 	wk, err := s.workout.Create(r.Context(), user.ID, in)
 	if err != nil {
 		s.writeWorkoutError(w, err)
 		return
 	}
+	slog.Info("workout imported", "workout_id", wk.ID, "user_id", user.ID, "filename", header.Filename, "bytes", len(data))
 
 	if s.rawUploads != nil {
 		if keep, err := s.settings.StoredStorage(r.Context()); err == nil && keep.KeepOriginalUploads {
@@ -181,6 +191,24 @@ func (s *Server) handleImportWorkout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, wk)
+}
+
+func estimateCalories(in workout.Input, method string, weightKg float64) int {
+	if in.Duration <= 0 || weightKg <= 0 {
+		return 0
+	}
+	if method == "heart-rate" && in.AvgHR > 0 {
+		// A conservative generic HR estimate for adults when sex/age are unavailable.
+		return int(math.Round((0.014*float64(in.AvgHR) + 0.017*weightKg - 1.2) * float64(in.Duration) / 60))
+	}
+	if in.Distance <= 0 {
+		return 0
+	}
+	factor := 1.0
+	if in.Type == workout.TypeRide {
+		factor = 0.35
+	}
+	return int(math.Round(factor * weightKg * in.Distance / 1000))
 }
 
 func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {

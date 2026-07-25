@@ -7,7 +7,7 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 
 export default function Heatmap() {
   const { workouts } = useWorkouts()
-  const [hoveredDay, setHoveredDay] = useState<{ date: string; count: number; duration: number } | null>(null)
+  const [hoveredDay, setHoveredDay] = useState<{ date: string; count: number; duration: number; x: number; y: number } | null>(null)
   const [typeFilter, setTypeFilter] = useState<WorkoutType | 'All'>('All')
 
   const filteredWorkouts = typeFilter === 'All' ? workouts : workouts.filter(w => w.type === typeFilter)
@@ -22,9 +22,8 @@ export default function Heatmap() {
     }
 
     const today = new Date()
-    const endDate = new Date(today)
-    const startDate = new Date(today)
-    startDate.setDate(startDate.getDate() - 364)
+    const startDate = new Date(today.getFullYear(), 0, 1)
+    const endDate = new Date(today.getFullYear(), 11, 31)
     // Align to Sunday
     while (startDate.getDay() !== 0) startDate.setDate(startDate.getDate() - 1)
 
@@ -41,7 +40,7 @@ export default function Heatmap() {
           const dateStr = currentDate.toISOString().split('T')[0]
           const data = activityMap[dateStr] || { count: 0, duration: 0 }
           const month = currentDate.getMonth()
-          if (month !== lastMonth && d === 0) {
+          if (month !== lastMonth && currentDate.getDate() <= 7) {
             monthLabels.push({ label: MONTHS[month], col })
             lastMonth = month
           }
@@ -115,11 +114,11 @@ export default function Heatmap() {
           <div style={{ display: 'flex', gap: 6 }}>
             {/* Day labels */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingTop: 16, flexShrink: 0 }}>
-              {DAYS.map((d, i) => (
+              {DAYS.map(d => (
                 <div key={d} style={{
                   height: 14, lineHeight: '14px',
                   fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-3)',
-                  opacity: i % 2 === 0 ? 1 : 0,
+                  opacity: 1,
                   width: 20, textAlign: 'right',
                 }}>
                   {d}
@@ -161,7 +160,7 @@ export default function Heatmap() {
                           transition: 'transform 0.1s',
                           position: 'relative',
                         }}
-                        onMouseEnter={() => day && day.count > 0 && setHoveredDay(day)}
+                        onMouseEnter={event => day && day.count > 0 && setHoveredDay({ ...day, x: event.clientX, y: event.clientY })}
                         onMouseLeave={() => setHoveredDay(null)}
                       />
                     ))}
@@ -183,7 +182,7 @@ export default function Heatmap() {
           {hoveredDay && (
             <div style={{
               position: 'fixed',
-              bottom: 80, right: 24,
+              top: hoveredDay.y + 12, left: hoveredDay.x + 12,
               background: 'var(--bg-2)', border: '1px solid var(--border-strong)',
               borderRadius: 8, padding: '10px 14px', zIndex: 100,
               boxShadow: '0 8px 32px rgba(0,0,0,0.4)',

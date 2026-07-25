@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { fmtDuration, fmtDist, fmtPace, TYPE_COLOR, TYPE_ICON, type WorkoutType, type Workout } from '../data/workouts'
 import { useWorkouts } from '../context/WorkoutsContext'
-import { Search, ChevronRight, Clock, Mountain, Flame, Download, Plus, RefreshCw } from 'lucide-react'
+import { Search, ChevronRight, Clock, Mountain, Flame, Download, Plus, RefreshCw, Grid2X2, List } from 'lucide-react'
 import TypeDropdown from '../components/TypeDropdown'
 import { api } from '../lib/api'
 
@@ -17,6 +17,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
   const [sortBy, setSortBy] = useState<'date' | 'distance' | 'duration'>('date')
   const [dateRange, setDateRange] = useState<'all' | '7d' | '30d' | '90d'>('all')
   const [refreshing, setRefreshing] = useState(false)
+  const [view, setView] = useState<'list' | 'grid'>('list')
 
   async function handleRefresh() {
     setRefreshing(true)
@@ -60,11 +61,15 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
           >
             <RefreshCw size={15} style={{ animation: (refreshing || loading) ? 'spin 0.8s linear infinite' : 'none' }} />
           </button>
+          <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
+            <button className="btn-icon" onClick={() => setView('list')} title="List view" style={{ borderRadius: 0, background: view === 'list' ? 'var(--bg-3)' : 'transparent' }}><List size={15} /></button>
+            <button className="btn-icon" onClick={() => setView('grid')} title="Grid view" style={{ borderRadius: 0, background: view === 'grid' ? 'var(--bg-3)' : 'transparent' }}><Grid2X2 size={15} /></button>
+          </div>
         </div>
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           {/* Search */}
-          <div style={{ position: 'relative', flex: 1, minWidth: 180 }}>
+          <div className="workout-search" style={{ position: 'relative', flex: 1, minWidth: 180 }}>
             <Search size={14} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', pointerEvents: 'none' }} />
             <input
               className="input"
@@ -102,7 +107,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
             <p style={{ fontSize: 14 }}>{loading ? 'Loading workouts…' : 'No workouts found'}</p>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div className={view === 'grid' ? 'workout-grid' : undefined} style={view === 'list' ? { display: 'flex', flexDirection: 'column', gap: 6 } : undefined}>
             {filtered.map(w => <WorkoutCard key={w.id} workout={w} onClick={() => onSelect(w)} />)}
           </div>
         )}

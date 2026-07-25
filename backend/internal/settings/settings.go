@@ -51,7 +51,9 @@ type Storage struct {
 	// bytes alongside the parsed workout so a future, improved import
 	// pipeline can reprocess history without asking users to re-upload.
 	// Trades additional database size for that flexibility.
-	KeepOriginalUploads bool `json:"keepOriginalUploads"`
+	KeepOriginalUploads bool    `json:"keepOriginalUploads"`
+	CalorieMethod       string  `json:"calorieMethod"`
+	BodyWeightKg        float64 `json:"bodyWeightKg"`
 }
 
 // Store persists settings and per-user last-login timestamps.
@@ -119,7 +121,7 @@ func (s *Store) SaveOIDC(ctx context.Context, v OIDC) error {
 
 // StoredStorage returns the raw storage settings saved in the database.
 func (s *Store) StoredStorage(ctx context.Context) (Storage, error) {
-	v := Storage{}
+	v := Storage{CalorieMethod: "heart-rate", BodyWeightKg: 70}
 	if _, err := s.get(ctx, keyStorage, &v); err != nil {
 		return Storage{}, err
 	}

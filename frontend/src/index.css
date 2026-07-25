@@ -495,10 +495,36 @@ body {
 
 .detail-top {
   display: grid;
-  grid-template-columns: 1fr 320px;
+  grid-template-columns: 320px 1fr;
+  grid-template-areas: "summary map";
   gap: 16px;
   margin-bottom: 16px;
   align-items: stretch;
+}
+.detail-top > :first-child { grid-area: map; }
+.detail-top > :last-child { grid-area: summary; }
+.playback-bar { display: flex; align-items: center; gap: 10px; }
+.playback-controls { display: flex; align-items: center; gap: 10px; }
+.workout-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.route-pin { background: none !important; border: none !important; display: grid; place-items: center; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5)); }
+.map-shade-select {
+  position: absolute;
+  bottom: 26px;
+  left: 10px;
+  z-index: 1000;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 12px;
+  padding: 6px 30px 6px 10px;
+  max-width: calc(100% - 20px);
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239aa0aa' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
 }
 
 /* ── Responsive ── */
@@ -522,6 +548,15 @@ body {
 
   .detail-top {
     grid-template-columns: 1fr;
+    grid-template-areas: "summary" "map";
+  }
+  .playback-bar { display: grid; grid-template-columns: auto 1fr; gap: 8px; }
+  .playback-controls { grid-column: 1; grid-row: 2; }
+  .playback-bar input { grid-column: 1 / -1; grid-row: 1; width: 100%; }
+  .playback-bar > span { grid-column: 2; grid-row: 2; justify-self: end; align-self: center; }
+  .workout-search {
+    flex-basis: 100%;
+    width: 100%;
   }
 
   .sidebar {

@@ -38,6 +38,9 @@ RUN mkdir -p /data && chown 65532:65532 /data
 FROM node:22-alpine AS frontend
 WORKDIR /app/frontend
 
+ARG VERSION=dev
+ENV VITE_APP_VERSION=$VERSION
+
 # Enable pnpm via corepack and install using the lockfile for reproducibility.
 RUN corepack enable
 
