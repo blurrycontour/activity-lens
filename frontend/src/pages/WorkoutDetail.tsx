@@ -6,6 +6,7 @@ import {
   Check, X as XIcon, Play, Pause, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, Layers,
 } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
+import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
 import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, Popup, useMap, useMapEvents } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -256,7 +257,7 @@ function LayerSwitcher({ layer, onChange }: { layer: MapLayerId; onChange: (l: M
 }
 
 function RouteMap({
-  route, color, duration, currentTime, onScrub, height, distance, hrTimeline, paceTimeline, elevTimeline,
+  route, color, duration, currentTime, onScrub, height, distance, hrTimeline, paceTimeline, elevTimeline, avatarUrl,
 }: {
   route: Array<[number, number]>
   color: string
@@ -268,6 +269,7 @@ function RouteMap({
   hrTimeline: Workout['hrTimeline']
   paceTimeline: Workout['paceTimeline']
   elevTimeline: Workout['elevTimeline']
+  avatarUrl?: string
 }) {
   const [layer, setLayer] = useState<MapLayerId>(() => {
     const stored = localStorage.getItem(MAP_LAYER_KEY)
@@ -280,6 +282,19 @@ function RouteMap({
   }, [layer])
 
   const timeAt = (index: number) => (index / Math.max(route.length - 1, 1)) * duration
+
+  // The moving playback marker shows the user's (minified) profile picture when
+  // available, so it reads as "you" tracing the route. Falls back to a plain
+  // dot when there's no avatar. Rebuilt only when the avatar/color changes.
+  const avatarIcon = useMemo(() => {
+    if (!avatarUrl) return null
+    return divIcon({
+      className: 'route-avatar',
+      html: `<img src="${avatarUrl}" width="34" height="34" loading="lazy" decoding="async" style="width:34px;height:34px;border-radius:50%;object-fit:cover;display:block;border:2.5px solid ${color};box-shadow:0 1px 6px rgba(0,0,0,0.45);background:var(--bg-2)" alt="" />`,
+      iconSize: [34, 34],
+      iconAnchor: [17, 17],
+    })
+  }, [avatarUrl, color])
 
   // Shading is precomputed once per route/metric (never per playback tick) and
   // capped to a fixed number of segments so long, high-frequency tracks stay
@@ -354,7 +369,9 @@ function RouteMap({
         {shadedSegments.map((seg, index) => <Polyline key={index} positions={seg.positions} pathOptions={{ color: seg.color, weight: 4, opacity: 0.85 }} />)}
         <Marker position={start} icon={START_MARKER} interactive={false} />
         <Marker position={end} icon={FINISH_MARKER} interactive={false} />
-        <CircleMarker center={current} radius={7} pane="markerPane" pathOptions={{ color: '#fff', fillColor: color, fillOpacity: 1, weight: 2 }} />
+        {avatarIcon
+          ? <Marker position={current} icon={avatarIcon} interactive={false} />
+          : <CircleMarker center={current} radius={7} pane="markerPane" pathOptions={{ color: '#fff', fillColor: color, fillOpacity: 1, weight: 2 }} />}
         {selectedPoint != null && <Popup position={route[selectedPoint]} closeButton={false} autoPan><div style={{ fontSize: 12, lineHeight: 1.6 }}><strong>{fmtDuration(selectedTime)}</strong><br />Distance {fmtDist((selectedPoint / Math.max(route.length - 1, 1)) * distance)}<br />HR {selectedHR ?? '—'} bpm<br />Pace {selectedPace ? `${fmtPace(selectedPace)} /km` : '—'}<br />Speed {selectedPace ? `${(3600 / selectedPace).toFixed(1)} km/h` : '—'}<br />Elevation {selectedElev ?? '—'} m</div></Popup>}
       </MapContainer>
     </div>
@@ -443,7 +460,14 @@ function ExpandModal({ title, onClose, children }: { title: string; onClose: () 
 
 export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDetailProps) {
   const { updateWorkout, removeWorkout } = useWorkouts()
+  const { user } = useAuth()
   const [w, setW] = useState(w0)
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 769)
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 769)
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
   const color = TYPE_COLOR[w.type]
   const trailColor = accent || color
 
@@ -718,8 +742,8 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
 
   function hrZoneChart(height: number) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+      <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0, width: isMobile ? '100%' : undefined }}>
           {hrZones.map(z => (
             <div key={z.name} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-2)' }}>
               <div style={{ width: 8, height: 8, borderRadius: '50%', background: z.color, flexShrink: 0 }} />
@@ -741,7 +765,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
 
   function mapCard(height: number | string) {
     return (
-      <RouteMap route={w.route} color={trailColor} duration={w.duration} currentTime={currentTime} onScrub={handleScrub} height={height} distance={w.distance} hrTimeline={w.hrTimeline} paceTimeline={w.paceTimeline} elevTimeline={w.elevTimeline} />
+      <RouteMap route={w.route} color={trailColor} duration={w.duration} currentTime={currentTime} onScrub={handleScrub} height={height} distance={w.distance} hrTimeline={w.hrTimeline} paceTimeline={w.paceTimeline} elevTimeline={w.elevTimeline} avatarUrl={user?.avatarPath || undefined} />
     )
   }
 
@@ -876,7 +900,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
             <div className="stat-grid-3">
               <StatChip icon={<Mountain size={12} color="var(--hike)" />} label="Elev. Gain" value={w.elevTimeline.length > 0 ? `${Math.round(w.elevationGain)} m` : '—'} />
               <StatChip icon={<Mountain size={12} color="var(--hike)" />} label="Elev. Loss" value={w.elevTimeline.length > 0 ? `${derived.elevLoss} m` : '—'} calculated={w.elevTimeline.length > 0} />
-              <StatChip icon={<Footprints size={12} />} label="Steps" value={(w.steps ?? 0) > 0 ? w.steps!.toLocaleString() : (derived.steps != null ? derived.steps.toLocaleString() : '—')} manual={w.stepsManual} calculated={!w.stepsManual && (w.steps ?? 0) === 0 && derived.steps != null} />
+              <StatChip icon={<Footprints size={12} />} label="Steps" value={(w.steps ?? 0) > 0 ? w.steps!.toLocaleString() : (derived.steps != null ? derived.steps.toLocaleString() : '—')} manual={w.stepsManual} calculated={!w.stepsManual && ((w.steps ?? 0) > 0 || derived.steps != null)} />
             </div>
           </div>
         </div>

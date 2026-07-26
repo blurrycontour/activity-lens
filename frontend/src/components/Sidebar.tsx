@@ -1,5 +1,5 @@
 import { useRef, useCallback } from 'react'
-import { LayoutDashboard, Dumbbell, MapIcon, BarChart2, Activity, HelpCircle, Upload } from 'lucide-react'
+import { LayoutDashboard, Dumbbell, MapIcon, BarChart2, Activity, HelpCircle, Plus } from 'lucide-react'
 import { type Page } from '../lib/nav'
 
 interface SidebarProps {
@@ -72,7 +72,7 @@ export default function Sidebar({ currentPage, onNavigate, collapsed, sidebarWid
           }}
           title="Add Workout"
         >
-          <Upload size={15} />
+          <Plus size={16} strokeWidth={2.5} />
           {!collapsed && <span>Add Workout</span>}
         </button>
       </div>

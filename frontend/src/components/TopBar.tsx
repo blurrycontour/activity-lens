@@ -1,4 +1,4 @@
-import { Menu, Sun, Moon, Monitor, Activity, HelpCircle } from 'lucide-react'
+import { Menu, Sun, Moon, Monitor, HelpCircle } from 'lucide-react'
 import type { ApiUser } from '../lib/api'
 
 export type ThemeMode = 'dark' | 'light' | 'system'
@@ -41,13 +41,7 @@ export default function TopBar({ onToggleSidebar, themeMode, onCycleTheme, onUse
       )}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <div style={{
-          width: 28, height: 28, borderRadius: 8,
-          background: 'var(--primary)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <Activity size={16} color="#0a0b0e" strokeWidth={2.5} />
-        </div>
+        <img src="/logo.png" alt="Activity Lens" width={28} height={28} style={{ borderRadius: 8, display: 'block' }} />
         <span style={{ fontWeight: 700, fontSize: 15, letterSpacing: '-0.02em', color: 'var(--text)' }}>
           Activity Lens
         </span>

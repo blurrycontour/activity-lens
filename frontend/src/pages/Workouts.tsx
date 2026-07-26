@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { fmtDuration, fmtDist, fmtPace, TYPE_COLOR, TYPE_ICON, type WorkoutType, type Workout } from '../data/workouts'
 import { useWorkouts } from '../context/WorkoutsContext'
-import { Search, ChevronRight, Clock, Mountain, Flame, Download, Plus, RefreshCw, Grid2X2, List } from 'lucide-react'
+import { Search, ChevronRight, Clock, Mountain, Flame, Download, Plus, RefreshCw, Grid2X2, List, Navigation } from 'lucide-react'
 import TypeDropdown from '../components/TypeDropdown'
 import { api } from '../lib/api'
 
@@ -210,9 +210,12 @@ function WorkoutCard({ workout: w, variant, onClick }: { workout: Workout; varia
         </div>
 
         {/* Stats */}
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', rowGap: 6 }}>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', rowGap: 6, alignItems: 'center' }}>
           {w.distance > 0 && (
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-2)' }}>{fmtDist(w.distance)}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+              <Navigation size={11} color="var(--text-3)" />
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-2)' }}>{fmtDist(w.distance)}</span>
+            </div>
           )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
             <Clock size={11} color="var(--text-3)" />
@@ -227,7 +230,7 @@ function WorkoutCard({ workout: w, variant, onClick }: { workout: Workout; varia
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-2)' }}>{w.calories} kcal</span>
           </div>
           <button
-            className="btn-icon"
+            className="btn-icon card-export-btn"
             title="Export as GPX"
             onClick={e => { void exportWorkout(w, e) }}
             style={{ marginLeft: 'auto', opacity: 0.6 }}
@@ -289,9 +292,10 @@ function WorkoutCard({ workout: w, variant, onClick }: { workout: Workout; varia
             {new Date(w.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
           </span>
           {w.distance > 0 && (
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-2)' }}>
-              {fmtDist(w.distance)}
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+              <Navigation size={11} color="var(--text-3)" />
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-2)' }}>{fmtDist(w.distance)}</span>
+            </div>
           )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
             <Clock size={11} color="var(--text-3)" />
@@ -318,7 +322,7 @@ function WorkoutCard({ workout: w, variant, onClick }: { workout: Workout; varia
           </div>
         </div>
         <button
-          className="btn-icon"
+          className="btn-icon card-export-btn"
           title="Export as GPX"
           onClick={e => { void exportWorkout(w, e) }}
           style={{ opacity: 0.6 }}

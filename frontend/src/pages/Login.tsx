@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Activity, LogIn, UserPlus } from 'lucide-react'
+import { LogIn, UserPlus } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { ApiError } from '../lib/api'
 
@@ -38,13 +38,7 @@ export default function Login() {
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, background: 'var(--bg)' }}>
       <div style={{ width: '100%', maxWidth: 380 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center', marginBottom: 8 }}>
-          <div style={{
-            width: 40, height: 40, borderRadius: 12,
-            background: 'linear-gradient(135deg, var(--primary) 0%, var(--blue) 100%)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <Activity size={22} color="#fff" />
-          </div>
+          <img src="/logo.png" alt="Activity Lens" width={40} height={40} style={{ borderRadius: 12, display: 'block' }} />
           <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>Activity Lens</span>
         </div>
         <p style={{ textAlign: 'center', color: 'var(--text-3)', fontSize: 13, marginBottom: 24 }}>
