@@ -7,15 +7,18 @@ import {
   CartesianGrid,
 } from 'recharts'
 
-type Metric = 'pace' | 'hr' | 'distance' | 'duration' | 'elevation' | 'calories'
+type Metric = 'pace' | 'hr' | 'maxHr' | 'distance' | 'duration' | 'elevation' | 'calories' | 'speed' | 'steps'
 
 const METRICS: { id: Metric; label: string; color: string; unit: string; format?: (v: number) => string }[] = [
   { id: 'pace', label: 'Avg Pace', color: 'var(--primary)', unit: '/km', format: fmtPace },
   { id: 'hr', label: 'Avg HR', color: '#ef4444', unit: 'bpm' },
+  { id: 'maxHr', label: 'Max HR', color: '#f97316', unit: 'bpm' },
   { id: 'distance', label: 'Distance', color: 'var(--blue)', unit: 'km', format: v => (v / 1000).toFixed(1) },
   { id: 'duration', label: 'Duration', color: 'var(--purple)', unit: 'min', format: v => Math.round(v / 60).toString() },
   { id: 'elevation', label: 'Elevation Gain', color: 'var(--hike)', unit: 'm' },
   { id: 'calories', label: 'Calories', color: 'var(--accent)', unit: 'kcal' },
+  { id: 'speed', label: 'Avg Speed', color: 'var(--swim)', unit: 'km/h', format: v => v.toFixed(1) },
+  { id: 'steps', label: 'Steps', color: 'var(--strength)', unit: '', format: v => Math.round(v).toLocaleString() },
 ]
 
 export default function Timeline() {
@@ -33,10 +36,13 @@ export default function Timeline() {
         dateLabel: new Date(w.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
         pace: w.avgPace || null,
         hr: w.avgHR,
+        maxHr: w.maxHR || null,
         distance: w.distance,
         duration: w.duration,
         elevation: w.elevationGain,
         calories: w.calories,
+        speed: w.avgSpeed || null,
+        steps: w.steps || null,
         name: w.name,
         type: w.type,
       }))

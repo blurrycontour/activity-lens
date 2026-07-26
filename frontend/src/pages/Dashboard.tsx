@@ -121,7 +121,7 @@ export default function Dashboard() {
               <StatCard icon={<Zap size={14} />} label="Activities" value={workouts.length.toString()} unit="" sub={`${Object.keys(d.typeCount).length} sport types`} />
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 16, marginBottom: 16 }}>
+            <div className="grid-main-side" style={{ marginBottom: 16 }}>
               {/* Weekly chart */}
               <div className="card">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
@@ -173,7 +173,7 @@ export default function Dashboard() {
             </div>
 
             {/* Latest workout + recent list */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div className="grid-2">
               {d.latest && (
                 <div className="card" style={{ background: 'var(--bg-2)', position: 'relative', overflow: 'hidden' }}>
                   <div style={{

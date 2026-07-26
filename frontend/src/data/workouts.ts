@@ -16,6 +16,8 @@ export interface Workout {
   elevationGain: number // meters
   calories: number
   steps?: number
+  caloriesManual?: boolean
+  stepsManual?: boolean
   avgPace: number // seconds per km (for runs/hikes)
   avgSpeed: number // km/h
   route: Array<[number, number]> // [lat, lng]

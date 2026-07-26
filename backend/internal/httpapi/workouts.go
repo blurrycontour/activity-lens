@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"mime/multipart"
 	"net/http"
 	"strings"
 	"time"
@@ -133,45 +134,9 @@ func (s *Server) handleDeleteWorkout(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleImportWorkout(w http.ResponseWriter, r *http.Request) {
 	user := httpmw.UserFrom(r)
-	r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
-	if err := r.ParseMultipartForm(maxUploadBytes); err != nil {
-		writeError(w, http.StatusBadRequest, "could not read upload")
+	in, data, header, ok := s.parseWorkoutUpload(w, r, user.ID)
+	if !ok {
 		return
-	}
-	file, header, err := r.FormFile("file")
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "missing file field")
-		return
-	}
-	defer file.Close()
-
-	data, err := io.ReadAll(file)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "could not read file")
-		return
-	}
-
-	defaultType := workout.TypeRun
-	if t := workout.Type(r.FormValue("type")); workout.ValidType(t) {
-		defaultType = t
-	}
-
-	in, err := ingest.Parse(header.Filename, data, defaultType)
-	if err != nil {
-		if errors.Is(err, ingest.ErrUnsupported) {
-			writeError(w, http.StatusUnsupportedMediaType, "unsupported file format (use .gpx or .tcx)")
-			return
-		}
-		writeError(w, http.StatusBadRequest, "could not parse file: "+err.Error())
-		return
-	}
-	if name := r.FormValue("name"); name != "" {
-		in.Name = name
-	}
-	if in.Calories == 0 {
-		if prefs, err := s.settings.UserPreferences(r.Context(), user.ID); err == nil {
-			in.Calories = estimateCalories(in, prefs.CalorieMethod, prefs.BodyWeightKg)
-		}
 	}
 
 	wk, err := s.workout.Create(r.Context(), user.ID, in)
@@ -196,8 +161,86 @@ func (s *Server) handleImportWorkout(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, wk)
 }
 
-func estimateCalories(in workout.Input, method string, weightKg float64) int {
-	return workout.EstimateCalories(in.Type, in.Duration, in.AvgHR, in.Distance, weightKg, method)
+// handlePreviewWorkout parses an uploaded file and returns the derived metrics
+// without persisting anything, so the client can show the numbers before the
+// user commits to saving the workout.
+func (s *Server) handlePreviewWorkout(w http.ResponseWriter, r *http.Request) {
+	user := httpmw.UserFrom(r)
+	in, _, _, ok := s.parseWorkoutUpload(w, r, user.ID)
+	if !ok {
+		return
+	}
+	wk, err := s.workout.Preview(in)
+	if err != nil {
+		s.writeWorkoutError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, wk)
+}
+
+// parseWorkoutUpload reads a multipart file upload, parses it into a workout
+// Input, applies an optional name override, and fills in an estimated calorie
+// value from the user's preferences when the file has none. On any failure it
+// writes an error response and returns ok=false.
+func (s *Server) parseWorkoutUpload(w http.ResponseWriter, r *http.Request, userID int64) (workout.Input, []byte, *multipart.FileHeader, bool) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
+	if err := r.ParseMultipartForm(maxUploadBytes); err != nil {
+		writeError(w, http.StatusBadRequest, "could not read upload")
+		return workout.Input{}, nil, nil, false
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "missing file field")
+		return workout.Input{}, nil, nil, false
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "could not read file")
+		return workout.Input{}, nil, nil, false
+	}
+
+	defaultType := workout.TypeRun
+	if t := workout.Type(r.FormValue("type")); workout.ValidType(t) {
+		defaultType = t
+	}
+
+	in, err := ingest.Parse(header.Filename, data, defaultType)
+	if err != nil {
+		if errors.Is(err, ingest.ErrUnsupported) {
+			writeError(w, http.StatusUnsupportedMediaType, "unsupported file format (use .gpx or .tcx)")
+			return workout.Input{}, nil, nil, false
+		}
+		writeError(w, http.StatusBadRequest, "could not parse file: "+err.Error())
+		return workout.Input{}, nil, nil, false
+	}
+	if name := r.FormValue("name"); name != "" {
+		in.Name = name
+	}
+	if in.Calories == 0 {
+		if prefs, err := s.settings.UserPreferences(r.Context(), userID); err == nil {
+			in.Calories = estimateCalories(in, prefs)
+		}
+	}
+	return in, data, header, true
+}
+
+func estimateCalories(in workout.Input, prefs settings.UserPrefs) int {
+	return workout.EstimateCalories(in.Type, in.Duration, in.AvgHR, in.Distance, prefs.BodyWeightKg, ageFromPrefs(prefs), prefs.Sex, prefs.CalorieMethod)
+}
+
+// ageFromPrefs returns the user's age derived from their birth year, or 0 when
+// no birth year has been set.
+func ageFromPrefs(prefs settings.UserPrefs) int {
+	if prefs.BirthYear <= 0 {
+		return 0
+	}
+	age := time.Now().UTC().Year() - prefs.BirthYear
+	if age < 0 || age > 120 {
+		return 0
+	}
+	return age
 }
 
 func (s *Server) handleRecalculateWorkout(w http.ResponseWriter, r *http.Request) {
@@ -207,7 +250,7 @@ func (s *Server) handleRecalculateWorkout(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusInternalServerError, "could not load preferences")
 		return
 	}
-	wk, err := s.workout.Recalculate(r.Context(), user.ID, r.PathValue("id"), prefs.CalorieMethod, prefs.BodyWeightKg)
+	wk, err := s.workout.Recalculate(r.Context(), user.ID, r.PathValue("id"), prefs.CalorieMethod, prefs.BodyWeightKg, ageFromPrefs(prefs), prefs.Sex)
 	if err != nil {
 		s.writeWorkoutError(w, err)
 		return
@@ -241,6 +284,9 @@ func (s *Server) handleSavePreferences(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		CalorieMethod string  `json:"calorieMethod"`
 		BodyWeightKg  float64 `json:"bodyWeightKg"`
+		Sex           string  `json:"sex"`
+		BirthYear     int     `json:"birthYear"`
+		HeightCm      int     `json:"heightCm"`
 		MaxHR         int     `json:"maxHr"`
 		RestingHR     int     `json:"restingHr"`
 		ThresholdPace string  `json:"thresholdPace"`
@@ -264,9 +310,20 @@ func (s *Server) handleSavePreferences(w http.ResponseWriter, r *http.Request) {
 		}
 		return n
 	}
+	sex := req.Sex
+	if sex != "male" && sex != "female" {
+		sex = ""
+	}
+	birthYear := req.BirthYear
+	if birthYear != 0 && (birthYear < 1900 || birthYear > time.Now().UTC().Year()) {
+		birthYear = 0
+	}
 	prefs := settings.UserPrefs{
 		CalorieMethod: method,
 		BodyWeightKg:  weight,
+		Sex:           sex,
+		BirthYear:     birthYear,
+		HeightCm:      clampNonNeg(req.HeightCm),
 		MaxHR:         clampNonNeg(req.MaxHR),
 		RestingHR:     clampNonNeg(req.RestingHR),
 		ThresholdPace: strings.TrimSpace(req.ThresholdPace),

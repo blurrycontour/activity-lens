@@ -52,26 +52,28 @@ type ElevPoint struct {
 // Workout is the domain model. The JSON tags produce exactly the shape the
 // frontend expects.
 type Workout struct {
-	ID            string      `json:"id"`
-	UserID        int64       `json:"-"`
-	Name          string      `json:"name"`
-	Type          Type        `json:"type"`
-	Date          string      `json:"date"` // YYYY-MM-DD (derived from StartTime)
-	StartTime     time.Time   `json:"-"`
-	Duration      int         `json:"duration"` // seconds
-	Distance      float64     `json:"distance"` // meters
-	AvgHR         int         `json:"avgHR"`
-	MaxHR         int         `json:"maxHR"`
-	ElevationGain float64     `json:"elevationGain"`
-	Calories      int         `json:"calories"`
-	Steps         int         `json:"steps"`
-	AvgPace       float64     `json:"avgPace"`  // seconds/km
-	AvgSpeed      float64     `json:"avgSpeed"` // km/h
-	Route         []LatLng    `json:"route"`
-	HRTimeline    []HRPoint   `json:"hrTimeline"`
-	PaceTimeline  []PacePoint `json:"paceTimeline"`
-	ElevTimeline  []ElevPoint `json:"elevTimeline"`
-	Notes         string      `json:"notes"`
+	ID             string      `json:"id"`
+	UserID         int64       `json:"-"`
+	Name           string      `json:"name"`
+	Type           Type        `json:"type"`
+	Date           string      `json:"date"` // YYYY-MM-DD (derived from StartTime)
+	StartTime      time.Time   `json:"-"`
+	Duration       int         `json:"duration"` // seconds
+	Distance       float64     `json:"distance"` // meters
+	AvgHR          int         `json:"avgHR"`
+	MaxHR          int         `json:"maxHR"`
+	ElevationGain  float64     `json:"elevationGain"`
+	Calories       int         `json:"calories"`
+	CaloriesManual bool        `json:"caloriesManual"`
+	Steps          int         `json:"steps"`
+	StepsManual    bool        `json:"stepsManual"`
+	AvgPace        float64     `json:"avgPace"`  // seconds/km
+	AvgSpeed       float64     `json:"avgSpeed"` // km/h
+	Route          []LatLng    `json:"route"`
+	HRTimeline     []HRPoint   `json:"hrTimeline"`
+	PaceTimeline   []PacePoint `json:"paceTimeline"`
+	ElevTimeline   []ElevPoint `json:"elevTimeline"`
+	Notes          string      `json:"notes"`
 }
 
 // Input carries the fields a caller may set when creating or importing a

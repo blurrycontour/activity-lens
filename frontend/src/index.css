@@ -493,6 +493,20 @@ body {
   gap: 16px;
 }
 
+/* Two equal responsive columns that collapse to one on mobile. */
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+/* Main content + fixed-ish sidebar column, collapses to one on mobile. */
+.grid-main-side {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: 16px;
+}
+
 .detail-top {
   display: grid;
   grid-template-columns: 320px 1fr;
@@ -535,7 +549,9 @@ body {
     grid-template-columns: 1fr;
   }
 
-  .charts-grid {
+  .charts-grid,
+  .grid-2,
+  .grid-main-side {
     grid-template-columns: 1fr;
   }
 

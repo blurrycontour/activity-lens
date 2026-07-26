@@ -45,3 +45,5 @@ go.work.sum
 /frontend/.vite/
 
 .vscode/chats
+
+AGENTS.md

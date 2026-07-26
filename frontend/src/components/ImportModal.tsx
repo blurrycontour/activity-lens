@@ -1,8 +1,8 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Upload, X, CheckCircle, FileText, AlertCircle, ArrowRight } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { api, ApiError } from '../lib/api'
-import { type Workout } from '../data/workouts'
+import { type Workout, fmtDist, fmtDuration, fmtPace } from '../data/workouts'
 
 interface ImportModalProps {
   onClose: () => void
@@ -32,6 +32,8 @@ export default function ImportModal({ onClose, onViewWorkout }: ImportModalProps
   const [created, setCreated] = useState<Workout | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [preview, setPreview] = useState<Workout | null>(null)
+  const [previewBusy, setPreviewBusy] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   // Manual form state
@@ -43,6 +45,7 @@ export default function ImportModal({ onClose, onViewWorkout }: ImportModalProps
   function handleFile(f: File) {
     setFile(f)
     setError(null)
+    setPreview(null)
   }
 
   function handleDrop(e: React.DragEvent) {
@@ -83,7 +86,7 @@ export default function ImportModal({ onClose, onViewWorkout }: ImportModalProps
       setCreated(workout)
       setDone(true)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Import failed')
+      setError(err instanceof ApiError ? err.message : 'Could not add workout')
     } finally {
       setBusy(false)
     }
@@ -92,6 +95,24 @@ export default function ImportModal({ onClose, onViewWorkout }: ImportModalProps
   const ext = file?.name.split('.').pop()?.toUpperCase() ?? ''
   const fileSupported = SUPPORTED.includes((file?.name.split('.').pop() ?? '').toLowerCase())
 
+  // Fetch a non-persisted preview of the derived numbers once a supported file
+  // is selected, so the user can review them before saving.
+  useEffect(() => {
+    if (tab !== 'file' || !file || !fileSupported) {
+      setPreview(null)
+      return
+    }
+    let active = true
+    setPreviewBusy(true)
+    setPreview(null)
+    setError(null)
+    api.previewWorkout(file, form.type)
+      .then(w => { if (active) setPreview(w) })
+      .catch(err => { if (active) setError(err instanceof ApiError ? err.message : 'Could not read file') })
+      .finally(() => { if (active) setPreviewBusy(false) })
+    return () => { active = false }
+  }, [file, fileSupported, tab, form.type])
+
   return (
     <>
       <div className="overlay" onClick={onClose} />
@@ -99,7 +120,7 @@ export default function ImportModal({ onClose, onViewWorkout }: ImportModalProps
         <div className="modal-box">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
             <div>
-              <h2 style={{ fontSize: 16, fontWeight: 700 }}>Import Workout</h2>
+              <h2 style={{ fontSize: 16, fontWeight: 700 }}>Add Workout</h2>
               <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>Upload a file or enter details manually</p>
             </div>
             <button className="btn-icon" onClick={onClose}><X size={16} /></button>
@@ -108,7 +129,7 @@ export default function ImportModal({ onClose, onViewWorkout }: ImportModalProps
           {done ? (
             <div style={{ textAlign: 'center', padding: '40px 0' }}>
               <CheckCircle size={48} color="var(--primary)" style={{ margin: '0 auto 16px' }} />
-              <p style={{ fontWeight: 700, fontSize: 16 }}>Workout Imported!</p>
+              <p style={{ fontWeight: 700, fontSize: 16 }}>Workout Added!</p>
               <p style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 6 }}>
                 {tab === 'file' ? file?.name : form.name || 'New Workout'} has been added to your library.
               </p>
@@ -183,11 +204,35 @@ export default function ImportModal({ onClose, onViewWorkout }: ImportModalProps
                       </div>
                       {fileSupported ? (
                         <div style={{ display: 'flex', gap: 6, marginTop: 12, alignItems: 'center', color: 'var(--primary)', fontSize: 12 }}>
-                          <CheckCircle size={14} /> Format supported — ready to import
+                          <CheckCircle size={14} /> Format supported — ready to add
                         </div>
                       ) : (
                         <div style={{ display: 'flex', gap: 6, marginTop: 12, alignItems: 'center', color: '#ef4444', fontSize: 12 }}>
                           <AlertCircle size={14} /> Unsupported format. Use .gpx or .tcx
+                        </div>
+                      )}
+                      {fileSupported && (previewBusy || preview) && (
+                        <div style={{ marginTop: 14, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+                          <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 8 }}>
+                            {previewBusy ? 'Reading file…' : 'Preview'}
+                          </div>
+                          {preview && (
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: 10 }}>
+                              {([
+                                ['Distance', preview.distance > 0 ? fmtDist(preview.distance) : '—'],
+                                ['Duration', preview.duration > 0 ? fmtDuration(preview.duration) : '—'],
+                                ['Calories', preview.calories > 0 ? `${preview.calories} kcal` : '—'],
+                                ['Avg HR', preview.avgHR > 0 ? `${preview.avgHR} bpm` : '—'],
+                                ['Elevation', preview.elevationGain > 0 ? `${Math.round(preview.elevationGain)} m` : '—'],
+                                ['Avg Pace', preview.avgPace > 0 ? `${fmtPace(preview.avgPace)} /km` : '—'],
+                              ] as [string, string][]).map(([label, value]) => (
+                                <div key={label}>
+                                  <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</div>
+                                  <div style={{ fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-mono)', marginTop: 2 }}>{value}</div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -299,7 +344,7 @@ export default function ImportModal({ onClose, onViewWorkout }: ImportModalProps
                   disabled={busy || (tab === 'file' ? (!file || !fileSupported) : !form.name.trim())}
                   style={{ opacity: (busy || (tab === 'file' ? (!file || !fileSupported) : !form.name.trim())) ? 0.4 : 1 }}
                 >
-                  {busy ? 'Importing…' : 'Import Workout'}
+                  {busy ? 'Saving…' : 'Add Workout'}
                 </button>
               </div>
             </>

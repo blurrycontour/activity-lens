@@ -17,7 +17,15 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
   const [sortBy, setSortBy] = useState<'date' | 'distance' | 'duration'>('date')
   const [dateRange, setDateRange] = useState<'all' | '7d' | '30d' | '90d'>('all')
   const [refreshing, setRefreshing] = useState(false)
-  const [view, setView] = useState<'list' | 'grid'>('list')
+  const [view, setView] = useState<'list' | 'grid'>(() => {
+    const saved = localStorage.getItem('workouts.view')
+    return saved === 'grid' || saved === 'list' ? saved : 'list'
+  })
+
+  function changeView(v: 'list' | 'grid') {
+    setView(v)
+    localStorage.setItem('workouts.view', v)
+  }
 
   async function handleRefresh() {
     setRefreshing(true)
@@ -62,8 +70,8 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
             <RefreshCw size={15} style={{ animation: (refreshing || loading) ? 'spin 0.8s linear infinite' : 'none' }} />
           </button>
           <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
-            <button className="btn-icon" onClick={() => setView('list')} title="List view" style={{ borderRadius: 0, background: view === 'list' ? 'var(--bg-3)' : 'transparent' }}><List size={15} /></button>
-            <button className="btn-icon" onClick={() => setView('grid')} title="Grid view" style={{ borderRadius: 0, background: view === 'grid' ? 'var(--bg-3)' : 'transparent' }}><Grid2X2 size={15} /></button>
+            <button className="btn-icon" onClick={() => changeView('list')} title="List view" style={{ borderRadius: 0, background: view === 'list' ? 'var(--bg-3)' : 'transparent' }}><List size={15} /></button>
+            <button className="btn-icon" onClick={() => changeView('grid')} title="Grid view" style={{ borderRadius: 0, background: view === 'grid' ? 'var(--bg-3)' : 'transparent' }}><Grid2X2 size={15} /></button>
           </div>
         </div>
 
@@ -108,7 +116,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
           </div>
         ) : (
           <div className={view === 'grid' ? 'workout-grid' : undefined} style={view === 'list' ? { display: 'flex', flexDirection: 'column', gap: 6 } : undefined}>
-            {filtered.map(w => <WorkoutCard key={w.id} workout={w} onClick={() => onSelect(w)} />)}
+            {filtered.map(w => <WorkoutCard key={w.id} workout={w} variant={view} onClick={() => onSelect(w)} />)}
           </div>
         )}
       </div>
@@ -117,7 +125,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
       <button
         className="fab"
         onClick={onImport}
-        title="Import / Add Workout"
+        title="Add Workout"
         aria-label="Add workout"
       >
         <Plus size={24} strokeWidth={2.5} />
@@ -151,8 +159,87 @@ ${full.route.map(([lat, lng]) => `      <trkpt lat="${lat.toFixed(6)}" lon="${ln
   URL.revokeObjectURL(url)
 }
 
-function WorkoutCard({ workout: w, onClick }: { workout: Workout; onClick: () => void }) {
+function WorkoutCard({ workout: w, variant, onClick }: { workout: Workout; variant: 'list' | 'grid'; onClick: () => void }) {
   const color = TYPE_COLOR[w.type]
+  const dateLabel = new Date(w.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+
+  if (variant === 'grid') {
+    return (
+      <div
+        onClick={onClick}
+        style={{
+          background: 'var(--bg-2)',
+          border: '1px solid var(--border)',
+          borderTop: `3px solid ${color}`,
+          borderRadius: 12,
+          padding: '16px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+          cursor: 'pointer',
+          transition: 'all 0.15s',
+          minWidth: 0,
+        }}
+        onMouseEnter={e => { e.currentTarget.style.borderColor = `${color}40`; e.currentTarget.style.background = 'var(--bg-3)' }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.borderTopColor = color; e.currentTarget.style.background = 'var(--bg-2)' }}
+      >
+        {/* Header: icon + type + name */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+          <div style={{
+            width: 40, height: 40, borderRadius: 10, flexShrink: 0,
+            background: `${color}18`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20,
+          }}>
+            {TYPE_ICON[w.type]}
+          </div>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.name}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3 }}>
+              <span className={`badge tag-${w.type.toLowerCase()}`}>{w.type}</span>
+              <span style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>{dateLabel}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Primary metric */}
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, paddingBottom: 4, borderBottom: '1px solid var(--border)' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 24, fontWeight: 700, color }}>
+            {w.avgPace ? fmtPace(w.avgPace) : w.avgSpeed.toFixed(1)}
+          </span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-3)' }}>{w.avgPace ? '/km' : 'km/h'}</span>
+        </div>
+
+        {/* Stats */}
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', rowGap: 6 }}>
+          {w.distance > 0 && (
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-2)' }}>{fmtDist(w.distance)}</span>
+          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+            <Clock size={11} color="var(--text-3)" />
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-2)' }}>{fmtDuration(w.duration)}</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+            <Mountain size={11} color="var(--text-3)" />
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-2)' }}>+{w.elevationGain}m</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+            <Flame size={11} color="var(--text-3)" />
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-2)' }}>{w.calories} kcal</span>
+          </div>
+          <button
+            className="btn-icon"
+            title="Export as GPX"
+            onClick={e => { void exportWorkout(w, e) }}
+            style={{ marginLeft: 'auto', opacity: 0.6 }}
+            onMouseEnter={e => e.currentTarget.style.opacity = '1'}
+            onMouseLeave={e => e.currentTarget.style.opacity = '0.6'}
+          >
+            <Download size={15} />
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div
@@ -197,7 +284,7 @@ function WorkoutCard({ workout: w, onClick }: { workout: Workout; onClick: () =>
           <span style={{ fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.name}</span>
           <span className={`badge tag-${w.type.toLowerCase()}`}>{w.type}</span>
         </div>
-        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
           <span style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
             {new Date(w.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
           </span>

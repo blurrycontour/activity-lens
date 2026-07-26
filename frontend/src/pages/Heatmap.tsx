@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { type WorkoutType } from '../data/workouts'
 import { useWorkouts } from '../context/WorkoutsContext'
+import TypeDropdown from '../components/TypeDropdown'
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -80,6 +81,19 @@ export default function Heatmap() {
     return Object.entries(stats).sort((a, b) => b[0].localeCompare(a[0])).slice(0, 6)
   }, [filteredWorkouts])
 
+  // Yearly breakdown
+  const yearlyStats = useMemo(() => {
+    const stats: Record<string, { count: number; duration: number; distance: number }> = {}
+    for (const w of filteredWorkouts) {
+      const key = w.date.slice(0, 4)
+      if (!stats[key]) stats[key] = { count: 0, duration: 0, distance: 0 }
+      stats[key].count++
+      stats[key].duration += w.duration
+      stats[key].distance += w.distance
+    }
+    return Object.entries(stats).sort((a, b) => b[0].localeCompare(a[0]))
+  }, [filteredWorkouts])
+
   return (
     <div>
       <div className="page-header">
@@ -88,21 +102,7 @@ export default function Heatmap() {
           <span style={{ fontSize: 12, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>365 days of activity</span>
         </div>
         <div style={{ display: 'flex', gap: 4 }}>
-          {(['All', 'Run', 'Ride', 'Hike', 'Swim', 'Strength'] as const).map(t => (
-            <button
-              key={t}
-              onClick={() => setTypeFilter(t as typeof typeFilter)}
-              style={{
-                padding: '4px 10px', borderRadius: 99, border: 'none', fontSize: 12,
-                fontWeight: 500, cursor: 'pointer',
-                background: typeFilter === t ? 'var(--primary)' : 'var(--bg-3)',
-                color: typeFilter === t ? '#0a0b0e' : 'var(--text-2)',
-                transition: 'all 0.12s',
-              }}
-            >
-              {t}
-            </button>
-          ))}
+          <TypeDropdown value={typeFilter} onChange={setTypeFilter} />
         </div>
       </div>
 
@@ -206,6 +206,32 @@ export default function Heatmap() {
                 <div key={month} className="card" style={{ padding: '14px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                     <span style={{ fontWeight: 600, fontSize: 13 }}>{label}</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--primary)', fontWeight: 700 }}>{stats.count} activities</span>
+                  </div>
+                  <div style={{ background: 'var(--bg-3)', borderRadius: 99, height: 4, marginBottom: 8 }}>
+                    <div style={{ width: `${pct}%`, height: '100%', background: 'var(--primary)', borderRadius: 99, transition: 'width 0.4s ease' }} />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>{(stats.distance / 1000).toFixed(0)} km</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>{Math.round(stats.duration / 3600)}h {Math.round((stats.duration % 3600) / 60)}m</span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Yearly breakdown */}
+        <div style={{ marginTop: 20 }}>
+          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Yearly Breakdown</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10 }}>
+            {yearlyStats.map(([year, stats]) => {
+              const maxDur = Math.max(...yearlyStats.map(([, s]) => s.duration))
+              const pct = maxDur > 0 ? (stats.duration / maxDur) * 100 : 0
+              return (
+                <div key={year} className="card" style={{ padding: '14px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                    <span style={{ fontWeight: 600, fontSize: 13 }}>{year}</span>
                     <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--primary)', fontWeight: 700 }}>{stats.count} activities</span>
                   </div>
                   <div style={{ background: 'var(--bg-3)', borderRadius: 99, height: 4, marginBottom: 8 }}>

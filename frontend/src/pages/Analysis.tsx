@@ -1,6 +1,7 @@
-import { useMemo } from 'react'
-import { TYPE_COLOR, type WorkoutType, type Workout } from '../data/workouts'
+import { useMemo, useState } from 'react'
+import { TYPE_COLOR, fmtPace, type WorkoutType, type Workout } from '../data/workouts'
 import { useWorkouts } from '../context/WorkoutsContext'
+import TypeDropdown from '../components/TypeDropdown'
 import {
   ScatterChart, Scatter, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   BarChart, Bar,
@@ -11,8 +12,9 @@ type PR = { longest: Workout; fastest: Workout | null; highest: Workout }
 
 export default function Analysis() {
   const { workouts } = useWorkouts()
+  const [scatterType, setScatterType] = useState<WorkoutType | 'All'>('Run')
 
-  const { PRs, scatterData, calByType, trainingLoad } = useMemo(() => {
+  const { PRs, calByType, trainingLoad } = useMemo(() => {
     // Personal records per type
     const PRs: Partial<Record<WorkoutType, PR>> = {}
     for (const type of ['Run', 'Ride', 'Hike', 'Swim', 'Strength'] as WorkoutType[]) {
@@ -26,9 +28,6 @@ export default function Analysis() {
     }
 
     // HR vs Pace scatter data (runs only)
-    const scatterData = workouts
-      .filter(w => w.type === 'Run' && w.avgPace > 0)
-      .map(w => ({ hr: w.avgHR, pace: Math.round(w.avgPace / 6) / 10, name: w.name, date: w.date, dist: (w.distance / 1000).toFixed(1) }))
 
     // Calories by type bar
     const calByType = (['Run', 'Ride', 'Hike', 'Swim', 'Strength'] as WorkoutType[]).map(t => ({
@@ -49,8 +48,15 @@ export default function Analysis() {
       trainingLoad.push({ date: dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), tss, load: Math.round(tss * 0.85) })
     }
 
-    return { PRs, scatterData, calByType, trainingLoad }
+    return { PRs, calByType, trainingLoad }
   }, [workouts])
+
+  // HR vs Pace scatter data, filterable by activity type (or all combined).
+  const scatterData = useMemo(() =>
+    workouts
+      .filter(w => (scatterType === 'All' || w.type === scatterType) && w.avgPace > 0)
+      .map(w => ({ hr: w.avgHR, pace: Math.round(w.avgPace / 6) / 10, name: w.name, date: w.date, dist: (w.distance / 1000).toFixed(1) })),
+  [workouts, scatterType])
 
   return (
     <div>
@@ -79,13 +85,13 @@ export default function Analysis() {
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Best Pace</span>
                     <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600, color: 'var(--primary)' }}>
-                      {Math.floor(pr.fastest.avgPace / 60)}:{String(pr.fastest.avgPace % 60).padStart(2, '0')} /km
+                      {fmtPace(pr.fastest.avgPace)} /km
                     </span>
                   </div>
                 )}
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Most Elevation</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600 }}>{pr.highest.elevationGain} m</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600 }}>{Math.round(pr.highest.elevationGain)} m</span>
                 </div>
               </div>
             </div>
@@ -93,11 +99,14 @@ export default function Analysis() {
         </div>
 
         {/* HR vs Pace scatter */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
+        <div className="grid-2" style={{ marginBottom: 24 }}>
           <div className="card">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
               <Target size={14} color="var(--primary)" />
-              <h3 style={{ fontSize: 13, fontWeight: 600 }}>HR vs Pace (Runs)</h3>
+              <h3 style={{ fontSize: 13, fontWeight: 600 }}>HR vs Pace</h3>
+              <div style={{ marginLeft: 'auto' }}>
+                <TypeDropdown value={scatterType} onChange={setScatterType} />
+              </div>
             </div>
             <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 12 }}>Lower HR at faster pace = improved aerobic efficiency</p>
             <ResponsiveContainer width="100%" height={200}>

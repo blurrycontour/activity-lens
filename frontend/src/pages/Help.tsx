@@ -1,14 +1,15 @@
 import { useState } from 'react'
-import { ChevronDown, HelpCircle, MessageSquare, FileText, Zap } from 'lucide-react'
+import {
+  ChevronDown, Upload, LayoutDashboard, Activity, Grid3x3,
+  Clock, LineChart, Settings as SettingsIcon, Keyboard, HelpCircle,
+} from 'lucide-react'
 
-const faqs = [
-  { q: 'How do I import a workout from Garmin or Strava?', a: 'Click "Import Workout" in the sidebar or top bar. You can drag and drop .fit, .gpx, .tcx, or .kml files directly, or connect your Garmin/Strava/Wahoo account for automatic sync.' },
-  { q: 'What file formats are supported?', a: 'Activity Lens supports .fit (Garmin, Wahoo), .gpx (universal GPS exchange), .tcx (Training Center XML), and .kml (Google Earth). Compressed .zip archives containing any of these formats also work.' },
-  { q: 'How is Training Stress Score (TSS) calculated?', a: 'TSS is estimated from duration and average heart rate relative to your threshold HR. For runs, we use pace-based normalized power equivalents. Set your HR zones in Settings for more accurate calculations.' },
-  { q: 'Can I share workouts with others?', a: 'Public sharing via link is available on Pro plans. Go to a workout, tap the share icon, and choose "Public Link" or invite specific users by email.' },
-  { q: 'How is the heatmap generated?', a: 'The heatmap shows activity density over the past 365 days. Each cell represents one day; color intensity reflects the number and duration of activities. Filter by sport type using the buttons above the grid.' },
-  { q: 'What heart rate zones does Activity Lens use?', a: 'By default we use 5-zone Karvonen model based on age-predicted max HR. You can override max HR and resting HR in Settings → Heart Rate Zones for personalized zones.' },
-  { q: 'Is there an offline mode?', a: 'Activity Lens is a PWA. Install it to your home screen and it will cache your recent workouts and graphs for offline viewing. Importing new workouts requires an internet connection.' },
+const features = [
+  { icon: LayoutDashboard, title: 'Dashboard', text: 'An at-a-glance summary of your recent activity, totals, and trends.' },
+  { icon: Activity, title: 'Workouts', text: 'Browse every workout in list or grid view. Open one to see charts, splits, and its route on the map.' },
+  { icon: Grid3x3, title: 'Heatmap', text: 'A calendar heatmap of the last year — each day is shaded by how much you trained.' },
+  { icon: Clock, title: 'Timeline', text: 'A chronological feed of your workouts grouped by date.' },
+  { icon: LineChart, title: 'Analysis', text: 'Longer-term charts that break down volume, distance, and effort over time.' },
 ]
 
 const shortcuts = [
@@ -17,118 +18,126 @@ const shortcuts = [
   { key: 'G then H', action: 'Go to Heatmap' },
   { key: 'G then T', action: 'Go to Timeline' },
   { key: 'G then A', action: 'Go to Analysis' },
-  { key: 'Cmd/Ctrl + I', action: 'Import Workout' },
-  { key: '[', action: 'Collapse Sidebar' },
-  { key: 'Escape', action: 'Close modal / go back' },
+  { key: 'Cmd / Ctrl + I', action: 'Add a workout' },
+  { key: '[', action: 'Collapse / expand sidebar' },
+  { key: 'Esc', action: 'Close modal or go back' },
 ]
+
+const faqs = [
+  { q: 'How do I add a workout?', a: 'Click "Add Workout" in the sidebar (or press Cmd/Ctrl + I). Upload a .gpx or .tcx file to import a recorded activity — you\'ll see a preview of the numbers before saving — or switch to Manual Entry to type in the details yourself.' },
+  { q: 'Which file formats are supported?', a: 'Activity Lens imports .gpx (universal GPS exchange) and .tcx (Training Center XML) files. Most watches and apps can export one of these.' },
+  { q: 'How are calories estimated?', a: 'When an imported file doesn\'t include calories, they are estimated for you. Under Settings → Calorie Estimation you can choose a heart-rate based method (which uses your sex, age, and weight from the About You section) or a distance-only method.' },
+  { q: 'What do the small icons next to some numbers mean?', a: 'A Σ icon means the value was calculated or derived from the recorded data. A pencil icon means you entered that value manually. Recalculating a workout replaces manual values with derived ones.' },
+  { q: 'How do heart-rate metrics work?', a: 'Where a workout records heart rate, its zones are shown directly. For workouts without their own max HR, your Max HR from Settings → Heart Rate & Performance is used instead.' },
+  { q: 'Can I install Activity Lens as an app?', a: 'Yes. It\'s a Progressive Web App, so you can add it to your home screen or desktop from your browser for a full-screen, app-like experience.' },
+]
+
+const cardStyle: React.CSSProperties = {
+  background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 12, padding: 16,
+}
 
 export default function Help() {
   const [openFaq, setOpenFaq] = useState<number | null>(0)
 
   return (
-    <div>
+    <>
       <div className="page-header">
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
-          <h1 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>Help & Documentation</h1>
-        </div>
+        <h1 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>Help</h1>
+        <p style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 4 }}>How Activity Lens works</p>
       </div>
 
-      <div className="page-content">
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 20, alignItems: 'start' }}>
-          <div>
-            {/* FAQ */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-              <HelpCircle size={16} color="var(--primary)" />
-              <h2 style={{ fontSize: 15, fontWeight: 600 }}>Frequently Asked Questions</h2>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {faqs.map((faq, i) => (
-                <div
-                  key={i}
-                  className="card"
-                  style={{ padding: '14px', cursor: 'pointer', transition: 'border-color 0.15s', borderColor: openFaq === i ? 'var(--border-strong)' : 'var(--border)' }}
-                  onClick={() => setOpenFaq(openFaq === i ? null : i)}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-                    <span style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.4 }}>{faq.q}</span>
-                    <ChevronDown
-                      size={16}
-                      style={{ flexShrink: 0, transform: openFaq === i ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', color: 'var(--text-3)' }}
-                    />
-                  </div>
-                  {openFaq === i && (
-                    <p style={{ fontSize: 13, color: 'var(--text-2)', marginTop: 10, lineHeight: 1.6 }}>{faq.a}</p>
-                  )}
-                </div>
-              ))}
-            </div>
+      <div className="page-content" style={{ maxWidth: 820, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
+        {/* Getting started */}
+        <section style={cardStyle}>
+          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Upload size={16} /> Getting started
+          </h3>
+          <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6, marginTop: 8 }}>
+            Add your first workout with the <strong>Add Workout</strong> button in the sidebar. Import a
+            <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}> .gpx</code> or
+            <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}> .tcx</code> file exported from
+            your watch or app, or enter a workout manually. Once added, it appears across the Dashboard,
+            Workouts, Heatmap, Timeline, and Analysis pages.
+          </p>
+        </section>
 
-            {/* Keyboard shortcuts */}
-            <div style={{ marginTop: 28 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-                <Zap size={16} color="var(--accent)" />
-                <h2 style={{ fontSize: 15, fontWeight: 600 }}>Keyboard Shortcuts</h2>
-              </div>
-              <div className="card">
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                  {shortcuts.map(s => (
-                    <div key={s.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
-                      <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{s.action}</span>
-                      <kbd style={{
-                        background: 'var(--bg-3)', border: '1px solid var(--border)', borderRadius: 5,
-                        padding: '2px 7px', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-2)',
-                        whiteSpace: 'nowrap',
-                      }}>{s.key}</kbd>
-                    </div>
-                  ))}
+        {/* Pages / features */}
+        <section>
+          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>The pages</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+            {features.map(f => (
+              <div key={f.title} style={cardStyle}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <f.icon size={16} color="var(--primary)" />
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{f.title}</span>
                 </div>
+                <p style={{ fontSize: 12, color: 'var(--text-3)', lineHeight: 1.5 }}>{f.text}</p>
               </div>
-            </div>
+            ))}
           </div>
+        </section>
 
-          {/* Sidebar */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div className="card" style={{ borderColor: 'var(--primary-glow)', borderWidth: 1 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                <MessageSquare size={15} color="var(--primary)" />
-                <h3 style={{ fontSize: 13, fontWeight: 600 }}>Contact Support</h3>
-              </div>
-              <p style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6, marginBottom: 12 }}>
-                Can't find an answer? Our support team responds within 24 hours on weekdays.
-              </p>
-              <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }}>
-                Open Support Chat
-              </button>
-            </div>
+        {/* Personalize */}
+        <section style={cardStyle}>
+          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <SettingsIcon size={16} /> Personalize your estimates
+          </h3>
+          <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6, marginTop: 8 }}>
+            Visit <strong>Settings</strong> to fill in the <strong>About You</strong> section (sex, birth year,
+            height, and weight). These personalize calorie and effort estimates. You can also pick a calorie
+            method, set your heart-rate values, and choose an accent color.
+          </p>
+        </section>
 
-            <div className="card">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                <FileText size={15} color="var(--blue)" />
-                <h3 style={{ fontSize: 13, fontWeight: 600 }}>Documentation</h3>
+        {/* Keyboard shortcuts */}
+        <section style={cardStyle}>
+          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Keyboard size={16} /> Keyboard shortcuts
+          </h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 8 }}>
+            {shortcuts.map(s => (
+              <div key={s.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '6px 0' }}>
+                <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{s.action}</span>
+                <kbd style={{
+                  fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-3)',
+                  background: 'var(--bg-3)', border: '1px solid var(--border)', borderRadius: 6,
+                  padding: '3px 7px', whiteSpace: 'nowrap',
+                }}>{s.key}</kbd>
               </div>
-              {['Getting Started Guide', 'Connecting Devices', 'Training Plans', 'API Reference', 'Data Privacy Policy'].map(item => (
-                <div
-                  key={item}
+            ))}
+          </div>
+        </section>
+
+        {/* FAQ */}
+        <section>
+          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <HelpCircle size={16} /> Frequently asked
+          </h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {faqs.map((f, i) => (
+              <div key={i} style={{ ...cardStyle, padding: 0, overflow: 'hidden' }}>
+                <button
+                  onClick={() => setOpenFaq(openFaq === i ? null : i)}
                   style={{
-                    padding: '8px 0', borderBottom: '1px solid var(--border)',
-                    fontSize: 13, color: 'var(--blue)', cursor: 'pointer',
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    gap: 12, padding: '14px 16px', background: 'none', border: 'none', cursor: 'pointer',
+                    textAlign: 'left', color: 'var(--text)', fontSize: 13, fontWeight: 500,
                   }}
                 >
-                  {item}
-                  <ChevronDown size={13} style={{ transform: 'rotate(-90deg)' }} />
-                </div>
-              ))}
-            </div>
-
-            <div className="card" style={{ background: 'var(--bg-3)' }}>
-              <div style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)', marginBottom: 4 }}>VERSION</div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>Activity Lens v1.0.0</div>
-              <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>Build 2026.07.23 · PWA enabled</div>
-            </div>
+                  {f.q}
+                  <ChevronDown
+                    size={16}
+                    style={{ flexShrink: 0, transition: 'transform 0.15s', transform: openFaq === i ? 'rotate(180deg)' : 'none', color: 'var(--text-3)' }}
+                  />
+                </button>
+                {openFaq === i && (
+                  <p style={{ fontSize: 12.5, color: 'var(--text-3)', lineHeight: 1.6, padding: '0 16px 16px' }}>{f.a}</p>
+                )}
+              </div>
+            ))}
           </div>
-        </div>
+        </section>
       </div>
-    </div>
+    </>
   )
 }

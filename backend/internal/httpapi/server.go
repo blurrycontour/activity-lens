@@ -102,6 +102,7 @@ func (s *Server) apiRoutes() http.Handler {
 	mux.Handle("DELETE /api/workouts/{id}", s.authedCSRF(s.handleDeleteWorkout))
 	mux.Handle("POST /api/workouts/{id}/recalculate", s.authedCSRF(s.handleRecalculateWorkout))
 	mux.Handle("POST /api/workouts/import", s.authedCSRF(s.handleImportWorkout))
+	mux.Handle("POST /api/workouts/preview", s.authedCSRF(s.handlePreviewWorkout))
 	mux.Handle("GET /api/stats", s.authed(s.handleStats))
 	mux.Handle("GET /api/preferences", s.authed(s.handleGetPreferences))
 	mux.Handle("PUT /api/preferences", s.authedCSRF(s.handleSavePreferences))

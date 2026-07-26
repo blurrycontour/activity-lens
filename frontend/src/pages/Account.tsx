@@ -31,6 +31,7 @@ export default function Account() {
 
   const [sessions, setSessions] = useState<SessionInfo[]>([])
   const [sessionsBusy, setSessionsBusy] = useState(false)
+  const [revokingId, setRevokingId] = useState<string | null>(null)
 
   const [delStage, setDelStage] = useState<'idle' | 'sent'>('idle')
   const [delCode, setDelCode] = useState('')
@@ -107,6 +108,19 @@ export default function Account() {
       /* ignore */
     } finally {
       setSessionsBusy(false)
+    }
+  }
+
+  async function signOutOne(id: string) {
+    setRevokingId(id)
+    try {
+      await api.revokeSession(id)
+      const r = await api.listSessions()
+      setSessions(r.sessions)
+    } catch {
+      /* ignore */
+    } finally {
+      setRevokingId(null)
     }
   }
 
@@ -289,8 +303,18 @@ export default function Account() {
                     {sess.ip || 'unknown IP'} · started {formatDate(sess.createdAt)}
                   </div>
                 </div>
-                {sess.current && (
+                {sess.current ? (
                   <span className="badge" style={{ background: 'var(--primary-dim)', color: 'var(--primary)' }}>This device</span>
+                ) : (
+                  <button
+                    className="btn btn-ghost"
+                    onClick={() => signOutOne(sess.id)}
+                    disabled={revokingId === sess.id}
+                    title="Sign out this session"
+                    style={{ flexShrink: 0, opacity: revokingId === sess.id ? 0.5 : 1 }}
+                  >
+                    <LogOut size={14} /> {revokingId === sess.id ? 'Signing out…' : 'Sign out'}
+                  </button>
                 )}
               </div>
             ))}

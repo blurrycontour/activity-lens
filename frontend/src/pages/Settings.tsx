@@ -16,6 +16,11 @@ export default function Settings({ accent, onAccentChange }: SettingsProps) {
 
   const [calorieMethod, setCalorieMethod] = useState<'heart-rate' | 'distance'>('heart-rate')
   const [bodyWeightKg, setBodyWeightKg] = useState('70')
+  const [sex, setSex] = useState<'male' | 'female' | ''>('')
+  const [birthYear, setBirthYear] = useState('')
+  const [heightCm, setHeightCm] = useState('')
+  const [bioBusy, setBioBusy] = useState(false)
+  const [bioMsg, setBioMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [calBusy, setCalBusy] = useState(false)
   const [calMsg, setCalMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
@@ -33,6 +38,9 @@ export default function Settings({ accent, onAccentChange }: SettingsProps) {
         if (!active) return
         setCalorieMethod(p.calorieMethod)
         setBodyWeightKg(String(p.bodyWeightKg))
+        setSex(p.sex ?? '')
+        setBirthYear(p.birthYear ? String(p.birthYear) : '')
+        setHeightCm(p.heightCm ? String(p.heightCm) : '')
         setMaxHr(p.maxHr ? String(p.maxHr) : '')
         setRestingHr(p.restingHr ? String(p.restingHr) : '')
         setThresholdPace(p.thresholdPace)
@@ -42,13 +50,38 @@ export default function Settings({ accent, onAccentChange }: SettingsProps) {
     return () => { active = false }
   }, [])
 
+  function buildPayload() {
+    return {
+      calorieMethod,
+      bodyWeightKg: Number(bodyWeightKg) || 70,
+      sex,
+      birthYear: Number(birthYear) || 0,
+      heightCm: Number(heightCm) || 0,
+      maxHr: Number(maxHr) || 0,
+      restingHr: Number(restingHr) || 0,
+      thresholdPace,
+      ftp: Number(ftp) || 0,
+    }
+  }
+
+  async function saveBio() {
+    setBioBusy(true); setBioMsg(null)
+    try {
+      const updated = await api.savePreferences(buildPayload())
+      setBodyWeightKg(String(updated.bodyWeightKg))
+      setSex(updated.sex ?? '')
+      setBirthYear(updated.birthYear ? String(updated.birthYear) : '')
+      setHeightCm(updated.heightCm ? String(updated.heightCm) : '')
+      setBioMsg({ ok: true, text: 'Saved' })
+    } catch (e) {
+      setBioMsg({ ok: false, text: e instanceof ApiError ? e.message : 'Save failed' })
+    } finally { setBioBusy(false) }
+  }
+
   async function saveCalories() {
     setCalBusy(true); setCalMsg(null)
     try {
-      const updated = await api.savePreferences({
-        calorieMethod, bodyWeightKg: Number(bodyWeightKg) || 70,
-        maxHr: Number(maxHr) || 0, restingHr: Number(restingHr) || 0, thresholdPace, ftp: Number(ftp) || 0,
-      })
+      const updated = await api.savePreferences(buildPayload())
       setBodyWeightKg(String(updated.bodyWeightKg))
       setCalMsg({ ok: true, text: 'Saved' })
     } catch (e) {
@@ -59,10 +92,7 @@ export default function Settings({ accent, onAccentChange }: SettingsProps) {
   async function savePerformance() {
     setPerfBusy(true); setPerfMsg(null)
     try {
-      await api.savePreferences({
-        calorieMethod, bodyWeightKg: Number(bodyWeightKg) || 70,
-        maxHr: Number(maxHr) || 0, restingHr: Number(restingHr) || 0, thresholdPace, ftp: Number(ftp) || 0,
-      })
+      await api.savePreferences(buildPayload())
       setPerfMsg({ ok: true, text: 'Saved' })
     } catch (e) {
       setPerfMsg({ ok: false, text: e instanceof ApiError ? e.message : 'Save failed' })
@@ -133,11 +163,46 @@ export default function Settings({ accent, onAccentChange }: SettingsProps) {
           </div>
         </section>
 
+        {/* Physiology / About You */}
+        <section className="card">
+          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>About You</h3>
+          <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 16 }}>
+            Body metrics used to personalize calorie and effort estimates. Kept private to your account.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+            <div style={{ minWidth: 0 }}>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Sex</label>
+              <select className="input" style={{ width: '100%' }} value={sex} onChange={e => setSex(e.target.value as typeof sex)}>
+                <option value="">Prefer not to say</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+              </select>
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Birth year</label>
+              <input className="input" type="number" min="1900" max={new Date().getFullYear()} placeholder="1990" style={{ width: '100%' }} value={birthYear} onChange={e => setBirthYear(e.target.value)} />
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Height (cm)</label>
+              <input className="input" type="number" min="100" max="250" placeholder="175" style={{ width: '100%' }} value={heightCm} onChange={e => setHeightCm(e.target.value)} />
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Body weight (kg)</label>
+              <input className="input" type="number" min="25" max="300" placeholder="70" style={{ width: '100%' }} value={bodyWeightKg} onChange={e => setBodyWeightKg(e.target.value)} />
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 16 }}>
+            <button className="btn btn-primary" onClick={saveBio} disabled={bioBusy} style={{ opacity: bioBusy ? 0.5 : 1 }}>Save</button>
+            {bioMsg && <span style={{ fontSize: 12, color: bioMsg.ok ? 'var(--primary)' : 'var(--red, #dc2626)' }}>{bioMsg.text}</span>}
+          </div>
+        </section>
+
         {/* Calorie estimation */}
         <section className="card">
           <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Calorie Estimation</h3>
           <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 16 }}>
             Used to estimate calories burned when an imported workout doesn't already include them.
+            The heart-rate method uses your sex, age, and weight from About You.
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
             <div style={{ minWidth: 0 }}>
@@ -146,10 +211,6 @@ export default function Settings({ accent, onAccentChange }: SettingsProps) {
                 <option value="heart-rate">Heart rate, then distance</option>
                 <option value="distance">Distance only</option>
               </select>
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Body weight (kg)</label>
-              <input className="input" type="number" min="25" max="300" style={{ width: '100%' }} value={bodyWeightKg} onChange={e => setBodyWeightKg(e.target.value)} />
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 16 }}>

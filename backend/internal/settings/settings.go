@@ -59,6 +59,9 @@ type Storage struct {
 type UserPrefs struct {
 	CalorieMethod string  `json:"calorieMethod"`
 	BodyWeightKg  float64 `json:"bodyWeightKg"`
+	Sex           string  `json:"sex"`
+	BirthYear     int     `json:"birthYear"`
+	HeightCm      int     `json:"heightCm"`
 	MaxHR         int     `json:"maxHr"`
 	RestingHR     int     `json:"restingHr"`
 	ThresholdPace string  `json:"thresholdPace"`
@@ -147,8 +150,8 @@ func (s *Store) SaveStorage(ctx context.Context, v Storage) error {
 func (s *Store) UserPreferences(ctx context.Context, userID int64) (UserPrefs, error) {
 	v := UserPrefs{CalorieMethod: "heart-rate", BodyWeightKg: 70}
 	err := s.db.QueryRowContext(ctx,
-		`SELECT calorie_method, body_weight_kg, max_hr, resting_hr, threshold_pace, ftp FROM user_prefs WHERE user_id = ?`, userID).
-		Scan(&v.CalorieMethod, &v.BodyWeightKg, &v.MaxHR, &v.RestingHR, &v.ThresholdPace, &v.FTP)
+		`SELECT calorie_method, body_weight_kg, sex, birth_year, height_cm, max_hr, resting_hr, threshold_pace, ftp FROM user_prefs WHERE user_id = ?`, userID).
+		Scan(&v.CalorieMethod, &v.BodyWeightKg, &v.Sex, &v.BirthYear, &v.HeightCm, &v.MaxHR, &v.RestingHR, &v.ThresholdPace, &v.FTP)
 	if errors.Is(err, sql.ErrNoRows) {
 		return v, nil
 	}
@@ -161,17 +164,20 @@ func (s *Store) UserPreferences(ctx context.Context, userID int64) (UserPrefs, e
 // SaveUserPreferences persists a user's calorie-estimation preferences.
 func (s *Store) SaveUserPreferences(ctx context.Context, userID int64, v UserPrefs) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO user_prefs (user_id, calorie_method, body_weight_kg, max_hr, resting_hr, threshold_pace, ftp, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		`INSERT INTO user_prefs (user_id, calorie_method, body_weight_kg, sex, birth_year, height_cm, max_hr, resting_hr, threshold_pace, ftp, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(user_id) DO UPDATE SET
 		   calorie_method = excluded.calorie_method,
 		   body_weight_kg = excluded.body_weight_kg,
+		   sex = excluded.sex,
+		   birth_year = excluded.birth_year,
+		   height_cm = excluded.height_cm,
 		   max_hr = excluded.max_hr,
 		   resting_hr = excluded.resting_hr,
 		   threshold_pace = excluded.threshold_pace,
 		   ftp = excluded.ftp,
 		   updated_at = excluded.updated_at`,
-		userID, v.CalorieMethod, v.BodyWeightKg, v.MaxHR, v.RestingHR, v.ThresholdPace, v.FTP, time.Now().UTC().Format(time.RFC3339))
+		userID, v.CalorieMethod, v.BodyWeightKg, v.Sex, v.BirthYear, v.HeightCm, v.MaxHR, v.RestingHR, v.ThresholdPace, v.FTP, time.Now().UTC().Format(time.RFC3339))
 	return err
 }
 

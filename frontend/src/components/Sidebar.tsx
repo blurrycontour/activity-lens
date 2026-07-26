@@ -70,10 +70,10 @@ export default function Sidebar({ currentPage, onNavigate, collapsed, sidebarWid
             justifyContent: collapsed ? 'center' : 'flex-start',
             padding: collapsed ? '7px' : '7px 12px',
           }}
-          title="Import Workout"
+          title="Add Workout"
         >
           <Upload size={15} />
-          {!collapsed && <span>Import Workout</span>}
+          {!collapsed && <span>Add Workout</span>}
         </button>
       </div>
 

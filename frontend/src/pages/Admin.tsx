@@ -419,7 +419,7 @@ function UsersSection({ users, onChanged }: { users: AdminUser[]; onChanged: () 
                     </span>
                   )}
                 </td>
-                <td style={{ padding: '8px 10px', color: 'var(--text-3)' }}>{fmtDate(u.lastLoginAt)}</td>
+                <td style={{ padding: '8px 10px', color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{fmtDate(u.lastLoginAt)}</td>
                 <td style={{ padding: '8px 10px', textAlign: 'right' }}>
                   {editingId === u.id ? (
                     <>

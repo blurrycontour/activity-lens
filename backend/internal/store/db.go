@@ -33,6 +33,12 @@ var workoutStepsSchema string
 //go:embed migrations/0006_user_prefs_hr.sql
 var userPrefsHRSchema string
 
+//go:embed migrations/0007_user_prefs_bio.sql
+var userPrefsBioSchema string
+
+//go:embed migrations/0008_workout_manual_flags.sql
+var workoutManualFlagsSchema string
+
 // OpenSQLite opens (and pings) a pure-Go SQLite database at dbPath with
 // foreign keys and WAL enabled for concurrency and integrity.
 func OpenSQLite(dbPath string) (*sql.DB, error) {
@@ -71,10 +77,29 @@ func MigrateApp(ctx context.Context, db *sql.DB) error {
 	if _, err := db.ExecContext(ctx, workoutStepsSchema); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
 		return fmt.Errorf("apply workout steps schema: %w", err)
 	}
-	// Backfill user_prefs columns on older databases. Each ALTER is executed
-	// individually so a duplicate-column error on one does not abort the rest.
+	// Backfill ALTER-based migrations on older databases. Each statement is
+	// executed individually so a duplicate-column error on one does not abort
+	// the rest, keeping startup idempotent.
+	for _, m := range []struct {
+		name   string
+		schema string
+	}{
+		{"user prefs hr", userPrefsHRSchema},
+		{"user prefs bio", userPrefsBioSchema},
+		{"workout manual flags", workoutManualFlagsSchema},
+	} {
+		if err := applyAlters(ctx, db, m.schema); err != nil {
+			return fmt.Errorf("apply %s schema: %w", m.name, err)
+		}
+	}
+	return nil
+}
+
+// applyAlters runs each semicolon-separated ALTER statement in schema
+// individually, tolerating duplicate-column errors so re-running is safe.
+func applyAlters(ctx context.Context, db *sql.DB, schema string) error {
 	var sqlOnly strings.Builder
-	for _, line := range strings.Split(userPrefsHRSchema, "\n") {
+	for _, line := range strings.Split(schema, "\n") {
 		if strings.HasPrefix(strings.TrimSpace(line), "--") {
 			continue
 		}
@@ -87,7 +112,7 @@ func MigrateApp(ctx context.Context, db *sql.DB) error {
 			continue
 		}
 		if _, err := db.ExecContext(ctx, stmt); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
-			return fmt.Errorf("apply user prefs hr schema: %w", err)
+			return err
 		}
 	}
 	return nil

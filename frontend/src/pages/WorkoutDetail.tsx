@@ -49,13 +49,21 @@ function CalcIcon() {
   )
 }
 
-function StatChip({ icon, label, value, calculated }: { icon?: React.ReactNode; label: string; value: string; calculated?: boolean }) {
+function ManualIcon() {
+  return (
+    <span title="Entered manually" style={{ display: 'inline-flex', opacity: 0.55 }}>
+      <Pencil size={10} />
+    </span>
+  )
+}
+
+function StatChip({ icon, label, value, calculated, manual }: { icon?: React.ReactNode; label: string; value: string; calculated?: boolean; manual?: boolean }) {
   return (
     <div className="stat-grid-item">
       <span className="stat-label">
         {icon}
         {label}
-        {calculated && <CalcIcon />}
+        {manual ? <ManualIcon /> : calculated && <CalcIcon />}
       </span>
       <span className="stat-value">{value}</span>
     </div>
@@ -838,7 +846,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
             <div className="stat-grid-3">
               <StatChip icon={<Navigation size={12} />} label="Distance" value={w.distance > 0 ? fmtDist(w.distance) : '—'} />
               <StatChip icon={<Clock size={12} />} label="Duration" value={w.duration > 0 ? fmtDuration(w.duration) : '—'} />
-              <StatChip icon={<Zap size={12} />} label="Calories" value={w.calories > 0 ? `${w.calories} kcal` : '—'} />
+              <StatChip icon={<Zap size={12} />} label="Calories" value={w.calories > 0 ? `${w.calories} kcal` : '—'} manual={w.caloriesManual} calculated={!w.caloriesManual && w.calories > 0} />
             </div>
 
             {(w.hrTimeline.length > 0 || w.avgHR > 0) && (
@@ -868,7 +876,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
             <div className="stat-grid-3">
               <StatChip icon={<Mountain size={12} color="var(--hike)" />} label="Elev. Gain" value={w.elevTimeline.length > 0 ? `${Math.round(w.elevationGain)} m` : '—'} />
               <StatChip icon={<Mountain size={12} color="var(--hike)" />} label="Elev. Loss" value={w.elevTimeline.length > 0 ? `${derived.elevLoss} m` : '—'} calculated={w.elevTimeline.length > 0} />
-              <StatChip icon={<Footprints size={12} />} label="Steps" value={(w.steps ?? 0) > 0 ? w.steps!.toLocaleString() : (derived.steps != null ? derived.steps.toLocaleString() : '—')} calculated={(w.steps ?? 0) === 0 && derived.steps != null} />
+              <StatChip icon={<Footprints size={12} />} label="Steps" value={(w.steps ?? 0) > 0 ? w.steps!.toLocaleString() : (derived.steps != null ? derived.steps.toLocaleString() : '—')} manual={w.stepsManual} calculated={!w.stepsManual && (w.steps ?? 0) === 0 && derived.steps != null} />
             </div>
           </div>
         </div>

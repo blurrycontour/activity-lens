@@ -65,6 +65,9 @@ export interface StorageSettings {
 export interface UserPreferences {
   calorieMethod: 'heart-rate' | 'distance'
   bodyWeightKg: number
+  sex: 'male' | 'female' | ''
+  birthYear: number
+  heightCm: number
   maxHr: number
   restingHr: number
   thresholdPace: string
@@ -231,6 +234,13 @@ export const api = {
     if (type) form.append('type', type)
     if (name) form.append('name', name)
     return request<import('../data/workouts').Workout>('/api/workouts/import', { method: 'POST', raw: form })
+  },
+  previewWorkout: (file: File, type?: string, name?: string) => {
+    const form = new FormData()
+    form.append('file', file)
+    if (type) form.append('type', type)
+    if (name) form.append('name', name)
+    return request<import('../data/workouts').Workout>('/api/workouts/preview', { method: 'POST', raw: form })
   },
   stats: () => request<Stats>('/api/stats'),
 }

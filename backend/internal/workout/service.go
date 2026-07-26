@@ -55,6 +55,35 @@ func (s *Service) Create(ctx context.Context, userID int64, in Input) (*Workout,
 	return w, nil
 }
 
+// Preview derives metrics for the given input without persisting anything. It
+// is used to show the numbers a file import would produce before the user
+// commits to saving it.
+func (s *Service) Preview(in Input) (*Workout, error) {
+	if err := validate(&in); err != nil {
+		return nil, err
+	}
+	w := &Workout{
+		Name:          strings.TrimSpace(in.Name),
+		Type:          in.Type,
+		StartTime:     in.StartTime.UTC(),
+		Duration:      in.Duration,
+		Distance:      in.Distance,
+		AvgHR:         in.AvgHR,
+		MaxHR:         in.MaxHR,
+		ElevationGain: in.ElevationGain,
+		Calories:      in.Calories,
+		Steps:         in.Steps,
+		Route:         in.Route,
+		HRTimeline:    in.HRTimeline,
+		PaceTimeline:  in.PaceTimeline,
+		ElevTimeline:  in.ElevTimeline,
+		Notes:         strings.TrimSpace(in.Notes),
+	}
+	deriveMetrics(w)
+	w.Date = w.StartTime.Format("2006-01-02")
+	return w, nil
+}
+
 // Get returns a single workout owned by the user.
 func (s *Service) Get(ctx context.Context, userID int64, id string) (*Workout, error) {
 	return s.repo.Get(ctx, userID, id)
@@ -102,12 +131,14 @@ func (s *Service) Update(ctx context.Context, userID int64, id string, p Patch) 
 			return nil, fmt.Errorf("%w: calories must be non-negative", ErrInvalid)
 		}
 		w.Calories = *p.Calories
+		w.CaloriesManual = *p.Calories > 0
 	}
 	if p.Steps != nil {
 		if *p.Steps < 0 {
 			return nil, fmt.Errorf("%w: steps must be non-negative", ErrInvalid)
 		}
 		w.Steps = *p.Steps
+		w.StepsManual = *p.Steps > 0
 	}
 	if err := s.repo.Update(ctx, w); err != nil {
 		return nil, err
@@ -119,7 +150,7 @@ func (s *Service) Update(ctx context.Context, userID int64, id string, p Patch) 
 // Recalculate re-derives every computed metric of a workout from its recorded
 // route/timelines and the given calorie preferences, overwriting any manually
 // entered values. The name, type, date and notes are left untouched.
-func (s *Service) Recalculate(ctx context.Context, userID int64, id, calorieMethod string, weightKg float64) (*Workout, error) {
+func (s *Service) Recalculate(ctx context.Context, userID int64, id, calorieMethod string, weightKg float64, age int, sex string) (*Workout, error) {
 	w, err := s.repo.Get(ctx, userID, id)
 	if err != nil {
 		return nil, err
@@ -154,7 +185,10 @@ func (s *Service) Recalculate(ctx context.Context, userID int64, id, calorieMeth
 	w.AvgSpeed = 0
 	w.Steps = estimateSteps(w.Type, w.Distance)
 	deriveMetrics(w)
-	w.Calories = EstimateCalories(w.Type, w.Duration, w.AvgHR, w.Distance, weightKg, calorieMethod)
+	w.Calories = EstimateCalories(w.Type, w.Duration, w.AvgHR, w.Distance, weightKg, age, sex, calorieMethod)
+	// Recalculation re-derives these values, so they are no longer manual.
+	w.CaloriesManual = false
+	w.StepsManual = false
 	if err := s.repo.Update(ctx, w); err != nil {
 		return nil, err
 	}
@@ -291,12 +325,27 @@ func estimateSteps(t Type, distanceMeters float64) int {
 // EstimateCalories returns an energy-expenditure estimate (kcal) using a
 // heart-rate formula when average HR is available, otherwise a distance-based
 // approximation. Returns 0 when there is not enough data.
-func EstimateCalories(t Type, duration, avgHR int, distanceMeters, weightKg float64, method string) int {
+func EstimateCalories(t Type, duration, avgHR int, distanceMeters, weightKg float64, age int, sex, method string) int {
 	if duration <= 0 || weightKg <= 0 {
 		return 0
 	}
 	if method == "heart-rate" && avgHR > 0 {
-		return int(math.Round((0.014*float64(avgHR) + 0.017*weightKg - 1.2) * float64(duration) / 60))
+		// Keytel et al. (2005) HR-based energy-expenditure formula (kcal/min),
+		// selecting the sex-specific coefficients. Age defaults to 35 when the
+		// user hasn't provided a birth year.
+		if age <= 0 {
+			age = 35
+		}
+		var kcalPerMin float64
+		if sex == "female" {
+			kcalPerMin = (-20.4022 + 0.4472*float64(avgHR) - 0.1263*weightKg + 0.074*float64(age)) / 4.184
+		} else {
+			kcalPerMin = (-55.0969 + 0.6309*float64(avgHR) + 0.1988*weightKg + 0.2017*float64(age)) / 4.184
+		}
+		if kcalPerMin < 0 {
+			kcalPerMin = 0
+		}
+		return int(math.Round(kcalPerMin * float64(duration) / 60))
 	}
 	if distanceMeters <= 0 {
 		return 0
