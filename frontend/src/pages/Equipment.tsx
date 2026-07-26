@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Plus, Footprints, Watch, Bike, Shirt, Package, Pencil, Trash2, X, ChevronRight, ArrowLeft, AlertTriangle } from 'lucide-react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { Plus, Watch, Bike, Shirt, Package, Footprints, Pencil, Trash2, X, ChevronRight, ArrowLeft, AlertTriangle, Search } from 'lucide-react'
 import { api, type Equipment, type EquipmentInput, type LinkedWorkout } from '../lib/api'
 import { fmtDuration, fmtDist } from '../data/workouts'
 
@@ -32,6 +32,9 @@ export default function EquipmentPage({ onSelectWorkout }: EquipmentPageProps) {
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState<Equipment | 'new' | null>(null)
   const [detail, setDetail] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [typeFilter, setTypeFilter] = useState<string>('all')
+  const [sortBy, setSortBy] = useState<'name' | 'workouts' | 'type'>('name')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -44,53 +47,115 @@ export default function EquipmentPage({ onSelectWorkout }: EquipmentPageProps) {
 
   useEffect(() => { void load() }, [load])
 
-  if (detail) {
-    return <EquipmentDetail id={detail} onBack={() => { setDetail(null); void load() }} onSelectWorkout={onSelectWorkout} onEdit={e => setEditing(e)} onDeleted={() => { setDetail(null); void load() }} />
-  }
+  const filtered = useMemo(() => {
+    let result = [...items]
+    if (typeFilter !== 'all') result = result.filter(e => e.type === typeFilter)
+    if (search) {
+      const q = search.toLowerCase()
+      result = result.filter(e =>
+        e.name.toLowerCase().includes(q) ||
+        e.brand.toLowerCase().includes(q) ||
+        e.model.toLowerCase().includes(q))
+    }
+    result.sort((a, b) => {
+      if (sortBy === 'workouts') return b.workoutCount - a.workoutCount
+      if (sortBy === 'type') return a.type.localeCompare(b.type) || a.name.localeCompare(b.name)
+      return a.name.localeCompare(b.name)
+    })
+    return result
+  }, [items, search, typeFilter, sortBy])
 
   return (
     <div>
       <div className="page-header">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: detail ? 0 : 16 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
-            <h1 style={{ fontSize: 24, fontWeight: 700 }}>Equipment</h1>
-            <span style={{ color: 'var(--text-3)', fontSize: 14 }}>{items.length} items</span>
+            <h1 style={{ fontSize: 20, fontWeight: 700 }}>Equipment</h1>
+            <span style={{ color: 'var(--text-3)', fontSize: 13, fontFamily: 'var(--font-mono)' }}>
+              {detail ? `${items.length} ${items.length === 1 ? 'item' : 'items'}` : `${filtered.length} of ${items.length}`}
+            </span>
           </div>
-          <button className="btn btn-primary" onClick={() => setEditing('new')}>
-            <Plus size={16} /> Add Equipment
-          </button>
+          {!detail && (
+            <button className="btn btn-primary" onClick={() => setEditing('new')}>
+              <Plus size={16} /> Add Equipment
+            </button>
+          )}
         </div>
+
+        {!detail && (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div style={{ position: 'relative', flex: 1, minWidth: 180 }}>
+              <Search size={14} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', pointerEvents: 'none' }} />
+              <input
+                className="input"
+                placeholder="Search equipment..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                style={{ paddingLeft: 30, width: '100%' }}
+              />
+            </div>
+            <select className="select" value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
+              <option value="all">All types</option>
+              {TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+            </select>
+            <select className="select" value={sortBy} onChange={e => setSortBy(e.target.value as typeof sortBy)}>
+              <option value="name">By Name</option>
+              <option value="workouts">By Workouts</option>
+              <option value="type">By Type</option>
+            </select>
+          </div>
+        )}
       </div>
 
-      {loading ? (
-        <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-3)' }}>Loading…</div>
-      ) : items.length === 0 ? (
-        <div className="card" style={{ padding: 40, textAlign: 'center', color: 'var(--text-3)' }}>
-          No equipment yet. Add your shoes, watch, or bike to track their usage.
-        </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
-          {items.map(e => (
-            <div key={e.id} className="card" style={{ padding: 16, cursor: 'pointer', opacity: e.retired ? 0.6 : 1 }} onClick={() => setDetail(e.id)}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span style={{ color: 'var(--primary)', flexShrink: 0 }}>{typeIcon(e.type, 22)}</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: 15, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {e.name}
-                    {e.retired && <span style={{ fontSize: 11, color: 'var(--text-3)', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 5px' }}>Retired</span>}
+      <div className="page-content" style={{ padding: '16px 24px' }}>
+        {detail ? (
+          <EquipmentDetail
+            id={detail}
+            onBack={() => { setDetail(null); void load() }}
+            onSelectWorkout={onSelectWorkout}
+            onEdit={e => setEditing(e)}
+            onDeleted={() => { setDetail(null); void load() }}
+          />
+        ) : loading ? (
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-3)' }}>Loading…</div>
+        ) : items.length === 0 ? (
+          <div className="card" style={{ padding: 40, textAlign: 'center', color: 'var(--text-3)' }}>
+            No equipment yet. Add your shoes, watch, or bike to track their usage.
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="card" style={{ padding: 40, textAlign: 'center', color: 'var(--text-3)' }}>
+            No equipment matches your filters.
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
+            {filtered.map(e => (
+              <div key={e.id} className="card" style={{ padding: 16, cursor: 'pointer', opacity: e.retired ? 0.6 : 1 }} onClick={() => setDetail(e.id)}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span style={{ color: 'var(--primary)', flexShrink: 0 }}>{typeIcon(e.type, 22)}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 15, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {e.name}
+                      {e.retired && <span style={{ fontSize: 11, color: 'var(--text-3)', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 5px' }}>Retired</span>}
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {[e.brand, e.model].filter(Boolean).join(' ') || TYPES.find(t => t.id === e.type)?.label}
+                    </div>
                   </div>
-                  <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {[e.brand, e.model].filter(Boolean).join(' ') || TYPES.find(t => t.id === e.type)?.label}
-                  </div>
+                  <ChevronRight size={16} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
                 </div>
-                <ChevronRight size={16} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+                <div style={{ marginTop: 12, fontSize: 13, color: 'var(--text-2)' }}>
+                  {e.workoutCount} {e.workoutCount === 1 ? 'workout' : 'workouts'}
+                </div>
               </div>
-              <div style={{ marginTop: 12, fontSize: 13, color: 'var(--text-2)' }}>
-                {e.workoutCount} {e.workoutCount === 1 ? 'workout' : 'workouts'}
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {!detail && (
+        <button className="fab" onClick={() => setEditing('new')} title="Add Equipment" aria-label="Add equipment">
+          <Plus size={24} strokeWidth={2.5} />
+        </button>
       )}
 
       {editing && (
@@ -129,14 +194,14 @@ function EquipmentDetail({ id, onBack, onSelectWorkout, onEdit, onDeleted }: {
 
   return (
     <div>
-      <button className="btn" onClick={onBack} style={{ marginBottom: 16 }}>
+      <button className="btn btn-ghost" onClick={onBack} style={{ marginBottom: 16 }}>
         <ArrowLeft size={16} /> Back
       </button>
 
       <div className="card" style={{ padding: 20, marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
           <span style={{ color: 'var(--primary)' }}>{typeIcon(data.type, 28)}</span>
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: 1, minWidth: 160 }}>
             <div style={{ fontSize: 20, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
               {data.name}
               {data.retired && <span style={{ fontSize: 12, color: 'var(--text-3)', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 6px' }}>Retired</span>}
@@ -145,13 +210,15 @@ function EquipmentDetail({ id, onBack, onSelectWorkout, onEdit, onDeleted }: {
               {[TYPES.find(t => t.id === data.type)?.label, data.brand, data.model].filter(Boolean).join(' · ')}
             </div>
           </div>
-          <button className="btn" onClick={() => onEdit(data)}><Pencil size={15} /> Edit</button>
-          <button className="btn" style={{ color: '#ef4444' }} onClick={() => setConfirmDelete(true)}><Trash2 size={15} /> Delete</button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-ghost" onClick={() => onEdit(data)}><Pencil size={15} /> Edit</button>
+            <button className="btn btn-ghost" style={{ color: '#ef4444' }} onClick={() => setConfirmDelete(true)}><Trash2 size={15} /> Delete</button>
+          </div>
         </div>
         {data.notes && <div style={{ marginTop: 14, fontSize: 14, color: 'var(--text-2)', whiteSpace: 'pre-wrap' }}>{data.notes}</div>}
       </div>
 
-      <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>
+      <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>
         Linked workouts <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>({data.workouts.length})</span>
       </h2>
       {data.workouts.length === 0 ? (
@@ -177,23 +244,26 @@ function EquipmentDetail({ id, onBack, onSelectWorkout, onEdit, onDeleted }: {
       )}
 
       {confirmDelete && (
-        <div className="overlay" onClick={() => setConfirmDelete(false)}>
-          <div className="card" style={{ maxWidth: 420, padding: 24, margin: 'auto' }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-              <AlertTriangle size={20} style={{ color: '#f59e0b' }} />
-              <h3 style={{ fontSize: 17, fontWeight: 700 }}>Delete equipment?</h3>
-            </div>
-            <p style={{ fontSize: 14, color: 'var(--text-2)', marginBottom: 20 }}>
-              {data.workoutCount > 0
-                ? `“${data.name}” is linked to ${data.workoutCount} ${data.workoutCount === 1 ? 'workout' : 'workouts'}. Deleting it will remove it from ${data.workoutCount === 1 ? 'that workout' : 'those workouts'}. This cannot be undone.`
-                : `“${data.name}” will be permanently deleted. This cannot be undone.`}
-            </p>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button className="btn" onClick={() => setConfirmDelete(false)}>Cancel</button>
-              <button className="btn btn-primary" style={{ background: '#ef4444', borderColor: '#ef4444' }} onClick={() => void doDelete()}>Delete</button>
+        <>
+          <div className="overlay" onClick={() => setConfirmDelete(false)} />
+          <div className="modal">
+            <div className="modal-box" style={{ maxWidth: 420 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                <AlertTriangle size={20} style={{ color: '#f59e0b' }} />
+                <h3 style={{ fontSize: 16, fontWeight: 700 }}>Delete equipment?</h3>
+              </div>
+              <p style={{ fontSize: 14, color: 'var(--text-2)', marginBottom: 20, lineHeight: 1.5 }}>
+                {data.workoutCount > 0
+                  ? `“${data.name}” is linked to ${data.workoutCount} ${data.workoutCount === 1 ? 'workout' : 'workouts'}. Deleting it will remove it from ${data.workoutCount === 1 ? 'that workout' : 'those workouts'}. This cannot be undone.`
+                  : `“${data.name}” will be permanently deleted. This cannot be undone.`}
+              </p>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                <button className="btn btn-ghost" onClick={() => setConfirmDelete(false)}>Cancel</button>
+                <button className="btn btn-primary" style={{ background: '#ef4444', borderColor: '#ef4444' }} onClick={() => void doDelete()}>Delete</button>
+              </div>
             </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   )
@@ -225,50 +295,57 @@ function EquipmentForm({ initial, onClose, onSaved }: {
   }
 
   return (
-    <div className="overlay" onClick={onClose}>
-      <div className="card" style={{ maxWidth: 480, width: '100%', padding: 24, margin: 'auto' }} onClick={e => e.stopPropagation()}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
-          <h3 style={{ fontSize: 18, fontWeight: 700 }}>{initial ? 'Edit equipment' : 'Add equipment'}</h3>
-          <button className="btn-icon" onClick={onClose}><X size={16} /></button>
-        </div>
+    <>
+      <div className="overlay" onClick={onClose} />
+      <div className="modal">
+        <div className="modal-box" style={{ maxWidth: 480 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+            <div>
+              <h2 style={{ fontSize: 16, fontWeight: 700 }}>{initial ? 'Edit Equipment' : 'Add Equipment'}</h2>
+              <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>Track gear like shoes, watches, and bikes</p>
+            </div>
+            <button className="btn-icon" onClick={onClose}><X size={16} /></button>
+          </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <label className="field">
-            <span>Name</span>
-            <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g. Nike Pegasus 40" />
-          </label>
-          <label className="field">
-            <span>Type</span>
-            <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
-              {TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
-            </select>
-          </label>
-          <div style={{ display: 'flex', gap: 12 }}>
-            <label className="field" style={{ flex: 1 }}>
-              <span>Brand</span>
-              <input value={form.brand} onChange={e => setForm({ ...form, brand: e.target.value })} />
-            </label>
-            <label className="field" style={{ flex: 1 }}>
-              <span>Model</span>
-              <input value={form.model} onChange={e => setForm({ ...form, model: e.target.value })} />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Name</label>
+              <input className="input" style={{ width: '100%' }} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g. Nike Pegasus 40" />
+            </div>
+            <div>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Type</label>
+              <select className="select" style={{ width: '100%' }} value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
+                {TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Brand</label>
+              <input className="input" style={{ width: '100%' }} value={form.brand} onChange={e => setForm({ ...form, brand: e.target.value })} placeholder="e.g. Nike" />
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Model</label>
+              <input className="input" style={{ width: '100%' }} value={form.model} onChange={e => setForm({ ...form, model: e.target.value })} placeholder="e.g. Air Zoom" />
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Notes (optional)</label>
+              <textarea className="input" style={{ width: '100%', resize: 'vertical', minHeight: 60 }} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="Purchase date, size, etc." />
+            </div>
+            <label style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', color: 'var(--text-2)' }}>
+              <input type="checkbox" checked={form.retired} onChange={e => setForm({ ...form, retired: e.target.checked })} />
+              Retired (no longer in use)
             </label>
           </div>
-          <label className="field">
-            <span>Notes</span>
-            <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={3} />
-          </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>
-            <input type="checkbox" checked={form.retired} onChange={e => setForm({ ...form, retired: e.target.checked })} />
-            Retired
-          </label>
-          {error && <div style={{ color: '#ef4444', fontSize: 13 }}>{error}</div>}
-        </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
-          <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={() => void save()} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+          {error && (
+            <div style={{ marginTop: 16, color: '#ef4444', fontSize: 12 }}>{error}</div>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
+            <button className="btn btn-ghost" onClick={onClose} disabled={saving}>Cancel</button>
+            <button className="btn btn-primary" onClick={() => void save()} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   )
 }

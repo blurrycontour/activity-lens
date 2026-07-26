@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { User, Settings, Shield, LogOut, X, Footprints } from 'lucide-react'
+import { User, Settings, Shield, LogOut, X, Watch } from 'lucide-react'
 import type { ApiUser } from '../lib/api'
 
 interface UserMenuProps {
@@ -32,7 +32,7 @@ export default function UserMenu({ onClose, onAccount, onSettings, onAdmin, onEq
 
   const items = [
     { icon: <User size={15} />, label: 'Account', sub: 'Profile, password, sessions', action: () => { onClose(); onAccount() } },
-    ...(onEquipment ? [{ icon: <Footprints size={15} />, label: 'Equipment', sub: 'Shoes, watches, bikes', action: () => { onClose(); onEquipment() } }] : []),
+    ...(onEquipment ? [{ icon: <Watch size={15} />, label: 'Equipment', sub: 'Shoes, watches, bikes', action: () => { onClose(); onEquipment() } }] : []),
     { icon: <Settings size={15} />, label: 'Settings', sub: 'Appearance & preferences', action: () => { onClose(); onSettings() } },
     ...(user.isAdmin ? [{ icon: <Shield size={15} />, label: 'Admin Panel', sub: 'Users, email, SSO', action: () => { onClose(); onAdmin() } }] : []),
   ]

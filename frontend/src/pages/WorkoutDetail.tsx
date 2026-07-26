@@ -861,44 +861,75 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
           </div>
         </div>
       )}
+      {editing && (
+        <>
+          <div className="overlay" onClick={() => { if (!saving) setEditing(false) }} />
+          <div className="modal">
+            <div className="modal-box">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+                <div>
+                  <h2 style={{ fontSize: 16, fontWeight: 700 }}>Edit Workout</h2>
+                  <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>Update the workout's details</p>
+                </div>
+                <button className="btn-icon" onClick={() => setEditing(false)} disabled={saving}><XIcon size={16} /></button>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Workout Name</label>
+                  <input className="input" style={{ width: '100%' }} value={editName} onChange={e => setEditName(e.target.value)} placeholder="Workout name" />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Sport Type</label>
+                  <select className="select" style={{ width: '100%' }} value={editType} onChange={e => setEditType(e.target.value as WorkoutType)}>
+                    {WORKOUT_TYPES.map(t => <option key={t} value={t}>{TYPE_ICON[t]} {t}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Date</label>
+                  <input className="input" style={{ width: '100%' }} type="date" value={editDate} onChange={e => setEditDate(e.target.value)} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Calories (kcal)</label>
+                  <input className="input" style={{ width: '100%' }} type="number" min="0" value={editCalories} onChange={e => setEditCalories(e.target.value)} placeholder="Calories" />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Steps</label>
+                  <input className="input" style={{ width: '100%' }} type="number" min="0" value={editSteps} onChange={e => setEditSteps(e.target.value)} placeholder="Steps" />
+                </div>
+              </div>
+
+              {saveErr && (
+                <div style={{ display: 'flex', gap: 6, marginTop: 16, alignItems: 'center', color: '#ef4444', fontSize: 12 }}>
+                  {saveErr}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: 8, marginTop: 20, justifyContent: 'flex-end' }}>
+                <button className="btn btn-ghost" onClick={() => setEditing(false)} disabled={saving}>Cancel</button>
+                <button className="btn btn-primary" onClick={saveEdit} disabled={saving || !editName.trim()}>
+                  <Check size={14} /> {saving ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
       <div className="page-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button className="btn-icon" onClick={onBack}><ArrowLeft size={18} /></button>
           <div style={{ flex: 1, minWidth: 0 }}>
-            {editing ? (
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                <input className="input" style={{ minWidth: 160 }} value={editName} onChange={e => setEditName(e.target.value)} placeholder="Workout name" />
-                <select className="select" value={editType} onChange={e => setEditType(e.target.value as WorkoutType)}>
-                  {WORKOUT_TYPES.map(t => <option key={t} value={t}>{TYPE_ICON[t]} {t}</option>)}
-                </select>
-                <input className="input" type="date" value={editDate} onChange={e => setEditDate(e.target.value)} />
-                <input className="input" style={{ width: 130 }} type="number" min="0" value={editCalories} onChange={e => setEditCalories(e.target.value)} placeholder="Calories" title="Calories (kcal)" />
-                <input className="input" style={{ width: 130 }} type="number" min="0" value={editSteps} onChange={e => setEditSteps(e.target.value)} placeholder="Steps" title="Step count" />
-                <button className="btn btn-primary" onClick={saveEdit} disabled={saving || !editName.trim()} title="Save">
-                  <Check size={14} /> {saving ? 'Saving…' : 'Save'}
-                </button>
-                <button className="btn btn-ghost" onClick={() => setEditing(false)} disabled={saving} title="Cancel">
-                  <XIcon size={14} />
-                </button>
-                {saveErr && <span style={{ fontSize: 12, color: '#ef4444' }}>{saveErr}</span>}
-              </div>
-            ) : (
-              <>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <h1 style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em' }}>{w.name}</h1>
-                  <span className={`badge tag-${w.type.toLowerCase()}`}>{TYPE_ICON[w.type]} {w.type}</span>
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
-                  {new Date(w.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                </div>
-              </>
-            )}
-          </div>
-          {!editing && (
-            <div style={{ marginLeft: 'auto', flexShrink: 0 }}>
-              <OptionsMenu onEdit={startEdit} onExport={() => exportGPX(w)} onRecalculate={() => { setRecalcErr(null); setConfirmRecalc(true) }} onDelete={handleDelete} deleting={deleting} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <h1 style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em' }}>{w.name}</h1>
+              <span className={`badge tag-${w.type.toLowerCase()}`}>{TYPE_ICON[w.type]} {w.type}</span>
             </div>
-          )}
+            <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
+              {new Date(w.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            </div>
+          </div>
+          <div style={{ marginLeft: 'auto', flexShrink: 0 }}>
+            <OptionsMenu onEdit={startEdit} onExport={() => exportGPX(w)} onRecalculate={() => { setRecalcErr(null); setConfirmRecalc(true) }} onDelete={handleDelete} deleting={deleting} />
+          </div>
         </div>
       </div>
 
@@ -1110,30 +1141,49 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
           </div>
           {editingEquip ? (
             <>
-              {allEquipment.length === 0 ? (
-                <p style={{ fontSize: 13, color: 'var(--text-3)' }}>No equipment yet. Add some on the Equipment page.</p>
-              ) : (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {allEquipment.map(e => {
-                    const on = equipSel.includes(e.id)
-                    return (
-                      <button
-                        key={e.id}
-                        type="button"
-                        onClick={() => setEquipSel(prev => on ? prev.filter(x => x !== e.id) : [...prev, e.id])}
-                        style={{
-                          padding: '5px 12px', borderRadius: 20, fontSize: 12, cursor: 'pointer',
-                          border: `1px solid ${on ? 'var(--primary)' : 'var(--border-strong)'}`,
-                          background: on ? 'var(--primary-dim)' : 'transparent',
-                          color: on ? 'var(--primary)' : 'var(--text-2)',
-                        }}
+              {(() => {
+                const available = allEquipment.filter(e => !equipSel.includes(e.id))
+                return (
+                  <>
+                    {equipSel.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                        {equipSel.map(id => {
+                          const e = allEquipment.find(x => x.id === id)
+                          if (!e) return null
+                          return (
+                            <span key={id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 8px 5px 12px', borderRadius: 20, fontSize: 12, border: '1px solid var(--primary)', background: 'var(--primary-dim)', color: 'var(--primary)' }}>
+                              {e.name}
+                              <button
+                                type="button"
+                                onClick={() => setEquipSel(prev => prev.filter(x => x !== id))}
+                                title="Remove"
+                                style={{ display: 'inline-flex', border: 'none', background: 'transparent', color: 'inherit', cursor: 'pointer', padding: 0 }}
+                              >
+                                <XIcon size={13} />
+                              </button>
+                            </span>
+                          )
+                        })}
+                      </div>
+                    )}
+                    {allEquipment.length === 0 ? (
+                      <p style={{ fontSize: 13, color: 'var(--text-3)' }}>No equipment yet. Add some on the Equipment page.</p>
+                    ) : available.length > 0 ? (
+                      <select
+                        className="select"
+                        value=""
+                        onChange={e => { if (e.target.value) setEquipSel(prev => [...prev, e.target.value]) }}
+                        style={{ width: '100%' }}
                       >
-                        {e.name}
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
+                        <option value="">+ Add equipment…</option>
+                        {available.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+                      </select>
+                    ) : (
+                      <p style={{ fontSize: 12, color: 'var(--text-3)' }}>All equipment added.</p>
+                    )}
+                  </>
+                )
+              })()}
               <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
                 <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => setEditingEquip(false)} disabled={equipSaving}>Cancel</button>
                 <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={() => void saveEquip()} disabled={equipSaving}>{equipSaving ? 'Saving…' : 'Save'}</button>

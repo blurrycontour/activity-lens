@@ -42,9 +42,6 @@ export default function ImportModal({ onClose, onViewWorkout }: ImportModalProps
   useEffect(() => {
     api.listEquipment().then(list => setEquipmentList(list.filter(e => !e.retired))).catch(() => {})
   }, [])
-  function toggleEquipment(id: string) {
-    setSelectedEquipment(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
-  }
 
   // Manual form state
   const [form, setForm] = useState({
@@ -344,26 +341,40 @@ export default function ImportModal({ onClose, onViewWorkout }: ImportModalProps
               {equipmentList.length > 0 && (
                 <div style={{ marginTop: 18 }}>
                   <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 8 }}>Equipment (optional)</label>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                    {equipmentList.map(e => {
-                      const on = selectedEquipment.includes(e.id)
-                      return (
-                        <button
-                          key={e.id}
-                          type="button"
-                          onClick={() => toggleEquipment(e.id)}
-                          style={{
-                            padding: '5px 12px', borderRadius: 20, fontSize: 12, cursor: 'pointer',
-                            border: `1px solid ${on ? 'var(--primary)' : 'var(--border-strong)'}`,
-                            background: on ? 'var(--primary-dim)' : 'transparent',
-                            color: on ? 'var(--primary)' : 'var(--text-2)',
-                          }}
-                        >
-                          {e.name}
-                        </button>
-                      )
-                    })}
-                  </div>
+                  {selectedEquipment.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                      {selectedEquipment.map(id => {
+                        const e = equipmentList.find(x => x.id === id)
+                        if (!e) return null
+                        return (
+                          <span key={id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 8px 5px 12px', borderRadius: 20, fontSize: 12, border: '1px solid var(--primary)', background: 'var(--primary-dim)', color: 'var(--primary)' }}>
+                            {e.name}
+                            <button
+                              type="button"
+                              onClick={() => setSelectedEquipment(prev => prev.filter(x => x !== id))}
+                              title="Remove"
+                              style={{ display: 'inline-flex', border: 'none', background: 'transparent', color: 'inherit', cursor: 'pointer', padding: 0 }}
+                            >
+                              <X size={13} />
+                            </button>
+                          </span>
+                        )
+                      })}
+                    </div>
+                  )}
+                  {equipmentList.some(e => !selectedEquipment.includes(e.id)) && (
+                    <select
+                      className="select"
+                      value=""
+                      onChange={e => { if (e.target.value) setSelectedEquipment(prev => [...prev, e.target.value]) }}
+                      style={{ width: '100%' }}
+                    >
+                      <option value="">+ Add equipment…</option>
+                      {equipmentList.filter(e => !selectedEquipment.includes(e.id)).map(e => (
+                        <option key={e.id} value={e.id}>{e.name}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
               )}
 

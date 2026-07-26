@@ -179,9 +179,9 @@ export default function Dashboard() {
                   <span style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>{caption}</span>
                 </div>
                 <div className="activity-mix-body">
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, justifyContent: 'center' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, justifyContent: 'center', width: 150 }}>
                     {d.radialData.map(r => (
-                      <div key={r.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
+                      <div key={r.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <div style={{ width: 10, height: 10, borderRadius: 3, background: r.fill }} />
                           <span style={{ fontSize: 13, color: 'var(--text-2)' }}>{r.name}</span>

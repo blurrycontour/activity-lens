@@ -510,14 +510,14 @@ body {
 /* Dashboard row: a narrower Weekly Volume next to a wider Activity Mix. */
 .grid-dash {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
   gap: 16px;
 }
 
-/* Activity Mix: legend on the left, chart on the right (desktop). */
+/* Activity Mix: compact legend on the left, chart on the right (desktop). */
 .activity-mix-body {
   display: grid;
-  grid-template-columns: 1fr 180px;
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 16px;
   align-items: center;
 }
