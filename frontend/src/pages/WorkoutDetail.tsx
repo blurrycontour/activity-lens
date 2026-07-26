@@ -3,7 +3,7 @@ import { type Workout, type WorkoutType, WORKOUT_TYPES, fmtDuration, fmtDist, fm
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ReferenceDot } from 'recharts'
 import {
   ArrowLeft, Heart, Mountain, Zap, Clock, TrendingUp, Navigation, Download, Pencil, Trash2, Gauge,
-  Check, X as XIcon, Play, Pause, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, Layers,
+  Check, X as XIcon, Play, Pause, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, Layers, AlertTriangle,
 } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useAuth } from '../context/AuthContext'
@@ -519,6 +519,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
   const [editSteps, setEditSteps] = useState('')
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [saveErr, setSaveErr] = useState<string | null>(null)
   const [confirmRecalc, setConfirmRecalc] = useState(false)
   const [recalculating, setRecalculating] = useState(false)
@@ -721,7 +722,6 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
   }
 
   async function handleDelete() {
-    if (!confirm(`Delete "${w.name}"? This cannot be undone.`)) return
     setDeleting(true)
     try {
       await removeWorkout(w.id)
@@ -915,6 +915,28 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
           </div>
         </>
       )}
+      {confirmDelete && (
+        <>
+          <div className="overlay" onClick={() => { if (!deleting) setConfirmDelete(false) }} />
+          <div className="modal">
+            <div className="modal-box" style={{ maxWidth: 420 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                <AlertTriangle size={20} style={{ color: '#f59e0b' }} />
+                <h3 style={{ fontSize: 16, fontWeight: 700 }}>Delete workout?</h3>
+              </div>
+              <p style={{ fontSize: 14, color: 'var(--text-2)', marginBottom: 20, lineHeight: 1.5 }}>
+                “{w.name}” will be permanently deleted. This cannot be undone.
+              </p>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                <button className="btn btn-ghost" onClick={() => setConfirmDelete(false)} disabled={deleting}>Cancel</button>
+                <button className="btn btn-primary" style={{ background: '#ef4444', borderColor: '#ef4444' }} onClick={handleDelete} disabled={deleting}>
+                  {deleting ? 'Deleting…' : 'Delete'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
       <div className="page-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button className="btn-icon" onClick={onBack}><ArrowLeft size={18} /></button>
@@ -928,7 +950,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
             </div>
           </div>
           <div style={{ marginLeft: 'auto', flexShrink: 0 }}>
-            <OptionsMenu onEdit={startEdit} onExport={() => exportGPX(w)} onRecalculate={() => { setRecalcErr(null); setConfirmRecalc(true) }} onDelete={handleDelete} deleting={deleting} />
+            <OptionsMenu onEdit={startEdit} onExport={() => exportGPX(w)} onRecalculate={() => { setRecalcErr(null); setConfirmRecalc(true) }} onDelete={() => setConfirmDelete(true)} deleting={deleting} />
           </div>
         </div>
       </div>

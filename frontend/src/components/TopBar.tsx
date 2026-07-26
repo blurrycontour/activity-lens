@@ -1,5 +1,6 @@
 import { Menu, Sun, Moon, Monitor, HelpCircle } from 'lucide-react'
 import type { ApiUser } from '../lib/api'
+import Logo from './Logo'
 
 export type ThemeMode = 'dark' | 'light' | 'system'
 
@@ -41,7 +42,7 @@ export default function TopBar({ onToggleSidebar, themeMode, onCycleTheme, onUse
       )}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <img src="/logo.png" alt="Activity Lens" width={28} height={28} style={{ borderRadius: 8, display: 'block' }} />
+        <Logo size={28} radius={8} />
         <span style={{ fontWeight: 700, fontSize: 15, letterSpacing: '-0.02em', color: 'var(--text)' }}>
           Activity Lens
         </span>
