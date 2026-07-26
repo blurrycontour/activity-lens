@@ -62,9 +62,9 @@ export default function Heatmap() {
   function getColor(count: number): string {
     if (count === 0) return 'var(--bg-3)'
     const intensity = Math.min(count / maxCount, 1)
-    if (intensity < 0.25) return 'rgba(0,232,122,0.2)'
-    if (intensity < 0.5) return 'rgba(0,232,122,0.45)'
-    if (intensity < 0.75) return 'rgba(0,232,122,0.7)'
+    if (intensity < 0.25) return 'color-mix(in srgb, var(--primary) 20%, transparent)'
+    if (intensity < 0.5) return 'color-mix(in srgb, var(--primary) 45%, transparent)'
+    if (intensity < 0.75) return 'color-mix(in srgb, var(--primary) 70%, transparent)'
     return 'var(--primary)'
   }
 
