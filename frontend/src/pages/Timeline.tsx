@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { fmtPace, type WorkoutType } from '../data/workouts'
 import { useWorkouts } from '../context/WorkoutsContext'
 import TypeDropdown from '../components/TypeDropdown'
+import { useLocalStorage } from '../lib/useLocalStorage'
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid,
@@ -24,7 +25,7 @@ const METRICS: { id: Metric; label: string; color: string; unit: string; format?
 export default function Timeline() {
   const { workouts } = useWorkouts()
   const [typeFilter, setTypeFilter] = useState<WorkoutType | 'All'>('Run')
-  const [selectedMetrics, setSelectedMetrics] = useState<Metric[]>(['pace', 'hr'])
+  const [selectedMetrics, setSelectedMetrics] = useLocalStorage<Metric[]>('al_tl_metrics', ['pace', 'hr'])
 
   const data = useMemo(() => {
     const filtered = typeFilter === 'All' ? workouts : workouts.filter(w => w.type === typeFilter)

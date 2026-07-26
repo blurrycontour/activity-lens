@@ -2,6 +2,11 @@ import { useEffect, useState } from 'react'
 import { Check } from 'lucide-react'
 import { ACCENTS, applyAccent } from '../lib/theme'
 import { api, ApiError } from '../lib/api'
+import { useLocalStorage } from '../lib/useLocalStorage'
+import {
+  DASHBOARD_CFG_KEY, DEFAULT_DASHBOARD_CONFIG, STAT_CARDS, WINDOW_OPTIONS,
+  type DashboardConfig, type StatCardId,
+} from '../lib/dashboardConfig'
 
 interface SettingsProps {
   accent: string
@@ -12,6 +17,17 @@ export default function Settings({ accent, onAccentChange }: SettingsProps) {
   function handleAccent(value: string) {
     onAccentChange(value)
     applyAccent(value)
+  }
+
+  const [dashCfg, setDashCfg] = useLocalStorage<DashboardConfig>(DASHBOARD_CFG_KEY, DEFAULT_DASHBOARD_CONFIG)
+  function toggleCard(id: StatCardId) {
+    setDashCfg(prev => {
+      const want = new Set(prev.cards)
+      if (want.has(id)) want.delete(id)
+      else want.add(id)
+      // Keep the master order so cards render consistently.
+      return { ...prev, cards: STAT_CARDS.map(c => c.id).filter(c => want.has(c)) }
+    })
   }
 
   const [calorieMethod, setCalorieMethod] = useState<'heart-rate' | 'distance'>('heart-rate')
@@ -144,6 +160,46 @@ export default function Settings({ accent, onAccentChange }: SettingsProps) {
               </button>
             ))}
           </div>
+        </section>
+
+        {/* Dashboard */}
+        <section className="card">
+          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Dashboard</h3>
+          <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 16 }}>
+            Choose which summary cards appear on your dashboard and the time window their
+            totals (and the activity mix) are calculated over.
+          </p>
+          <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 6 }}>Stat cards</label>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
+            {STAT_CARDS.map(c => {
+              const on = dashCfg.cards.includes(c.id)
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => toggleCard(c.id)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8,
+                    border: `1px solid ${on ? 'var(--primary)' : 'var(--border)'}`,
+                    background: on ? 'var(--primary-dim)' : 'var(--bg-3)',
+                    color: on ? 'var(--primary)' : 'var(--text-2)',
+                    fontSize: 12, fontWeight: 500, cursor: 'pointer',
+                  }}
+                >
+                  {on && <Check size={13} />}
+                  {c.label}
+                </button>
+              )
+            })}
+          </div>
+          <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 6 }}>Time window</label>
+          <select
+            className="input"
+            style={{ width: '100%', maxWidth: 220 }}
+            value={dashCfg.windowDays}
+            onChange={e => setDashCfg(prev => ({ ...prev, windowDays: Number(e.target.value) }))}
+          >
+            {WINDOW_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
         </section>
 
         {/* Units */}

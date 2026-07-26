@@ -4,6 +4,7 @@ export type Page =
   | 'heatmap'
   | 'timeline'
   | 'analysis'
+  | 'equipment'
   | 'help'
   | 'settings'
   | 'account'

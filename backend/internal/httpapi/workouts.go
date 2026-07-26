@@ -35,21 +35,23 @@ func (s *Server) handleGetWorkout(w http.ResponseWriter, r *http.Request) {
 		s.writeWorkoutError(w, err)
 		return
 	}
+	s.attachEquipment(r, user.ID, wk)
 	writeJSON(w, http.StatusOK, wk)
 }
 
 // createWorkoutRequest is the manual-entry payload from the import modal.
 type createWorkoutRequest struct {
-	Name          string  `json:"name"`
-	Type          string  `json:"type"`
-	Date          string  `json:"date"` // YYYY-MM-DD
-	Duration      int     `json:"duration"`
-	Distance      float64 `json:"distance"`
-	AvgHR         int     `json:"avgHR"`
-	MaxHR         int     `json:"maxHR"`
-	ElevationGain float64 `json:"elevationGain"`
-	Calories      int     `json:"calories"`
-	Notes         string  `json:"notes"`
+	Name          string   `json:"name"`
+	Type          string   `json:"type"`
+	Date          string   `json:"date"` // YYYY-MM-DD
+	Duration      int      `json:"duration"`
+	Distance      float64  `json:"distance"`
+	AvgHR         int      `json:"avgHR"`
+	MaxHR         int      `json:"maxHR"`
+	ElevationGain float64  `json:"elevationGain"`
+	Calories      int      `json:"calories"`
+	Notes         string   `json:"notes"`
+	EquipmentIDs  []string `json:"equipmentIds"`
 }
 
 func (s *Server) handleCreateWorkout(w http.ResponseWriter, r *http.Request) {
@@ -85,6 +87,7 @@ func (s *Server) handleCreateWorkout(w http.ResponseWriter, r *http.Request) {
 		s.writeWorkoutError(w, err)
 		return
 	}
+	s.linkEquipment(r, user.ID, wk, req.EquipmentIDs)
 	slog.Info("workout created", "workout_id", wk.ID, "user_id", user.ID, "source", "manual")
 	writeJSON(w, http.StatusCreated, wk)
 }
@@ -92,12 +95,13 @@ func (s *Server) handleCreateWorkout(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handlePatchWorkout(w http.ResponseWriter, r *http.Request) {
 	user := httpmw.UserFrom(r)
 	var req struct {
-		Name     *string `json:"name"`
-		Type     *string `json:"type"`
-		Notes    *string `json:"notes"`
-		Date     *string `json:"date"` // YYYY-MM-DD
-		Calories *int    `json:"calories"`
-		Steps    *int    `json:"steps"`
+		Name         *string   `json:"name"`
+		Type         *string   `json:"type"`
+		Notes        *string   `json:"notes"`
+		Date         *string   `json:"date"` // YYYY-MM-DD
+		Calories     *int      `json:"calories"`
+		Steps        *int      `json:"steps"`
+		EquipmentIDs *[]string `json:"equipmentIds"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -121,8 +125,25 @@ func (s *Server) handlePatchWorkout(w http.ResponseWriter, r *http.Request) {
 		s.writeWorkoutError(w, err)
 		return
 	}
+	if req.EquipmentIDs != nil {
+		if err := s.equipment.SetForWorkout(r.Context(), user.ID, wk.ID, *req.EquipmentIDs); err != nil {
+			slog.Warn("could not set workout equipment", "workout_id", wk.ID, "error", err)
+		}
+	}
+	s.attachEquipment(r, user.ID, wk)
 	slog.Info("workout updated", "workout_id", wk.ID, "user_id", user.ID)
 	writeJSON(w, http.StatusOK, wk)
+}
+
+// linkEquipment associates the given equipment ids with a workout (best-effort;
+// failures are logged) and attaches the resulting equipment to the workout.
+func (s *Server) linkEquipment(r *http.Request, userID int64, wk *workout.Workout, ids []string) {
+	if len(ids) > 0 {
+		if err := s.equipment.SetForWorkout(r.Context(), userID, wk.ID, ids); err != nil {
+			slog.Warn("could not set workout equipment", "workout_id", wk.ID, "error", err)
+		}
+	}
+	s.attachEquipment(r, userID, wk)
 }
 
 func (s *Server) handleDeleteWorkout(w http.ResponseWriter, r *http.Request) {
@@ -147,6 +168,11 @@ func (s *Server) handleImportWorkout(w http.ResponseWriter, r *http.Request) {
 		s.writeWorkoutError(w, err)
 		return
 	}
+	var equipmentIDs []string
+	if r.MultipartForm != nil {
+		equipmentIDs = r.MultipartForm.Value["equipmentIds"]
+	}
+	s.linkEquipment(r, user.ID, wk, equipmentIDs)
 	slog.Info("workout imported", "workout_id", wk.ID, "user_id", user.ID, "filename", header.Filename, "bytes", len(data))
 
 	if s.rawUploads != nil {

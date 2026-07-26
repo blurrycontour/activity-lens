@@ -8,6 +8,7 @@ import {
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
+import { useLocalStorage } from '../lib/useLocalStorage'
 import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, Popup, useMap, useMapEvents } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import { divIcon } from 'leaflet'
@@ -112,6 +113,32 @@ type Metric = 'hr' | 'pace' | 'speed' | 'elevation'
 
 const HR_ZONE_COLORS = ['#60a5fa', '#34d399', '#fbbf24', '#ef4444', '#a855f7']
 const HR_ZONE_LABELS = ['Zone 1 (<60%)', 'Zone 2 (60-70%)', 'Zone 3 (70-80%)', 'Zone 4 (80-90%)', 'Zone 5 (90-100%)']
+
+/** Maps a heart rate (bpm) to its zone colour, given the user's max HR. */
+function hrZoneColor(hr: number, maxHR: number): string {
+  if (maxHR <= 0) return HR_ZONE_COLORS[0]
+  const pct = (hr / maxHR) * 100
+  const idx = pct < 60 ? 0 : pct < 70 ? 1 : pct < 80 ? 2 : pct < 90 ? 3 : 4
+  return HR_ZONE_COLORS[idx]
+}
+
+/** Builds vertical gradient stops (top→bottom) that colour an HR line by zone,
+ * mapping bpm values within [yMin, yMax] to the 5-zone palette. */
+function hrZoneStops(yMin: number, yMax: number, maxHR: number): { offset: number; color: string }[] | null {
+  if (maxHR <= 0 || yMax <= yMin) return null
+  const offAt = (v: number) => Math.min(1, Math.max(0, (yMax - v) / (yMax - yMin)))
+  const stops: { offset: number; color: string }[] = [{ offset: 0, color: hrZoneColor(yMax, maxHR) }]
+  for (const f of [0.9, 0.8, 0.7, 0.6]) {
+    const b = f * maxHR
+    if (b > yMin && b < yMax) {
+      const off = offAt(b)
+      stops.push({ offset: off, color: hrZoneColor(b + 0.01, maxHR) })
+      stops.push({ offset: off, color: hrZoneColor(b - 0.01, maxHR) })
+    }
+  }
+  stops.push({ offset: 1, color: hrZoneColor(yMin, maxHR) })
+  return stops
+}
 
 function hrZoneBuckets(hrTimeline: { t: number; hr: number }[], maxHR: number) {
   if (hrTimeline.length === 0 || maxHR <= 0) return []
@@ -257,7 +284,7 @@ function LayerSwitcher({ layer, onChange }: { layer: MapLayerId; onChange: (l: M
 }
 
 function RouteMap({
-  route, color, duration, currentTime, onScrub, height, distance, hrTimeline, paceTimeline, elevTimeline, avatarUrl,
+  route, color, duration, currentTime, onScrub, height, distance, hrTimeline, paceTimeline, elevTimeline, avatarUrl, maxHR,
 }: {
   route: Array<[number, number]>
   color: string
@@ -270,10 +297,11 @@ function RouteMap({
   paceTimeline: Workout['paceTimeline']
   elevTimeline: Workout['elevTimeline']
   avatarUrl?: string
+  maxHR: number
 }) {
   const [layer, setLayer] = useState<MapLayerId>(() => {
     const stored = localStorage.getItem(MAP_LAYER_KEY)
-    return (stored === 'street' || stored === 'topo' || stored === 'satellite') ? stored : 'street'
+    return (stored === 'street' || stored === 'topo' || stored === 'satellite') ? stored : 'satellite'
   })
   const [shading, setShading] = useState<'accent' | 'hr' | 'pace' | 'elevation'>('accent')
   const [selectedPoint, setSelectedPoint] = useState<number | null>(null)
@@ -317,8 +345,8 @@ function RouteMap({
     let cursor = 0
     const colorFor = (t: number) => {
       while (cursor < samples.length - 1 && Math.abs(samples[cursor + 1].t - t) <= Math.abs(samples[cursor].t - t)) cursor++
+      if (shading === 'hr') return hrZoneColor(values[cursor], maxHR)
       const ratio = (values[cursor] - min) / span
-      if (shading === 'hr') return ratio < 0.6 ? '#34d399' : ratio < 0.8 ? '#fbbf24' : '#ef4444'
       return `hsl(${210 - ratio * 190} 78% 52%)`
     }
     const segs: Array<{ positions: Array<[number, number]>; color: string }> = []
@@ -327,7 +355,7 @@ function RouteMap({
       segs.push({ positions: route.slice(i, end + 1), color: colorFor(i * segStep) })
     }
     return segs
-  }, [route, shading, hrTimeline, paceTimeline, elevTimeline, duration, color])
+  }, [route, shading, hrTimeline, paceTimeline, elevTimeline, duration, color, maxHR])
 
   if (route.length < 2) {
     return (
@@ -496,9 +524,32 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
   const [recalculating, setRecalculating] = useState(false)
   const [recalcErr, setRecalcErr] = useState<string | null>(null)
 
-  const [selectedMetrics, setSelectedMetrics] = useState<Metric[]>(['hr', 'pace', 'speed', 'elevation'])
+  const [selectedMetrics, setSelectedMetrics] = useLocalStorage<Metric[]>('al_wd_metrics', ['hr', 'pace', 'speed', 'elevation'])
   function toggleMetric(m: Metric) {
     setSelectedMetrics(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m])
+  }
+  const [yFromZero, setYFromZero] = useLocalStorage<boolean>('al_y0', false)
+
+  // Equipment editing
+  const [allEquipment, setAllEquipment] = useState<import('../lib/api').Equipment[]>([])
+  const [editingEquip, setEditingEquip] = useState(false)
+  const [equipSel, setEquipSel] = useState<string[]>([])
+  const [equipSaving, setEquipSaving] = useState(false)
+  useEffect(() => {
+    api.listEquipment().then(setAllEquipment).catch(() => {})
+  }, [])
+  function startEditEquip() {
+    setEquipSel((w.equipment ?? []).map(e => e.id))
+    setEditingEquip(true)
+  }
+  async function saveEquip() {
+    setEquipSaving(true)
+    try {
+      const updated = await updateWorkout(w.id, { equipmentIds: equipSel })
+      setW(updated)
+      setEditingEquip(false)
+    } catch { /* keep editing open on failure */ }
+    finally { setEquipSaving(false) }
   }
 
   const speedTimeline = useMemo(
@@ -690,11 +741,18 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
     yTickFormatter?: (v: number) => string
     height: number
     valueFormatter?: (value: number) => string
+    hrZoneStroke?: boolean
+    maxHRForZones?: number
   }) {
-    const { data, dataKey, stroke, gradId, unit, reversed, yTickFormatter, height, valueFormatter } = opts
+    const { data, dataKey, stroke, gradId, unit, reversed, yTickFormatter, height, valueFormatter, hrZoneStroke, maxHRForZones } = opts
     const visible = visibleUpTo(data, currentTime)
-    const yDomain = domainOf(data.map(d => d[dataKey]))
+    const vals = data.map(d => d[dataKey])
+    const yDomain: [number, number] = yFromZero
+      ? [0, vals.length ? Math.ceil(Math.max(...vals) * 1.05) || 1 : 1]
+      : domainOf(vals)
     const cursorVal = valueAtTime(data, dataKey as any, currentTime)
+    const strokeStops = hrZoneStroke && maxHRForZones ? hrZoneStops(yDomain[0], yDomain[1], maxHRForZones) : null
+    const strokeColor = strokeStops ? `url(#${gradId}_stroke)` : stroke
     return (
       <ResponsiveContainer width="100%" height={height}>
         <AreaChart
@@ -707,6 +765,11 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
               <stop offset="5%" stopColor={stroke} stopOpacity={0.3} />
               <stop offset="95%" stopColor={stroke} stopOpacity={0} />
             </linearGradient>
+            {strokeStops && (
+              <linearGradient id={`${gradId}_stroke`} x1="0" y1="0" x2="0" y2="1">
+                {strokeStops.map((s, i) => <stop key={i} offset={`${(s.offset * 100).toFixed(2)}%`} stopColor={s.color} />)}
+              </linearGradient>
+            )}
           </defs>
           <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
           <XAxis
@@ -719,7 +782,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
             axisLine={false} tickLine={false} domain={yDomain} reversed={reversed} tickFormatter={yTickFormatter}
           />
           <Tooltip content={<ChartTooltip unit={unit} valueFormatter={valueFormatter} />} />
-          <Area type="monotone" dataKey={dataKey} stroke={stroke} strokeWidth={2} fill={`url(#${gradId})`} dot={false} isAnimationActive={false} />
+          <Area type="monotone" dataKey={dataKey} stroke={strokeColor} strokeWidth={2} fill={`url(#${gradId})`} dot={false} isAnimationActive={false} />
           {currentTime > 0 && <ReferenceLine x={currentTime} stroke="var(--text-2)" strokeDasharray="3 3" />}
           {cursorVal != null && <ReferenceDot x={currentTime} y={cursorVal} r={4} fill={stroke} stroke="var(--bg-2)" strokeWidth={2} />}
         </AreaChart>
@@ -728,7 +791,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
   }
 
   function hrChart(height: number) {
-    return areaChart({ data: w.hrTimeline as any, dataKey: 'hr', stroke: '#ef4444', gradId: 'hrGrad', unit: 'bpm', height })
+    return areaChart({ data: w.hrTimeline as any, dataKey: 'hr', stroke: '#ef4444', gradId: 'hrGrad', unit: 'bpm', height, hrZoneStroke: true, maxHRForZones: effectiveMaxHR })
   }
   function paceChart(height: number) {
     return areaChart({ data: smoothPaceTimeline as any, dataKey: 'pace', stroke: color, gradId: 'paceGrad', unit: '/km', valueFormatter: fmtPace, reversed: true, yTickFormatter: v => fmtPace(v), height })
@@ -765,7 +828,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
 
   function mapCard(height: number | string) {
     return (
-      <RouteMap route={w.route} color={trailColor} duration={w.duration} currentTime={currentTime} onScrub={handleScrub} height={height} distance={w.distance} hrTimeline={w.hrTimeline} paceTimeline={w.paceTimeline} elevTimeline={w.elevTimeline} avatarUrl={user?.avatarPath || undefined} />
+      <RouteMap route={w.route} color={trailColor} duration={w.duration} currentTime={currentTime} onScrub={handleScrub} height={height} distance={w.distance} hrTimeline={w.hrTimeline} paceTimeline={w.paceTimeline} elevTimeline={w.elevTimeline} avatarUrl={user?.avatarPath || undefined} maxHR={effectiveMaxHR} />
     )
   }
 
@@ -919,7 +982,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
         </div>
 
         {/* Metric toggle row */}
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
           {([
             { id: 'hr' as Metric, label: 'Heart Rate', color: '#ef4444', available: w.hrTimeline.length > 0 },
             { id: 'pace' as Metric, label: 'Pace', color: color, available: w.paceTimeline.length > 0 },
@@ -941,6 +1004,20 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
               {m.label}
             </button>
           ))}
+          <button
+            onClick={() => setYFromZero(v => !v)}
+            className="btn"
+            title="Start every chart's Y axis at zero"
+            style={{
+              marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 8, fontSize: 12,
+              border: `1px solid ${yFromZero ? 'var(--primary)' : 'var(--border)'}`,
+              background: yFromZero ? 'var(--primary-dim)' : 'transparent',
+              color: yFromZero ? 'var(--primary)' : 'var(--text-3)',
+            }}
+          >
+            {yFromZero ? <Check size={13} /> : <Sigma size={13} />}
+            Y axis from 0
+          </button>
         </div>
 
         {/* Charts */}
@@ -956,6 +1033,19 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
                 </div>
               </div>
               {hrChart(140)}
+            </div>
+          )}
+
+          {/* Heart rate zones — shown right after the HR graph */}
+          {selectedMetrics.includes('hr') && hrZones.length > 0 && (
+            <div className="card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Heart size={14} color="#ef4444" /> Heart Rate Zones
+                </h3>
+                <button className="btn-icon" onClick={() => setExpanded('hrzones')} title="Expand"><Maximize2 size={13} /></button>
+              </div>
+              {hrZoneChart(160)}
             </div>
           )}
 
@@ -1000,19 +1090,6 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
               {elevChart(140)}
             </div>
           )}
-
-          {/* Heart rate zones */}
-          {selectedMetrics.includes('hr') && hrZones.length > 0 && (
-            <div className="card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Heart size={14} color="#ef4444" /> Heart Rate Zones
-                </h3>
-                <button className="btn-icon" onClick={() => setExpanded('hrzones')} title="Expand"><Maximize2 size={13} /></button>
-              </div>
-              {hrZoneChart(160)}
-            </div>
-          )}
         </div>
 
         {w.notes && (
@@ -1021,6 +1098,57 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
             <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6 }}>{w.notes}</p>
           </div>
         )}
+
+        <div className="card" style={{ marginTop: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <h3 style={{ fontSize: 13, fontWeight: 600 }}>Equipment</h3>
+            {!editingEquip && (
+              <button className="btn btn-ghost" style={{ fontSize: 12, padding: '4px 10px' }} onClick={startEditEquip}>
+                {(w.equipment ?? []).length > 0 ? 'Edit' : 'Add'}
+              </button>
+            )}
+          </div>
+          {editingEquip ? (
+            <>
+              {allEquipment.length === 0 ? (
+                <p style={{ fontSize: 13, color: 'var(--text-3)' }}>No equipment yet. Add some on the Equipment page.</p>
+              ) : (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {allEquipment.map(e => {
+                    const on = equipSel.includes(e.id)
+                    return (
+                      <button
+                        key={e.id}
+                        type="button"
+                        onClick={() => setEquipSel(prev => on ? prev.filter(x => x !== e.id) : [...prev, e.id])}
+                        style={{
+                          padding: '5px 12px', borderRadius: 20, fontSize: 12, cursor: 'pointer',
+                          border: `1px solid ${on ? 'var(--primary)' : 'var(--border-strong)'}`,
+                          background: on ? 'var(--primary-dim)' : 'transparent',
+                          color: on ? 'var(--primary)' : 'var(--text-2)',
+                        }}
+                      >
+                        {e.name}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
+                <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => setEditingEquip(false)} disabled={equipSaving}>Cancel</button>
+                <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={() => void saveEquip()} disabled={equipSaving}>{equipSaving ? 'Saving…' : 'Save'}</button>
+              </div>
+            </>
+          ) : (w.equipment ?? []).length > 0 ? (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {(w.equipment ?? []).map(e => (
+                <span key={e.id} style={{ padding: '5px 12px', borderRadius: 20, fontSize: 12, border: '1px solid var(--border)', color: 'var(--text-2)' }}>{e.name}</span>
+              ))}
+            </div>
+          ) : (
+            <p style={{ fontSize: 13, color: 'var(--text-3)' }}>No equipment linked.</p>
+          )}
+        </div>
       </div>
 
       {expanded === 'map' && (

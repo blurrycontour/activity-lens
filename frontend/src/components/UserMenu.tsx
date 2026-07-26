@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { User, Settings, Shield, LogOut, X } from 'lucide-react'
+import { User, Settings, Shield, LogOut, X, Footprints } from 'lucide-react'
 import type { ApiUser } from '../lib/api'
 
 interface UserMenuProps {
@@ -7,11 +7,12 @@ interface UserMenuProps {
   onAccount: () => void
   onSettings: () => void
   onAdmin: () => void
+  onEquipment?: () => void
   onLogout: () => void | Promise<void>
   user: ApiUser
 }
 
-export default function UserMenu({ onClose, onAccount, onSettings, onAdmin, onLogout, user }: UserMenuProps) {
+export default function UserMenu({ onClose, onAccount, onSettings, onAdmin, onEquipment, onLogout, user }: UserMenuProps) {
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -31,6 +32,7 @@ export default function UserMenu({ onClose, onAccount, onSettings, onAdmin, onLo
 
   const items = [
     { icon: <User size={15} />, label: 'Account', sub: 'Profile, password, sessions', action: () => { onClose(); onAccount() } },
+    ...(onEquipment ? [{ icon: <Footprints size={15} />, label: 'Equipment', sub: 'Shoes, watches, bikes', action: () => { onClose(); onEquipment() } }] : []),
     { icon: <Settings size={15} />, label: 'Settings', sub: 'Appearance & preferences', action: () => { onClose(); onSettings() } },
     ...(user.isAdmin ? [{ icon: <Shield size={15} />, label: 'Admin Panel', sub: 'Users, email, SSO', action: () => { onClose(); onAdmin() } }] : []),
   ]

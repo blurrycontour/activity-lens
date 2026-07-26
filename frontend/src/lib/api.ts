@@ -227,16 +227,17 @@ export const api = {
   getWorkout: (id: string) => request<import('../data/workouts').Workout>(`/api/workouts/${id}`),
   createWorkout: (payload: ManualWorkoutInput) =>
     request<import('../data/workouts').Workout>('/api/workouts', { method: 'POST', body: payload }),
-  patchWorkout: (id: string, patch: { name?: string; type?: string; notes?: string; date?: string; calories?: number; steps?: number }) =>
+  patchWorkout: (id: string, patch: { name?: string; type?: string; notes?: string; date?: string; calories?: number; steps?: number; equipmentIds?: string[] }) =>
     request<import('../data/workouts').Workout>(`/api/workouts/${id}`, { method: 'PATCH', body: patch }),
   recalcWorkout: (id: string) =>
     request<import('../data/workouts').Workout>(`/api/workouts/${id}/recalculate`, { method: 'POST' }),
   deleteWorkout: (id: string) => request<unknown>(`/api/workouts/${id}`, { method: 'DELETE' }),
-  importWorkout: (file: File, type?: string, name?: string) => {
+  importWorkout: (file: File, type?: string, name?: string, equipmentIds?: string[]) => {
     const form = new FormData()
     form.append('file', file)
     if (type) form.append('type', type)
     if (name) form.append('name', name)
+    if (equipmentIds) equipmentIds.forEach(id => form.append('equipmentIds', id))
     return request<import('../data/workouts').Workout>('/api/workouts/import', { method: 'POST', raw: form })
   },
   previewWorkout: (file: File, type?: string, name?: string) => {
@@ -247,6 +248,46 @@ export const api = {
     return request<import('../data/workouts').Workout>('/api/workouts/preview', { method: 'POST', raw: form })
   },
   stats: () => request<Stats>('/api/stats'),
+
+  // --- Equipment ---
+  listEquipment: () => request<Equipment[]>('/api/equipment'),
+  getEquipment: (id: string) => request<Equipment & { workouts: LinkedWorkout[] }>(`/api/equipment/${id}`),
+  createEquipment: (payload: EquipmentInput) =>
+    request<Equipment>('/api/equipment', { method: 'POST', body: payload }),
+  patchEquipment: (id: string, patch: Partial<EquipmentInput>) =>
+    request<Equipment>(`/api/equipment/${id}`, { method: 'PATCH', body: patch }),
+  deleteEquipment: (id: string) => request<unknown>(`/api/equipment/${id}`, { method: 'DELETE' }),
+}
+
+export interface Equipment {
+  id: string
+  name: string
+  type: string
+  brand: string
+  model: string
+  notes: string
+  retired: boolean
+  workoutCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface EquipmentInput {
+  name: string
+  type: string
+  brand: string
+  model: string
+  notes: string
+  retired: boolean
+}
+
+export interface LinkedWorkout {
+  id: string
+  name: string
+  type: string
+  date: string
+  distance: number
+  duration: number
 }
 
 export interface ManualWorkoutInput {
@@ -260,6 +301,7 @@ export interface ManualWorkoutInput {
   elevationGain: number
   calories: number
   notes: string
+  equipmentIds?: string[]
 }
 
 export interface Stats {

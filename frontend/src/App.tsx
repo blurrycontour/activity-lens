@@ -11,6 +11,7 @@ import WorkoutDetail from './pages/WorkoutDetail'
 import Heatmap from './pages/Heatmap'
 import Timeline from './pages/Timeline'
 import Analysis from './pages/Analysis'
+import Equipment from './pages/Equipment'
 import Help from './pages/Help'
 import Settings from './pages/Settings'
 import Account from './pages/Account'
@@ -25,7 +26,7 @@ import { api } from './lib/api'
 const SIDEBAR_KEY = 'al_sidebar_w'
 const THEME_KEY = 'al_theme'
 const ACCENT_KEY = 'al_accent'
-const PAGES: Page[] = ['dashboard', 'workouts', 'heatmap', 'timeline', 'analysis', 'help', 'settings', 'account', 'admin']
+const PAGES: Page[] = ['dashboard', 'workouts', 'heatmap', 'timeline', 'analysis', 'equipment', 'help', 'settings', 'account', 'admin']
 
 // URL <-> app state helpers. Routes are path-based (e.g. /workouts,
 // /workouts/:id, /settings) so a full page reload lands back on the same
@@ -234,6 +235,8 @@ export default function App() {
           <Timeline />
         ) : page === 'analysis' ? (
           <Analysis />
+        ) : page === 'equipment' ? (
+          <Equipment onSelectWorkout={id => { api.getWorkout(id).then(selectWorkout).catch(() => {}) }} />
         ) : page === 'settings' ? (
           <Settings accent={accent} onAccentChange={setAccent} />
         ) : page === 'account' ? (
@@ -257,6 +260,7 @@ export default function App() {
           onAccount={() => navigate('account')}
           onSettings={() => navigate('settings')}
           onAdmin={() => navigate('admin')}
+          onEquipment={isMobile ? () => navigate('equipment') : undefined}
           onLogout={logout}
           user={user}
         />

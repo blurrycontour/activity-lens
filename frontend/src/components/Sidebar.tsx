@@ -1,5 +1,5 @@
 import { useRef, useCallback } from 'react'
-import { LayoutDashboard, Dumbbell, MapIcon, BarChart2, Activity, HelpCircle, Plus } from 'lucide-react'
+import { LayoutDashboard, Dumbbell, MapIcon, BarChart2, Activity, HelpCircle, Plus, Footprints } from 'lucide-react'
 import { type Page } from '../lib/nav'
 
 interface SidebarProps {
@@ -18,6 +18,7 @@ const navItems: { id: Page; label: string; icon: React.ReactNode }[] = [
   { id: 'heatmap', label: 'Heatmap', icon: <MapIcon size={18} /> },
   { id: 'timeline', label: 'Timeline', icon: <Activity size={18} /> },
   { id: 'analysis', label: 'Analysis', icon: <BarChart2 size={18} /> },
+  { id: 'equipment', label: 'Equipment', icon: <Footprints size={18} /> },
   { id: 'help', label: 'Help', icon: <HelpCircle size={18} /> },
 ]
 

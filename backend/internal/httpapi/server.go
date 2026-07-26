@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/blurrycontour/activity-lens/backend/internal/config"
+	"github.com/blurrycontour/activity-lens/backend/internal/equipment"
 	"github.com/blurrycontour/activity-lens/backend/internal/settings"
 	"github.com/blurrycontour/activity-lens/backend/internal/web"
 	"github.com/blurrycontour/activity-lens/backend/internal/workout"
@@ -21,13 +22,14 @@ type Server struct {
 	mw         *httpmw.Middleware
 	oidc       *oidc.Handler
 	workout    *workout.Service
+	equipment  *equipment.Service
 	settings   *settings.Store
 	rawUploads *workout.RawUploadStore
 }
 
 // New constructs a Server and its auth middleware/OIDC handler.
-func New(cfg config.Config, authSvc *auth.Service, workoutSvc *workout.Service, settingsStore *settings.Store, rawUploads *workout.RawUploadStore) *Server {
-	s := &Server{cfg: cfg, auth: authSvc, workout: workoutSvc, settings: settingsStore, rawUploads: rawUploads}
+func New(cfg config.Config, authSvc *auth.Service, workoutSvc *workout.Service, equipmentSvc *equipment.Service, settingsStore *settings.Store, rawUploads *workout.RawUploadStore) *Server {
+	s := &Server{cfg: cfg, auth: authSvc, workout: workoutSvc, equipment: equipmentSvc, settings: settingsStore, rawUploads: rawUploads}
 	s.mw = &httpmw.Middleware{
 		Auth:   authSvc,
 		Secure: s.secure,
@@ -106,6 +108,13 @@ func (s *Server) apiRoutes() http.Handler {
 	mux.Handle("GET /api/stats", s.authed(s.handleStats))
 	mux.Handle("GET /api/preferences", s.authed(s.handleGetPreferences))
 	mux.Handle("PUT /api/preferences", s.authedCSRF(s.handleSavePreferences))
+
+	// --- Equipment (authenticated) ---
+	mux.Handle("GET /api/equipment", s.authed(s.handleListEquipment))
+	mux.Handle("POST /api/equipment", s.authedCSRF(s.handleCreateEquipment))
+	mux.Handle("GET /api/equipment/{id}", s.authed(s.handleGetEquipment))
+	mux.Handle("PATCH /api/equipment/{id}", s.authedCSRF(s.handlePatchEquipment))
+	mux.Handle("DELETE /api/equipment/{id}", s.authedCSRF(s.handleDeleteEquipment))
 
 	// --- Admin (administrators only) ---
 	mux.Handle("GET /api/admin/settings", s.authedAdmin(s.handleGetSettings))

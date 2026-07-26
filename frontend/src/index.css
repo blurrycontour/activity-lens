@@ -507,6 +507,38 @@ body {
   gap: 16px;
 }
 
+/* Dashboard row: a narrower Weekly Volume next to a wider Activity Mix. */
+.grid-dash {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
+  gap: 16px;
+}
+
+/* Activity Mix: legend on the left, chart on the right (desktop). */
+.activity-mix-body {
+  display: grid;
+  grid-template-columns: 1fr 180px;
+  gap: 16px;
+  align-items: center;
+}
+
+/* Leaflet popups/tooltips: use theme surfaces so they read correctly in dark
+ * mode (Leaflet defaults to white). */
+.leaflet-popup-content-wrapper,
+.leaflet-tooltip {
+  background: var(--bg-2) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border-strong) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4) !important;
+}
+.leaflet-popup-tip {
+  background: var(--bg-2) !important;
+  border: 1px solid var(--border-strong) !important;
+}
+.leaflet-popup-content-wrapper strong { color: var(--text); }
+.leaflet-tooltip::before { border-top-color: var(--border-strong) !important; }
+.leaflet-container a.leaflet-popup-close-button { color: var(--text-3) !important; }
+
 .detail-top {
   display: grid;
   grid-template-columns: 320px 1fr;
@@ -555,6 +587,13 @@ body {
   .charts-grid,
   .grid-2,
   .grid-main-side {
+    grid-template-columns: 1fr;
+  }
+
+  .grid-dash {
+    grid-template-columns: 1fr;
+  }
+  .activity-mix-body {
     grid-template-columns: 1fr;
   }
 

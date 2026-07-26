@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Upload, X, CheckCircle, FileText, AlertCircle, ArrowRight } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
-import { api, ApiError } from '../lib/api'
+import { api, ApiError, type Equipment } from '../lib/api'
 import { type Workout, fmtDist, fmtDuration, fmtPace } from '../data/workouts'
 
 interface ImportModalProps {
@@ -36,6 +36,16 @@ export default function ImportModal({ onClose, onViewWorkout }: ImportModalProps
   const [previewBusy, setPreviewBusy] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
+  // Equipment selection (shared across both tabs)
+  const [equipmentList, setEquipmentList] = useState<Equipment[]>([])
+  const [selectedEquipment, setSelectedEquipment] = useState<string[]>([])
+  useEffect(() => {
+    api.listEquipment().then(list => setEquipmentList(list.filter(e => !e.retired))).catch(() => {})
+  }, [])
+  function toggleEquipment(id: string) {
+    setSelectedEquipment(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
   // Manual form state
   const [form, setForm] = useState({
     name: '', type: 'Run', date: new Date().toISOString().split('T')[0],
@@ -67,7 +77,7 @@ export default function ImportModal({ onClose, onViewWorkout }: ImportModalProps
       let workout: Workout
       if (tab === 'file') {
         if (!file) return
-        workout = await api.importWorkout(file, form.type)
+        workout = await api.importWorkout(file, form.type, undefined, selectedEquipment)
       } else {
         workout = await api.createWorkout({
           name: form.name.trim(),
@@ -80,6 +90,7 @@ export default function ImportModal({ onClose, onViewWorkout }: ImportModalProps
           elevationGain: form.elevation ? parseFloat(form.elevation) : 0,
           calories: 0,
           notes: form.notes.trim(),
+          equipmentIds: selectedEquipment,
         })
       }
       await refresh()
@@ -326,6 +337,32 @@ export default function ImportModal({ onClose, onViewWorkout }: ImportModalProps
                         onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
                       />
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {equipmentList.length > 0 && (
+                <div style={{ marginTop: 18 }}>
+                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 8 }}>Equipment (optional)</label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {equipmentList.map(e => {
+                      const on = selectedEquipment.includes(e.id)
+                      return (
+                        <button
+                          key={e.id}
+                          type="button"
+                          onClick={() => toggleEquipment(e.id)}
+                          style={{
+                            padding: '5px 12px', borderRadius: 20, fontSize: 12, cursor: 'pointer',
+                            border: `1px solid ${on ? 'var(--primary)' : 'var(--border-strong)'}`,
+                            background: on ? 'var(--primary-dim)' : 'transparent',
+                            color: on ? 'var(--primary)' : 'var(--text-2)',
+                          }}
+                        >
+                          {e.name}
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
               )}

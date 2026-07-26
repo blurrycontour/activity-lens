@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/blurrycontour/activity-lens/backend/internal/config"
+	"github.com/blurrycontour/activity-lens/backend/internal/equipment"
 	"github.com/blurrycontour/activity-lens/backend/internal/httpapi"
 	"github.com/blurrycontour/activity-lens/backend/internal/settings"
 	"github.com/blurrycontour/activity-lens/backend/internal/store"
@@ -77,10 +78,11 @@ func run() error {
 	}
 
 	workoutSvc := workout.NewService(workout.NewSQLiteRepository(db))
+	equipmentSvc := equipment.NewService(equipment.NewSQLiteRepository(db))
 	settingsStore := settings.New(db)
 	rawUploads := workout.NewRawUploadStore(cfg.DataDir)
 
-	apiServer := httpapi.New(cfg, authSvc, workoutSvc, settingsStore, rawUploads)
+	apiServer := httpapi.New(cfg, authSvc, workoutSvc, equipmentSvc, settingsStore, rawUploads)
 	handler, err := apiServer.Handler()
 	if err != nil {
 		return err

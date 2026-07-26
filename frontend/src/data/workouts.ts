@@ -25,6 +25,7 @@ export interface Workout {
   paceTimeline: PacePoint[]
   elevTimeline: ElevPoint[]
   notes?: string
+  equipment?: { id: string; name: string; type: string }[]
 }
 
 export const WORKOUT_TYPES: WorkoutType[] = ['Run', 'Ride', 'Hike', 'Swim', 'Strength']

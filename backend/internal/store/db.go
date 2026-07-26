@@ -42,6 +42,9 @@ var workoutManualFlagsSchema string
 //go:embed migrations/0009_user_prefs_step_length.sql
 var userPrefsStepLengthSchema string
 
+//go:embed migrations/0010_equipment.sql
+var equipmentSchema string
+
 // OpenSQLite opens (and pings) a pure-Go SQLite database at dbPath with
 // foreign keys and WAL enabled for concurrency and integrity.
 func OpenSQLite(dbPath string) (*sql.DB, error) {
@@ -95,6 +98,9 @@ func MigrateApp(ctx context.Context, db *sql.DB) error {
 		if err := applyAlters(ctx, db, m.schema); err != nil {
 			return fmt.Errorf("apply %s schema: %w", m.name, err)
 		}
+	}
+	if _, err := db.ExecContext(ctx, equipmentSchema); err != nil {
+		return fmt.Errorf("apply equipment schema: %w", err)
 	}
 	return nil
 }

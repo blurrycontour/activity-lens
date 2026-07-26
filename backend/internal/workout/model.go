@@ -74,6 +74,16 @@ type Workout struct {
 	PaceTimeline   []PacePoint `json:"paceTimeline"`
 	ElevTimeline   []ElevPoint `json:"elevTimeline"`
 	Notes          string      `json:"notes"`
+	// Equipment is populated by the API layer for single-workout responses.
+	Equipment []EquipmentTag `json:"equipment,omitempty"`
+}
+
+// EquipmentTag is a minimal reference to a piece of equipment linked to a
+// workout, attached to workout responses by the API layer.
+type EquipmentTag struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Type string `json:"type"`
 }
 
 // Input carries the fields a caller may set when creating or importing a
