@@ -89,6 +89,7 @@ type Input struct {
 	ElevationGain float64
 	Calories      int
 	Steps         int
+	StepLengthM   float64 // user's stride length in metres; 0 = per-activity default
 	Route         []LatLng
 	HRTimeline    []HRPoint
 	PaceTimeline  []PacePoint

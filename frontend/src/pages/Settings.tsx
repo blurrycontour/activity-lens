@@ -19,6 +19,7 @@ export default function Settings({ accent, onAccentChange }: SettingsProps) {
   const [sex, setSex] = useState<'male' | 'female' | ''>('')
   const [birthYear, setBirthYear] = useState('')
   const [heightCm, setHeightCm] = useState('')
+  const [stepLengthCm, setStepLengthCm] = useState('')
   const [bioBusy, setBioBusy] = useState(false)
   const [bioMsg, setBioMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [calBusy, setCalBusy] = useState(false)
@@ -41,6 +42,7 @@ export default function Settings({ accent, onAccentChange }: SettingsProps) {
         setSex(p.sex ?? '')
         setBirthYear(p.birthYear ? String(p.birthYear) : '')
         setHeightCm(p.heightCm ? String(p.heightCm) : '')
+        setStepLengthCm(p.stepLengthCm ? String(p.stepLengthCm) : '')
         setMaxHr(p.maxHr ? String(p.maxHr) : '')
         setRestingHr(p.restingHr ? String(p.restingHr) : '')
         setThresholdPace(p.thresholdPace)
@@ -57,6 +59,7 @@ export default function Settings({ accent, onAccentChange }: SettingsProps) {
       sex,
       birthYear: Number(birthYear) || 0,
       heightCm: Number(heightCm) || 0,
+      stepLengthCm: Number(stepLengthCm) || 0,
       maxHr: Number(maxHr) || 0,
       restingHr: Number(restingHr) || 0,
       thresholdPace,
@@ -72,6 +75,7 @@ export default function Settings({ accent, onAccentChange }: SettingsProps) {
       setSex(updated.sex ?? '')
       setBirthYear(updated.birthYear ? String(updated.birthYear) : '')
       setHeightCm(updated.heightCm ? String(updated.heightCm) : '')
+      setStepLengthCm(updated.stepLengthCm ? String(updated.stepLengthCm) : '')
       setBioMsg({ ok: true, text: 'Saved' })
     } catch (e) {
       setBioMsg({ ok: false, text: e instanceof ApiError ? e.message : 'Save failed' })
@@ -168,6 +172,7 @@ export default function Settings({ accent, onAccentChange }: SettingsProps) {
           <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>About You</h3>
           <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 16 }}>
             Body metrics used to personalize calorie and effort estimates. Kept private to your account.
+            Step length is used to estimate step counts from distance for runs and hikes.
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
             <div style={{ minWidth: 0 }}>
@@ -185,6 +190,10 @@ export default function Settings({ accent, onAccentChange }: SettingsProps) {
             <div style={{ minWidth: 0 }}>
               <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Height (cm)</label>
               <input className="input" type="number" min="100" max="250" placeholder="175" style={{ width: '100%' }} value={heightCm} onChange={e => setHeightCm(e.target.value)} />
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Step length (cm)</label>
+              <input className="input" type="number" min="30" max="200" placeholder="75" style={{ width: '100%' }} value={stepLengthCm} onChange={e => setStepLengthCm(e.target.value)} />
             </div>
             <div style={{ minWidth: 0 }}>
               <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Body weight (kg)</label>

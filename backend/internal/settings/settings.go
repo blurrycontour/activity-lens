@@ -41,6 +41,7 @@ type OIDC struct {
 	RedirectURL       string   `json:"redirectUrl"`
 	AdminGroup        string   `json:"adminGroup"`
 	ProviderName      string   `json:"providerName"`
+	LogoURL           string   `json:"logoUrl"`
 	AllowRegistration bool     `json:"allowRegistration"`
 	Scopes            []string `json:"scopes"`
 }
@@ -66,6 +67,7 @@ type UserPrefs struct {
 	RestingHR     int     `json:"restingHr"`
 	ThresholdPace string  `json:"thresholdPace"`
 	FTP           int     `json:"ftp"`
+	StepLengthCm  int     `json:"stepLengthCm"`
 }
 
 // Store persists settings and per-user last-login timestamps.
@@ -150,8 +152,8 @@ func (s *Store) SaveStorage(ctx context.Context, v Storage) error {
 func (s *Store) UserPreferences(ctx context.Context, userID int64) (UserPrefs, error) {
 	v := UserPrefs{CalorieMethod: "heart-rate", BodyWeightKg: 70}
 	err := s.db.QueryRowContext(ctx,
-		`SELECT calorie_method, body_weight_kg, sex, birth_year, height_cm, max_hr, resting_hr, threshold_pace, ftp FROM user_prefs WHERE user_id = ?`, userID).
-		Scan(&v.CalorieMethod, &v.BodyWeightKg, &v.Sex, &v.BirthYear, &v.HeightCm, &v.MaxHR, &v.RestingHR, &v.ThresholdPace, &v.FTP)
+		`SELECT calorie_method, body_weight_kg, sex, birth_year, height_cm, max_hr, resting_hr, threshold_pace, ftp, step_length_cm FROM user_prefs WHERE user_id = ?`, userID).
+		Scan(&v.CalorieMethod, &v.BodyWeightKg, &v.Sex, &v.BirthYear, &v.HeightCm, &v.MaxHR, &v.RestingHR, &v.ThresholdPace, &v.FTP, &v.StepLengthCm)
 	if errors.Is(err, sql.ErrNoRows) {
 		return v, nil
 	}
@@ -164,8 +166,8 @@ func (s *Store) UserPreferences(ctx context.Context, userID int64) (UserPrefs, e
 // SaveUserPreferences persists a user's calorie-estimation preferences.
 func (s *Store) SaveUserPreferences(ctx context.Context, userID int64, v UserPrefs) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO user_prefs (user_id, calorie_method, body_weight_kg, sex, birth_year, height_cm, max_hr, resting_hr, threshold_pace, ftp, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`INSERT INTO user_prefs (user_id, calorie_method, body_weight_kg, sex, birth_year, height_cm, max_hr, resting_hr, threshold_pace, ftp, step_length_cm, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(user_id) DO UPDATE SET
 		   calorie_method = excluded.calorie_method,
 		   body_weight_kg = excluded.body_weight_kg,
@@ -176,8 +178,9 @@ func (s *Store) SaveUserPreferences(ctx context.Context, userID int64, v UserPre
 		   resting_hr = excluded.resting_hr,
 		   threshold_pace = excluded.threshold_pace,
 		   ftp = excluded.ftp,
+		   step_length_cm = excluded.step_length_cm,
 		   updated_at = excluded.updated_at`,
-		userID, v.CalorieMethod, v.BodyWeightKg, v.Sex, v.BirthYear, v.HeightCm, v.MaxHR, v.RestingHR, v.ThresholdPace, v.FTP, time.Now().UTC().Format(time.RFC3339))
+		userID, v.CalorieMethod, v.BodyWeightKg, v.Sex, v.BirthYear, v.HeightCm, v.MaxHR, v.RestingHR, v.ThresholdPace, v.FTP, v.StepLengthCm, time.Now().UTC().Format(time.RFC3339))
 	return err
 }
 
@@ -293,6 +296,10 @@ func (s *Store) EffectiveOIDC(ctx context.Context) (OIDC, OIDCFields, error) {
 	if s, ok := lookup("AL_OIDC_PROVIDER_NAME"); ok {
 		v.ProviderName = s
 		ov["providerName"] = true
+	}
+	if s, ok := lookup("AL_OIDC_LOGO_URL"); ok {
+		v.LogoURL = s
+		ov["logoUrl"] = true
 	}
 	if s, ok := lookup("AL_OIDC_ALLOW_REGISTRATION"); ok {
 		v.AllowRegistration, _ = strconv.ParseBool(s)

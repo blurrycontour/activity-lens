@@ -17,6 +17,7 @@ export interface AuthFeatures {
   allowRegistration: boolean
   oidcEnabled: boolean
   oidcProviderName: string
+  oidcLogoUrl: string
 }
 
 export interface SessionInfo {
@@ -47,6 +48,7 @@ export interface OidcSettings {
   redirectUrl: string
   adminGroup: string
   providerName: string
+  logoUrl: string
   allowRegistration: boolean
   scopes: string[]
   overridden: Record<string, boolean>
@@ -72,6 +74,7 @@ export interface UserPreferences {
   restingHr: number
   thresholdPace: string
   ftp: number
+  stepLengthCm: number
 }
 
 export interface SmtpInput {
@@ -92,6 +95,7 @@ export interface OidcInput {
   redirectUrl: string
   adminGroup: string
   providerName: string
+  logoUrl: string
   allowRegistration: boolean
   scopes: string[]
 }

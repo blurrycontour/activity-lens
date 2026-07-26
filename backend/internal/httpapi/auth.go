@@ -31,6 +31,7 @@ func (s *Server) handleAuthConfig(w http.ResponseWriter, r *http.Request) {
 		"allowRegistration": s.cfg.AllowRegistration,
 		"oidcEnabled":       oidcCfg.Enabled,
 		"oidcProviderName":  oidcCfg.ProviderName,
+		"oidcLogoUrl":       oidcCfg.LogoURL,
 	})
 }
 

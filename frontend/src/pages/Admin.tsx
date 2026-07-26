@@ -191,6 +191,7 @@ function OidcSection({ settings, onSaved }: { settings: AdminSettings; onSaved: 
   const [redirectUrl, setRedirectUrl] = useState(s.redirectUrl)
   const [adminGroup, setAdminGroup] = useState(s.adminGroup)
   const [providerName, setProviderName] = useState(s.providerName)
+  const [logoUrl, setLogoUrl] = useState(s.logoUrl)
   const [allowRegistration, setAllowRegistration] = useState(s.allowRegistration)
   const [scopes, setScopes] = useState((s.scopes || []).join(' '))
   const [busy, setBusy] = useState(false)
@@ -200,7 +201,7 @@ function OidcSection({ settings, onSaved }: { settings: AdminSettings; onSaved: 
     setBusy(true); setMsg(null)
     const payload: OidcInput = {
       enabled, issuerUrl, clientId, clientSecret, redirectUrl,
-      adminGroup, providerName, allowRegistration,
+      adminGroup, providerName, logoUrl, allowRegistration,
       scopes: scopes.split(/\s+/).map(x => x.trim()).filter(Boolean),
     }
     try {
@@ -229,7 +230,8 @@ function OidcSection({ settings, onSaved }: { settings: AdminSettings; onSaved: 
           <input className="input" style={{ width: '100%' }} value={issuerUrl} disabled={ov.issuerUrl} onChange={e => setIssuerUrl(e.target.value)} />
         </Field>
         <Field label="Redirect URL" over={ov.redirectUrl}>
-          <input className="input" style={{ width: '100%' }} value={redirectUrl} disabled={ov.redirectUrl} onChange={e => setRedirectUrl(e.target.value)} />
+          <input className="input" style={{ width: '100%' }} value={redirectUrl} disabled={ov.redirectUrl} placeholder="https://your-domain/api/auth/oidc/callback" onChange={e => setRedirectUrl(e.target.value)} />
+          <span style={{ fontSize: 10, color: 'var(--text-3)' }}>Must end in <code>/api/auth/oidc/callback</code> and match the provider's allowed callback.</span>
         </Field>
         <Field label="Client ID" over={ov.clientId}>
           <input className="input" style={{ width: '100%' }} value={clientId} disabled={ov.clientId} onChange={e => setClientId(e.target.value)} />
@@ -241,6 +243,10 @@ function OidcSection({ settings, onSaved }: { settings: AdminSettings; onSaved: 
         </Field>
         <Field label="Provider Name" over={ov.providerName}>
           <input className="input" style={{ width: '100%' }} value={providerName} disabled={ov.providerName} onChange={e => setProviderName(e.target.value)} />
+        </Field>
+        <Field label="Logo URL" over={ov.logoUrl}>
+          <input className="input" style={{ width: '100%' }} value={logoUrl} disabled={ov.logoUrl} placeholder="https://example.com/logo.svg" onChange={e => setLogoUrl(e.target.value)} />
+          <span style={{ fontSize: 10, color: 'var(--text-3)' }}>Shown on the SSO button on the login screen.</span>
         </Field>
         <Field label="Admin Group" over={ov.adminGroup}>
           <input className="input" style={{ width: '100%' }} value={adminGroup} disabled={ov.adminGroup} onChange={e => setAdminGroup(e.target.value)} />

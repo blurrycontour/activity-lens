@@ -47,7 +47,7 @@ func (s *Service) Create(ctx context.Context, userID int64, in Input) (*Workout,
 		ElevTimeline:  in.ElevTimeline,
 		Notes:         strings.TrimSpace(in.Notes),
 	}
-	deriveMetrics(w)
+	deriveMetrics(w, in.StepLengthM)
 	if err := s.repo.Create(ctx, w); err != nil {
 		return nil, err
 	}
@@ -79,7 +79,7 @@ func (s *Service) Preview(in Input) (*Workout, error) {
 		ElevTimeline:  in.ElevTimeline,
 		Notes:         strings.TrimSpace(in.Notes),
 	}
-	deriveMetrics(w)
+	deriveMetrics(w, in.StepLengthM)
 	w.Date = w.StartTime.Format("2006-01-02")
 	return w, nil
 }
@@ -150,7 +150,7 @@ func (s *Service) Update(ctx context.Context, userID int64, id string, p Patch) 
 // Recalculate re-derives every computed metric of a workout from its recorded
 // route/timelines and the given calorie preferences, overwriting any manually
 // entered values. The name, type, date and notes are left untouched.
-func (s *Service) Recalculate(ctx context.Context, userID int64, id, calorieMethod string, weightKg float64, age int, sex string) (*Workout, error) {
+func (s *Service) Recalculate(ctx context.Context, userID int64, id, calorieMethod string, weightKg float64, age int, sex string, stepLengthM float64) (*Workout, error) {
 	w, err := s.repo.Get(ctx, userID, id)
 	if err != nil {
 		return nil, err
@@ -183,8 +183,8 @@ func (s *Service) Recalculate(ctx context.Context, userID int64, id, calorieMeth
 	}
 	w.AvgPace = 0
 	w.AvgSpeed = 0
-	w.Steps = estimateSteps(w.Type, w.Distance)
-	deriveMetrics(w)
+	w.Steps = estimateSteps(w.Type, w.Distance, stepLengthM)
+	deriveMetrics(w, stepLengthM)
 	w.Calories = EstimateCalories(w.Type, w.Duration, w.AvgHR, w.Distance, weightKg, age, sex, calorieMethod)
 	// Recalculation re-derives these values, so they are no longer manual.
 	w.CaloriesManual = false
@@ -287,7 +287,7 @@ func validate(in *Input) error {
 
 // deriveMetrics fills in avg pace/speed from distance & duration when possible,
 // and sorts route/timeline samples so downstream charts render correctly.
-func deriveMetrics(w *Workout) {
+func deriveMetrics(w *Workout, stepLengthM float64) {
 	if w.Distance > 0 && w.Duration > 0 {
 		km := w.Distance / 1000
 		hours := float64(w.Duration) / 3600
@@ -300,13 +300,14 @@ func deriveMetrics(w *Workout) {
 	sort.Slice(w.PaceTimeline, func(i, j int) bool { return w.PaceTimeline[i].T < w.PaceTimeline[j].T })
 	sort.Slice(w.ElevTimeline, func(i, j int) bool { return w.ElevTimeline[i].T < w.ElevTimeline[j].T })
 	if w.Steps == 0 {
-		w.Steps = estimateSteps(w.Type, w.Distance)
+		w.Steps = estimateSteps(w.Type, w.Distance, stepLengthM)
 	}
 }
 
-// estimateSteps approximates step count from distance using a per-activity
-// average stride length. Only foot-based activities produce a value.
-func estimateSteps(t Type, distanceMeters float64) int {
+// estimateSteps approximates step count from distance using the user's stride
+// length when provided (stepLengthM > 0), otherwise a per-activity average.
+// Only foot-based activities produce a value.
+func estimateSteps(t Type, distanceMeters, stepLengthM float64) int {
 	var stride float64
 	switch t {
 	case TypeRun:
@@ -315,6 +316,9 @@ func estimateSteps(t Type, distanceMeters float64) int {
 		stride = 0.75
 	default:
 		return 0
+	}
+	if stepLengthM > 0 {
+		stride = stepLengthM
 	}
 	if distanceMeters <= 0 {
 		return 0

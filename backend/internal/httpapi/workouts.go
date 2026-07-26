@@ -77,6 +77,9 @@ func (s *Server) handleCreateWorkout(w http.ResponseWriter, r *http.Request) {
 		Calories:      req.Calories,
 		Notes:         req.Notes,
 	}
+	if prefs, err := s.settings.UserPreferences(r.Context(), user.ID); err == nil {
+		in.StepLengthM = stepLengthMeters(prefs)
+	}
 	wk, err := s.workout.Create(r.Context(), user.ID, in)
 	if err != nil {
 		s.writeWorkoutError(w, err)
@@ -218,8 +221,9 @@ func (s *Server) parseWorkoutUpload(w http.ResponseWriter, r *http.Request, user
 	if name := r.FormValue("name"); name != "" {
 		in.Name = name
 	}
-	if in.Calories == 0 {
-		if prefs, err := s.settings.UserPreferences(r.Context(), userID); err == nil {
+	if prefs, err := s.settings.UserPreferences(r.Context(), userID); err == nil {
+		in.StepLengthM = stepLengthMeters(prefs)
+		if in.Calories == 0 {
 			in.Calories = estimateCalories(in, prefs)
 		}
 	}
@@ -228,6 +232,24 @@ func (s *Server) parseWorkoutUpload(w http.ResponseWriter, r *http.Request, user
 
 func estimateCalories(in workout.Input, prefs settings.UserPrefs) int {
 	return workout.EstimateCalories(in.Type, in.Duration, in.AvgHR, in.Distance, prefs.BodyWeightKg, ageFromPrefs(prefs), prefs.Sex, prefs.CalorieMethod)
+}
+
+// stepLengthMeters converts a user's stored stride length (cm) to metres, or 0
+// when unset so the workout service falls back to per-activity defaults.
+func stepLengthMeters(prefs settings.UserPrefs) float64 {
+	if prefs.StepLengthCm <= 0 {
+		return 0
+	}
+	return float64(prefs.StepLengthCm) / 100
+}
+
+// clampStepLength keeps a user-supplied stride length within a plausible human
+// range (cm); anything outside it is treated as unset (0 = activity default).
+func clampStepLength(cm int) int {
+	if cm < 30 || cm > 200 {
+		return 0
+	}
+	return cm
 }
 
 // ageFromPrefs returns the user's age derived from their birth year, or 0 when
@@ -250,7 +272,7 @@ func (s *Server) handleRecalculateWorkout(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusInternalServerError, "could not load preferences")
 		return
 	}
-	wk, err := s.workout.Recalculate(r.Context(), user.ID, r.PathValue("id"), prefs.CalorieMethod, prefs.BodyWeightKg, ageFromPrefs(prefs), prefs.Sex)
+	wk, err := s.workout.Recalculate(r.Context(), user.ID, r.PathValue("id"), prefs.CalorieMethod, prefs.BodyWeightKg, ageFromPrefs(prefs), prefs.Sex, stepLengthMeters(prefs))
 	if err != nil {
 		s.writeWorkoutError(w, err)
 		return
@@ -291,6 +313,7 @@ func (s *Server) handleSavePreferences(w http.ResponseWriter, r *http.Request) {
 		RestingHR     int     `json:"restingHr"`
 		ThresholdPace string  `json:"thresholdPace"`
 		FTP           int     `json:"ftp"`
+		StepLengthCm  int     `json:"stepLengthCm"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -328,6 +351,7 @@ func (s *Server) handleSavePreferences(w http.ResponseWriter, r *http.Request) {
 		RestingHR:     clampNonNeg(req.RestingHR),
 		ThresholdPace: strings.TrimSpace(req.ThresholdPace),
 		FTP:           clampNonNeg(req.FTP),
+		StepLengthCm:  clampStepLength(req.StepLengthCm),
 	}
 	if err := s.settings.SaveUserPreferences(r.Context(), user.ID, prefs); err != nil {
 		writeError(w, http.StatusInternalServerError, "could not save preferences")

@@ -44,16 +44,15 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 			"overridden":  smtpOv,
 		},
 		"oidc": map[string]any{
-			"enabled":           oidc.Enabled,
-			"issuerUrl":         oidc.IssuerURL,
-			"clientId":          oidc.ClientID,
-			"clientSecretSet":   oidc.ClientSecret != "",
-			"redirectUrl":       oidc.RedirectURL,
-			"adminGroup":        oidc.AdminGroup,
-			"providerName":      oidc.ProviderName,
-			"allowRegistration": oidc.AllowRegistration,
-			"scopes":            oidc.Scopes,
-			"overridden":        oidcOv,
+			"enabled":         oidc.Enabled,
+			"issuerUrl":       oidc.IssuerURL,
+			"clientId":        oidc.ClientID,
+			"clientSecretSet": oidc.ClientSecret != "",
+			"redirectUrl":     oidc.RedirectURL,
+			"adminGroup":      oidc.AdminGroup,
+			"providerName":    oidc.ProviderName, "logoUrl": oidc.LogoURL, "allowRegistration": oidc.AllowRegistration,
+			"scopes":     oidc.Scopes,
+			"overridden": oidcOv,
 		},
 		"storage": map[string]any{
 			"keepOriginalUploads": storage.KeepOriginalUploads,
@@ -137,6 +136,7 @@ func (s *Server) handleSaveOIDC(w http.ResponseWriter, r *http.Request) {
 		RedirectURL       string   `json:"redirectUrl"`
 		AdminGroup        string   `json:"adminGroup"`
 		ProviderName      string   `json:"providerName"`
+		LogoURL           string   `json:"logoUrl"`
 		AllowRegistration bool     `json:"allowRegistration"`
 		Scopes            []string `json:"scopes"`
 	}
@@ -166,6 +166,9 @@ func (s *Server) handleSaveOIDC(w http.ResponseWriter, r *http.Request) {
 	}
 	if !ov["providerName"] {
 		out.ProviderName = strings.TrimSpace(req.ProviderName)
+	}
+	if !ov["logoUrl"] {
+		out.LogoURL = strings.TrimSpace(req.LogoURL)
 	}
 	if !ov["allowRegistration"] {
 		out.AllowRegistration = req.AllowRegistration
