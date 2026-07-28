@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Check } from 'lucide-react'
+import { Check, Plus, Trash2 } from 'lucide-react'
 import { ACCENTS, applyAccent } from '../lib/theme'
+import { WORKOUT_TYPES, TYPE_ICON } from '../data/workouts'
+import { describeGoal, newGoal, type Goal } from '../lib/insights'
 import { api, ApiError } from '../lib/api'
 import { useLocalStorage } from '../lib/useLocalStorage'
 import {
@@ -44,6 +46,10 @@ export default function Settings({ accent, onAccentChange }: SettingsProps) {
   const [calBusy, setCalBusy] = useState(false)
   const [calMsg, setCalMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
+  const [goals, setGoals] = useState<Goal[]>([])
+  const [goalBusy, setGoalBusy] = useState(false)
+  const [goalMsg, setGoalMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
   const [maxHr, setMaxHr] = useState('')
   const [restingHr, setRestingHr] = useState('')
   const [thresholdPace, setThresholdPace] = useState('')
@@ -66,6 +72,13 @@ export default function Settings({ accent, onAccentChange }: SettingsProps) {
         setRestingHr(p.restingHr ? String(p.restingHr) : '')
         setThresholdPace(p.thresholdPace)
         setFtp(p.ftp ? String(p.ftp) : '')
+        setGoals((p.goals ?? []).map(g => ({
+          id: g.id || Math.random().toString(36).slice(2, 10),
+          count: g.count,
+          period: g.period === 'month' ? 'month' : 'week',
+          type: g.type as Goal['type'],
+          minKm: g.minKm,
+        })))
       })
       .catch(() => { /* fall back to defaults */ })
     return () => { active = false }
@@ -83,7 +96,26 @@ export default function Settings({ accent, onAccentChange }: SettingsProps) {
       restingHr: Number(restingHr) || 0,
       thresholdPace,
       ftp: Number(ftp) || 0,
+      goals,
     }
+  }
+
+  function updateGoal(index: number, patch: Partial<Goal>) {
+    setGoals(prev => prev.map((g, i) => i === index ? { ...g, ...patch } : g))
+  }
+
+  async function saveGoals() {
+    setGoalBusy(true); setGoalMsg(null)
+    try {
+      // Drop half-filled rows rather than rejecting the whole save.
+      const kept = goals.filter(g => g.count > 0)
+      setGoals(kept)
+      const updated = await api.savePreferences({ ...buildPayload(), goals: kept })
+      setGoals((updated.goals ?? []) as Goal[])
+      setGoalMsg({ ok: true, text: 'Saved' })
+    } catch (e) {
+      setGoalMsg({ ok: false, text: e instanceof ApiError ? e.message : 'Save failed' })
+    } finally { setGoalBusy(false) }
   }
 
   async function saveBio() {
@@ -203,6 +235,106 @@ export default function Settings({ accent, onAccentChange }: SettingsProps) {
           >
             {WINDOW_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 20 }}>
+            <label className="switch">
+              <input
+                type="checkbox"
+                checked={dashCfg.showDeltas !== false}
+                onChange={e => setDashCfg(prev => ({ ...prev, showDeltas: e.target.checked }))}
+              />
+              <span className="switch-track" />
+              Show change against the previous period
+            </label>
+            <label className="switch">
+              <input
+                type="checkbox"
+                checked={dashCfg.showSparklines !== false}
+                onChange={e => setDashCfg(prev => ({ ...prev, showSparklines: e.target.checked }))}
+              />
+              <span className="switch-track" />
+              Show trend sparklines on stat cards
+            </label>
+          </div>
+          <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8, lineHeight: 1.5 }}>
+            Change is measured against the equally long period immediately before your time
+            window, so it is unavailable when the window is set to All time.
+          </p>
+        </section>
+
+        {/* Training goals */}
+        <section className="card">
+          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Training Goals</h3>
+          <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 16 }}>
+            What a good week or month looks like for you — say two runs of at least 5 km a week,
+            plus two hikes a month. The dashboard tracks each one's streak separately. Distances are
+            matched against the figure shown on the workout, so a run listed as 5.0 km counts toward
+            a 5 km goal.
+          </p>
+
+          {goals.length === 0 && (
+            <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 12 }}>
+              No goals yet. Add one to start tracking a streak.
+            </p>
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
+            {goals.map((g, i) => (
+              <div key={g.id} className="goal-row">
+                <div style={{ minWidth: 0 }}>
+                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>How many</label>
+                  <input
+                    className="input" type="number" min="1" max="93" style={{ width: '100%' }}
+                    value={g.count || ''}
+                    onChange={e => updateGoal(i, { count: Number(e.target.value) || 0 })}
+                  />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Sport</label>
+                  <select className="input" style={{ width: '100%' }} value={g.type} onChange={e => updateGoal(i, { type: e.target.value as Goal['type'] })}>
+                    <option value="">Any activity</option>
+                    {WORKOUT_TYPES.map(t => <option key={t} value={t}>{TYPE_ICON[t]} {t}</option>)}
+                  </select>
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Per</label>
+                  <select className="input" style={{ width: '100%' }} value={g.period} onChange={e => updateGoal(i, { period: e.target.value as Goal['period'] })}>
+                    <option value="week">Week</option>
+                    <option value="month">Month</option>
+                  </select>
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Min km</label>
+                  <input
+                    className="input" type="number" min="0" step="0.5" placeholder="any" style={{ width: '100%' }}
+                    value={g.minKm || ''}
+                    onChange={e => updateGoal(i, { minKm: Number(e.target.value) || 0 })}
+                  />
+                </div>
+                <button
+                  className="btn-icon"
+                  onClick={() => setGoals(prev => prev.filter((_, j) => j !== i))}
+                  title="Remove goal"
+                  style={{ alignSelf: 'end', marginBottom: 1, color: '#ef4444' }}
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <button className="btn btn-ghost" onClick={() => setGoals(prev => [...prev, newGoal()])} disabled={goals.length >= 12}>
+              <Plus size={14} /> Add goal
+            </button>
+            <button className="btn btn-primary" onClick={saveGoals} disabled={goalBusy} style={{ opacity: goalBusy ? 0.5 : 1 }}>Save</button>
+            {goalMsg && <span style={{ fontSize: 12, color: goalMsg.ok ? 'var(--primary)' : 'var(--red, #dc2626)' }}>{goalMsg.text}</span>}
+          </div>
+          {goals.length > 0 && (
+            <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 12, lineHeight: 1.6 }}>
+              {goals.filter(g => g.count > 0).map(describeGoal).join(' · ')}
+            </p>
+          )}
         </section>
 
         {/* Charts */}

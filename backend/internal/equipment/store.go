@@ -37,6 +37,17 @@ type SQLiteRepository struct {
 // NewSQLiteRepository builds a SQLite-backed equipment repository.
 func NewSQLiteRepository(db *sql.DB) *SQLiteRepository { return &SQLiteRepository{db: db} }
 
+// equipmentCols selects an equipment row plus its usage aggregates. The three
+// correlated subqueries scan the same small join table and keep the query a
+// single round trip, rather than fetching every linked workout to sum in Go.
+const equipmentCols = `e.id, e.user_id, e.name, e.type, e.brand, e.model, e.notes, e.retired,
+	e.retire_at_km, e.created_at, e.updated_at,
+	(SELECT COUNT(*) FROM workout_equipment we WHERE we.equipment_id = e.id) AS workout_count,
+	(SELECT COALESCE(SUM(w.distance), 0) FROM workout_equipment we
+	   JOIN workouts w ON w.id = we.workout_id WHERE we.equipment_id = e.id) AS total_distance,
+	(SELECT COALESCE(SUM(w.duration), 0) FROM workout_equipment we
+	   JOIN workouts w ON w.id = we.workout_id WHERE we.equipment_id = e.id) AS total_duration`
+
 func boolToInt(b bool) int {
 	if b {
 		return 1
@@ -49,9 +60,9 @@ func (r *SQLiteRepository) Create(ctx context.Context, e *Equipment) error {
 	e.CreatedAt = now
 	e.UpdatedAt = now
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO equipment (id, user_id, name, type, brand, model, notes, retired, created_at, updated_at)
-		 VALUES (?,?,?,?,?,?,?,?,?,?)`,
-		e.ID, e.UserID, e.Name, e.Type, e.Brand, e.Model, e.Notes, boolToInt(e.Retired), now, now)
+		`INSERT INTO equipment (id, user_id, name, type, brand, model, notes, retired, retire_at_km, created_at, updated_at)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+		e.ID, e.UserID, e.Name, e.Type, e.Brand, e.Model, e.Notes, boolToInt(e.Retired), e.RetireAtKm, now, now)
 	if err != nil {
 		return fmt.Errorf("insert equipment: %w", err)
 	}
@@ -60,8 +71,7 @@ func (r *SQLiteRepository) Create(ctx context.Context, e *Equipment) error {
 
 func (r *SQLiteRepository) Get(ctx context.Context, userID int64, id string) (*Equipment, error) {
 	row := r.db.QueryRowContext(ctx,
-		`SELECT e.id, e.user_id, e.name, e.type, e.brand, e.model, e.notes, e.retired, e.created_at, e.updated_at,
-		        (SELECT COUNT(*) FROM workout_equipment we WHERE we.equipment_id = e.id) AS workout_count
+		`SELECT `+equipmentCols+`
 		 FROM equipment e WHERE e.id = ? AND e.user_id = ?`, id, userID)
 	e, err := scanEquipment(row)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -72,8 +82,7 @@ func (r *SQLiteRepository) Get(ctx context.Context, userID int64, id string) (*E
 
 func (r *SQLiteRepository) List(ctx context.Context, userID int64) ([]Equipment, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT e.id, e.user_id, e.name, e.type, e.brand, e.model, e.notes, e.retired, e.created_at, e.updated_at,
-		        (SELECT COUNT(*) FROM workout_equipment we WHERE we.equipment_id = e.id) AS workout_count
+		`SELECT `+equipmentCols+`
 		 FROM equipment e WHERE e.user_id = ? ORDER BY e.retired ASC, e.created_at DESC`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("query equipment: %w", err)
@@ -93,9 +102,9 @@ func (r *SQLiteRepository) List(ctx context.Context, userID int64) ([]Equipment,
 func (r *SQLiteRepository) Update(ctx context.Context, e *Equipment) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	res, err := r.db.ExecContext(ctx,
-		`UPDATE equipment SET name=?, type=?, brand=?, model=?, notes=?, retired=?, updated_at=?
+		`UPDATE equipment SET name=?, type=?, brand=?, model=?, notes=?, retired=?, retire_at_km=?, updated_at=?
 		 WHERE id=? AND user_id=?`,
-		e.Name, e.Type, e.Brand, e.Model, e.Notes, boolToInt(e.Retired), now, e.ID, e.UserID)
+		e.Name, e.Type, e.Brand, e.Model, e.Notes, boolToInt(e.Retired), e.RetireAtKm, now, e.ID, e.UserID)
 	if err != nil {
 		return fmt.Errorf("update equipment: %w", err)
 	}
@@ -145,7 +154,8 @@ func (r *SQLiteRepository) LinkedWorkouts(ctx context.Context, userID int64, equ
 
 func (r *SQLiteRepository) ForWorkout(ctx context.Context, userID int64, workoutID string) ([]Equipment, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT e.id, e.user_id, e.name, e.type, e.brand, e.model, e.notes, e.retired, e.created_at, e.updated_at, 0
+		`SELECT e.id, e.user_id, e.name, e.type, e.brand, e.model, e.notes, e.retired, e.retire_at_km,
+		        e.created_at, e.updated_at, 0, 0, 0
 		 FROM workout_equipment we
 		 JOIN equipment e ON e.id = we.equipment_id
 		 WHERE we.workout_id = ? AND e.user_id = ?
@@ -200,7 +210,8 @@ type scanner interface {
 func scanEquipment(s scanner) (*Equipment, error) {
 	var e Equipment
 	var retired int
-	if err := s.Scan(&e.ID, &e.UserID, &e.Name, &e.Type, &e.Brand, &e.Model, &e.Notes, &retired, &e.CreatedAt, &e.UpdatedAt, &e.WorkoutCount); err != nil {
+	if err := s.Scan(&e.ID, &e.UserID, &e.Name, &e.Type, &e.Brand, &e.Model, &e.Notes, &retired,
+		&e.RetireAtKm, &e.CreatedAt, &e.UpdatedAt, &e.WorkoutCount, &e.TotalDistance, &e.TotalDuration); err != nil {
 		return nil, err
 	}
 	e.Retired = retired != 0

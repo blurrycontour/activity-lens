@@ -7,6 +7,10 @@ export type StatCardId = 'distance' | 'time' | 'elevation' | 'calories' | 'avgHr
 export interface DashboardConfig {
   cards: StatCardId[]
   windowDays: number // 0 = all time
+  /** Show period-on-period change under each stat card. */
+  showDeltas?: boolean
+  /** Show the 8-bucket trend line inside each stat card. */
+  showSparklines?: boolean
 }
 
 export const STAT_CARDS: { id: StatCardId; label: string }[] = [
@@ -30,6 +34,8 @@ export const DASHBOARD_CFG_KEY = 'al_dash_cfg'
 export const DEFAULT_DASHBOARD_CONFIG: DashboardConfig = {
   cards: STAT_CARDS.map(c => c.id),
   windowDays: 30,
+  showDeltas: true,
+  showSparklines: true,
 }
 
 export { rangeLabel as windowLabel } from './range'

@@ -25,7 +25,19 @@ function typeIcon(type: string, size = 18) {
   }
 }
 
-const EMPTY: EquipmentInput = { name: '', type: 'shoes', brand: '', model: '', notes: '', retired: false }
+const EMPTY: EquipmentInput = { name: '', type: 'shoes', brand: '', model: '', notes: '', retired: false, retireAtKm: 0 }
+
+/** Replacement distance suggested per type when the user hasn't set one. */
+const DEFAULT_RETIRE_KM: Record<string, number> = { shoes: 600 }
+
+/** A gear item's wear against its replacement distance, or null when the type
+ *  has no distance-based wear limit (a watch doesn't wear out by the km). */
+function wearOf(e: { type: string; totalDistance?: number; retireAtKm?: number }) {
+  const limitKm = e.retireAtKm && e.retireAtKm > 0 ? e.retireAtKm : DEFAULT_RETIRE_KM[e.type] ?? 0
+  const km = Math.round((e.totalDistance ?? 0) / 1000)
+  if (limitKm <= 0) return { km, limitKm: 0, pct: 0 }
+  return { km, limitKm, pct: km / limitKm }
+}
 
 export default function EquipmentPage({ onSelectWorkout }: EquipmentPageProps) {
   const [items, setItems] = useState<Equipment[]>([])
@@ -34,7 +46,7 @@ export default function EquipmentPage({ onSelectWorkout }: EquipmentPageProps) {
   const [detail, setDetail] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState<string>('all')
-  const [sortBy, setSortBy] = useState<'name' | 'workouts' | 'type'>('name')
+  const [sortBy, setSortBy] = useState<'name' | 'workouts' | 'distance' | 'wear' | 'type'>('name')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -59,6 +71,8 @@ export default function EquipmentPage({ onSelectWorkout }: EquipmentPageProps) {
     }
     result.sort((a, b) => {
       if (sortBy === 'workouts') return b.workoutCount - a.workoutCount
+      if (sortBy === 'distance') return (b.totalDistance ?? 0) - (a.totalDistance ?? 0)
+      if (sortBy === 'wear') return wearOf(b).pct - wearOf(a).pct
       if (sortBy === 'type') return a.type.localeCompare(b.type) || a.name.localeCompare(b.name)
       return a.name.localeCompare(b.name)
     })
@@ -101,6 +115,8 @@ export default function EquipmentPage({ onSelectWorkout }: EquipmentPageProps) {
             <select className="select" value={sortBy} onChange={e => setSortBy(e.target.value as typeof sortBy)}>
               <option value="name">By Name</option>
               <option value="workouts">By Workouts</option>
+              <option value="distance">By Distance</option>
+              <option value="wear">By Wear</option>
               <option value="type">By Type</option>
             </select>
           </div>
@@ -143,9 +159,27 @@ export default function EquipmentPage({ onSelectWorkout }: EquipmentPageProps) {
                   </div>
                   <ChevronRight size={16} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
                 </div>
-                <div style={{ marginTop: 12, fontSize: 13, color: 'var(--text-2)' }}>
-                  {e.workoutCount} {e.workoutCount === 1 ? 'workout' : 'workouts'}
+                <div style={{ marginTop: 12, fontSize: 13, color: 'var(--text-2)', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <span>{e.workoutCount} {e.workoutCount === 1 ? 'workout' : 'workouts'}</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-3)' }}>{wearOf(e).km.toLocaleString()} km</span>
                 </div>
+                {(() => {
+                  const wear = wearOf(e)
+                  if (wear.limitKm <= 0) return null
+                  return (
+                    <div style={{ marginTop: 8 }}>
+                      <div style={{ background: 'var(--bg-3)', borderRadius: 99, height: 4 }}>
+                        <div style={{
+                          width: `${Math.min(wear.pct, 1) * 100}%`, height: '100%', borderRadius: 99,
+                          background: wear.pct >= 1 ? '#ef4444' : wear.pct >= 0.8 ? '#f59e0b' : 'var(--primary)',
+                        }} />
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)', marginTop: 4 }}>
+                        {Math.round(wear.pct * 100)}% of {wear.limitKm.toLocaleString()} km
+                      </div>
+                    </div>
+                  )
+                })()}
               </div>
             ))}
           </div>
@@ -215,6 +249,28 @@ function EquipmentDetail({ id, onBack, onSelectWorkout, onEdit, onDeleted }: {
             <button className="btn btn-ghost" style={{ color: '#ef4444' }} onClick={() => setConfirmDelete(true)}><Trash2 size={15} /> Delete</button>
           </div>
         </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 12, marginTop: 16 }}>
+          <div className="stat-chip">
+            <span className="label">Workouts</span>
+            <span className="value" style={{ fontSize: 14 }}>{data.workoutCount}</span>
+          </div>
+          <div className="stat-chip">
+            <span className="label">Distance</span>
+            <span className="value" style={{ fontSize: 14 }}>{wearOf(data).km.toLocaleString()} km</span>
+          </div>
+          <div className="stat-chip">
+            <span className="label">Time</span>
+            <span className="value" style={{ fontSize: 14 }}>{Math.round((data.totalDuration ?? 0) / 3600)} h</span>
+          </div>
+          {wearOf(data).limitKm > 0 && (
+            <div className="stat-chip">
+              <span className="label">Wear</span>
+              <span className="value" style={{ fontSize: 14, color: wearOf(data).pct >= 1 ? '#ef4444' : wearOf(data).pct >= 0.8 ? '#f59e0b' : undefined }}>
+                {Math.round(wearOf(data).pct * 100)}%
+              </span>
+            </div>
+          )}
+        </div>
         {data.notes && <div style={{ marginTop: 14, fontSize: 14, color: 'var(--text-2)', whiteSpace: 'pre-wrap' }}>{data.notes}</div>}
       </div>
 
@@ -275,7 +331,7 @@ function EquipmentForm({ initial, onClose, onSaved }: {
   onSaved: () => void
 }) {
   const [form, setForm] = useState<EquipmentInput>(initial
-    ? { name: initial.name, type: initial.type, brand: initial.brand, model: initial.model, notes: initial.notes, retired: initial.retired }
+    ? { name: initial.name, type: initial.type, brand: initial.brand, model: initial.model, notes: initial.notes, retired: initial.retired, retireAtKm: initial.retireAtKm ?? 0 }
     : EMPTY)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -325,6 +381,15 @@ function EquipmentForm({ initial, onClose, onSaved }: {
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Model</label>
               <input className="input" style={{ width: '100%' }} value={form.model} onChange={e => setForm({ ...form, model: e.target.value })} placeholder="e.g. Air Zoom" />
+            </div>
+            <div>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Replace at (km)</label>
+              <input
+                className="input" type="number" min="0" style={{ width: '100%' }}
+                value={form.retireAtKm || ''}
+                onChange={e => setForm({ ...form, retireAtKm: Number(e.target.value) || 0 })}
+                placeholder={String(DEFAULT_RETIRE_KM[form.type] ?? 0) === '0' ? 'n/a for this type' : String(DEFAULT_RETIRE_KM[form.type])}
+              />
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Notes (optional)</label>

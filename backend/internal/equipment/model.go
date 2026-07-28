@@ -15,8 +15,15 @@ type Equipment struct {
 	Notes        string `json:"notes"`
 	Retired      bool   `json:"retired"`
 	WorkoutCount int    `json:"workoutCount"`
-	CreatedAt    string `json:"createdAt"`
-	UpdatedAt    string `json:"updatedAt"`
+	// TotalDistance and TotalDuration aggregate every workout this gear is
+	// linked to, so callers can show mileage without fetching each workout.
+	TotalDistance float64 `json:"totalDistance"` // meters
+	TotalDuration int     `json:"totalDuration"` // seconds
+	// RetireAtKm is the distance at which the user wants to replace this item.
+	// Zero means "use the default for this equipment type".
+	RetireAtKm float64 `json:"retireAtKm"`
+	CreatedAt  string  `json:"createdAt"`
+	UpdatedAt  string  `json:"updatedAt"`
 }
 
 // LinkedWorkout is a lightweight summary of a workout an equipment is used in.
@@ -31,23 +38,25 @@ type LinkedWorkout struct {
 
 // Input carries the fields a caller may set when creating equipment.
 type Input struct {
-	Name    string
-	Type    string
-	Brand   string
-	Model   string
-	Notes   string
-	Retired bool
+	Name       string
+	Type       string
+	Brand      string
+	Model      string
+	Notes      string
+	Retired    bool
+	RetireAtKm float64
 }
 
 // Patch carries optional edits to a piece of equipment; nil fields are left
 // unchanged.
 type Patch struct {
-	Name    *string
-	Type    *string
-	Brand   *string
-	Model   *string
-	Notes   *string
-	Retired *bool
+	Name       *string
+	Type       *string
+	Brand      *string
+	Model      *string
+	Notes      *string
+	Retired    *bool
+	RetireAtKm *float64
 }
 
 var validTypes = map[string]struct{}{
@@ -58,4 +67,16 @@ var validTypes = map[string]struct{}{
 func ValidType(t string) bool {
 	_, ok := validTypes[t]
 	return ok
+}
+
+// DefaultRetireKm is the distance at which each equipment type is conventionally
+// replaced. Used when the user has not set their own threshold; types with no
+// meaningful wear limit return 0 and are never nudged about.
+func DefaultRetireKm(t string) float64 {
+	switch t {
+	case "shoes":
+		return 600
+	default:
+		return 0
+	}
 }

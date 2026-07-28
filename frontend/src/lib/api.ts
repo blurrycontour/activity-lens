@@ -75,6 +75,19 @@ export interface UserPreferences {
   thresholdPace: string
   ftp: number
   stepLengthCm: number
+  /** Training goals tracked on the dashboard; empty means none set. */
+  goals: ApiGoal[]
+}
+
+export interface ApiGoal {
+  id: string
+  /** Qualifying activities required per period. */
+  count: number
+  period: 'week' | 'month'
+  /** Activity type the goal applies to, or '' for any. */
+  type: string
+  /** Minimum distance (km) for an activity to count. */
+  minKm: number
 }
 
 export interface SmtpInput {
@@ -268,6 +281,11 @@ export interface Equipment {
   notes: string
   retired: boolean
   workoutCount: number
+  /** Summed across every linked workout. */
+  totalDistance: number // meters
+  totalDuration: number // seconds
+  /** User's own replacement distance; 0 means use the per-type default. */
+  retireAtKm: number
   createdAt: string
   updatedAt: string
 }
@@ -279,6 +297,7 @@ export interface EquipmentInput {
   model: string
   notes: string
   retired: boolean
+  retireAtKm?: number
 }
 
 export interface LinkedWorkout {

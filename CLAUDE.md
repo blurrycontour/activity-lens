@@ -1,5 +1,5 @@
 ## Development
-The development of the app needs to happen in a maintainable and efficient way. At any point in time, if you come across bad implementation or better ideas, do let me know and then the way forward can be decided. Always keep in mind that the data would keep incoming for many years via many users, on both mobile and desktop.
+The development of the app needs to happen in a maintainable and efficient way. At any point in time, if you come across bad implementation or better ideas, do let me know and then the way forward can be decided. This app is intended for long-term use by several users, on both mobile and desktop.
 
 Less code is better than lot of sloppy code. Avoid unnecessary complexity and keep the codebase clean and maintainable. Always write code with future developers in mind, including yourself.
 
@@ -21,3 +21,7 @@ Keep in mind that this project would be used by handful number of active users o
 Stack: Sqlite OR Postgres
 
 Currently project uses Sqlite for simplicity, but all the backend should be compatible with Postgres as well, to be able to switch at any time in future.
+
+
+## Deployment
+Final deployment will be via Docker Compose and a local instance is running on port 9090.

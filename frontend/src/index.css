@@ -815,3 +815,112 @@ body {
 @media (min-width: 769px) {
   .bottom-bar { display: none !important; }
 }
+
+/* Training-goal editor row: four fields plus a remove button on desktop,
+   stacking into a two-column grid on narrow screens. */
+.goal-row {
+  display: grid;
+  grid-template-columns: 90px 1fr 110px 100px auto;
+  gap: 8px;
+  align-items: start;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-3);
+}
+@media (max-width: 640px) {
+  .goal-row { grid-template-columns: 1fr 1fr; }
+  .goal-row > button { grid-column: 1 / -1; justify-self: end; }
+}
+
+/* ── Goal tile: the numbers carry the motivation, so they lead and everything
+   else recedes behind a divider. ── */
+.goal-tile { display: flex; flex-direction: column; gap: 10px; }
+
+.goal-tile-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.goal-figure {
+  display: flex;
+  align-items: baseline;
+  gap: 1px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  flex-shrink: 0;
+  letter-spacing: -0.05em;
+}
+.goal-figure-current {
+  font-size: 40px;
+  font-weight: 700;
+  color: var(--text);
+  transition: color 0.2s ease, text-shadow 0.2s ease;
+}
+/* Hitting the target is the moment worth celebrating, so the number takes the
+   accent and a soft glow rather than just changing colour. */
+.goal-tile.met .goal-figure-current {
+  color: var(--primary);
+  text-shadow: 0 0 22px var(--primary-glow);
+}
+.goal-figure-total {
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--text-3);
+  opacity: 0.75;
+}
+
+.goal-divider {
+  width: 1px;
+  align-self: stretch;
+  min-height: 32px;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+/* Supporting copy sits behind the figure in the visual hierarchy. */
+.goal-meta {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-3);
+  opacity: 0.85;
+}
+.goal-meta-streak {
+  display: block;
+  margin-top: 3px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+.goal-flame {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 3px 9px;
+  border-radius: 99px;
+  background: var(--primary-dim);
+  color: var(--primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.goal-history { display: flex; gap: 4px; }
+.goal-history span {
+  flex: 1;
+  height: 6px;
+  border-radius: 99px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+}
+.goal-history span.met { background: var(--primary); border-color: transparent; }
+
+@media (max-width: 480px) {
+  .goal-figure-current { font-size: 34px; }
+}

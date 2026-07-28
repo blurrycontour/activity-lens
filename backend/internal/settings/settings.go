@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -68,6 +69,20 @@ type UserPrefs struct {
 	ThresholdPace string  `json:"thresholdPace"`
 	FTP           int     `json:"ftp"`
 	StepLengthCm  int     `json:"stepLengthCm"`
+	// Goals the dashboard tracks, e.g. two 5 km runs a week plus two hikes a
+	// month. Empty means the user has not set any.
+	Goals []Goal `json:"goals"`
+}
+
+// Goal is one training target: `Count` qualifying activities per `Period`.
+type Goal struct {
+	// ID is client-generated and only needs to be unique within a user's list;
+	// it exists so the settings editor can key rows across edits.
+	ID     string  `json:"id"`
+	Count  int     `json:"count"`
+	Period string  `json:"period"` // "week" or "month"
+	Type   string  `json:"type"`   // activity type, or "" for any
+	MinKm  float64 `json:"minKm"`  // minimum distance to qualify; 0 for none
 }
 
 // Store persists settings and per-user last-login timestamps.
@@ -150,24 +165,52 @@ func (s *Store) SaveStorage(ctx context.Context, v Storage) error {
 // UserPreferences returns the calorie-estimation preferences for a user,
 // falling back to sensible defaults when the user has never saved any.
 func (s *Store) UserPreferences(ctx context.Context, userID int64) (UserPrefs, error) {
-	v := UserPrefs{CalorieMethod: "heart-rate", BodyWeightKg: 70}
+	v := UserPrefs{CalorieMethod: "heart-rate", BodyWeightKg: 70, Goals: []Goal{}}
+	var (
+		goalsJSON   string
+		legacyCount int
+		legacyType  string
+		legacyMinKm float64
+	)
 	err := s.db.QueryRowContext(ctx,
-		`SELECT calorie_method, body_weight_kg, sex, birth_year, height_cm, max_hr, resting_hr, threshold_pace, ftp, step_length_cm FROM user_prefs WHERE user_id = ?`, userID).
-		Scan(&v.CalorieMethod, &v.BodyWeightKg, &v.Sex, &v.BirthYear, &v.HeightCm, &v.MaxHR, &v.RestingHR, &v.ThresholdPace, &v.FTP, &v.StepLengthCm)
+		`SELECT calorie_method, body_weight_kg, sex, birth_year, height_cm, max_hr, resting_hr, threshold_pace, ftp, step_length_cm,
+		        goals, weekly_goal_count, weekly_goal_type, weekly_goal_min_km FROM user_prefs WHERE user_id = ?`, userID).
+		Scan(&v.CalorieMethod, &v.BodyWeightKg, &v.Sex, &v.BirthYear, &v.HeightCm, &v.MaxHR, &v.RestingHR, &v.ThresholdPace, &v.FTP, &v.StepLengthCm,
+			&goalsJSON, &legacyCount, &legacyType, &legacyMinKm)
 	if errors.Is(err, sql.ErrNoRows) {
 		return v, nil
 	}
 	if err != nil {
 		return UserPrefs{}, err
 	}
+	if goalsJSON != "" {
+		if err := json.Unmarshal([]byte(goalsJSON), &v.Goals); err != nil {
+			return UserPrefs{}, fmt.Errorf("parse goals: %w", err)
+		}
+	} else if legacyCount > 0 {
+		// Seed from the single weekly goal this user set before goals became a
+		// list. Their next save writes it back as JSON and this stops firing.
+		v.Goals = []Goal{{ID: "legacy", Count: legacyCount, Period: "week", Type: legacyType, MinKm: legacyMinKm}}
+	}
+	if v.Goals == nil {
+		v.Goals = []Goal{}
+	}
 	return v, nil
 }
 
 // SaveUserPreferences persists a user's calorie-estimation preferences.
 func (s *Store) SaveUserPreferences(ctx context.Context, userID int64, v UserPrefs) error {
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO user_prefs (user_id, calorie_method, body_weight_kg, sex, birth_year, height_cm, max_hr, resting_hr, threshold_pace, ftp, step_length_cm, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	if v.Goals == nil {
+		v.Goals = []Goal{}
+	}
+	goalsJSON, err := json.Marshal(v.Goals)
+	if err != nil {
+		return fmt.Errorf("encode goals: %w", err)
+	}
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO user_prefs (user_id, calorie_method, body_weight_kg, sex, birth_year, height_cm, max_hr, resting_hr, threshold_pace, ftp, step_length_cm,
+		                         goals, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(user_id) DO UPDATE SET
 		   calorie_method = excluded.calorie_method,
 		   body_weight_kg = excluded.body_weight_kg,
@@ -179,8 +222,10 @@ func (s *Store) SaveUserPreferences(ctx context.Context, userID int64, v UserPre
 		   threshold_pace = excluded.threshold_pace,
 		   ftp = excluded.ftp,
 		   step_length_cm = excluded.step_length_cm,
+		   goals = excluded.goals,
 		   updated_at = excluded.updated_at`,
-		userID, v.CalorieMethod, v.BodyWeightKg, v.Sex, v.BirthYear, v.HeightCm, v.MaxHR, v.RestingHR, v.ThresholdPace, v.FTP, v.StepLengthCm, time.Now().UTC().Format(time.RFC3339))
+		userID, v.CalorieMethod, v.BodyWeightKg, v.Sex, v.BirthYear, v.HeightCm, v.MaxHR, v.RestingHR, v.ThresholdPace, v.FTP, v.StepLengthCm,
+		string(goalsJSON), time.Now().UTC().Format(time.RFC3339))
 	return err
 }
 

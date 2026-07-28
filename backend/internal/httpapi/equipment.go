@@ -28,6 +28,9 @@ type equipmentRequest struct {
 	Model   string `json:"model"`
 	Notes   string `json:"notes"`
 	Retired bool   `json:"retired"`
+	// RetireAtKm is the user's own replacement threshold; 0 falls back to the
+	// per-type default.
+	RetireAtKm float64 `json:"retireAtKm"`
 }
 
 func (s *Server) handleCreateEquipment(w http.ResponseWriter, r *http.Request) {
@@ -39,6 +42,7 @@ func (s *Server) handleCreateEquipment(w http.ResponseWriter, r *http.Request) {
 	}
 	e, err := s.equipment.Create(r.Context(), user.ID, equipment.Input{
 		Name: req.Name, Type: req.Type, Brand: req.Brand, Model: req.Model, Notes: req.Notes, Retired: req.Retired,
+		RetireAtKm: req.RetireAtKm,
 	})
 	if err != nil {
 		s.writeEquipmentError(w, err)
@@ -69,12 +73,13 @@ func (s *Server) handleGetEquipment(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handlePatchEquipment(w http.ResponseWriter, r *http.Request) {
 	user := httpmw.UserFrom(r)
 	var req struct {
-		Name    *string `json:"name"`
-		Type    *string `json:"type"`
-		Brand   *string `json:"brand"`
-		Model   *string `json:"model"`
-		Notes   *string `json:"notes"`
-		Retired *bool   `json:"retired"`
+		Name       *string  `json:"name"`
+		Type       *string  `json:"type"`
+		Brand      *string  `json:"brand"`
+		Model      *string  `json:"model"`
+		Notes      *string  `json:"notes"`
+		Retired    *bool    `json:"retired"`
+		RetireAtKm *float64 `json:"retireAtKm"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -82,6 +87,7 @@ func (s *Server) handlePatchEquipment(w http.ResponseWriter, r *http.Request) {
 	}
 	e, err := s.equipment.Update(r.Context(), user.ID, r.PathValue("id"), equipment.Patch{
 		Name: req.Name, Type: req.Type, Brand: req.Brand, Model: req.Model, Notes: req.Notes, Retired: req.Retired,
+		RetireAtKm: req.RetireAtKm,
 	})
 	if err != nil {
 		s.writeEquipmentError(w, err)

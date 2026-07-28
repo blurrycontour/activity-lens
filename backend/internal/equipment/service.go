@@ -43,6 +43,8 @@ func (s *Service) Create(ctx context.Context, userID int64, in Input) (*Equipmen
 		Model:   strings.TrimSpace(in.Model),
 		Notes:   strings.TrimSpace(in.Notes),
 		Retired: in.Retired,
+
+		RetireAtKm: max(in.RetireAtKm, 0),
 	}
 	if err := s.repo.Create(ctx, e); err != nil {
 		return nil, err
@@ -84,6 +86,9 @@ func (s *Service) Update(ctx context.Context, userID int64, id string, p Patch) 
 	}
 	if p.Notes != nil {
 		e.Notes = strings.TrimSpace(*p.Notes)
+	}
+	if p.RetireAtKm != nil {
+		e.RetireAtKm = max(*p.RetireAtKm, 0)
 	}
 	if p.Retired != nil {
 		e.Retired = *p.Retired

@@ -340,6 +340,14 @@ func (s *Server) handleSavePreferences(w http.ResponseWriter, r *http.Request) {
 		ThresholdPace string  `json:"thresholdPace"`
 		FTP           int     `json:"ftp"`
 		StepLengthCm  int     `json:"stepLengthCm"`
+
+		Goals []struct {
+			ID     string  `json:"id"`
+			Count  int     `json:"count"`
+			Period string  `json:"period"`
+			Type   string  `json:"type"`
+			MinKm  float64 `json:"minKm"`
+		} `json:"goals"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -367,6 +375,33 @@ func (s *Server) handleSavePreferences(w http.ResponseWriter, r *http.Request) {
 	if birthYear != 0 && (birthYear < 1900 || birthYear > time.Now().UTC().Year()) {
 		birthYear = 0
 	}
+	// Goals are validated individually and silently dropped when they could
+	// never be met, so one bad row can't reject an otherwise valid save.
+	goals := make([]settings.Goal, 0, len(req.Goals))
+	for _, g := range req.Goals {
+		if g.Count <= 0 {
+			continue
+		}
+		period := g.Period
+		if period != "week" && period != "month" {
+			period = "week"
+		}
+		// An empty type means "any activity counts".
+		typ := g.Type
+		if typ != "" && !workout.ValidType(workout.Type(typ)) {
+			typ = ""
+		}
+		goals = append(goals, settings.Goal{
+			ID:     g.ID,
+			Count:  min(g.Count, maxGoalCount(period)),
+			Period: period,
+			Type:   typ,
+			MinKm:  max(g.MinKm, 0),
+		})
+		if len(goals) >= 12 {
+			break
+		}
+	}
 	prefs := settings.UserPrefs{
 		CalorieMethod: method,
 		BodyWeightKg:  weight,
@@ -378,6 +413,8 @@ func (s *Server) handleSavePreferences(w http.ResponseWriter, r *http.Request) {
 		ThresholdPace: strings.TrimSpace(req.ThresholdPace),
 		FTP:           clampNonNeg(req.FTP),
 		StepLengthCm:  clampStepLength(req.StepLengthCm),
+
+		Goals: goals,
 	}
 	if err := s.settings.SaveUserPreferences(r.Context(), user.ID, prefs); err != nil {
 		writeError(w, http.StatusInternalServerError, "could not save preferences")
@@ -395,4 +432,13 @@ func (s *Server) writeWorkoutError(w http.ResponseWriter, err error) {
 	default:
 		writeError(w, http.StatusInternalServerError, "internal error")
 	}
+}
+
+// maxGoalCount caps a goal at roughly three activities a day for its period —
+// beyond that it is a typo rather than a plan.
+func maxGoalCount(period string) int {
+	if period == "month" {
+		return 93
+	}
+	return 21
 }

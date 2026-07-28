@@ -48,6 +48,12 @@ var equipmentSchema string
 //go:embed migrations/0011_workout_cadence.sql
 var workoutCadenceSchema string
 
+//go:embed migrations/0012_goals_and_gear.sql
+var goalsAndGearSchema string
+
+//go:embed migrations/0013_multi_goals.sql
+var multiGoalsSchema string
+
 // OpenSQLite opens (and pings) a pure-Go SQLite database at dbPath with
 // foreign keys and WAL enabled for concurrency and integrity.
 func OpenSQLite(dbPath string) (*sql.DB, error) {
@@ -86,6 +92,11 @@ func MigrateApp(ctx context.Context, db *sql.DB) error {
 	if _, err := db.ExecContext(ctx, workoutStepsSchema); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
 		return fmt.Errorf("apply workout steps schema: %w", err)
 	}
+	// Table creations run before the ALTER backfills below, which add columns
+	// to them.
+	if _, err := db.ExecContext(ctx, equipmentSchema); err != nil {
+		return fmt.Errorf("apply equipment schema: %w", err)
+	}
 	// Backfill ALTER-based migrations on older databases. Each statement is
 	// executed individually so a duplicate-column error on one does not abort
 	// the rest, keeping startup idempotent.
@@ -98,13 +109,12 @@ func MigrateApp(ctx context.Context, db *sql.DB) error {
 		{"workout manual flags", workoutManualFlagsSchema},
 		{"user prefs step length", userPrefsStepLengthSchema},
 		{"workout cadence", workoutCadenceSchema},
+		{"goals and gear", goalsAndGearSchema},
+		{"multi goals", multiGoalsSchema},
 	} {
 		if err := applyAlters(ctx, db, m.schema); err != nil {
 			return fmt.Errorf("apply %s schema: %w", m.name, err)
 		}
-	}
-	if _, err := db.ExecContext(ctx, equipmentSchema); err != nil {
-		return fmt.Errorf("apply equipment schema: %w", err)
 	}
 	return nil
 }

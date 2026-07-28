@@ -6,21 +6,21 @@ import RangeDropdown from '../components/RangeDropdown'
 import { useLocalStorage } from '../lib/useLocalStorage'
 import { filterByRange, rangeLabel, rangeStartDate, toDateKey } from '../lib/range'
 import { AXIS_TICK, GRID_PROPS, HOVER_FILL, recencyRamp } from '../lib/chartColors'
+import { recentWeekStarts, weekdayMatrix } from '../lib/insights'
 import ChartCard, { EmptyPlot } from '../components/ChartCard'
 import InfoTip from '../components/InfoTip'
 import {
-  BarChart, Bar, LineChart, Line, ComposedChart, XAxis, YAxis, Tooltip,
+  BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid, Legend, Cell,
 } from 'recharts'
 import { CalendarDays, GitCompareArrows, Sigma } from 'lucide-react'
-import { EdgeTick } from '../components/ChartAxis'
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 /** Years compared side by side before the chart gets too dense to read. */
 const MAX_YEARS = 5
-/** Recent periods shown in the month-over-month and week-over-week charts. */
-const PERIODS_SHOWN = 12
+/** Weeks compared side by side in the week-over-week chart. */
+const WEEKS_COMPARED = 5
 
 type TabId = 'calendar' | 'compare' | 'totals'
 
@@ -195,18 +195,23 @@ export default function Consistency() {
     return { cumulativeData: data, cumulativeYears: years }
   }, [typeWorkouts])
 
-  // Month-over-month and week-over-week. Like the year-over-year chart these
-  // read from the whole (type-filtered) library rather than the page's time
-  // range: a fixed count of recent periods is what makes them comparable, and
-  // a 30-day range could not produce twelve months.
-  const monthOverMonth = useMemo(
-    () => recentPeriods(typeWorkouts, PERIODS_SHOWN, 'month', m.value, measure),
-    [typeWorkouts, m, measure],
-  )
-  const weekOverWeek = useMemo(
-    () => recentPeriods(typeWorkouts, PERIODS_SHOWN, 'week', m.value, measure),
-    [typeWorkouts, m, measure],
-  )
+  // Week over week, built exactly like the year-over-year chart: the x axis is
+  // a position within the cycle (weekday rather than month) and each series is
+  // one cycle. Like that chart it reads from the whole type-filtered library,
+  // since a fixed set of recent weeks is what makes them comparable.
+  const { wowData, wowWeeks } = useMemo(() => {
+    const weeks = recentWeekStarts(WEEKS_COMPARED)
+    const raw = weekdayMatrix(typeWorkouts, weeks, m.value)
+    const data = measure === 'duration'
+      ? raw.map(row => {
+          const out: Record<string, string | number> = { day: row.day }
+          for (const w of weeks) out[w] = Math.round((row[w] as number) / 360) / 10
+          return out
+        })
+      : raw
+    // Newest week first so the recency ramp puts the strongest colour on it.
+    return { wowData: data, wowWeeks: [...weeks].reverse() }
+  }, [typeWorkouts, m, measure])
 
   // Monthly / yearly rollups over the selected range.
   const monthlyStats = useMemo(() => rollup(filteredWorkouts, d => d.slice(0, 7)).slice(0, 6), [filteredWorkouts])
@@ -216,6 +221,7 @@ export default function Consistency() {
   // in Settings is reflected the next time this page draws.
   const yearRamp = recencyRamp(yoyYears.length)
   const cumulativeRamp = recencyRamp(cumulativeYears.length)
+  const weekRamp = recencyRamp(wowWeeks.length)
 
   function statValue(s: { count: number; duration: number }): number {
     return measure === 'count' ? s.count : s.duration
@@ -429,30 +435,49 @@ export default function Consistency() {
         </ChartCard>
 
         <ChartCard
-          title="Month over Month"
-          description={`The last ${PERIODS_SHOWN} months by ${m.label.toLowerCase()}, with a 4-month trailing average.`}
-          info={`Each bar is one calendar month's total; the line averages the last four so a single heavy month doesn't read as a trend. Months with nothing recorded appear as empty bars rather than being skipped, which is what makes a gap visible. Hover a bar for its change against the month before. Like the other comparison charts this always shows the last ${PERIODS_SHOWN} months, independent of the page's time range.`}
-          actions={<ChangeBadge data={monthOverMonth} />}
-          style={{ marginTop: 16 }}
-        >
-          {monthOverMonth.length === 0 ? (
-            <EmptyPlot height={230}>No activities yet</EmptyPlot>
-          ) : (
-            <PeriodChart data={monthOverMonth} measure={measure} xTitle="Month" yTitle={measure === 'count' ? 'Activities' : 'Duration (hours)'} />
-          )}
-        </ChartCard>
-
-        <ChartCard
           title="Week over Week"
-          description={`The last ${PERIODS_SHOWN} weeks by ${m.label.toLowerCase()}, with a 4-week trailing average.`}
-          info={`The same view at week granularity, weeks running Monday to Sunday and labelled by their start date. This is the resolution where consistency actually shows up — a run of similar bars is a habit, whereas alternating tall and empty ones is the stop-start pattern that stalls progress. The trailing average is also the line to watch for safe build-ups: steady growth rather than spikes.`}
-          actions={<ChangeBadge data={weekOverWeek} />}
+          description={`Each weekday across your last ${WEEKS_COMPARED} weeks, by ${m.label.toLowerCase()}.`}
+          info={`The weekly counterpart of the chart above: the x axis is a position inside the cycle — Monday to Sunday instead of January to December — and each bar is one of the last ${WEEKS_COMPARED} weeks, newest in the strongest colour. Read down a weekday to see whether that slot is a habit or an accident, and across the chart to see whether your training days are drifting. Empty weekdays are genuine rest days, not missing data.`}
           style={{ marginTop: 16 }}
         >
-          {weekOverWeek.length === 0 ? (
-            <EmptyPlot height={230}>No activities yet</EmptyPlot>
+          {wowWeeks.length === 0 ? (
+            <EmptyPlot height={260}>No activities yet</EmptyPlot>
           ) : (
-            <PeriodChart data={weekOverWeek} measure={measure} xTitle="Week starting" yTitle={measure === 'count' ? 'Activities' : 'Duration (hours)'} />
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={wowData} margin={{ top: 8, right: 16, left: 8, bottom: 18 }} barCategoryGap="18%" barGap={2}>
+                <CartesianGrid {...GRID_PROPS} />
+                <XAxis dataKey="day" tick={AXIS_TICK} axisLine={false} tickLine={false} label={xLabel('Day of week')} />
+                <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={52} label={yLabel(measure === 'count' ? 'Activities' : 'Duration (hours)')} />
+                <Tooltip
+                  cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload?.length) return null
+                    const active_ = payload.filter(p => Number(p.value) > 0)
+                    return (
+                      <div className="custom-tooltip">
+                        <div style={{ fontWeight: 600, marginBottom: 4 }}>{label}</div>
+                        {active_.length === 0
+                          ? <div style={{ color: 'var(--text-3)' }}>Rest day in every week shown</div>
+                          : active_.map(p => (
+                            <div key={p.dataKey as string} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ width: 8, height: 8, borderRadius: 2, background: p.color, flexShrink: 0 }} />
+                              week of {String(p.dataKey).slice(5)}: {measure === 'duration' ? `${Number(p.value).toFixed(1)}h` : Math.round(Number(p.value))}
+                            </div>
+                          ))}
+                      </div>
+                    )
+                  }}
+                />
+                <Legend
+                  verticalAlign="top" align="right" height={26}
+                  wrapperStyle={{ fontSize: 11, paddingBottom: 6 }}
+                  formatter={value => `w/c ${String(value).slice(5)}`}
+                />
+                {wowWeeks.map((week, i) => (
+                  <Bar key={week} dataKey={week} fill={weekRamp[i]} radius={[3, 3, 0, 0]} isAnimationActive={false} />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
           )}
         </ChartCard>
         </>)}
@@ -529,138 +554,6 @@ export default function Consistency() {
         </>)}
       </div>
     </div>
-  )
-}
-
-/** Sortable key for the Monday-anchored week a YYYY-MM-DD date falls in. */
-function weekKey(date: string): string {
-  const d = new Date(`${date}T00:00:00`)
-  d.setDate(d.getDate() - ((d.getDay() + 6) % 7))
-  return toDateKey(d)
-}
-
-export interface PeriodPoint {
-  key: string
-  label: string
-  /** Raw total, in the measure's own unit (activities, or seconds). */
-  raw: number
-  /** Plotted value — seconds are converted to hours for the duration measure. */
-  value: number
-  /** Trailing 4-period average of `value`, drawn as the trend line. */
-  avg: number
-  /** Percent change against the previous period, null for the first one. */
-  change: number | null
-}
-
-/**
- * Buckets workouts into recent weeks or months and returns the last `count` of
- * them, oldest first, with a trailing average and a period-on-period delta.
- * Periods with no activity are included as empty bars so gaps stay visible.
- */
-function recentPeriods(
-  workouts: Workout[],
-  count: number,
-  kind: 'week' | 'month',
-  valueOf: (w: Workout) => number,
-  measure: Measure,
-): PeriodPoint[] {
-  const keyOf = (date: string) => kind === 'week' ? weekKey(date) : date.slice(0, 7)
-  const labelOf = (key: string) => kind === 'week'
-    ? key.slice(5).replace('-', '/')
-    : `${MONTHS[Number(key.slice(5, 7)) - 1]} ${key.slice(2, 4)}`
-
-  const totals = new Map<string, number>()
-  for (const w of workouts) {
-    const key = keyOf(w.date)
-    totals.set(key, (totals.get(key) ?? 0) + valueOf(w))
-  }
-  if (totals.size === 0) return []
-
-  // Walk backwards from the current period so stretches with no activity still
-  // appear as empty bars rather than being silently skipped. Monthly stepping
-  // anchors to the 1st: stepping back a month from the 31st would skip the
-  // short months entirely.
-  const cursor = new Date()
-  cursor.setHours(0, 0, 0, 0)
-  if (kind === 'month') cursor.setDate(1)
-  const keys: string[] = []
-  for (let i = 0; i < count; i++) {
-    keys.unshift(keyOf(toDateKey(cursor)))
-    if (kind === 'week') cursor.setDate(cursor.getDate() - 7)
-    else cursor.setMonth(cursor.getMonth() - 1)
-  }
-
-  const rows = keys.map(key => {
-    const raw = totals.get(key) ?? 0
-    return { key, label: labelOf(key), raw, value: measure === 'duration' ? raw / 3600 : raw }
-  })
-  return rows.map((r, i) => {
-    const window = rows.slice(Math.max(0, i - 3), i + 1)
-    const prev = i > 0 ? rows[i - 1].value : null
-    return {
-      ...r,
-      value: Math.round(r.value * 10) / 10,
-      avg: Math.round((window.reduce((a, b) => a + b.value, 0) / window.length) * 10) / 10,
-      change: prev != null && prev > 0 ? Math.round(((r.value - prev) / prev) * 100) : null,
-    }
-  })
-}
-
-/**
- * Bars for each recent period with a trailing-average line over them. Both use
- * the same unit and axis, so the line is a smoothed reading of the bars rather
- * than a second scale to decode.
- */
-function PeriodChart({ data, measure, xTitle, yTitle }: {
-  data: PeriodPoint[]
-  measure: Measure
-  xTitle: string
-  yTitle: string
-}) {
-  const fmt = (v: number) => measure === 'duration' ? `${v.toFixed(1)} h` : `${Math.round(v)}`
-  return (
-    <ResponsiveContainer width="100%" height={230}>
-      <ComposedChart data={data} margin={{ top: 8, right: 16, left: 8, bottom: 18 }}>
-        <CartesianGrid {...GRID_PROPS} />
-        <XAxis dataKey="label" tick={<EdgeTick fontSize={9} />} axisLine={false} tickLine={false} label={xLabel(xTitle)} />
-        <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={52} label={yLabel(yTitle)} />
-        <Tooltip
-          cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
-          content={({ active, payload }) => {
-            if (!active || !payload?.length) return null
-            const d = payload[0].payload as PeriodPoint
-            return (
-              <div className="custom-tooltip">
-                <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.label}</div>
-                <div style={{ color: 'var(--primary)' }}>{fmt(d.value)}</div>
-                <div style={{ color: 'var(--text-3)' }}>4-period avg {fmt(d.avg)}</div>
-                {d.change != null && (
-                  <div style={{ color: d.change > 0 ? '#22c55e' : d.change < 0 ? '#ef4444' : 'var(--text-3)' }}>
-                    {d.change > 0 ? '▲' : d.change < 0 ? '▼' : '—'} {Math.abs(d.change)}% vs previous
-                  </div>
-                )}
-              </div>
-            )
-          }}
-        />
-        <Bar dataKey="value" fill="var(--primary)" opacity={0.35} radius={[3, 3, 0, 0]} maxBarSize={40} isAnimationActive={false} />
-        <Line type="monotone" dataKey="avg" stroke="var(--primary)" strokeWidth={2.5} dot={false} isAnimationActive={false} />
-      </ComposedChart>
-    </ResponsiveContainer>
-  )
-}
-
-/** Headline "vs previous period" readout for a PeriodChart's title row. */
-function ChangeBadge({ data }: { data: PeriodPoint[] }) {
-  const change = data.length > 0 ? data[data.length - 1].change : null
-  if (change == null) return null
-  return (
-    <span style={{
-      fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700,
-      color: change > 0 ? '#22c55e' : change < 0 ? '#ef4444' : 'var(--text-3)',
-    }}>
-      {change > 0 ? '▲' : change < 0 ? '▼' : '—'} {Math.abs(change)}% vs previous
-    </span>
   )
 }
 
