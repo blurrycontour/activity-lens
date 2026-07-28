@@ -47,3 +47,6 @@ go.work.sum
 .vscode/chats
 
 AGENTS.md
+
+.claude/sessions/
+.claude/transcripts/

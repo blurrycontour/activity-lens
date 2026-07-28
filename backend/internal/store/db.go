@@ -45,6 +45,9 @@ var userPrefsStepLengthSchema string
 //go:embed migrations/0010_equipment.sql
 var equipmentSchema string
 
+//go:embed migrations/0011_workout_cadence.sql
+var workoutCadenceSchema string
+
 // OpenSQLite opens (and pings) a pure-Go SQLite database at dbPath with
 // foreign keys and WAL enabled for concurrency and integrity.
 func OpenSQLite(dbPath string) (*sql.DB, error) {
@@ -94,6 +97,7 @@ func MigrateApp(ctx context.Context, db *sql.DB) error {
 		{"user prefs bio", userPrefsBioSchema},
 		{"workout manual flags", workoutManualFlagsSchema},
 		{"user prefs step length", userPrefsStepLengthSchema},
+		{"workout cadence", workoutCadenceSchema},
 	} {
 		if err := applyAlters(ctx, db, m.schema); err != nil {
 			return fmt.Errorf("apply %s schema: %w", m.name, err)

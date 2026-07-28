@@ -20,6 +20,8 @@ type trackPoint struct {
 	HasElev  bool
 	HR       int
 	HasHR    bool
+	Cad      int
+	HasCad   bool
 	Time     time.Time
 	HasTime  bool
 }
@@ -46,10 +48,13 @@ func Parse(filename string, data []byte, defaultType workout.Type) (workout.Inpu
 // (e.g. a route-only GPX file); when zero, time.Now() is used as a last resort.
 func buildInput(name string, typ workout.Type, points []trackPoint, calories int, fallbackStart time.Time) workout.Input {
 	in := workout.Input{
-		Name:     name,
-		Type:     typ,
-		Calories: calories,
-		Route:    []workout.LatLng{},
+		Name:  name,
+		Type:  typ,
+		Route: []workout.LatLng{},
+		// A non-zero figure here came out of the file itself (TCX states
+		// calories per lap); zero means the caller will have to estimate.
+		Calories:         calories,
+		CaloriesReported: calories > 0,
 	}
 	if len(points) == 0 {
 		if !fallbackStart.IsZero() {
@@ -111,6 +116,9 @@ func buildInput(name string, typ workout.Type, points []trackPoint, calories int
 			}
 			in.HRTimeline = append(in.HRTimeline, workout.HRPoint{T: tSec, HR: p.HR})
 		}
+		if p.HasCad {
+			in.CadenceTimeline = append(in.CadenceTimeline, workout.CadencePoint{T: tSec, Cad: p.Cad})
+		}
 		// Most GPX/TCX exports don't carry a pace/speed field directly, so it
 		// is derived here from consecutive GPS fixes and their timestamps
 		// (distance / elapsed time). A minimum segment distance avoids
@@ -145,7 +153,35 @@ func buildInput(name string, typ workout.Type, points []trackPoint, calories int
 		in.AvgHR = hrSum / hrCount
 		in.MaxHR = maxHR
 	}
+	normalizeCadence(&in)
 	return in
+}
+
+// perFootCadenceCeiling is the highest average cadence we still read as
+// "one foot only". Foot pods and Garmin's RunCadence/gpxtpx:cad fields report
+// steps for a single foot, so a run averaging 85 there is really 170 steps per
+// minute — the number every other tracker shows. Averaging above this ceiling
+// would mean over 240 total steps per minute, which no human sustains, so the
+// file must already be reporting both feet and is left alone.
+const perFootCadenceCeiling = 120
+
+// normalizeCadence doubles per-foot cadence samples for foot-based activities
+// so the stored series is always total steps per minute. Ride cadence (rpm) is
+// per-crank by definition and never scaled.
+func normalizeCadence(in *workout.Input) {
+	if len(in.CadenceTimeline) == 0 || (in.Type != workout.TypeRun && in.Type != workout.TypeHike) {
+		return
+	}
+	sum := 0
+	for _, p := range in.CadenceTimeline {
+		sum += p.Cad
+	}
+	if avg := sum / len(in.CadenceTimeline); avg == 0 || avg > perFootCadenceCeiling {
+		return
+	}
+	for i := range in.CadenceTimeline {
+		in.CadenceTimeline[i].Cad *= 2
+	}
 }
 
 // haversine returns the great-circle distance between two points in meters.

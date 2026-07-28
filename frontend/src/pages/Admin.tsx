@@ -298,8 +298,9 @@ function StorageSection({ settings, onSaved }: { settings: AdminSettings; onSave
       </label>
       <p style={{ fontSize: 12, color: 'var(--text-3)', lineHeight: 1.6, marginBottom: 14 }}>
         <strong>On:</strong> the original file is kept alongside the parsed workout, so future import
-        improvements can reprocess your history without re-uploading. Files are stored under
-        <code>raw-uploads/</code> in the configured data directory.<br />
+        improvements can reprocess your history without re-uploading. Files are stored zstd-compressed
+        (roughly a tenth of their original size) under <code>raw-uploads/</code> in the configured data
+        directory.<br />
         <strong>Off</strong> (default): only the parsed data (route, heart rate, pace, etc.) is kept and the
         original file is discarded right after import, keeping the database as small as possible.
       </p>

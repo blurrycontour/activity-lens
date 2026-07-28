@@ -3,7 +3,7 @@ import { type Workout, type WorkoutType, WORKOUT_TYPES, fmtDuration, fmtDist, fm
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ReferenceDot } from 'recharts'
 import {
   ArrowLeft, Heart, Mountain, Zap, Clock, TrendingUp, Navigation, Download, Pencil, Trash2, Gauge,
-  Check, X as XIcon, Play, Pause, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, Layers, AlertTriangle,
+  Check, X as XIcon, Play, Pause, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, Layers, AlertTriangle, Activity,
 } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useAuth } from '../context/AuthContext'
@@ -109,7 +109,14 @@ function OptionsMenu({ onEdit, onExport, onRecalculate, onDelete, deleting }: { 
   )
 }
 
-type Metric = 'hr' | 'pace' | 'speed' | 'elevation'
+type Metric = 'hr' | 'pace' | 'speed' | 'elevation' | 'cadence'
+
+const CADENCE_COLOR = '#ec4899'
+
+/** Cadence means steps per minute on foot and crank revolutions on a bike. */
+function cadenceUnit(type: WorkoutType): string {
+  return type === 'Ride' ? 'rpm' : 'spm'
+}
 
 const HR_ZONE_COLORS = ['#60a5fa', '#34d399', '#fbbf24', '#ef4444', '#a855f7']
 const HR_ZONE_LABELS = ['Zone 1 (<60%)', 'Zone 2 (60-70%)', 'Zone 3 (70-80%)', 'Zone 4 (80-90%)', 'Zone 5 (90-100%)']
@@ -557,6 +564,13 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
     () => w.paceTimeline.filter(p => p.pace > 0).map(p => ({ t: p.t, speed: Math.round((3600 / p.pace) * 10) / 10 })),
     [w.paceTimeline],
   )
+  // Cadence arrives noisy (a dropped stride shows up as a zero), so zeros are
+  // dropped and the series is lightly smoothed the way pace/speed are.
+  const cadenceTimeline = useMemo(
+    () => smoothTimeline((w.cadenceTimeline ?? []).filter(p => p.cad > 0).map(p => ({ t: p.t, value: p.cad })), 5)
+      .map(p => ({ t: p.t, cad: Math.round(p.value) })),
+    [w.cadenceTimeline],
+  )
   const [prefMaxHr, setPrefMaxHr] = useState(0)
   useEffect(() => {
     let cancelled = false
@@ -579,7 +593,11 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
     }
     const strideLength = w.type === 'Run' ? 1.0 : w.type === 'Hike' ? 0.75 : null
     const steps = strideLength && w.distance > 0 ? Math.round(w.distance / strideLength) : null
+    const cadVals = cadenceTimeline.map(p => p.cad)
     return {
+      cadMin: cadVals.length ? Math.min(...cadVals) : null,
+      cadMax: cadVals.length ? Math.max(...cadVals) : null,
+      cadAvg: cadVals.length ? Math.round(cadVals.reduce((a, b) => a + b, 0) / cadVals.length) : null,
       hrMin: hrVals.length ? Math.min(...hrVals) : null,
       hrMax: hrVals.length ? Math.max(...hrVals) : (w.maxHR || null),
       hrAvg: w.avgHR || (hrVals.length ? Math.round(hrVals.reduce((a, b) => a + b, 0) / hrVals.length) : null),
@@ -590,7 +608,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
       elevLoss: Math.round(elevLoss),
       steps,
     }
-  }, [w, speedTimeline])
+  }, [w, speedTimeline, cadenceTimeline])
 
   const smoothPaceTimeline = useMemo(
     () => smoothTimeline(w.paceTimeline.filter(point => point.pace > 0).map(point => ({ t: point.t, value: point.pace })), 10).map(point => ({ t: point.t, pace: point.value })),
@@ -802,6 +820,9 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
   function elevChart(height: number) {
     return areaChart({ data: w.elevTimeline as any, dataKey: 'elev', stroke: 'var(--hike)', gradId: 'elevGrad', unit: 'm', height })
   }
+  function cadenceChart(height: number) {
+    return areaChart({ data: cadenceTimeline as any, dataKey: 'cad', stroke: CADENCE_COLOR, gradId: 'cadGrad', unit: cadenceUnit(w.type), height })
+  }
 
   function hrZoneChart(height: number) {
     return (
@@ -986,7 +1007,10 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
             <div className="stat-grid-3">
               <StatChip icon={<Navigation size={12} />} label="Distance" value={w.distance > 0 ? fmtDist(w.distance) : '—'} />
               <StatChip icon={<Clock size={12} />} label="Duration" value={w.duration > 0 ? fmtDuration(w.duration) : '—'} />
-              <StatChip icon={<Zap size={12} />} label="Calories" value={w.calories > 0 ? `${w.calories} kcal` : '—'} manual={w.caloriesManual} calculated={!w.caloriesManual && w.calories > 0} />
+              {/* Calories are only badged as computed when we estimated them
+                  ourselves — TCX files state them outright, and those are as
+                  good as any other reported field. */}
+              <StatChip icon={<Zap size={12} />} label="Calories" value={w.calories > 0 ? `${w.calories} kcal` : '—'} manual={w.caloriesManual} calculated={!w.caloriesManual && !w.caloriesReported && w.calories > 0} />
             </div>
 
             {(w.hrTimeline.length > 0 || w.avgHR > 0) && (
@@ -1010,6 +1034,14 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
                 <StatChip icon={<Gauge size={12} color="var(--blue)" />} label="Min Speed" value={derived.speedMin != null ? `${derived.speedMin.toFixed(1)} km/h` : '—'} calculated={derived.speedMin != null} />
                 <StatChip icon={<Gauge size={12} color="var(--blue)" />} label="Avg Speed" value={w.avgSpeed > 0 ? `${w.avgSpeed.toFixed(1)} km/h` : '—'} calculated />
                 <StatChip icon={<Gauge size={12} color="var(--blue)" />} label="Max Speed" value={derived.speedMax != null ? `${derived.speedMax.toFixed(1)} km/h` : '—'} calculated={derived.speedMax != null} />
+              </div>
+            )}
+
+            {cadenceTimeline.length > 0 && (
+              <div className="stat-grid-3">
+                <StatChip icon={<Activity size={12} color={CADENCE_COLOR} />} label="Min Cadence" value={derived.cadMin != null ? `${derived.cadMin} ${cadenceUnit(w.type)}` : '—'} />
+                <StatChip icon={<Activity size={12} color={CADENCE_COLOR} />} label="Avg Cadence" value={derived.cadAvg != null ? `${derived.cadAvg} ${cadenceUnit(w.type)}` : '—'} calculated />
+                <StatChip icon={<Activity size={12} color={CADENCE_COLOR} />} label="Max Cadence" value={derived.cadMax != null ? `${derived.cadMax} ${cadenceUnit(w.type)}` : '—'} />
               </div>
             )}
 
@@ -1041,6 +1073,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
             { id: 'pace' as Metric, label: 'Pace', color: color, available: w.paceTimeline.length > 0 },
             { id: 'speed' as Metric, label: 'Speed', color: 'var(--blue)', available: speedTimeline.length > 0 },
             { id: 'elevation' as Metric, label: 'Elevation', color: 'var(--hike)', available: w.elevTimeline.length > 0 },
+            { id: 'cadence' as Metric, label: 'Cadence', color: CADENCE_COLOR, available: cadenceTimeline.length > 0 },
           ]).filter(m => m.available).map(m => (
             <button
               key={m.id}
@@ -1057,20 +1090,11 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
               {m.label}
             </button>
           ))}
-          <button
-            onClick={() => setYFromZero(v => !v)}
-            className="btn"
-            title="Start every chart's Y axis at zero"
-            style={{
-              marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 8, fontSize: 12,
-              border: `1px solid ${yFromZero ? 'var(--primary)' : 'var(--border)'}`,
-              background: yFromZero ? 'var(--primary-dim)' : 'transparent',
-              color: yFromZero ? 'var(--primary)' : 'var(--text-3)',
-            }}
-          >
-            {yFromZero ? <Check size={13} /> : <Sigma size={13} />}
+          <label className="switch" style={{ marginLeft: 'auto' }} title="Start every chart's Y axis at zero">
+            <input type="checkbox" checked={yFromZero} onChange={e => setYFromZero(e.target.checked)} />
+            <span className="switch-track" />
             Y axis from 0
-          </button>
+          </label>
         </div>
 
         {/* Charts */}
@@ -1141,6 +1165,20 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
                 </div>
               </div>
               {elevChart(140)}
+            </div>
+          )}
+
+          {/* Cadence chart */}
+          {selectedMetrics.includes('cadence') && cadenceTimeline.length > 0 && (
+            <div className="card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><Activity size={14} color={CADENCE_COLOR} /> Cadence</h3>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)' }}>Min {derived.cadMin ?? '—'} · Avg {derived.cadAvg ?? '—'} · Max {derived.cadMax ?? '—'} {cadenceUnit(w.type)}</span>
+                  <button className="btn-icon" onClick={() => setExpanded('cadence')} title="Expand"><Maximize2 size={13} /></button>
+                </div>
+              </div>
+              {cadenceChart(140)}
             </div>
           )}
         </div>
@@ -1258,6 +1296,14 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
       {expanded === 'elevation' && (
         <ExpandModal title="Elevation" onClose={() => setExpanded(null)}>
           {elevChart(400)}
+          <div style={{ marginTop: 12 }}>
+            <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onEnd={handleEnd} onScrub={handleScrub} />
+          </div>
+        </ExpandModal>
+      )}
+      {expanded === 'cadence' && (
+        <ExpandModal title="Cadence" onClose={() => setExpanded(null)}>
+          {cadenceChart(400)}
           <div style={{ marginTop: 12 }}>
             <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onEnd={handleEnd} onScrub={handleScrub} />
           </div>

@@ -49,6 +49,14 @@ type ElevPoint struct {
 	Elev int `json:"elev"`
 }
 
+// CadencePoint is a cadence sample at t seconds into the activity. The unit is
+// steps per minute for foot-based activities and revolutions per minute for
+// rides, matching whatever the source file reported.
+type CadencePoint struct {
+	T   int `json:"t"`
+	Cad int `json:"cad"`
+}
+
 // Workout is the domain model. The JSON tags produce exactly the shape the
 // frontend expects.
 type Workout struct {
@@ -65,15 +73,20 @@ type Workout struct {
 	ElevationGain  float64     `json:"elevationGain"`
 	Calories       int         `json:"calories"`
 	CaloriesManual bool        `json:"caloriesManual"`
-	Steps          int         `json:"steps"`
-	StepsManual    bool        `json:"stepsManual"`
-	AvgPace        float64     `json:"avgPace"`  // seconds/km
-	AvgSpeed       float64     `json:"avgSpeed"` // km/h
-	Route          []LatLng    `json:"route"`
-	HRTimeline     []HRPoint   `json:"hrTimeline"`
-	PaceTimeline   []PacePoint `json:"paceTimeline"`
-	ElevTimeline   []ElevPoint `json:"elevTimeline"`
-	Notes          string      `json:"notes"`
+	// CaloriesReported marks calories that the imported file stated outright
+	// (TCX carries them per lap) rather than ones we estimated, so the UI
+	// doesn't badge a source-provided number as computed.
+	CaloriesReported bool           `json:"caloriesReported"`
+	Steps            int            `json:"steps"`
+	StepsManual      bool           `json:"stepsManual"`
+	AvgPace          float64        `json:"avgPace"`  // seconds/km
+	AvgSpeed         float64        `json:"avgSpeed"` // km/h
+	Route            []LatLng       `json:"route"`
+	HRTimeline       []HRPoint      `json:"hrTimeline"`
+	PaceTimeline     []PacePoint    `json:"paceTimeline"`
+	ElevTimeline     []ElevPoint    `json:"elevTimeline"`
+	CadenceTimeline  []CadencePoint `json:"cadenceTimeline"`
+	Notes            string         `json:"notes"`
 	// Equipment is populated by the API layer for single-workout responses.
 	Equipment []EquipmentTag `json:"equipment,omitempty"`
 }
@@ -89,22 +102,24 @@ type EquipmentTag struct {
 // Input carries the fields a caller may set when creating or importing a
 // workout. Derived metrics (pace/speed) are filled in by the service.
 type Input struct {
-	Name          string
-	Type          Type
-	StartTime     time.Time
-	Duration      int
-	Distance      float64
-	AvgHR         int
-	MaxHR         int
-	ElevationGain float64
-	Calories      int
-	Steps         int
-	StepLengthM   float64 // user's stride length in metres; 0 = per-activity default
-	Route         []LatLng
-	HRTimeline    []HRPoint
-	PaceTimeline  []PacePoint
-	ElevTimeline  []ElevPoint
-	Notes         string
+	Name             string
+	Type             Type
+	StartTime        time.Time
+	Duration         int
+	Distance         float64
+	AvgHR            int
+	MaxHR            int
+	ElevationGain    float64
+	Calories         int
+	CaloriesReported bool // Calories came from the source file, not an estimate
+	Steps            int
+	StepLengthM      float64 // user's stride length in metres; 0 = per-activity default
+	Route            []LatLng
+	HRTimeline       []HRPoint
+	PaceTimeline     []PacePoint
+	ElevTimeline     []ElevPoint
+	CadenceTimeline  []CadencePoint
+	Notes            string
 }
 
 // Patch carries optional edits to an existing workout. Nil fields are left

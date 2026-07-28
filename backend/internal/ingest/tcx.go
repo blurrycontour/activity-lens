@@ -36,6 +36,11 @@ type tcxPoint struct {
 	HR       *struct {
 		Value int `xml:"Value"`
 	} `xml:"HeartRateBpm"`
+	// Bike cadence (rpm) lives directly on the trackpoint; running cadence is
+	// carried in Garmin's ActivityExtension TPX block instead. Both are matched
+	// namespace-agnostically by encoding/xml.
+	Cadence    *int `xml:"Cadence"`
+	RunCadence *int `xml:"Extensions>TPX>RunCadence"`
 }
 
 func parseTCX(data []byte, defaultType workout.Type) (workout.Input, error) {
@@ -69,6 +74,11 @@ func parseTCX(data []byte, defaultType workout.Type) (workout.Input, error) {
 				}
 				if p.HR != nil {
 					tp.HR, tp.HasHR = p.HR.Value, true
+				}
+				if p.RunCadence != nil {
+					tp.Cad, tp.HasCad = *p.RunCadence, true
+				} else if p.Cadence != nil {
+					tp.Cad, tp.HasCad = *p.Cadence, true
 				}
 				if p.Time != "" {
 					if ts, err := time.Parse(time.RFC3339, p.Time); err == nil {

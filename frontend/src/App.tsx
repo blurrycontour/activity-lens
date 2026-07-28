@@ -54,6 +54,10 @@ function resolveTheme(mode: ThemeMode): 'dark' | 'light' {
 function applyTheme(mode: ThemeMode) {
   const resolved = resolveTheme(mode)
   document.documentElement.className = resolved === 'light' ? 'light' : ''
+  // Keep the phone's status bar matching the page background instead of the
+  // accent colour, in both themes.
+  document.querySelector('meta[name="theme-color"]')
+    ?.setAttribute('content', resolved === 'light' ? '#f4f6f9' : '#0a0b0e')
 }
 
 export default function App() {

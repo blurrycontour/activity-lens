@@ -31,8 +31,9 @@ type gpxPoint struct {
 	Elev *float64 `xml:"ele"`
 	Time string   `xml:"time"`
 	Ext  struct {
-		// Matches <gpxtpx:hr> under any TrackPointExtension namespace.
-		HR *int `xml:"TrackPointExtension>hr"`
+		// Matches <gpxtpx:hr>/<gpxtpx:cad> under any TrackPointExtension namespace.
+		HR  *int `xml:"TrackPointExtension>hr"`
+		Cad *int `xml:"TrackPointExtension>cad"`
 	} `xml:"extensions"`
 }
 
@@ -55,6 +56,9 @@ func parseGPX(data []byte, defaultType workout.Type) (workout.Input, error) {
 			}
 			if p.Ext.HR != nil {
 				tp.HR, tp.HasHR = *p.Ext.HR, true
+			}
+			if p.Ext.Cad != nil {
+				tp.Cad, tp.HasCad = *p.Ext.Cad, true
 			}
 			if p.Time != "" {
 				if ts, err := time.Parse(time.RFC3339, p.Time); err == nil {

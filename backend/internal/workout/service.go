@@ -29,23 +29,25 @@ func (s *Service) Create(ctx context.Context, userID int64, in Input) (*Workout,
 		return nil, err
 	}
 	w := &Workout{
-		ID:            newID(),
-		UserID:        userID,
-		Name:          strings.TrimSpace(in.Name),
-		Type:          in.Type,
-		StartTime:     in.StartTime.UTC(),
-		Duration:      in.Duration,
-		Distance:      in.Distance,
-		AvgHR:         in.AvgHR,
-		MaxHR:         in.MaxHR,
-		ElevationGain: in.ElevationGain,
-		Calories:      in.Calories,
-		Steps:         in.Steps,
-		Route:         in.Route,
-		HRTimeline:    in.HRTimeline,
-		PaceTimeline:  in.PaceTimeline,
-		ElevTimeline:  in.ElevTimeline,
-		Notes:         strings.TrimSpace(in.Notes),
+		ID:               newID(),
+		UserID:           userID,
+		Name:             strings.TrimSpace(in.Name),
+		Type:             in.Type,
+		StartTime:        in.StartTime.UTC(),
+		Duration:         in.Duration,
+		Distance:         in.Distance,
+		AvgHR:            in.AvgHR,
+		MaxHR:            in.MaxHR,
+		ElevationGain:    in.ElevationGain,
+		Calories:         in.Calories,
+		Steps:            in.Steps,
+		Route:            in.Route,
+		HRTimeline:       in.HRTimeline,
+		PaceTimeline:     in.PaceTimeline,
+		ElevTimeline:     in.ElevTimeline,
+		Notes:            strings.TrimSpace(in.Notes),
+		CaloriesReported: in.CaloriesReported,
+		CadenceTimeline:  in.CadenceTimeline,
 	}
 	deriveMetrics(w, in.StepLengthM)
 	if err := s.repo.Create(ctx, w); err != nil {
@@ -63,21 +65,23 @@ func (s *Service) Preview(in Input) (*Workout, error) {
 		return nil, err
 	}
 	w := &Workout{
-		Name:          strings.TrimSpace(in.Name),
-		Type:          in.Type,
-		StartTime:     in.StartTime.UTC(),
-		Duration:      in.Duration,
-		Distance:      in.Distance,
-		AvgHR:         in.AvgHR,
-		MaxHR:         in.MaxHR,
-		ElevationGain: in.ElevationGain,
-		Calories:      in.Calories,
-		Steps:         in.Steps,
-		Route:         in.Route,
-		HRTimeline:    in.HRTimeline,
-		PaceTimeline:  in.PaceTimeline,
-		ElevTimeline:  in.ElevTimeline,
-		Notes:         strings.TrimSpace(in.Notes),
+		Name:             strings.TrimSpace(in.Name),
+		Type:             in.Type,
+		StartTime:        in.StartTime.UTC(),
+		Duration:         in.Duration,
+		Distance:         in.Distance,
+		AvgHR:            in.AvgHR,
+		MaxHR:            in.MaxHR,
+		ElevationGain:    in.ElevationGain,
+		Calories:         in.Calories,
+		Steps:            in.Steps,
+		Route:            in.Route,
+		HRTimeline:       in.HRTimeline,
+		PaceTimeline:     in.PaceTimeline,
+		ElevTimeline:     in.ElevTimeline,
+		Notes:            strings.TrimSpace(in.Notes),
+		CaloriesReported: in.CaloriesReported,
+		CadenceTimeline:  in.CadenceTimeline,
 	}
 	deriveMetrics(w, in.StepLengthM)
 	w.Date = w.StartTime.Format("2006-01-02")
@@ -132,6 +136,8 @@ func (s *Service) Update(ctx context.Context, userID int64, id string, p Patch) 
 		}
 		w.Calories = *p.Calories
 		w.CaloriesManual = *p.Calories > 0
+		// A hand-entered value supersedes whatever the source file said.
+		w.CaloriesReported = w.CaloriesReported && !w.CaloriesManual
 	}
 	if p.Steps != nil {
 		if *p.Steps < 0 {
@@ -186,8 +192,10 @@ func (s *Service) Recalculate(ctx context.Context, userID int64, id, calorieMeth
 	w.Steps = estimateSteps(w.Type, w.Distance, stepLengthM)
 	deriveMetrics(w, stepLengthM)
 	w.Calories = EstimateCalories(w.Type, w.Duration, w.AvgHR, w.Distance, weightKg, age, sex, calorieMethod)
-	// Recalculation re-derives these values, so they are no longer manual.
+	// Recalculation re-derives these values, so they are neither manual nor
+	// the number the source file reported.
 	w.CaloriesManual = false
+	w.CaloriesReported = false
 	w.StepsManual = false
 	if err := s.repo.Update(ctx, w); err != nil {
 		return nil, err
@@ -299,6 +307,7 @@ func deriveMetrics(w *Workout, stepLengthM float64) {
 	sort.Slice(w.HRTimeline, func(i, j int) bool { return w.HRTimeline[i].T < w.HRTimeline[j].T })
 	sort.Slice(w.PaceTimeline, func(i, j int) bool { return w.PaceTimeline[i].T < w.PaceTimeline[j].T })
 	sort.Slice(w.ElevTimeline, func(i, j int) bool { return w.ElevTimeline[i].T < w.ElevTimeline[j].T })
+	sort.Slice(w.CadenceTimeline, func(i, j int) bool { return w.CadenceTimeline[i].T < w.CadenceTimeline[j].T })
 	if w.Steps == 0 {
 		w.Steps = estimateSteps(w.Type, w.Distance, stepLengthM)
 	}

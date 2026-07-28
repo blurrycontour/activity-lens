@@ -3,6 +3,8 @@ export type WorkoutType = 'Run' | 'Ride' | 'Hike' | 'Swim' | 'Strength'
 export interface HeartRatePoint { t: number; hr: number }
 export interface PacePoint { t: number; pace: number }
 export interface ElevPoint { t: number; elev: number }
+/** Steps per minute for foot-based activities, rpm for rides. */
+export interface CadencePoint { t: number; cad: number }
 
 export interface Workout {
   id: string
@@ -17,6 +19,8 @@ export interface Workout {
   calories: number
   steps?: number
   caloriesManual?: boolean
+  /** Calories stated by the imported file itself rather than estimated by us. */
+  caloriesReported?: boolean
   stepsManual?: boolean
   avgPace: number // seconds per km (for runs/hikes)
   avgSpeed: number // km/h
@@ -24,6 +28,7 @@ export interface Workout {
   hrTimeline: HeartRatePoint[]
   paceTimeline: PacePoint[]
   elevTimeline: ElevPoint[]
+  cadenceTimeline?: CadencePoint[]
   notes?: string
   equipment?: { id: string; name: string; type: string }[]
 }

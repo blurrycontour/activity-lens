@@ -43,23 +43,23 @@ func NewSQLiteRepository(db *sql.DB) *SQLiteRepository { return &SQLiteRepositor
 
 const workoutCols = `id, user_id, name, type, start_time, duration, distance, avg_hr, max_hr,
 	elevation_gain, calories, steps, avg_pace, avg_speed, route, hr_timeline, pace_timeline,
-	elev_timeline, notes, calories_manual, steps_manual`
+	elev_timeline, cadence_timeline, notes, calories_manual, calories_reported, steps_manual`
 
 const workoutSummaryCols = `id, user_id, name, type, start_time, duration, distance, avg_hr, max_hr,
-	elevation_gain, calories, steps, avg_pace, avg_speed, notes, calories_manual, steps_manual`
+	elevation_gain, calories, steps, avg_pace, avg_speed, notes, calories_manual, calories_reported, steps_manual`
 
 func (r *SQLiteRepository) Create(ctx context.Context, w *Workout) error {
-	route, hr, pace, elev, err := marshalSeries(w)
+	s, err := marshalSeries(w)
 	if err != nil {
 		return err
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	_, err = r.db.ExecContext(ctx, `INSERT INTO workouts (`+workoutCols+`, created_at, updated_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		w.ID, w.UserID, w.Name, string(w.Type), w.StartTime.UTC().Format(time.RFC3339),
 		w.Duration, w.Distance, w.AvgHR, w.MaxHR, w.ElevationGain, w.Calories, w.Steps,
-		w.AvgPace, w.AvgSpeed, route, hr, pace, elev, w.Notes,
-		boolToInt(w.CaloriesManual), boolToInt(w.StepsManual), now, now)
+		w.AvgPace, w.AvgSpeed, s.route, s.hr, s.pace, s.elev, s.cadence, w.Notes,
+		boolToInt(w.CaloriesManual), boolToInt(w.CaloriesReported), boolToInt(w.StepsManual), now, now)
 	if err != nil {
 		return fmt.Errorf("insert workout: %w", err)
 	}
@@ -110,17 +110,20 @@ func (r *SQLiteRepository) ListSummary(ctx context.Context, userID int64) ([]Wor
 }
 
 func (r *SQLiteRepository) Update(ctx context.Context, w *Workout) error {
-	route, hr, pace, elev, err := marshalSeries(w)
+	s, err := marshalSeries(w)
 	if err != nil {
 		return err
 	}
 	res, err := r.db.ExecContext(ctx, `UPDATE workouts SET name=?, type=?, start_time=?, duration=?,
 		distance=?, avg_hr=?, max_hr=?, elevation_gain=?, calories=?, steps=?, avg_pace=?, avg_speed=?,
-		route=?, hr_timeline=?, pace_timeline=?, elev_timeline=?, notes=?, calories_manual=?, steps_manual=?, updated_at=?
+		route=?, hr_timeline=?, pace_timeline=?, elev_timeline=?, cadence_timeline=?, notes=?,
+		calories_manual=?, calories_reported=?, steps_manual=?, updated_at=?
 		WHERE id=? AND user_id=?`,
 		w.Name, string(w.Type), w.StartTime.UTC().Format(time.RFC3339), w.Duration, w.Distance,
-		w.AvgHR, w.MaxHR, w.ElevationGain, w.Calories, w.Steps, w.AvgPace, w.AvgSpeed, route, hr, pace, elev,
-		w.Notes, boolToInt(w.CaloriesManual), boolToInt(w.StepsManual), time.Now().UTC().Format(time.RFC3339), w.ID, w.UserID)
+		w.AvgHR, w.MaxHR, w.ElevationGain, w.Calories, w.Steps, w.AvgPace, w.AvgSpeed,
+		s.route, s.hr, s.pace, s.elev, s.cadence, w.Notes,
+		boolToInt(w.CaloriesManual), boolToInt(w.CaloriesReported), boolToInt(w.StepsManual),
+		time.Now().UTC().Format(time.RFC3339), w.ID, w.UserID)
 	if err != nil {
 		return fmt.Errorf("update workout: %w", err)
 	}
@@ -141,10 +144,14 @@ func (r *SQLiteRepository) Delete(ctx context.Context, userID int64, id string) 
 	return nil
 }
 
+// seriesBlobs holds the encoded per-point series of one workout, in the order
+// they appear in workoutCols.
+type seriesBlobs struct{ route, hr, pace, elev, cadence []byte }
+
 // marshalSeries JSON-encodes and gzip-compresses each timeline. The JSON is
 // highly repetitive (same few keys per point, smoothly changing numbers), so
 // gzip typically shrinks it several-fold before it hits disk.
-func marshalSeries(w *Workout) (route, hr, pace, elev []byte, err error) {
+func marshalSeries(w *Workout) (seriesBlobs, error) {
 	b := func(v any) ([]byte, error) {
 		data, e := json.Marshal(v)
 		if e != nil {
@@ -164,17 +171,25 @@ func marshalSeries(w *Workout) (route, hr, pace, elev []byte, err error) {
 	if w.ElevTimeline == nil {
 		w.ElevTimeline = []ElevPoint{}
 	}
-	if route, err = b(w.Route); err != nil {
-		return
+	if w.CadenceTimeline == nil {
+		w.CadenceTimeline = []CadencePoint{}
 	}
-	if hr, err = b(w.HRTimeline); err != nil {
-		return
+	var (
+		s   seriesBlobs
+		err error
+	)
+	for _, enc := range []struct {
+		dst *[]byte
+		src any
+	}{
+		{&s.route, w.Route}, {&s.hr, w.HRTimeline}, {&s.pace, w.PaceTimeline},
+		{&s.elev, w.ElevTimeline}, {&s.cadence, w.CadenceTimeline},
+	} {
+		if *enc.dst, err = b(enc.src); err != nil {
+			return seriesBlobs{}, err
+		}
 	}
-	if pace, err = b(w.PaceTimeline); err != nil {
-		return
-	}
-	elev, err = b(w.ElevTimeline)
-	return
+	return s, nil
 }
 
 func boolToInt(b bool) int {
@@ -218,53 +233,57 @@ func gunzipMaybe(data []byte) ([]byte, error) {
 
 func scanWorkout(row interface{ Scan(...any) error }) (*Workout, error) {
 	var (
-		w          Workout
-		typ        string
-		startTime  string
-		route, hr  []byte
-		pace, elev []byte
-		calManual  int
-		stepManual int
+		w           Workout
+		typ         string
+		startTime   string
+		s           seriesBlobs
+		calManual   int
+		calReported int
+		stepManual  int
 	)
 	if err := row.Scan(&w.ID, &w.UserID, &w.Name, &typ, &startTime, &w.Duration, &w.Distance,
 		&w.AvgHR, &w.MaxHR, &w.ElevationGain, &w.Calories, &w.Steps, &w.AvgPace, &w.AvgSpeed,
-		&route, &hr, &pace, &elev, &w.Notes, &calManual, &stepManual); err != nil {
+		&s.route, &s.hr, &s.pace, &s.elev, &s.cadence, &w.Notes,
+		&calManual, &calReported, &stepManual); err != nil {
 		return nil, err
 	}
 	w.CaloriesManual = calManual != 0
+	w.CaloriesReported = calReported != 0
 	w.StepsManual = stepManual != 0
 	if err := applyScalarFields(&w, typ, startTime); err != nil {
 		return nil, err
 	}
-	if err := unmarshalInto(route, &w.Route); err != nil {
-		return nil, err
-	}
-	if err := unmarshalInto(hr, &w.HRTimeline); err != nil {
-		return nil, err
-	}
-	if err := unmarshalInto(pace, &w.PaceTimeline); err != nil {
-		return nil, err
-	}
-	if err := unmarshalInto(elev, &w.ElevTimeline); err != nil {
-		return nil, err
+	w.CadenceTimeline = []CadencePoint{}
+	for _, dec := range []struct {
+		src []byte
+		dst any
+	}{
+		{s.route, &w.Route}, {s.hr, &w.HRTimeline}, {s.pace, &w.PaceTimeline},
+		{s.elev, &w.ElevTimeline}, {s.cadence, &w.CadenceTimeline},
+	} {
+		if err := unmarshalInto(dec.src, dec.dst); err != nil {
+			return nil, err
+		}
 	}
 	return &w, nil
 }
 
 func scanWorkoutSummary(row interface{ Scan(...any) error }) (*Workout, error) {
 	var (
-		w          Workout
-		typ        string
-		startTime  string
-		calManual  int
-		stepManual int
+		w           Workout
+		typ         string
+		startTime   string
+		calManual   int
+		calReported int
+		stepManual  int
 	)
 	if err := row.Scan(&w.ID, &w.UserID, &w.Name, &typ, &startTime, &w.Duration, &w.Distance,
 		&w.AvgHR, &w.MaxHR, &w.ElevationGain, &w.Calories, &w.Steps, &w.AvgPace, &w.AvgSpeed, &w.Notes,
-		&calManual, &stepManual); err != nil {
+		&calManual, &calReported, &stepManual); err != nil {
 		return nil, err
 	}
 	w.CaloriesManual = calManual != 0
+	w.CaloriesReported = calReported != 0
 	w.StepsManual = stepManual != 0
 	if err := applyScalarFields(&w, typ, startTime); err != nil {
 		return nil, err
@@ -273,6 +292,7 @@ func scanWorkoutSummary(row interface{ Scan(...any) error }) (*Workout, error) {
 	w.HRTimeline = []HRPoint{}
 	w.PaceTimeline = []PacePoint{}
 	w.ElevTimeline = []ElevPoint{}
+	w.CadenceTimeline = []CadencePoint{}
 	return &w, nil
 }
 
