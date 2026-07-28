@@ -5,7 +5,8 @@ import { api, ApiError } from '../lib/api'
 import { useLocalStorage } from '../lib/useLocalStorage'
 import {
   DASHBOARD_CFG_KEY, DEFAULT_DASHBOARD_CONFIG, STAT_CARDS, WINDOW_OPTIONS,
-  type DashboardConfig, type StatCardId,
+  DEFAULT_HR_ZONE_CHART, HR_ZONE_CHART_KEY,
+  type DashboardConfig, type HRZoneChart, type StatCardId,
 } from '../lib/dashboardConfig'
 
 interface SettingsProps {
@@ -29,6 +30,8 @@ export default function Settings({ accent, onAccentChange }: SettingsProps) {
       return { ...prev, cards: STAT_CARDS.map(c => c.id).filter(c => want.has(c)) }
     })
   }
+
+  const [hrZoneChart, setHrZoneChart] = useLocalStorage<HRZoneChart>(HR_ZONE_CHART_KEY, DEFAULT_HR_ZONE_CHART)
 
   const [calorieMethod, setCalorieMethod] = useState<'heart-rate' | 'distance'>('heart-rate')
   const [bodyWeightKg, setBodyWeightKg] = useState('70')
@@ -200,6 +203,38 @@ export default function Settings({ accent, onAccentChange }: SettingsProps) {
           >
             {WINDOW_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
+        </section>
+
+        {/* Charts */}
+        <section className="card">
+          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Charts</h3>
+          <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 16 }}>
+            How the heart-rate zone breakdown is drawn on a workout. The histogram makes it easier to
+            compare zones; the donut emphasises their share of the whole.
+          </p>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {([
+              { id: 'histogram', label: 'Histogram' },
+              { id: 'pie', label: 'Donut' },
+            ] as const).map(o => {
+              const on = hrZoneChart === o.id
+              return (
+                <button
+                  key={o.id}
+                  onClick={() => setHrZoneChart(o.id)}
+                  style={{
+                    flex: '1 1 160px', padding: '8px 12px', borderRadius: 8,
+                    border: `1px solid ${on ? 'var(--primary)' : 'var(--border)'}`,
+                    background: on ? 'var(--primary-dim)' : 'var(--bg-3)',
+                    color: on ? 'var(--primary)' : 'var(--text-2)',
+                    fontSize: 12, fontWeight: 500, cursor: 'pointer',
+                  }}
+                >
+                  {o.label}
+                </button>
+              )
+            })}
+          </div>
         </section>
 
         {/* Units */}

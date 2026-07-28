@@ -2,7 +2,9 @@ import { useState, useMemo } from 'react'
 import { fmtPace, type WorkoutType } from '../data/workouts'
 import { useWorkouts } from '../context/WorkoutsContext'
 import TypeDropdown from '../components/TypeDropdown'
+import RangeDropdown from '../components/RangeDropdown'
 import { useLocalStorage } from '../lib/useLocalStorage'
+import { filterByRange, rangeLabel } from '../lib/range'
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid,
@@ -26,12 +28,13 @@ export default function Timeline() {
   const { workouts } = useWorkouts()
   const [typeFilter, setTypeFilter] = useState<WorkoutType | 'All'>('Run')
   const [selectedMetrics, setSelectedMetrics] = useLocalStorage<Metric[]>('al_tl_metrics', ['pace', 'hr'])
+  const [rangeDays, setRangeDays] = useLocalStorage<number>('al_tl_range', 30)
 
   const data = useMemo(() => {
-    const filtered = typeFilter === 'All' ? workouts : workouts.filter(w => w.type === typeFilter)
+    const inRange = filterByRange(workouts, rangeDays)
+    const filtered = typeFilter === 'All' ? inRange : inRange.filter(w => w.type === typeFilter)
     return [...filtered]
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-      .filter(w => typeFilter === 'All' || w.type === typeFilter)
       .map(w => ({
         date: w.date,
         dateLabel: new Date(w.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
@@ -47,7 +50,7 @@ export default function Timeline() {
         name: w.name,
         type: w.type,
       }))
-  }, [workouts, typeFilter])
+  }, [workouts, typeFilter, rangeDays])
 
   function toggleMetric(m: Metric) {
     setSelectedMetrics(prev =>
@@ -98,7 +101,10 @@ export default function Timeline() {
           <h1 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>Timeline</h1>
           <span style={{ fontSize: 12, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>Trends over time</span>
         </div>
-        <TypeDropdown value={typeFilter} onChange={v => setTypeFilter(v)} />
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <TypeDropdown value={typeFilter} onChange={v => setTypeFilter(v)} />
+          <RangeDropdown value={rangeDays} onChange={setRangeDays} />
+        </div>
       </div>
 
       <div className="page-content">
@@ -147,7 +153,7 @@ export default function Timeline() {
         {/* Main chart */}
         {data.length === 0 ? (
           <div className="card" style={{ textAlign: 'center', padding: '60px', color: 'var(--text-3)' }}>
-            No data for this activity type
+            No {typeFilter === 'All' ? '' : `${typeFilter.toLowerCase()} `}activities in the {rangeLabel(rangeDays)}
           </div>
         ) : (
           <div className="card">

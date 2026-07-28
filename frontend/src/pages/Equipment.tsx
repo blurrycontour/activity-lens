@@ -107,7 +107,7 @@ export default function EquipmentPage({ onSelectWorkout }: EquipmentPageProps) {
         )}
       </div>
 
-      <div className="page-content" style={{ padding: '16px 24px' }}>
+      <div className="page-content tight">
         {detail ? (
           <EquipmentDetail
             id={detail}

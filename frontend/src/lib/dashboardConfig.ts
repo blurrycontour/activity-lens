@@ -18,13 +18,12 @@ export const STAT_CARDS: { id: StatCardId; label: string }[] = [
   { id: 'activities', label: 'Activities' },
 ]
 
-export const WINDOW_OPTIONS: { value: number; label: string }[] = [
-  { value: 7, label: 'Last 7 days' },
-  { value: 30, label: 'Last 30 days' },
-  { value: 90, label: 'Last 90 days' },
-  { value: 365, label: 'Last year' },
-  { value: 0, label: 'All time' },
-]
+export { RANGE_OPTIONS as WINDOW_OPTIONS } from './range'
+
+/** How the workout page draws the heart-rate zone breakdown. */
+export type HRZoneChart = 'histogram' | 'pie'
+export const HR_ZONE_CHART_KEY = 'al_hrzone_chart'
+export const DEFAULT_HR_ZONE_CHART: HRZoneChart = 'histogram'
 
 export const DASHBOARD_CFG_KEY = 'al_dash_cfg'
 
@@ -33,9 +32,4 @@ export const DEFAULT_DASHBOARD_CONFIG: DashboardConfig = {
   windowDays: 30,
 }
 
-/** Human-readable caption for a window, e.g. "last 30 days" or "all time". */
-export function windowLabel(days: number): string {
-  if (days <= 0) return 'all time'
-  if (days === 365) return 'last year'
-  return `last ${days} days`
-}
+export { rangeLabel as windowLabel } from './range'

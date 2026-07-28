@@ -35,9 +35,9 @@ export default function TypeDropdown({ value, onChange }: TypeDropdownProps) {
   const color = SPORT_COLOR[value]
 
   return (
-    <div className="type-dropdown" ref={ref}>
+    <div className="al-dropdown" ref={ref}>
       <button
-        className="type-dropdown-trigger"
+        className="al-dropdown-trigger"
         onClick={() => setOpen(o => !o)}
         type="button"
       >
@@ -57,11 +57,11 @@ export default function TypeDropdown({ value, onChange }: TypeDropdownProps) {
       </button>
 
       {open && (
-        <div className="type-dropdown-menu" style={{ animation: 'fadeIn 0.12s ease' }}>
+        <div className="al-dropdown-menu" style={{ animation: 'fadeIn 0.12s ease' }}>
           {OPTIONS.map(opt => (
             <button
               key={opt}
-              className={`type-dropdown-item ${value === opt ? 'active' : ''}`}
+              className={`al-dropdown-item ${value === opt ? 'active' : ''}`}
               onClick={() => { onChange(opt); setOpen(false) }}
             >
               <span style={{

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { type Workout, type WorkoutType, WORKOUT_TYPES, fmtDuration, fmtDist, fmtPace, TYPE_COLOR, TYPE_ICON } from '../data/workouts'
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ReferenceDot } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ReferenceDot, BarChart, Bar } from 'recharts'
 import {
   ArrowLeft, Heart, Mountain, Zap, Clock, TrendingUp, Navigation, Download, Pencil, Trash2, Gauge,
   Check, X as XIcon, Play, Pause, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, Layers, AlertTriangle, Activity,
@@ -9,6 +9,7 @@ import { useWorkouts } from '../context/WorkoutsContext'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
 import { useLocalStorage } from '../lib/useLocalStorage'
+import { DEFAULT_HR_ZONE_CHART, HR_ZONE_CHART_KEY, type HRZoneChart } from '../lib/dashboardConfig'
 import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, Popup, useMap, useMapEvents } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import { divIcon } from 'leaflet'
@@ -120,6 +121,7 @@ function cadenceUnit(type: WorkoutType): string {
 
 const HR_ZONE_COLORS = ['#60a5fa', '#34d399', '#fbbf24', '#ef4444', '#a855f7']
 const HR_ZONE_LABELS = ['Zone 1 (<60%)', 'Zone 2 (60-70%)', 'Zone 3 (70-80%)', 'Zone 4 (80-90%)', 'Zone 5 (90-100%)']
+const HR_ZONE_SHORT = ['Z1', 'Z2', 'Z3', 'Z4', 'Z5']
 
 /** Maps a heart rate (bpm) to its zone colour, given the user's max HR. */
 function hrZoneColor(hr: number, maxHR: number): string {
@@ -157,7 +159,12 @@ function hrZoneBuckets(hrTimeline: { t: number; hr: number }[], maxHR: number) {
   }
   const total = counts.reduce((a, b) => a + b, 0)
   if (total === 0) return []
-  return counts.map((c, i) => ({ name: HR_ZONE_LABELS[i], value: c, pct: Math.round((c / total) * 100), color: HR_ZONE_COLORS[i] })).filter(z => z.value > 0)
+  // Every zone is returned, including empty ones: the histogram wants the gaps
+  // to be visible. The donut filters them out at render time instead.
+  return counts.map((c, i) => ({
+    name: HR_ZONE_LABELS[i], short: HR_ZONE_SHORT[i],
+    value: c, pct: Math.round((c / total) * 100), color: HR_ZONE_COLORS[i],
+  }))
 }
 
 function nearestRouteIndex(route: Array<[number, number]>, lat: number, lng: number): number {
@@ -290,8 +297,10 @@ function LayerSwitcher({ layer, onChange }: { layer: MapLayerId; onChange: (l: M
   )
 }
 
+type Shading = 'accent' | 'hr' | 'pace' | 'elevation' | 'cadence'
+
 function RouteMap({
-  route, color, duration, currentTime, onScrub, height, distance, hrTimeline, paceTimeline, elevTimeline, avatarUrl, maxHR,
+  route, color, duration, currentTime, onScrub, height, distance, hrTimeline, paceTimeline, elevTimeline, cadenceTimeline, avatarUrl, maxHR, cadenceLabel,
 }: {
   route: Array<[number, number]>
   color: string
@@ -303,14 +312,16 @@ function RouteMap({
   hrTimeline: Workout['hrTimeline']
   paceTimeline: Workout['paceTimeline']
   elevTimeline: Workout['elevTimeline']
+  cadenceTimeline: Array<{ t: number; cad: number }>
   avatarUrl?: string
   maxHR: number
+  cadenceLabel: string
 }) {
   const [layer, setLayer] = useState<MapLayerId>(() => {
     const stored = localStorage.getItem(MAP_LAYER_KEY)
     return (stored === 'street' || stored === 'topo' || stored === 'satellite') ? stored : 'satellite'
   })
-  const [shading, setShading] = useState<'accent' | 'hr' | 'pace' | 'elevation'>('accent')
+  const [shading, setShading] = useState<Shading>('accent')
   const [selectedPoint, setSelectedPoint] = useState<number | null>(null)
   useEffect(() => {
     localStorage.setItem(MAP_LAYER_KEY, layer)
@@ -341,8 +352,13 @@ function RouteMap({
     if (shading === 'accent' || route.length < 2) {
       return [{ positions: route, color }]
     }
-    const samples = shading === 'hr' ? hrTimeline : shading === 'pace' ? paceTimeline : elevTimeline
-    const values = shading === 'hr' ? hrTimeline.map(p => p.hr) : shading === 'pace' ? paceTimeline.map(p => p.pace) : elevTimeline.map(p => p.elev)
+    const series: Record<Exclude<Shading, 'accent'>, { samples: Array<{ t: number }>; values: number[] }> = {
+      hr: { samples: hrTimeline, values: hrTimeline.map(p => p.hr) },
+      pace: { samples: paceTimeline, values: paceTimeline.map(p => p.pace) },
+      elevation: { samples: elevTimeline, values: elevTimeline.map(p => p.elev) },
+      cadence: { samples: cadenceTimeline, values: cadenceTimeline.map(p => p.cad) },
+    }
+    const { samples, values } = series[shading]
     if (samples.length === 0) return [{ positions: route, color }]
     const min = Math.min(...values)
     const span = Math.max(Math.max(...values) - min, 1)
@@ -362,7 +378,7 @@ function RouteMap({
       segs.push({ positions: route.slice(i, end + 1), color: colorFor(i * segStep) })
     }
     return segs
-  }, [route, shading, hrTimeline, paceTimeline, elevTimeline, duration, color, maxHR])
+  }, [route, shading, hrTimeline, paceTimeline, elevTimeline, cadenceTimeline, duration, color, maxHR])
 
   if (route.length < 2) {
     return (
@@ -383,15 +399,17 @@ function RouteMap({
   const selectedHR = selectedPoint == null ? null : sampleAt(hrTimeline, selectedPoint)?.hr
   const selectedPace = selectedPoint == null ? null : sampleAt(paceTimeline, selectedPoint)?.pace
   const selectedElev = selectedPoint == null ? null : sampleAt(elevTimeline, selectedPoint)?.elev
+  const selectedCad = selectedPoint == null ? null : sampleAt(cadenceTimeline, selectedPoint)?.cad
 
   return (
     <div style={{ width: '100%', height, position: 'relative' }}>
       <LayerSwitcher layer={layer} onChange={setLayer} />
-      <select className="map-shade-select" value={shading} onChange={e => setShading(e.target.value as typeof shading)} title="Track shading">
+      <select className="map-shade-select" value={shading} onChange={e => setShading(e.target.value as Shading)} title="Track shading">
         <option value="accent">Default</option>
-        <option value="hr">Heart rate zones</option>
-        <option value="pace">Pace / Speed</option>
-        <option value="elevation">Elevation</option>
+        {hrTimeline.length > 0 && <option value="hr">Heart rate zones</option>}
+        {paceTimeline.length > 0 && <option value="pace">Pace / Speed</option>}
+        {elevTimeline.length > 0 && <option value="elevation">Elevation</option>}
+        {cadenceTimeline.length > 0 && <option value="cadence">Cadence</option>}
       </select>
       <MapContainer center={current} zoom={14} style={{ width: '100%', height: '100%' }} scrollWheelZoom attributionControl={false}>
         <TileLayer
@@ -407,7 +425,7 @@ function RouteMap({
         {avatarIcon
           ? <Marker position={current} icon={avatarIcon} interactive={false} />
           : <CircleMarker center={current} radius={7} pane="markerPane" pathOptions={{ color: '#fff', fillColor: color, fillOpacity: 1, weight: 2 }} />}
-        {selectedPoint != null && <Popup position={route[selectedPoint]} closeButton={false} autoPan><div style={{ fontSize: 12, lineHeight: 1.6 }}><strong>{fmtDuration(selectedTime)}</strong><br />Distance {fmtDist((selectedPoint / Math.max(route.length - 1, 1)) * distance)}<br />HR {selectedHR ?? '—'} bpm<br />Pace {selectedPace ? `${fmtPace(selectedPace)} /km` : '—'}<br />Speed {selectedPace ? `${(3600 / selectedPace).toFixed(1)} km/h` : '—'}<br />Elevation {selectedElev ?? '—'} m</div></Popup>}
+        {selectedPoint != null && <Popup position={route[selectedPoint]} closeButton={false} autoPan><div style={{ fontSize: 12, lineHeight: 1.6 }}><strong>{fmtDuration(selectedTime)}</strong><br />Distance {fmtDist((selectedPoint / Math.max(route.length - 1, 1)) * distance)}<br />HR {selectedHR ?? '—'} bpm<br />Pace {selectedPace ? `${fmtPace(selectedPace)} /km` : '—'}<br />Speed {selectedPace ? `${(3600 / selectedPace).toFixed(1)} km/h` : '—'}<br />Elevation {selectedElev ?? '—'} m{cadenceTimeline.length > 0 && <><br />Cadence {selectedCad ?? '—'} {cadenceLabel}</>}</div></Popup>}
       </MapContainer>
     </div>
   )
@@ -537,6 +555,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
     setSelectedMetrics(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m])
   }
   const [yFromZero, setYFromZero] = useLocalStorage<boolean>('al_y0', false)
+  const [hrZoneStyle] = useLocalStorage<HRZoneChart>(HR_ZONE_CHART_KEY, DEFAULT_HR_ZONE_CHART)
 
   // Equipment editing
   const [allEquipment, setAllEquipment] = useState<import('../lib/api').Equipment[]>([])
@@ -825,10 +844,32 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
   }
 
   function hrZoneChart(height: number) {
+    if (hrZoneStyle === 'histogram') {
+      return (
+        <ResponsiveContainer width="100%" height={height}>
+          <BarChart data={hrZones} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
+            <XAxis
+              dataKey="short" tick={{ fontSize: 11, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}
+              axisLine={false} tickLine={false}
+            />
+            <YAxis
+              tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}
+              axisLine={false} tickLine={false} tickFormatter={v => `${v}%`}
+            />
+            <Tooltip cursor={{ fill: 'var(--bg-3)' }} content={<HRZoneTooltip />} />
+            <Bar dataKey="pct" radius={[4, 4, 0, 0]} isAnimationActive={false}>
+              {hrZones.map(z => <Cell key={z.name} fill={z.color} />)}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      )
+    }
+    const slices = hrZones.filter(z => z.value > 0)
     return (
       <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: 'center', gap: 12 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0, width: isMobile ? '100%' : undefined }}>
-          {hrZones.map(z => (
+          {slices.map(z => (
             <div key={z.name} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-2)' }}>
               <div style={{ width: 8, height: 8, borderRadius: '50%', background: z.color, flexShrink: 0 }} />
               <span style={{ whiteSpace: 'nowrap' }}>{z.name} · {z.pct}%</span>
@@ -837,8 +878,8 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
         </div>
         <ResponsiveContainer width="100%" height={height}>
           <PieChart>
-            <Pie data={hrZones} dataKey="value" nameKey="name" innerRadius={height * 0.25} outerRadius={height * 0.44} paddingAngle={2}>
-              {hrZones.map(z => <Cell key={z.name} fill={z.color} />)}
+            <Pie data={slices} dataKey="value" nameKey="name" innerRadius={height * 0.25} outerRadius={height * 0.44} paddingAngle={2}>
+              {slices.map(z => <Cell key={z.name} fill={z.color} />)}
             </Pie>
             <Tooltip content={<HRZoneTooltip />} />
           </PieChart>
@@ -849,7 +890,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
 
   function mapCard(height: number | string) {
     return (
-      <RouteMap route={w.route} color={trailColor} duration={w.duration} currentTime={currentTime} onScrub={handleScrub} height={height} distance={w.distance} hrTimeline={w.hrTimeline} paceTimeline={w.paceTimeline} elevTimeline={w.elevTimeline} avatarUrl={user?.avatarPath || undefined} maxHR={effectiveMaxHR} />
+      <RouteMap route={w.route} color={trailColor} duration={w.duration} currentTime={currentTime} onScrub={handleScrub} height={height} distance={w.distance} hrTimeline={w.hrTimeline} paceTimeline={w.paceTimeline} elevTimeline={w.elevTimeline} cadenceTimeline={cadenceTimeline} cadenceLabel={cadenceUnit(w.type)} avatarUrl={user?.avatarPath || undefined} maxHR={effectiveMaxHR} />
     )
   }
 

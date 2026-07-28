@@ -10,6 +10,8 @@ interface TopBarProps {
   onCycleTheme: () => void
   onUserMenu: () => void
   onHelp: () => void
+  /** Clicking the brand returns to the dashboard, like any site logo. */
+  onHome: () => void
   isMobile: boolean
   user: ApiUser
 }
@@ -26,7 +28,7 @@ const THEME_LABELS: Record<ThemeMode, string> = {
   system: 'System theme',
 }
 
-export default function TopBar({ onToggleSidebar, themeMode, onCycleTheme, onUserMenu, onHelp, isMobile, user }: TopBarProps) {
+export default function TopBar({ onToggleSidebar, themeMode, onCycleTheme, onUserMenu, onHelp, onHome, isMobile, user }: TopBarProps) {
   const initials = (user.displayName || user.username || '?')
     .split(/\s+/)
     .map(s => s[0])
@@ -41,12 +43,19 @@ export default function TopBar({ onToggleSidebar, themeMode, onCycleTheme, onUse
         </button>
       )}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <button
+        onClick={onHome}
+        title="Go to dashboard"
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
+        }}
+      >
         <Logo size={28} radius={8} />
         <span style={{ fontWeight: 700, fontSize: 15, letterSpacing: '-0.02em', color: 'var(--text)' }}>
           Activity Lens
         </span>
-      </div>
+      </button>
 
       <div style={{ flex: 1 }} />
 

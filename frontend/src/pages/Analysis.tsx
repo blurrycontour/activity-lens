@@ -2,8 +2,11 @@ import { useMemo, useState } from 'react'
 import { TYPE_COLOR, fmtPace, type WorkoutType, type Workout } from '../data/workouts'
 import { useWorkouts } from '../context/WorkoutsContext'
 import TypeDropdown from '../components/TypeDropdown'
+import RangeDropdown from '../components/RangeDropdown'
+import { useLocalStorage } from '../lib/useLocalStorage'
+import { filterByRange, rangeLabel, toDateKey } from '../lib/range'
 import {
-  ScatterChart, Scatter, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
+  ScatterChart, Scatter, XAxis, YAxis, ZAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   BarChart, Bar,
 } from 'recharts'
 import { TrendingUp, Award, Target, Zap } from 'lucide-react'
@@ -11,8 +14,11 @@ import { TrendingUp, Award, Target, Zap } from 'lucide-react'
 type PR = { longest: Workout; fastest: Workout | null; highest: Workout }
 
 export default function Analysis() {
-  const { workouts } = useWorkouts()
+  const { workouts: allWorkouts } = useWorkouts()
   const [scatterType, setScatterType] = useState<WorkoutType | 'All'>('Run')
+  const [rangeDays, setRangeDays] = useLocalStorage<number>('al_an_range', 30)
+
+  const workouts = useMemo(() => filterByRange(allWorkouts, rangeDays), [allWorkouts, rangeDays])
 
   const { PRs, calByType, trainingLoad } = useMemo(() => {
     // Personal records per type
@@ -37,34 +43,50 @@ export default function Analysis() {
       fill: TYPE_COLOR[t],
     })).filter(d => d.count > 0)
 
-    // Training load (TSS-equivalent, 60 days)
-    const trainingLoad: { date: string; tss: number; load: number }[] = []
-    for (let i = 60; i >= 0; i--) {
+    // Training load (TSS-equivalent), one bar per day across the selected
+    // range. All-time is capped at a year so the chart stays legible.
+    const loadDays = Math.min(rangeDays > 0 ? rangeDays : 365, 365)
+    const byDate = new Map<string, number>()
+    for (const w of workouts) {
+      byDate.set(w.date, (byDate.get(w.date) ?? 0) + Math.round(w.duration / 3600 * w.avgHR / 150 * 100))
+    }
+    const trainingLoad: { date: string; tss: number }[] = []
+    for (let i = loadDays - 1; i >= 0; i--) {
       const dt = new Date()
       dt.setDate(dt.getDate() - i)
-      const ds = dt.toISOString().split('T')[0]
-      const dayW = workouts.filter(w => w.date === ds)
-      const tss = dayW.reduce((a, w) => a + Math.round(w.duration / 3600 * w.avgHR / 150 * 100), 0)
-      trainingLoad.push({ date: dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), tss, load: Math.round(tss * 0.85) })
+      trainingLoad.push({
+        date: dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        tss: byDate.get(toDateKey(dt)) ?? 0,
+      })
     }
 
     return { PRs, calByType, trainingLoad }
-  }, [workouts])
+  }, [workouts, rangeDays])
 
   // HR vs Pace scatter data, filterable by activity type (or all combined).
   const scatterData = useMemo(() =>
     workouts
       .filter(w => (scatterType === 'All' || w.type === scatterType) && w.avgPace > 0)
-      .map(w => ({ hr: w.avgHR, pace: Math.round(w.avgPace / 6) / 10, name: w.name, date: w.date, dist: (w.distance / 1000).toFixed(1) })),
+      .map(w => ({
+        hr: w.avgHR,
+        pace: Math.round(w.avgPace / 6) / 10,
+        distKm: w.distance / 1000,
+        name: w.name,
+        date: w.date,
+        dist: (w.distance / 1000).toFixed(1),
+      })),
   [workouts, scatterType])
 
   return (
     <div>
       <div className="page-header">
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 16 }}>
           <h1 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>Analysis</h1>
-          <span style={{ fontSize: 12, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>Performance insights</span>
+          <span style={{ fontSize: 12, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
+            Performance insights · {workouts.length} activities
+          </span>
         </div>
+        <RangeDropdown value={rangeDays} onChange={setRangeDays} />
       </div>
 
       <div className="page-content">
@@ -109,12 +131,33 @@ export default function Analysis() {
               </div>
             </div>
             <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 12 }}>Lower HR at faster pace = improved aerobic efficiency</p>
-            <ResponsiveContainer width="100%" height={200}>
-              <ScatterChart margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+            {scatterData.length === 0 ? (
+              <div style={{ height: 230, display: 'grid', placeItems: 'center', fontSize: 12, color: 'var(--text-3)' }}>
+                No paced activities in the {rangeLabel(rangeDays)}
+              </div>
+            ) : (
+            <ResponsiveContainer width="100%" height={230}>
+              {/* Units live in the axis labels rather than on every tick: with
+                  " bpm" appended to each value the labels grew wide enough to
+                  be clipped by the plot area. */}
+              <ScatterChart margin={{ top: 8, right: 12, left: 4, bottom: 16 }}>
                 <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" />
-                <XAxis dataKey="pace" name="Pace" unit=" min/km" tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} />
-                <YAxis dataKey="hr" name="HR" unit=" bpm" tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} />
+                <XAxis
+                  type="number" dataKey="pace" name="Pace" domain={['dataMin - 0.3', 'dataMax + 0.3']}
+                  tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}
+                  axisLine={false} tickLine={false}
+                  label={{ value: 'Pace (min/km)', position: 'insideBottom', offset: -12, fontSize: 10, fill: 'var(--text-3)' }}
+                />
+                <YAxis
+                  type="number" dataKey="hr" name="HR" domain={['dataMin - 5', 'dataMax + 5']} width={44}
+                  tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}
+                  axisLine={false} tickLine={false}
+                  label={{ value: 'HR (bpm)', angle: -90, position: 'insideLeft', fontSize: 10, fill: 'var(--text-3)', style: { textAnchor: 'middle' } }}
+                />
+                {/* Marker area encodes distance, so long efforts stand out. */}
+                <ZAxis type="number" dataKey="distKm" range={[36, 220]} name="Distance" />
                 <Tooltip
+                  cursor={{ strokeDasharray: '3 3', stroke: 'var(--border-strong)' }}
                   content={({ active, payload }) => {
                     if (!active || !payload?.length) return null
                     const d = payload[0].payload
@@ -129,9 +172,10 @@ export default function Analysis() {
                     )
                   }}
                 />
-                <Scatter data={scatterData} fill="var(--primary)" opacity={0.7} />
+                <Scatter data={scatterData} fill="var(--primary)" opacity={0.6} />
               </ScatterChart>
             </ResponsiveContainer>
+            )}
           </div>
 
           {/* Calories by type */}
@@ -169,13 +213,13 @@ export default function Analysis() {
         <div className="card">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
             <TrendingUp size={14} color="var(--blue)" />
-            <h3 style={{ fontSize: 13, fontWeight: 600 }}>Training Load (60 days)</h3>
+            <h3 style={{ fontSize: 13, fontWeight: 600 }}>Training Load</h3>
             <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>TSS-equivalent score</span>
           </div>
           <ResponsiveContainer width="100%" height={160}>
-            <BarChart data={trainingLoad.filter((_, i) => i % 2 === 0)} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+            <BarChart data={trainingLoad} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
               <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
-              <XAxis dataKey="date" tick={{ fontSize: 9, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} interval={6} />
+              <XAxis dataKey="date" tick={{ fontSize: 9, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} interval={Math.max(0, Math.ceil(trainingLoad.length / 8) - 1)} />
               <YAxis tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} />
               <Tooltip
                 content={({ active, payload }) => {

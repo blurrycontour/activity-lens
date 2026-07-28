@@ -20,7 +20,8 @@ import Login from './pages/Login'
 import { type Workout } from './data/workouts'
 import { useAuth } from './context/AuthContext'
 import { WorkoutsProvider } from './context/WorkoutsContext'
-import { type Page } from './lib/nav'
+import { adjacentPage, type Page } from './lib/nav'
+import { useSwipeNav } from './lib/useSwipeNav'
 import { api } from './lib/api'
 
 const SIDEBAR_KEY = 'al_sidebar_w'
@@ -185,6 +186,19 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [navigate, toggleSidebar, selectWorkout])
 
+  // Mobile swipe navigation across the bottom-bar pages. Disabled while a
+  // workout detail is open, where horizontal drags belong to the map.
+  const mainRef = useRef<HTMLElement>(null)
+  const swipeTo = useCallback((steps: number) => {
+    const next = adjacentPage(page, steps)
+    if (next) navigate(next)
+  }, [page, navigate])
+  useSwipeNav(mainRef, {
+    enabled: isMobile && !selectedWorkout && !showImport && !showUserMenu,
+    onPrev: () => swipeTo(-1),
+    onNext: () => swipeTo(1),
+  })
+
   const layoutClass = [
     'app-layout',
     sidebarCollapsed && !isMobile ? 'collapsed' : '',
@@ -211,6 +225,7 @@ export default function App() {
         onCycleTheme={cycleTheme}
         onUserMenu={() => setShowUserMenu(v => !v)}
         onHelp={() => navigate('help')}
+        onHome={() => navigate('dashboard')}
         isMobile={isMobile}
         user={user}
       />
@@ -226,7 +241,7 @@ export default function App() {
         isMobile={isMobile}
       />
 
-      <main className="main-content">
+      <main className="main-content" ref={mainRef}>
         {selectedWorkout ? (
           <WorkoutDetail key={selectedWorkout.id} workout={selectedWorkout} accent={accent} onBack={() => selectWorkout(null)} />
         ) : page === 'dashboard' ? (

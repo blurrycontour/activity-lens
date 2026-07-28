@@ -287,6 +287,10 @@ body {
 
 .page-header { padding: 24px 24px 16px; border-bottom: 1px solid var(--border); }
 .page-content { padding: 24px; }
+/* Pages whose header already carries the filters (Workouts, Equipment) sit
+   tighter against it. Only the vertical padding is narrowed so the mobile
+   override below still governs the horizontal gutters. */
+.page-content.tight { padding-top: 16px; padding-bottom: 16px; }
 
 .input {
   background: var(--bg-3);
@@ -387,12 +391,12 @@ body {
   font-family: var(--font-mono);
 }
 
-/* Custom type-filter dropdown */
-.type-dropdown {
+/* Compact filter dropdown, shared by the type and time-range pickers. */
+.al-dropdown {
   position: relative;
   display: inline-block;
 }
-.type-dropdown-trigger {
+.al-dropdown-trigger {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -406,8 +410,8 @@ body {
   min-width: 150px;
   transition: border-color 0.15s;
 }
-.type-dropdown-trigger:hover { border-color: var(--border-strong); }
-.type-dropdown-menu {
+.al-dropdown-trigger:hover { border-color: var(--border-strong); }
+.al-dropdown-menu {
   position: absolute;
   top: calc(100% + 4px);
   left: 0;
@@ -419,7 +423,7 @@ body {
   min-width: 170px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
-.type-dropdown-item {
+.al-dropdown-item {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -434,8 +438,8 @@ body {
   width: 100%;
   text-align: left;
 }
-.type-dropdown-item:hover { background: var(--bg-3); color: var(--text); }
-.type-dropdown-item.active { color: var(--text); font-weight: 600; }
+.al-dropdown-item:hover { background: var(--bg-3); color: var(--text); }
+.al-dropdown-item.active { color: var(--text); font-weight: 600; }
 
 /* Workout detail summary stat grid: readable multi-column layout that
  * collapses to 3-per-row on mobile. */

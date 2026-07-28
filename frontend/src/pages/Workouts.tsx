@@ -108,7 +108,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
         </div>
       </div>
 
-      <div className="page-content" style={{ padding: '16px 24px' }}>
+      <div className="page-content tight">
         {filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-3)' }}>
             <div style={{ fontSize: 32, marginBottom: 12 }}>{loading ? '⏳' : '🔍'}</div>
