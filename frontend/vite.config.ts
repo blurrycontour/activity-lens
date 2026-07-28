@@ -1,9 +1,24 @@
 import { defineConfig, type HtmlTagDescriptor, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { VitePWA } from 'vite-plugin-pwa'
 import path from 'node:path'
 
 import siteConfiguration from './.figma/make/site.json'
+
+// Accepted when a workout file is shared into the app. GadgetBridge and several
+// other exporters share with a generic or missing MIME type, so the extensions
+// are listed alongside the specific types to make sure the share sheet offers
+// Activity Lens at all.
+const WORKOUT_FILE_TYPES = [
+  '.gpx',
+  '.tcx',
+  'application/gpx+xml',
+  'application/vnd.garmin.tcx+xml',
+  'application/xml',
+  'text/xml',
+  'application/octet-stream',
+]
 
 // Vite config — https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -26,6 +41,49 @@ export default defineConfig(({ mode }) => {
       figmaErrorOverlayReplay(),
       figmaReactRefreshBoundaryFallback(),
       figmaMakeKitPlugin({ storiesGlob: '/src/**/*.stories.{ts,tsx,js,jsx}' }),
+      VitePWA({
+        // injectManifest (rather than generateSW) because the share target
+        // needs a hand-written POST handler that no generated worker provides.
+        strategies: 'injectManifest',
+        srcDir: 'src',
+        filename: 'sw.ts',
+        registerType: 'autoUpdate',
+        // Registration happens explicitly in main.tsx.
+        injectRegister: null,
+        injectManifest: {
+          globPatterns: ['**/*.{js,css,html,png,svg,woff,woff2}'],
+        },
+        manifest: {
+          name: 'Activity Lens',
+          short_name: 'Activity Lens',
+          description: 'Multi-sport workout tracking and performance analysis',
+          start_url: '/',
+          scope: '/',
+          display: 'standalone',
+          background_color: '#0a0b0e',
+          theme_color: '#0a0b0e',
+          orientation: 'portrait',
+          categories: ['fitness', 'health', 'sports'],
+          icons: [
+            { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
+            { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+          ],
+          // Lets the installed app appear in the Android share sheet when a
+          // tracker app shares a workout file. The POST is intercepted by the
+          // service worker, which stashes the file and redirects to the app.
+          share_target: {
+            action: '/share-target',
+            method: 'POST',
+            enctype: 'multipart/form-data',
+            params: {
+              title: 'title',
+              text: 'text',
+              url: 'url',
+              files: [{ name: 'file', accept: WORKOUT_FILE_TYPES }],
+            },
+          },
+        },
+      }),
     ],
     resolve: {
       alias: {

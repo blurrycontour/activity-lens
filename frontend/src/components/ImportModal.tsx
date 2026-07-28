@@ -7,6 +7,9 @@ import { type Workout, fmtDist, fmtDuration, fmtPace } from '../data/workouts'
 interface ImportModalProps {
   onClose: () => void
   onViewWorkout?: (workout: Workout) => void
+  // Pre-selected file, set when the modal was opened by a file shared into the
+  // app rather than by the user picking one.
+  initialFile?: File | null
 }
 
 type Tab = 'file' | 'manual'
@@ -23,11 +26,11 @@ function parseDuration(v: string): number {
   return 0
 }
 
-export default function ImportModal({ onClose, onViewWorkout }: ImportModalProps) {
+export default function ImportModal({ onClose, onViewWorkout, initialFile }: ImportModalProps) {
   const { refresh } = useWorkouts()
   const [tab, setTab] = useState<Tab>('file')
   const [dragging, setDragging] = useState(false)
-  const [file, setFile] = useState<File | null>(null)
+  const [file, setFile] = useState<File | null>(initialFile ?? null)
   const [done, setDone] = useState(false)
   const [created, setCreated] = useState<Workout | null>(null)
   // Set when the server recognised the file as already imported and returned

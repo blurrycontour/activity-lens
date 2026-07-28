@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import { api, ApiError, type ApiUser, type AuthFeatures } from '../lib/api'
+import { clearApiCache } from '../lib/swCache'
 
 interface AuthState {
   user: ApiUser | null
@@ -72,6 +73,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await api.logout()
     } finally {
       setUserState(null)
+      // The service worker caches API GETs so the app works offline. Those
+      // responses are this user's data, so drop them on the way out rather
+      // than leaving them readable to whoever logs in next on this device.
+      void clearApiCache()
     }
   }, [])
 

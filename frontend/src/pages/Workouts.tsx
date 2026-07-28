@@ -4,6 +4,7 @@ import { useWorkouts } from '../context/WorkoutsContext'
 import { Search, ChevronRight, Clock, Mountain, Flame, Download, Plus, RefreshCw, Grid2X2, List, Navigation } from 'lucide-react'
 import TypeDropdown from '../components/TypeDropdown'
 import { api } from '../lib/api'
+import { downloadWorkoutGPX } from '../lib/download'
 
 interface WorkoutsProps {
   onSelect: (w: Workout) => void
@@ -138,25 +139,7 @@ async function exportWorkout(w: Workout, e: React.MouseEvent) {
   e.stopPropagation()
   // The list view only carries summary fields (no route) for efficiency, so
   // fetch the full workout — including its route — on demand when exporting.
-  const full = await api.getWorkout(w.id)
-  // Build a minimal GPX string
-  const gpx = `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="Activity Lens">
-  <trk>
-    <name>${full.name}</name>
-    <type>${full.type}</type>
-    <trkseg>
-${full.route.map(([lat, lng]) => `      <trkpt lat="${lat.toFixed(6)}" lon="${lng.toFixed(6)}"></trkpt>`).join('\n')}
-    </trkseg>
-  </trk>
-</gpx>`
-  const blob = new Blob([gpx], { type: 'application/gpx+xml' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `${full.name.replace(/\s+/g, '_')}_${full.date}.gpx`
-  a.click()
-  URL.revokeObjectURL(url)
+  downloadWorkoutGPX(await api.getWorkout(w.id))
 }
 
 function WorkoutCard({ workout: w, variant, onClick }: { workout: Workout; variant: 'list' | 'grid'; onClick: () => void }) {

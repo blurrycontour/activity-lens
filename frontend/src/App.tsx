@@ -21,6 +21,7 @@ import { useAuth } from './context/AuthContext'
 import { WorkoutsProvider } from './context/WorkoutsContext'
 import { adjacentPage, DESKTOP_PAGES, LEGACY_ROUTES, type Page } from './lib/nav'
 import { useSwipeNav } from './lib/useSwipeNav'
+import { consumeShareParam, takeSharedFile } from './lib/shareTarget'
 import { api } from './lib/api'
 
 const SIDEBAR_KEY = 'al_sidebar_w'
@@ -82,6 +83,7 @@ export default function App() {
   })
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showImport, setShowImport] = useState(false)
+  const [sharedFile, setSharedFile] = useState<File | null>(null)
   const [isMobile, setIsMobile] = useState(false)
 
   // Detect mobile
@@ -135,6 +137,24 @@ export default function App() {
     return () => { cancelled = true }
     // Only run once, when auth resolves.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user])
+
+  // Pick up a workout file shared into the installed app from the Android
+  // share sheet. The service worker stashed it and redirected here with
+  // ?share=; claim it and open the import modal ready to go. Waits for auth so
+  // a share that arrives while logged out survives the login screen.
+  useEffect(() => {
+    if (!user) return
+    if (consumeShareParam() === null) return
+    let cancelled = false
+    // The modal opens either way: if the handoff failed, an empty import modal
+    // is a better outcome than the share appearing to do nothing.
+    takeSharedFile().then(f => {
+      if (cancelled) return
+      setSharedFile(f)
+      setShowImport(true)
+    })
+    return () => { cancelled = true }
   }, [user])
 
   // Keep app state in sync with browser back/forward navigation.
@@ -294,8 +314,9 @@ export default function App() {
       )}
       {showImport && (
         <ImportModal
-          onClose={() => setShowImport(false)}
-          onViewWorkout={w => { selectWorkout(w); setShowImport(false) }}
+          initialFile={sharedFile}
+          onClose={() => { setShowImport(false); setSharedFile(null) }}
+          onViewWorkout={w => { selectWorkout(w); setShowImport(false); setSharedFile(null) }}
         />
       )}
       </div>

@@ -8,6 +8,7 @@ import {
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
+import { downloadWorkoutGPX } from '../lib/download'
 import { useLocalStorage } from '../lib/useLocalStorage'
 import { DEFAULT_HR_ZONE_CHART, HR_ZONE_CHART_KEY, type HRZoneChart } from '../lib/dashboardConfig'
 import InfoTip from '../components/InfoTip'
@@ -15,27 +16,6 @@ import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, Popup, useMap,
 import 'leaflet/dist/leaflet.css'
 import { divIcon } from 'leaflet'
 import type { LatLngBoundsExpression } from 'leaflet'
-
-function exportGPX(w: Workout) {
-  const gpx = `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="Activity Lens">
-  <metadata><name>${w.name}</name></metadata>
-  <trk>
-    <name>${w.name}</name>
-    <type>${w.type}</type>
-    <trkseg>
-${w.route.map(([lat, lng]) => `      <trkpt lat="${lat.toFixed(6)}" lon="${lng.toFixed(6)}"></trkpt>`).join('\n')}
-    </trkseg>
-  </trk>
-</gpx>`
-  const blob = new Blob([gpx], { type: 'application/gpx+xml' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `${w.name.replace(/\s+/g, '_')}_${w.date}.gpx`
-  a.click()
-  URL.revokeObjectURL(url)
-}
 
 interface WorkoutDetailProps {
   workout: Workout
@@ -1013,7 +993,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
             </div>
           </div>
           <div style={{ marginLeft: 'auto', flexShrink: 0 }}>
-            <OptionsMenu onEdit={startEdit} onExport={() => exportGPX(w)} onRecalculate={() => { setRecalcErr(null); setConfirmRecalc(true) }} onDelete={() => setConfirmDelete(true)} deleting={deleting} />
+            <OptionsMenu onEdit={startEdit} onExport={() => downloadWorkoutGPX(w)} onRecalculate={() => { setRecalcErr(null); setConfirmRecalc(true) }} onDelete={() => setConfirmDelete(true)} deleting={deleting} />
           </div>
         </div>
       </div>

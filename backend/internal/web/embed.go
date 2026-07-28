@@ -5,9 +5,18 @@ package web
 import (
 	"embed"
 	"io/fs"
+	"mime"
 	"net/http"
 	"strings"
 )
+
+// Files that must never be served from a stale browser cache. A pinned service
+// worker keeps a client on an old build indefinitely, because the worker script
+// is what triggers the update check in the first place.
+var noStoreFiles = map[string]bool{
+	"sw.js":                true,
+	"manifest.webmanifest": true,
+}
 
 //go:embed all:dist
 var dist embed.FS
@@ -29,15 +38,27 @@ func Handler() (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Go's built-in type table has no entry for .webmanifest, so the manifest
+	// would go out as text/plain and browsers would refuse to install the PWA.
+	if err := mime.AddExtensionType(".webmanifest", "application/manifest+json"); err != nil {
+		return nil, err
+	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		p := strings.TrimPrefix(r.URL.Path, "/")
-		if p == "" {
+		// http.FileServer answers "/index.html" with a 301 to "/". The service
+		// worker precaches the shell under its real name and fetches it during
+		// install, where a redirect makes the response uncacheable and takes
+		// offline support down with it — so serve the shell directly instead.
+		if p == "" || p == "index.html" {
 			serveIndex(w, index)
 			return
 		}
 		if f, err := assets.Open(p); err == nil {
 			_ = f.Close()
+			if noStoreFiles[p] {
+				w.Header().Set("Cache-Control", "no-cache")
+			}
 			// Static assets are content-hashed and never need byte-range
 			// serving (no audio/video). Some reverse proxies compress
 			// responses on the fly (e.g. Caddy's "encode" directive); if
