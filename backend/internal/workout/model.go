@@ -27,6 +27,18 @@ func ValidType(t Type) bool {
 	return ok
 }
 
+// Source identifies where a workout came from. It pairs with Workout.ExternalID
+// to give an imported workout a stable identity, so re-importing the same file
+// or re-running a sync updates nothing instead of creating a duplicate.
+type Source string
+
+// Supported workout sources.
+const (
+	SourceUpload        Source = "upload"        // a .gpx/.tcx file the user uploaded
+	SourceManual        Source = "manual"        // hand-entered in the import modal
+	SourceHealthConnect Source = "healthconnect" // synced from Android Health Connect
+)
+
 // LatLng is a geographic point [latitude, longitude], serialized as a 2-tuple
 // to match the frontend route format.
 type LatLng [2]float64
@@ -87,6 +99,15 @@ type Workout struct {
 	ElevTimeline     []ElevPoint    `json:"elevTimeline"`
 	CadenceTimeline  []CadencePoint `json:"cadenceTimeline"`
 	Notes            string         `json:"notes"`
+	// Source records where this workout came from so the UI can badge it.
+	Source Source `json:"source,omitempty"`
+	// ExternalID is this workout's identity within Source (the file's SHA-256
+	// for uploads, the provider's record id for a sync). Empty means the
+	// workout cannot be de-duplicated. Not exposed to clients.
+	ExternalID string `json:"-"`
+	// ContentHash is the SHA-256 of the original uploaded bytes, when there
+	// were any. Not exposed to clients.
+	ContentHash string `json:"-"`
 	// Equipment is populated by the API layer for single-workout responses.
 	Equipment []EquipmentTag `json:"equipment,omitempty"`
 }
@@ -120,6 +141,12 @@ type Input struct {
 	ElevTimeline     []ElevPoint
 	CadenceTimeline  []CadencePoint
 	Notes            string
+	// Source, ExternalID and ContentHash drive de-duplication; see the
+	// corresponding fields on Workout. Source defaults to SourceManual when
+	// left empty.
+	Source      Source
+	ExternalID  string
+	ContentHash string
 }
 
 // Patch carries optional edits to an existing workout. Nil fields are left

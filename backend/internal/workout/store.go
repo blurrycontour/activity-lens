@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 )
 
@@ -16,12 +17,20 @@ import (
 // requesting user).
 var ErrNotFound = errors.New("workout: not found")
 
+// ErrDuplicate is returned when an insert collides with an existing workout
+// carrying the same (user, source, external id) identity.
+var ErrDuplicate = errors.New("workout: duplicate")
+
 // Repository is the persistence seam for workouts. All SQL lives behind this
 // interface so an alternative backend (Postgres, encrypted SQLite) can be
 // dropped in without changing the service.
 type Repository interface {
 	Create(ctx context.Context, w *Workout) error
 	Get(ctx context.Context, userID int64, id string) (*Workout, error)
+	// GetByExternalID looks a workout up by its (source, external id) identity
+	// so an import can detect that it has already stored this workout.
+	// Returns ErrNotFound when there is no match.
+	GetByExternalID(ctx context.Context, userID int64, source Source, externalID string) (*Workout, error)
 	List(ctx context.Context, userID int64) ([]Workout, error)
 	// ListSummary is like List but omits the route/HR/pace/elevation
 	// timelines, which can be tens of KB each. List/dashboard views only
@@ -43,10 +52,15 @@ func NewSQLiteRepository(db *sql.DB) *SQLiteRepository { return &SQLiteRepositor
 
 const workoutCols = `id, user_id, name, type, start_time, duration, distance, avg_hr, max_hr,
 	elevation_gain, calories, steps, avg_pace, avg_speed, route, hr_timeline, pace_timeline,
-	elev_timeline, cadence_timeline, notes, calories_manual, calories_reported, steps_manual`
+	elev_timeline, cadence_timeline, notes, calories_manual, calories_reported, steps_manual, source`
 
 const workoutSummaryCols = `id, user_id, name, type, start_time, duration, distance, avg_hr, max_hr,
-	elevation_gain, calories, steps, avg_pace, avg_speed, notes, calories_manual, calories_reported, steps_manual`
+	elevation_gain, calories, steps, avg_pace, avg_speed, notes, calories_manual, calories_reported,
+	steps_manual, source`
+
+// insertCols extends workoutCols with the de-duplication identity, which is
+// written on insert but never read back into the model on normal reads.
+const insertCols = workoutCols + `, external_id, content_hash`
 
 func (r *SQLiteRepository) Create(ctx context.Context, w *Workout) error {
 	s, err := marshalSeries(w)
@@ -54,16 +68,30 @@ func (r *SQLiteRepository) Create(ctx context.Context, w *Workout) error {
 		return err
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
-	_, err = r.db.ExecContext(ctx, `INSERT INTO workouts (`+workoutCols+`, created_at, updated_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err = r.db.ExecContext(ctx, `INSERT INTO workouts (`+insertCols+`, created_at, updated_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		w.ID, w.UserID, w.Name, string(w.Type), w.StartTime.UTC().Format(time.RFC3339),
 		w.Duration, w.Distance, w.AvgHR, w.MaxHR, w.ElevationGain, w.Calories, w.Steps,
 		w.AvgPace, w.AvgSpeed, s.route, s.hr, s.pace, s.elev, s.cadence, w.Notes,
-		boolToInt(w.CaloriesManual), boolToInt(w.CaloriesReported), boolToInt(w.StepsManual), now, now)
+		boolToInt(w.CaloriesManual), boolToInt(w.CaloriesReported), boolToInt(w.StepsManual),
+		string(w.Source), nullIfEmpty(w.ExternalID), nullIfEmpty(w.ContentHash), now, now)
 	if err != nil {
+		if isUniqueViolation(err) {
+			return ErrDuplicate
+		}
 		return fmt.Errorf("insert workout: %w", err)
 	}
 	return nil
+}
+
+func (r *SQLiteRepository) GetByExternalID(ctx context.Context, userID int64, source Source, externalID string) (*Workout, error) {
+	row := r.db.QueryRowContext(ctx, `SELECT `+workoutCols+` FROM workouts
+		WHERE user_id = ? AND source = ? AND external_id = ?`, userID, string(source), externalID)
+	w, err := scanWorkout(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return w, err
 }
 
 func (r *SQLiteRepository) Get(ctx context.Context, userID int64, id string) (*Workout, error) {
@@ -199,6 +227,27 @@ func boolToInt(b bool) int {
 	return 0
 }
 
+// nullIfEmpty stores an empty string as SQL NULL, which is what keeps
+// non-de-duplicable rows out of the partial unique index on external_id.
+func nullIfEmpty(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
+}
+
+// isUniqueViolation reports whether err is a unique-constraint failure. The
+// message differs per driver ("UNIQUE constraint failed" on SQLite, "duplicate
+// key value violates unique constraint" on Postgres), so both are matched to
+// keep the repository portable without importing driver-specific error types.
+func isUniqueViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "unique constraint") || strings.Contains(msg, "duplicate key value")
+}
+
 func gzipBytes(data []byte) ([]byte, error) {
 	var buf bytes.Buffer
 	gw := gzip.NewWriter(&buf)
@@ -240,16 +289,18 @@ func scanWorkout(row interface{ Scan(...any) error }) (*Workout, error) {
 		calManual   int
 		calReported int
 		stepManual  int
+		source      string
 	)
 	if err := row.Scan(&w.ID, &w.UserID, &w.Name, &typ, &startTime, &w.Duration, &w.Distance,
 		&w.AvgHR, &w.MaxHR, &w.ElevationGain, &w.Calories, &w.Steps, &w.AvgPace, &w.AvgSpeed,
 		&s.route, &s.hr, &s.pace, &s.elev, &s.cadence, &w.Notes,
-		&calManual, &calReported, &stepManual); err != nil {
+		&calManual, &calReported, &stepManual, &source); err != nil {
 		return nil, err
 	}
 	w.CaloriesManual = calManual != 0
 	w.CaloriesReported = calReported != 0
 	w.StepsManual = stepManual != 0
+	w.Source = Source(source)
 	if err := applyScalarFields(&w, typ, startTime); err != nil {
 		return nil, err
 	}
@@ -276,15 +327,17 @@ func scanWorkoutSummary(row interface{ Scan(...any) error }) (*Workout, error) {
 		calManual   int
 		calReported int
 		stepManual  int
+		source      string
 	)
 	if err := row.Scan(&w.ID, &w.UserID, &w.Name, &typ, &startTime, &w.Duration, &w.Distance,
 		&w.AvgHR, &w.MaxHR, &w.ElevationGain, &w.Calories, &w.Steps, &w.AvgPace, &w.AvgSpeed, &w.Notes,
-		&calManual, &calReported, &stepManual); err != nil {
+		&calManual, &calReported, &stepManual, &source); err != nil {
 		return nil, err
 	}
 	w.CaloriesManual = calManual != 0
 	w.CaloriesReported = calReported != 0
 	w.StepsManual = stepManual != 0
+	w.Source = Source(source)
 	if err := applyScalarFields(&w, typ, startTime); err != nil {
 		return nil, err
 	}

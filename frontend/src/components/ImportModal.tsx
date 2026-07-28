@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Upload, X, CheckCircle, FileText, AlertCircle, ArrowRight } from 'lucide-react'
+import { Upload, X, CheckCircle, FileText, AlertCircle, ArrowRight, Info } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { api, ApiError, type Equipment } from '../lib/api'
 import { type Workout, fmtDist, fmtDuration, fmtPace } from '../data/workouts'
@@ -30,6 +30,9 @@ export default function ImportModal({ onClose, onViewWorkout }: ImportModalProps
   const [file, setFile] = useState<File | null>(null)
   const [done, setDone] = useState(false)
   const [created, setCreated] = useState<Workout | null>(null)
+  // Set when the server recognised the file as already imported and returned
+  // the existing workout rather than creating a second copy.
+  const [duplicate, setDuplicate] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [preview, setPreview] = useState<Workout | null>(null)
@@ -70,11 +73,14 @@ export default function ImportModal({ onClose, onViewWorkout }: ImportModalProps
   async function handleImport() {
     setBusy(true)
     setError(null)
+    setDuplicate(false)
     try {
       let workout: Workout
       if (tab === 'file') {
         if (!file) return
-        workout = await api.importWorkout(file, form.type, undefined, selectedEquipment)
+        const imported = await api.importWorkout(file, form.type, undefined, selectedEquipment)
+        setDuplicate(imported.duplicate === true)
+        workout = imported
       } else {
         workout = await api.createWorkout({
           name: form.name.trim(),
@@ -136,10 +142,16 @@ export default function ImportModal({ onClose, onViewWorkout }: ImportModalProps
 
           {done ? (
             <div style={{ textAlign: 'center', padding: '40px 0' }}>
-              <CheckCircle size={48} color="var(--primary)" style={{ margin: '0 auto 16px' }} />
-              <p style={{ fontWeight: 700, fontSize: 16 }}>Workout Added!</p>
+              {duplicate ? (
+                <Info size={48} color="var(--text-3)" style={{ margin: '0 auto 16px' }} />
+              ) : (
+                <CheckCircle size={48} color="var(--primary)" style={{ margin: '0 auto 16px' }} />
+              )}
+              <p style={{ fontWeight: 700, fontSize: 16 }}>{duplicate ? 'Already Imported' : 'Workout Added!'}</p>
               <p style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 6 }}>
-                {tab === 'file' ? file?.name : form.name || 'New Workout'} has been added to your library.
+                {duplicate
+                  ? `${file?.name} matches a workout already in your library, so nothing was added.`
+                  : `${tab === 'file' ? file?.name : form.name || 'New Workout'} has been added to your library.`}
               </p>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 20 }}>
                 <button className="btn btn-ghost" onClick={onClose}>Done</button>

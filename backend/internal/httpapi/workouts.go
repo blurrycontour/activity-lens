@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"log/slog"
@@ -78,6 +80,7 @@ func (s *Server) handleCreateWorkout(w http.ResponseWriter, r *http.Request) {
 		ElevationGain: req.ElevationGain,
 		Calories:      req.Calories,
 		Notes:         req.Notes,
+		Source:        workout.SourceManual,
 	}
 	if prefs, err := s.settings.UserPreferences(r.Context(), user.ID); err == nil {
 		in.StepLengthM = stepLengthMeters(prefs)
@@ -156,6 +159,14 @@ func (s *Server) handleDeleteWorkout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// importResponse is a workout plus a flag telling the client this file had
+// already been imported. The workout is embedded so its fields stay at the top
+// level of the JSON object and existing clients are unaffected.
+type importResponse struct {
+	*workout.Workout
+	Duplicate bool `json:"duplicate,omitempty"`
+}
+
 func (s *Server) handleImportWorkout(w http.ResponseWriter, r *http.Request) {
 	user := httpmw.UserFrom(r)
 	in, data, header, ok := s.parseWorkoutUpload(w, r, user.ID)
@@ -163,9 +174,18 @@ func (s *Server) handleImportWorkout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	wk, err := s.workout.Create(r.Context(), user.ID, in)
+	wk, created, err := s.workout.CreateIdempotent(r.Context(), user.ID, in)
 	if err != nil {
 		s.writeWorkoutError(w, err)
+		return
+	}
+	// An already-imported file resolves to the stored workout as-is: re-linking
+	// equipment would clobber edits the user has since made to it, and the
+	// original bytes are already archived.
+	if !created {
+		s.attachEquipment(r, user.ID, wk)
+		slog.Info("workout import skipped (duplicate)", "workout_id", wk.ID, "user_id", user.ID, "filename", header.Filename)
+		writeJSON(w, http.StatusOK, importResponse{Workout: wk, Duplicate: true})
 		return
 	}
 	var equipmentIDs []string
@@ -187,7 +207,7 @@ func (s *Server) handleImportWorkout(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, http.StatusCreated, wk)
+	writeJSON(w, http.StatusCreated, importResponse{Workout: wk})
 }
 
 // handlePreviewWorkout parses an uploaded file and returns the derived metrics
@@ -247,6 +267,13 @@ func (s *Server) parseWorkoutUpload(w http.ResponseWriter, r *http.Request, user
 	if name := r.FormValue("name"); name != "" {
 		in.Name = name
 	}
+	// Identify the upload by its content so re-importing the same file (a
+	// repeated share from a tracker app, a double-click on Import) resolves to
+	// the workout already stored rather than creating a second copy.
+	sum := sha256.Sum256(data)
+	in.Source = workout.SourceUpload
+	in.ContentHash = hex.EncodeToString(sum[:])
+	in.ExternalID = in.ContentHash
 	if prefs, err := s.settings.UserPreferences(r.Context(), userID); err == nil {
 		in.StepLengthM = stepLengthMeters(prefs)
 		if in.Calories == 0 {

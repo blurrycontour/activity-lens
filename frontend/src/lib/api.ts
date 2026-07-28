@@ -251,7 +251,9 @@ export const api = {
     if (type) form.append('type', type)
     if (name) form.append('name', name)
     if (equipmentIds) equipmentIds.forEach(id => form.append('equipmentIds', id))
-    return request<import('../data/workouts').Workout>('/api/workouts/import', { method: 'POST', raw: form })
+    // `duplicate` marks a file the server had already imported; the workout in
+    // the response is the existing one, left untouched.
+    return request<ImportedWorkout>('/api/workouts/import', { method: 'POST', raw: form })
   },
   previewWorkout: (file: File, type?: string, name?: string) => {
     const form = new FormData()
@@ -322,6 +324,11 @@ export interface ManualWorkoutInput {
   notes: string
   equipmentIds?: string[]
 }
+
+// ImportedWorkout is the import response: the workout, plus a flag set when the
+// server recognised the file as one it had already imported and returned the
+// existing workout instead of creating a duplicate.
+export type ImportedWorkout = import('../data/workouts').Workout & { duplicate?: boolean }
 
 export interface Stats {
   count: number

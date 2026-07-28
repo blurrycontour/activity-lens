@@ -24,6 +24,8 @@ type Service struct {
 func NewService(repo Repository) *Service { return &Service{repo: repo} }
 
 // Create validates input, derives metrics, persists and returns the workout.
+// It always inserts; callers importing from a file or a sync source should use
+// CreateIdempotent so a repeat import does not duplicate.
 func (s *Service) Create(ctx context.Context, userID int64, in Input) (*Workout, error) {
 	if err := validate(&in); err != nil {
 		return nil, err
@@ -48,6 +50,9 @@ func (s *Service) Create(ctx context.Context, userID int64, in Input) (*Workout,
 		Notes:            strings.TrimSpace(in.Notes),
 		CaloriesReported: in.CaloriesReported,
 		CadenceTimeline:  in.CadenceTimeline,
+		Source:           in.Source,
+		ExternalID:       in.ExternalID,
+		ContentHash:      in.ContentHash,
 	}
 	deriveMetrics(w, in.StepLengthM)
 	if err := s.repo.Create(ctx, w); err != nil {
@@ -55,6 +60,40 @@ func (s *Service) Create(ctx context.Context, userID int64, in Input) (*Workout,
 	}
 	w.Date = w.StartTime.Format("2006-01-02")
 	return w, nil
+}
+
+// CreateIdempotent persists a workout unless one with the same
+// (source, external id) identity already exists for the user, in which case the
+// existing workout is returned untouched. created reports which happened.
+//
+// An input with no ExternalID cannot be de-duplicated and is always inserted.
+func (s *Service) CreateIdempotent(ctx context.Context, userID int64, in Input) (w *Workout, created bool, err error) {
+	if in.Source == "" {
+		in.Source = SourceManual
+	}
+	if in.ExternalID == "" {
+		w, err = s.Create(ctx, userID, in)
+		return w, err == nil, err
+	}
+	if existing, err := s.repo.GetByExternalID(ctx, userID, in.Source, in.ExternalID); err == nil {
+		return existing, false, nil
+	} else if !errors.Is(err, ErrNotFound) {
+		return nil, false, err
+	}
+	w, err = s.Create(ctx, userID, in)
+	// Lost a race against a concurrent import of the same workout: the unique
+	// index rejected the insert, so return whatever won.
+	if errors.Is(err, ErrDuplicate) {
+		existing, getErr := s.repo.GetByExternalID(ctx, userID, in.Source, in.ExternalID)
+		if getErr != nil {
+			return nil, false, err
+		}
+		return existing, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	return w, true, nil
 }
 
 // Preview derives metrics for the given input without persisting anything. It

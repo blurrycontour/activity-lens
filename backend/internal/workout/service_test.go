@@ -15,8 +15,25 @@ func newFakeRepo() *fakeRepo {
 }
 
 func (r *fakeRepo) Create(ctx context.Context, w *Workout) error {
+	// Mirror the partial unique index on (user_id, source, external_id) so the
+	// fake rejects duplicates the same way the real repository does.
+	if w.ExternalID != "" {
+		if _, err := r.GetByExternalID(ctx, w.UserID, w.Source, w.ExternalID); err == nil {
+			return ErrDuplicate
+		}
+	}
 	r.workouts[w.ID] = w
 	return nil
+}
+
+func (r *fakeRepo) GetByExternalID(ctx context.Context, userID int64, source Source, externalID string) (*Workout, error) {
+	for _, w := range r.workouts {
+		if w.UserID == userID && w.Source == source && w.ExternalID == externalID {
+			cp := *w
+			return &cp, nil
+		}
+	}
+	return nil, ErrNotFound
 }
 
 func (r *fakeRepo) Get(ctx context.Context, userID int64, id string) (*Workout, error) {
@@ -113,6 +130,101 @@ func TestUpdateAppliesStartTimeAndRecomputesDate(t *testing.T) {
 	}
 	if !fetched.StartTime.Equal(newStart) {
 		t.Fatalf("persisted StartTime = %v, want %v", fetched.StartTime, newStart)
+	}
+}
+
+// importInput is a workout as an upload would produce it: identified by the
+// SHA-256 of the file bytes.
+func importInput(name, hash string) Input {
+	return Input{
+		Name:       name,
+		Type:       TypeRun,
+		StartTime:  time.Date(2024, 5, 4, 7, 0, 0, 0, time.UTC),
+		Duration:   1800,
+		Distance:   5000,
+		Source:     SourceUpload,
+		ExternalID: hash,
+	}
+}
+
+func TestCreateIdempotentSkipsAlreadyImportedFile(t *testing.T) {
+	svc := NewService(newFakeRepo())
+	ctx := context.Background()
+
+	first, created, err := svc.CreateIdempotent(ctx, 1, importInput("Morning Run", "abc123"))
+	if err != nil {
+		t.Fatalf("first CreateIdempotent() error = %v", err)
+	}
+	if !created {
+		t.Fatal("first import should have created a workout")
+	}
+
+	// Same bytes, different name override: resolves to the stored workout.
+	second, created, err := svc.CreateIdempotent(ctx, 1, importInput("Renamed Run", "abc123"))
+	if err != nil {
+		t.Fatalf("second CreateIdempotent() error = %v", err)
+	}
+	if created {
+		t.Fatal("re-importing the same file should not create a second workout")
+	}
+	if second.ID != first.ID {
+		t.Fatalf("ID = %q, want the existing %q", second.ID, first.ID)
+	}
+	if second.Name != "Morning Run" {
+		t.Fatalf("Name = %q, want the stored %q left untouched", second.Name, "Morning Run")
+	}
+
+	list, err := svc.List(ctx, 1)
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("got %d workouts, want 1", len(list))
+	}
+}
+
+func TestCreateIdempotentScopesDedupeToUserAndSource(t *testing.T) {
+	svc := NewService(newFakeRepo())
+	ctx := context.Background()
+
+	if _, created, err := svc.CreateIdempotent(ctx, 1, importInput("Run", "abc123")); err != nil || !created {
+		t.Fatalf("seed import: created = %v, err = %v", created, err)
+	}
+
+	// The same file uploaded by a different user is a different workout.
+	if _, created, err := svc.CreateIdempotent(ctx, 2, importInput("Run", "abc123")); err != nil || !created {
+		t.Fatalf("other user: created = %v, err = %v", created, err)
+	}
+
+	// The same id claimed by a different source is a different workout.
+	hcIn := importInput("Run", "abc123")
+	hcIn.Source = SourceHealthConnect
+	if _, created, err := svc.CreateIdempotent(ctx, 1, hcIn); err != nil || !created {
+		t.Fatalf("other source: created = %v, err = %v", created, err)
+	}
+}
+
+func TestCreateIdempotentAlwaysInsertsWithoutExternalID(t *testing.T) {
+	svc := NewService(newFakeRepo())
+	ctx := context.Background()
+
+	// Hand-entered workouts carry no external id, so two identical ones are
+	// two genuine workouts (someone really did run the same loop twice).
+	in := Input{Name: "Run", Type: TypeRun, StartTime: time.Now(), Duration: 1800, Distance: 5000}
+	for i := 0; i < 2; i++ {
+		if _, created, err := svc.CreateIdempotent(ctx, 1, in); err != nil || !created {
+			t.Fatalf("insert %d: created = %v, err = %v", i, created, err)
+		}
+	}
+	list, err := svc.List(ctx, 1)
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(list) != 2 {
+		t.Fatalf("got %d workouts, want 2", len(list))
+	}
+	if list[0].Source != SourceManual {
+		t.Fatalf("Source = %q, want %q", list[0].Source, SourceManual)
 	}
 }
 
