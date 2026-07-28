@@ -6,14 +6,42 @@ import RangeDropdown from '../components/RangeDropdown'
 import { useLocalStorage } from '../lib/useLocalStorage'
 import { filterByRange, rangeLabel, rangeStartDate, toDateKey } from '../lib/range'
 import { AXIS_TICK, GRID_PROPS, HOVER_FILL, recencyRamp } from '../lib/chartColors'
+import ChartCard, { EmptyPlot } from '../components/ChartCard'
+import InfoTip from '../components/InfoTip'
 import {
-  BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, Cell,
+  BarChart, Bar, LineChart, Line, ComposedChart, XAxis, YAxis, Tooltip,
+  ResponsiveContainer, CartesianGrid, Legend, Cell,
 } from 'recharts'
+import { CalendarDays, GitCompareArrows, Sigma } from 'lucide-react'
+import { EdgeTick } from '../components/ChartAxis'
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 /** Years compared side by side before the chart gets too dense to read. */
 const MAX_YEARS = 5
+/** Recent periods shown in the month-over-month and week-over-week charts. */
+const PERIODS_SHOWN = 12
+
+type TabId = 'calendar' | 'compare' | 'totals'
+
+const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
+  { id: 'calendar', label: 'Calendar', icon: <CalendarDays size={15} /> },
+  { id: 'compare', label: 'Compare', icon: <GitCompareArrows size={15} /> },
+  { id: 'totals', label: 'Totals', icon: <Sigma size={15} /> },
+]
+
+/** Axis label placed below the plot, clear of the tick row. */
+function xLabel(value: string) {
+  return { value, position: 'insideBottom' as const, offset: -12, fontSize: 10, fill: 'var(--text-3)' }
+}
+
+/** Rotated axis label centred on the y axis. */
+function yLabel(value: string) {
+  return {
+    value, angle: -90, position: 'insideLeft' as const,
+    fontSize: 10, fill: 'var(--text-3)', style: { textAnchor: 'middle' as const },
+  }
+}
 
 /** What the heatmap and the distribution charts measure. */
 type Measure = 'count' | 'duration'
@@ -35,12 +63,13 @@ const MEASURES: Record<Measure, { label: string; axisLabel: string; value: (w: W
   },
 }
 
-export default function Heatmap() {
+export default function Consistency() {
   const { workouts } = useWorkouts()
   const [hoveredDay, setHoveredDay] = useState<{ date: string; count: number; duration: number; x: number; y: number } | null>(null)
   const [typeFilter, setTypeFilter] = useState<WorkoutType | 'All'>('All')
   const [rangeDays, setRangeDays] = useLocalStorage<number>('al_hm_range', 365)
   const [measure, setMeasure] = useLocalStorage<Measure>('al_hm_measure', 'count')
+  const [tab, setTab] = useLocalStorage<TabId>('al_cs_tab', 'calendar')
 
   const m = MEASURES[measure]
 
@@ -166,6 +195,19 @@ export default function Heatmap() {
     return { cumulativeData: data, cumulativeYears: years }
   }, [typeWorkouts])
 
+  // Month-over-month and week-over-week. Like the year-over-year chart these
+  // read from the whole (type-filtered) library rather than the page's time
+  // range: a fixed count of recent periods is what makes them comparable, and
+  // a 30-day range could not produce twelve months.
+  const monthOverMonth = useMemo(
+    () => recentPeriods(typeWorkouts, PERIODS_SHOWN, 'month', m.value, measure),
+    [typeWorkouts, m, measure],
+  )
+  const weekOverWeek = useMemo(
+    () => recentPeriods(typeWorkouts, PERIODS_SHOWN, 'week', m.value, measure),
+    [typeWorkouts, m, measure],
+  )
+
   // Monthly / yearly rollups over the selected range.
   const monthlyStats = useMemo(() => rollup(filteredWorkouts, d => d.slice(0, 7)).slice(0, 6), [filteredWorkouts])
   const yearlyStats = useMemo(() => rollup(filteredWorkouts, d => d.slice(0, 4)), [filteredWorkouts])
@@ -183,7 +225,7 @@ export default function Heatmap() {
     <div>
       <div className="page-header">
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 16 }}>
-          <h1 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>Heatmap</h1>
+          <h1 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>Consistency</h1>
           <span style={{ fontSize: 12, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
             {filteredWorkouts.length} activities · {rangeLabel(rangeDays)}
           </span>
@@ -196,10 +238,33 @@ export default function Heatmap() {
       </div>
 
       <div className="page-content">
+        <nav className="tab-strip" style={{ marginBottom: 20 }} aria-label="Consistency sections">
+          {TABS.map(t => (
+            <button
+              key={t.id}
+              className={`tab-strip-item${tab === t.id ? ' active' : ''}`}
+              onClick={() => setTab(t.id)}
+              aria-current={tab === t.id ? 'page' : undefined}
+            >
+              {t.icon}
+              {t.label}
+            </button>
+          ))}
+        </nav>
+
+        {tab === 'calendar' && (<>
         {/* Heatmap grid: cells stretch to fill the available width, so on
             wide screens each day becomes a rectangle rather than a fixed
             11x11 square. */}
         <div className="card" style={{ padding: '20px', overflowX: 'auto' }}>
+          <div className="chart-card-head">
+            <h3 className="chart-card-title">Activity Calendar</h3>
+            <InfoTip
+              label="Activity Calendar"
+              text={`One cell per day, columns running Sunday to Saturday, shaded by ${measure === 'count' ? 'how many activities' : 'how much time'} you logged. Shading is relative to your busiest day in the current selection, so the scale rebases when you change the filters. Unbroken runs of colour are streaks; the blank stretches are where consistency slipped.`}
+            />
+          </div>
+          <p className="chart-card-desc">Daily activity across the {rangeLabel(rangeDays)}, shaded by {m.label.toLowerCase()}.</p>
           <div style={{ display: 'flex', gap: 6 }}>
             {/* Day labels */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingTop: 16, flexShrink: 0 }}>
@@ -285,12 +350,17 @@ export default function Heatmap() {
 
         {/* Day of week distribution — sits directly under the calendar since
             it answers the same "when do I train" question. */}
-        <ChartCard title="Day of Week Distribution" subtitle={`by ${m.label.toLowerCase()}`}>
+        <ChartCard
+          title="Day of Week Distribution"
+          description={`Which days you actually train, by ${m.label.toLowerCase()}.`}
+          info="Totals every activity in the selected range onto the weekday it happened. Tall weekend bars with a hollow midweek is the classic pattern for people who run out of time on workdays — useful for spotting whether your plan matches your week rather than your intentions."
+          style={{ marginTop: 16 }}
+        >
           <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={dayOfWeek} margin={{ top: 4, right: 16, left: 4, bottom: 0 }}>
+            <BarChart data={dayOfWeek} margin={{ top: 4, right: 16, left: 8, bottom: 18 }}>
               <CartesianGrid {...GRID_PROPS} />
-              <XAxis dataKey="label" tick={{ ...AXIS_TICK, fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={44} unit={m.axisLabel || undefined} />
+              <XAxis dataKey="label" tick={{ ...AXIS_TICK, fontSize: 11 }} axisLine={false} tickLine={false} label={xLabel('Day of week')} />
+              <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={52} unit={m.axisLabel || undefined} label={yLabel(measure === 'count' ? 'Activities' : 'Duration (hours)')} />
               <Tooltip
                 cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
                 content={({ active, payload, label }) => {
@@ -309,23 +379,29 @@ export default function Heatmap() {
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
+        </>)}
 
+        {tab === 'compare' && (<>
         {/* Year over year */}
         <ChartCard
           title="Year over Year"
-          subtitle={yoyYears.length > 1 ? `monthly ${m.label.toLowerCase()}, all years` : 'needs more than one year of data'}
+          description={yoyYears.length > 1
+            ? `Each month side by side across your last ${yoyYears.length} years, by ${m.label.toLowerCase()}.`
+            : 'Compares months across years — needs more than one year of data to be interesting.'}
+          info="Groups every month's total by calendar year so you can see whether this March beat last March. Bars run newest to oldest within each month and are shaded from your accent colour down to grey, so the strongest bar is always the most recent year. This chart deliberately ignores the page's time range — comparing years needs every year present."
+          style={{ marginTop: 16 }}
         >
           {yoyYears.length === 0 ? (
-            <div style={{ height: 230, display: 'grid', placeItems: 'center', fontSize: 12, color: 'var(--text-3)' }}>No activities yet</div>
+            <EmptyPlot height={260}>No activities yet</EmptyPlot>
           ) : (
-            <ResponsiveContainer width="100%" height={230}>
+            <ResponsiveContainer width="100%" height={260}>
               {/* Years are an ordered series, so they get a single-hue ramp
                   stepping away from the accent rather than arbitrary hues —
                   that stays legible whichever accent the user has picked. */}
-              <BarChart data={yoyData} margin={{ top: 4, right: 16, left: 4, bottom: 0 }} barCategoryGap="18%" barGap={2}>
+              <BarChart data={yoyData} margin={{ top: 8, right: 16, left: 8, bottom: 18 }} barCategoryGap="18%" barGap={2}>
                 <CartesianGrid {...GRID_PROPS} />
-                <XAxis dataKey="month" tick={AXIS_TICK} axisLine={false} tickLine={false} />
-                <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={44} unit={m.axisLabel || undefined} />
+                <XAxis dataKey="month" tick={AXIS_TICK} axisLine={false} tickLine={false} label={xLabel('Month')} />
+                <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={52} unit={m.axisLabel || undefined} label={yLabel(measure === 'count' ? 'Activities' : 'Duration (hours)')} />
                 <Tooltip
                   cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
                   content={({ active, payload, label }) => {
@@ -343,7 +419,7 @@ export default function Heatmap() {
                     )
                   }}
                 />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Legend verticalAlign="top" align="right" height={26} wrapperStyle={{ fontSize: 11, paddingBottom: 6 }} />
                 {yoyYears.map((y, i) => (
                   <Bar key={y} dataKey={y} fill={yearRamp[i]} radius={[3, 3, 0, 0]} isAnimationActive={false} />
                 ))}
@@ -352,16 +428,51 @@ export default function Heatmap() {
           )}
         </ChartCard>
 
-        {/* Cumulative distance by year */}
-        <ChartCard title="Cumulative Distance by Year" subtitle="kilometres run to date, all years">
-          {cumulativeYears.length === 0 ? (
-            <div style={{ height: 230, display: 'grid', placeItems: 'center', fontSize: 12, color: 'var(--text-3)' }}>No activities yet</div>
+        <ChartCard
+          title="Month over Month"
+          description={`The last ${PERIODS_SHOWN} months by ${m.label.toLowerCase()}, with a 4-month trailing average.`}
+          info={`Each bar is one calendar month's total; the line averages the last four so a single heavy month doesn't read as a trend. Months with nothing recorded appear as empty bars rather than being skipped, which is what makes a gap visible. Hover a bar for its change against the month before. Like the other comparison charts this always shows the last ${PERIODS_SHOWN} months, independent of the page's time range.`}
+          actions={<ChangeBadge data={monthOverMonth} />}
+          style={{ marginTop: 16 }}
+        >
+          {monthOverMonth.length === 0 ? (
+            <EmptyPlot height={230}>No activities yet</EmptyPlot>
           ) : (
-            <ResponsiveContainer width="100%" height={230}>
-              <LineChart data={cumulativeData} margin={{ top: 4, right: 16, left: 4, bottom: 0 }}>
+            <PeriodChart data={monthOverMonth} measure={measure} xTitle="Month" yTitle={measure === 'count' ? 'Activities' : 'Duration (hours)'} />
+          )}
+        </ChartCard>
+
+        <ChartCard
+          title="Week over Week"
+          description={`The last ${PERIODS_SHOWN} weeks by ${m.label.toLowerCase()}, with a 4-week trailing average.`}
+          info={`The same view at week granularity, weeks running Monday to Sunday and labelled by their start date. This is the resolution where consistency actually shows up — a run of similar bars is a habit, whereas alternating tall and empty ones is the stop-start pattern that stalls progress. The trailing average is also the line to watch for safe build-ups: steady growth rather than spikes.`}
+          actions={<ChangeBadge data={weekOverWeek} />}
+          style={{ marginTop: 16 }}
+        >
+          {weekOverWeek.length === 0 ? (
+            <EmptyPlot height={230}>No activities yet</EmptyPlot>
+          ) : (
+            <PeriodChart data={weekOverWeek} measure={measure} xTitle="Week starting" yTitle={measure === 'count' ? 'Activities' : 'Duration (hours)'} />
+          )}
+        </ChartCard>
+        </>)}
+
+        {tab === 'totals' && (<>
+        {/* Cumulative distance by year */}
+        <ChartCard
+          title="Cumulative Distance by Year"
+          description="Kilometres banked from January onward, one line per year."
+          info="Each line adds up that year's distance month by month, so the steepness is your rate and the height is the total. Because every year starts at zero in January they're directly comparable — if this year's line sits above last year's at the same month, you're ahead of pace. The current year stops at today rather than flattening out to December. Like the chart above, it uses your whole library rather than the page's time range."
+          style={{ marginTop: 16 }}
+        >
+          {cumulativeYears.length === 0 ? (
+            <EmptyPlot height={260}>No activities yet</EmptyPlot>
+          ) : (
+            <ResponsiveContainer width="100%" height={260}>
+              <LineChart data={cumulativeData} margin={{ top: 8, right: 16, left: 8, bottom: 18 }}>
                 <CartesianGrid {...GRID_PROPS} />
-                <XAxis dataKey="month" tick={AXIS_TICK} axisLine={false} tickLine={false} />
-                <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={48} unit="km" />
+                <XAxis dataKey="month" tick={AXIS_TICK} axisLine={false} tickLine={false} label={xLabel('Month')} />
+                <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={56} label={yLabel('Cumulative distance (km)')} />
                 <Tooltip
                   content={({ active, payload, label }) => {
                     if (!active || !payload?.length) return null
@@ -378,7 +489,7 @@ export default function Heatmap() {
                     )
                   }}
                 />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Legend verticalAlign="top" align="right" height={26} wrapperStyle={{ fontSize: 11, paddingBottom: 6 }} />
                 {cumulativeYears.map((y, i) => (
                   <Line
                     key={y} type="monotone" dataKey={y}
@@ -394,6 +505,7 @@ export default function Heatmap() {
         {/* Monthly breakdown */}
         <BreakdownGrid
           title="Monthly Breakdown"
+          info="The six most recent months inside your selected time range, newest first. The bar under each month is that month relative to your biggest month on screen, and the footer always shows distance and time regardless of which measure the page toggle is set to."
           stats={monthlyStats}
           label={key => {
             const [yr, mo] = key.split('-')
@@ -407,14 +519,148 @@ export default function Heatmap() {
         {/* Yearly breakdown */}
         <BreakdownGrid
           title="Yearly Breakdown"
+          info="The same rollup at year granularity, covering whatever years fall inside your selected time range. Set the range to All time to see every year you have recorded."
           stats={yearlyStats}
           label={key => key}
           measure={measure}
           statValue={statValue}
           format={m.format}
         />
+        </>)}
       </div>
     </div>
+  )
+}
+
+/** Sortable key for the Monday-anchored week a YYYY-MM-DD date falls in. */
+function weekKey(date: string): string {
+  const d = new Date(`${date}T00:00:00`)
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7))
+  return toDateKey(d)
+}
+
+export interface PeriodPoint {
+  key: string
+  label: string
+  /** Raw total, in the measure's own unit (activities, or seconds). */
+  raw: number
+  /** Plotted value — seconds are converted to hours for the duration measure. */
+  value: number
+  /** Trailing 4-period average of `value`, drawn as the trend line. */
+  avg: number
+  /** Percent change against the previous period, null for the first one. */
+  change: number | null
+}
+
+/**
+ * Buckets workouts into recent weeks or months and returns the last `count` of
+ * them, oldest first, with a trailing average and a period-on-period delta.
+ * Periods with no activity are included as empty bars so gaps stay visible.
+ */
+function recentPeriods(
+  workouts: Workout[],
+  count: number,
+  kind: 'week' | 'month',
+  valueOf: (w: Workout) => number,
+  measure: Measure,
+): PeriodPoint[] {
+  const keyOf = (date: string) => kind === 'week' ? weekKey(date) : date.slice(0, 7)
+  const labelOf = (key: string) => kind === 'week'
+    ? key.slice(5).replace('-', '/')
+    : `${MONTHS[Number(key.slice(5, 7)) - 1]} ${key.slice(2, 4)}`
+
+  const totals = new Map<string, number>()
+  for (const w of workouts) {
+    const key = keyOf(w.date)
+    totals.set(key, (totals.get(key) ?? 0) + valueOf(w))
+  }
+  if (totals.size === 0) return []
+
+  // Walk backwards from the current period so stretches with no activity still
+  // appear as empty bars rather than being silently skipped. Monthly stepping
+  // anchors to the 1st: stepping back a month from the 31st would skip the
+  // short months entirely.
+  const cursor = new Date()
+  cursor.setHours(0, 0, 0, 0)
+  if (kind === 'month') cursor.setDate(1)
+  const keys: string[] = []
+  for (let i = 0; i < count; i++) {
+    keys.unshift(keyOf(toDateKey(cursor)))
+    if (kind === 'week') cursor.setDate(cursor.getDate() - 7)
+    else cursor.setMonth(cursor.getMonth() - 1)
+  }
+
+  const rows = keys.map(key => {
+    const raw = totals.get(key) ?? 0
+    return { key, label: labelOf(key), raw, value: measure === 'duration' ? raw / 3600 : raw }
+  })
+  return rows.map((r, i) => {
+    const window = rows.slice(Math.max(0, i - 3), i + 1)
+    const prev = i > 0 ? rows[i - 1].value : null
+    return {
+      ...r,
+      value: Math.round(r.value * 10) / 10,
+      avg: Math.round((window.reduce((a, b) => a + b.value, 0) / window.length) * 10) / 10,
+      change: prev != null && prev > 0 ? Math.round(((r.value - prev) / prev) * 100) : null,
+    }
+  })
+}
+
+/**
+ * Bars for each recent period with a trailing-average line over them. Both use
+ * the same unit and axis, so the line is a smoothed reading of the bars rather
+ * than a second scale to decode.
+ */
+function PeriodChart({ data, measure, xTitle, yTitle }: {
+  data: PeriodPoint[]
+  measure: Measure
+  xTitle: string
+  yTitle: string
+}) {
+  const fmt = (v: number) => measure === 'duration' ? `${v.toFixed(1)} h` : `${Math.round(v)}`
+  return (
+    <ResponsiveContainer width="100%" height={230}>
+      <ComposedChart data={data} margin={{ top: 8, right: 16, left: 8, bottom: 18 }}>
+        <CartesianGrid {...GRID_PROPS} />
+        <XAxis dataKey="label" tick={<EdgeTick fontSize={9} />} axisLine={false} tickLine={false} label={xLabel(xTitle)} />
+        <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={52} label={yLabel(yTitle)} />
+        <Tooltip
+          cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
+          content={({ active, payload }) => {
+            if (!active || !payload?.length) return null
+            const d = payload[0].payload as PeriodPoint
+            return (
+              <div className="custom-tooltip">
+                <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.label}</div>
+                <div style={{ color: 'var(--primary)' }}>{fmt(d.value)}</div>
+                <div style={{ color: 'var(--text-3)' }}>4-period avg {fmt(d.avg)}</div>
+                {d.change != null && (
+                  <div style={{ color: d.change > 0 ? '#22c55e' : d.change < 0 ? '#ef4444' : 'var(--text-3)' }}>
+                    {d.change > 0 ? '▲' : d.change < 0 ? '▼' : '—'} {Math.abs(d.change)}% vs previous
+                  </div>
+                )}
+              </div>
+            )
+          }}
+        />
+        <Bar dataKey="value" fill="var(--primary)" opacity={0.35} radius={[3, 3, 0, 0]} maxBarSize={40} isAnimationActive={false} />
+        <Line type="monotone" dataKey="avg" stroke="var(--primary)" strokeWidth={2.5} dot={false} isAnimationActive={false} />
+      </ComposedChart>
+    </ResponsiveContainer>
+  )
+}
+
+/** Headline "vs previous period" readout for a PeriodChart's title row. */
+function ChangeBadge({ data }: { data: PeriodPoint[] }) {
+  const change = data.length > 0 ? data[data.length - 1].change : null
+  if (change == null) return null
+  return (
+    <span style={{
+      fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700,
+      color: change > 0 ? '#22c55e' : change < 0 ? '#ef4444' : 'var(--text-3)',
+    }}>
+      {change > 0 ? '▲' : change < 0 ? '▼' : '—'} {Math.abs(change)}% vs previous
+    </span>
   )
 }
 
@@ -454,20 +700,9 @@ function MeasureToggle({ value, onChange }: { value: Measure; onChange: (v: Meas
   )
 }
 
-function ChartCard({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
-  return (
-    <div style={{ marginTop: 20 }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
-        <h3 style={{ fontSize: 14, fontWeight: 600 }}>{title}</h3>
-        {subtitle && <span style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>{subtitle}</span>}
-      </div>
-      <div className="card">{children}</div>
-    </div>
-  )
-}
-
-function BreakdownGrid({ title, stats, label, measure, statValue, format }: {
+function BreakdownGrid({ title, info, stats, label, measure, statValue, format }: {
   title: string
+  info: string
   stats: Rollup[]
   label: (key: string) => string
   measure: Measure
@@ -478,7 +713,10 @@ function BreakdownGrid({ title, stats, label, measure, statValue, format }: {
   const max = Math.max(...stats.map(([, s]) => statValue(s)), 1)
   return (
     <div style={{ marginTop: 20 }}>
-      <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>{title}</h3>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+        <h3 style={{ fontSize: 14, fontWeight: 600 }}>{title}</h3>
+        <InfoTip text={info} label={title} />
+      </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10 }}>
         {stats.map(([key, s]) => (
           <div key={key} className="card" style={{ padding: '14px' }}>

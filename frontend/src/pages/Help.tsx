@@ -1,23 +1,23 @@
 import { useState } from 'react'
 import {
-  ChevronDown, Upload, LayoutDashboard, Activity, Grid3x3,
-  Clock, LineChart, Settings as SettingsIcon, Keyboard, HelpCircle,
+  ChevronDown, Upload, LayoutDashboard, Activity, CalendarCheck,
+  Watch, LineChart, Settings as SettingsIcon, Keyboard, HelpCircle,
 } from 'lucide-react'
 
 const features = [
   { icon: LayoutDashboard, title: 'Dashboard', text: 'An at-a-glance summary of your recent activity, totals, and trends.' },
   { icon: Activity, title: 'Workouts', text: 'Browse every workout in list or grid view. Open one to see charts, splits, and its route on the map.' },
-  { icon: Grid3x3, title: 'Heatmap', text: 'A calendar heatmap of the last year — each day is shaded by how much you trained.' },
-  { icon: Clock, title: 'Timeline', text: 'A chronological feed of your workouts grouped by date.' },
-  { icon: LineChart, title: 'Analysis', text: 'Longer-term charts that break down volume, distance, and effort over time.' },
+  { icon: LineChart, title: 'Analysis', text: 'Everything about how you are performing, split into four tabs: Records, Trends, Efficiency and Load. One time range and sport filter drives them all.' },
+  { icon: CalendarCheck, title: 'Consistency', text: 'Everything about whether you are showing up: a calendar heatmap, day-of-week habits, year-over-year comparisons and cumulative distance.' },
+  { icon: Watch, title: 'Equipment', text: 'Track gear like shoes, watches and bikes, and see the workouts logged against each.' },
 ]
 
 const shortcuts = [
   { key: 'G then D', action: 'Go to Dashboard' },
   { key: 'G then W', action: 'Go to Workouts' },
-  { key: 'G then H', action: 'Go to Heatmap' },
-  { key: 'G then T', action: 'Go to Timeline' },
   { key: 'G then A', action: 'Go to Analysis' },
+  { key: 'G then C', action: 'Go to Consistency' },
+  { key: 'G then E', action: 'Go to Equipment' },
   { key: 'Cmd / Ctrl + I', action: 'Add a workout' },
   { key: '[', action: 'Collapse / expand sidebar' },
   { key: 'Esc', action: 'Close modal or go back' },
@@ -29,6 +29,8 @@ const faqs = [
   { q: 'How are calories estimated?', a: 'When an imported file doesn\'t include calories, they are estimated for you. Under Settings → Calorie Estimation you can choose a heart-rate based method (which uses your sex, age, and weight from the About You section) or a distance-only method.' },
   { q: 'What do the small icons next to some numbers mean?', a: 'A Σ icon means the value was calculated or derived from the recorded data. A pencil icon means you entered that value manually. Recalculating a workout replaces manual values with derived ones.' },
   { q: 'How do heart-rate metrics work?', a: 'Where a workout records heart rate, its zones are shown directly. For workouts without their own max HR, your Max HR from Settings → Heart Rate & Performance is used instead.' },
+  { q: 'What does the info icon next to a chart title do?', a: 'It opens a longer explanation of what that chart measures and how to read it — including the caveats worth knowing before you act on it. Hover it on desktop, tap it on mobile.' },
+  { q: 'Where did the Timeline and Heatmap pages go?', a: 'Timeline was merged into Analysis, which now has Records, Trends, Efficiency and Load tabs sharing one filter. Heatmap became Consistency and gained year-over-year and cumulative-distance charts. Old links to /timeline and /heatmap redirect automatically.' },
   { q: 'Can I install Activity Lens as an app?', a: 'Yes. It\'s a Progressive Web App, so you can add it to your home screen or desktop from your browser for a full-screen, app-like experience.' },
 ]
 
@@ -57,7 +59,7 @@ export default function Help() {
             <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}> .gpx</code> or
             <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}> .tcx</code> file exported from
             your watch or app, or enter a workout manually. Once added, it appears across the Dashboard,
-            Workouts, Heatmap, Timeline, and Analysis pages.
+            Workouts, Analysis, and Consistency pages.
           </p>
         </section>
 

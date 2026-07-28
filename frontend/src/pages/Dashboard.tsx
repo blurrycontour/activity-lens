@@ -7,6 +7,7 @@ import {
 } from 'recharts'
 import { TrendingUp, Zap, Flame, Clock, Mountain, Heart } from 'lucide-react'
 import { useLocalStorage } from '../lib/useLocalStorage'
+import InfoTip from '../components/InfoTip'
 import {
   DASHBOARD_CFG_KEY, DEFAULT_DASHBOARD_CONFIG, windowLabel,
   type DashboardConfig, type StatCardId,
@@ -146,14 +147,19 @@ export default function Dashboard() {
             <div className="grid-dash" style={{ marginBottom: 16 }}>
               {/* Weekly chart */}
               <div className="card">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                  <h3 style={{ fontSize: 13, fontWeight: 600 }}>Weekly Volume</h3>
-                  <span style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>hours / week</span>
+                <div className="chart-card-head">
+                  <h3 className="chart-card-title">Weekly Volume</h3>
+                  <InfoTip
+                    label="Weekly Volume"
+                    text="Hours of training in each of the last eight weeks, newest on the right. This one always shows eight weeks regardless of the dashboard time window in Settings, so it stays a consistent read on your recent rhythm. For volume over a range you choose, and in kilometres, see Analysis → Trends."
+                  />
+                  <span className="chart-card-actions" style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>hours / week</span>
                 </div>
+                <p className="chart-card-desc">Training hours across the last eight weeks.</p>
                 <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={d.weeklyData} barSize={20} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                    <XAxis dataKey="week" tick={{ fontSize: 11, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 11, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} />
+                  <BarChart data={d.weeklyData} barSize={20} margin={{ top: 0, right: 8, left: 8, bottom: 18 }}>
+                    <XAxis dataKey="week" tick={{ fontSize: 11, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} label={{ value: 'Week', position: 'insideBottom', offset: -12, fontSize: 10, fill: 'var(--text-3)' }} />
+                    <YAxis tick={{ fontSize: 11, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} width={44} label={{ value: 'Hours', angle: -90, position: 'insideLeft', fontSize: 10, fill: 'var(--text-3)', style: { textAnchor: 'middle' } }} />
                     <Tooltip
                       cursor={{ fill: 'var(--bg-3)', opacity: 0.5 }}
                       content={({ active, payload }) => {
@@ -174,10 +180,15 @@ export default function Dashboard() {
 
               {/* Radial type breakdown: legend on the left, chart on the right (desktop) */}
               <div className="card">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                  <h3 style={{ fontSize: 13, fontWeight: 600 }}>Activity Mix</h3>
-                  <span style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>{caption}</span>
+                <div className="chart-card-head">
+                  <h3 className="chart-card-title">Activity Mix</h3>
+                  <InfoTip
+                    label="Activity Mix"
+                    text="How many activities of each type you logged in the dashboard's time window, which you can change under Settings → Dashboard. Ring length is proportional to the count, so it shows the balance of your training rather than how much time or distance each sport took."
+                  />
+                  <span className="chart-card-actions" style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>{caption}</span>
                 </div>
+                <p className="chart-card-desc">Share of activities by sport over the {caption}.</p>
                 <div className="activity-mix-body">
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, justifyContent: 'center', width: 150 }}>
                     {d.radialData.map(r => (
@@ -236,7 +247,10 @@ export default function Dashboard() {
 
               {/* Recent list */}
               <div className="card">
-                <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Recent Activities</h3>
+                <div className="chart-card-head" style={{ marginBottom: 4 }}>
+                  <h3 className="chart-card-title">Recent Activities</h3>
+                  <InfoTip label="Recent Activities" text="Your most recently recorded activities, newest first, by activity date rather than import date. Select one to open its full detail view with charts and route map." />
+                </div>
                 <div>
                   {d.sorted.slice(0, 5).map(w => <WorkoutRow key={w.id} w={w} />)}
                 </div>

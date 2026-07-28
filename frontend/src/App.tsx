@@ -8,8 +8,7 @@ import { applyAccent, ACCENTS } from './lib/theme'
 import Dashboard from './pages/Dashboard'
 import Workouts from './pages/Workouts'
 import WorkoutDetail from './pages/WorkoutDetail'
-import Heatmap from './pages/Heatmap'
-import Timeline from './pages/Timeline'
+import Consistency from './pages/Consistency'
 import Analysis from './pages/Analysis'
 import Equipment from './pages/Equipment'
 import Help from './pages/Help'
@@ -20,14 +19,14 @@ import Login from './pages/Login'
 import { type Workout } from './data/workouts'
 import { useAuth } from './context/AuthContext'
 import { WorkoutsProvider } from './context/WorkoutsContext'
-import { adjacentPage, type Page } from './lib/nav'
+import { adjacentPage, DESKTOP_PAGES, LEGACY_ROUTES, type Page } from './lib/nav'
 import { useSwipeNav } from './lib/useSwipeNav'
 import { api } from './lib/api'
 
 const SIDEBAR_KEY = 'al_sidebar_w'
 const THEME_KEY = 'al_theme'
 const ACCENT_KEY = 'al_accent'
-const PAGES: Page[] = ['dashboard', 'workouts', 'heatmap', 'timeline', 'analysis', 'equipment', 'help', 'settings', 'account', 'admin']
+const PAGES: Page[] = [...DESKTOP_PAGES, 'settings', 'account', 'admin']
 
 // URL <-> app state helpers. Routes are path-based (e.g. /workouts,
 // /workouts/:id, /settings) so a full page reload lands back on the same
@@ -36,12 +35,16 @@ function pathForPage(p: Page): string {
   return p === 'dashboard' ? '/' : `/${p}`
 }
 
-function parseLocation(): { page: Page; workoutId: string | null } {
+function parseLocation(): { page: Page; workoutId: string | null; redirect?: boolean } {
   const segs = window.location.pathname.split('/').filter(Boolean)
   if (segs.length === 0) return { page: 'dashboard', workoutId: null }
   if (segs[0] === 'workouts' && segs[1]) return { page: 'workouts', workoutId: segs[1] }
   const candidate = segs[0] as Page
   if (PAGES.includes(candidate)) return { page: candidate, workoutId: null }
+  // Timeline was folded into Analysis and Heatmap became Consistency; keep old
+  // links and open tabs working instead of dumping them on the dashboard.
+  const legacy = LEGACY_ROUTES[segs[0]]
+  if (legacy) return { page: legacy, workoutId: null, redirect: true }
   return { page: 'dashboard', workoutId: null }
 }
 
@@ -114,6 +117,14 @@ export default function App() {
     document.documentElement.style.setProperty('--sidebar-w', `${sidebarWidth}px`)
   }, [sidebarWidth])
 
+  // Rewrite retired routes (/timeline, /heatmap) to where they moved, so the
+  // address bar matches the page and a reload doesn't redirect a second time.
+  useEffect(() => {
+    if (initialLocation.redirect) {
+      window.history.replaceState(null, '', pathForPage(initialLocation.page))
+    }
+  }, [initialLocation])
+
   // Resolve a deep-linked workout on first load (e.g. reloading /workouts/abc).
   useEffect(() => {
     if (!initialLocation.workoutId || !user) return
@@ -167,7 +178,7 @@ export default function App() {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return
       if (gPressed) {
         gPressed = false
-        const map: Record<string, Page> = { d: 'dashboard', w: 'workouts', h: 'heatmap', t: 'timeline', a: 'analysis' }
+        const map: Record<string, Page> = { d: 'dashboard', w: 'workouts', a: 'analysis', c: 'consistency', e: 'equipment' }
         if (map[e.key]) { navigate(map[e.key]); return }
       }
       if (e.key === 'g') { gPressed = true; setTimeout(() => { gPressed = false }, 1000); return }
@@ -248,12 +259,10 @@ export default function App() {
           <Dashboard />
         ) : page === 'workouts' ? (
           <Workouts onSelect={selectWorkout} onImport={() => setShowImport(true)} />
-        ) : page === 'heatmap' ? (
-          <Heatmap />
-        ) : page === 'timeline' ? (
-          <Timeline />
         ) : page === 'analysis' ? (
           <Analysis />
+        ) : page === 'consistency' ? (
+          <Consistency />
         ) : page === 'equipment' ? (
           <Equipment onSelectWorkout={id => { api.getWorkout(id).then(selectWorkout).catch(() => {}) }} />
         ) : page === 'settings' ? (
@@ -279,7 +288,6 @@ export default function App() {
           onAccount={() => navigate('account')}
           onSettings={() => navigate('settings')}
           onAdmin={() => navigate('admin')}
-          onEquipment={isMobile ? () => navigate('equipment') : undefined}
           onLogout={logout}
           user={user}
         />

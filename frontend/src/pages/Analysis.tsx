@@ -1,23 +1,62 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { TYPE_COLOR, fmtPace, type WorkoutType, type Workout } from '../data/workouts'
 import { useWorkouts } from '../context/WorkoutsContext'
 import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
+import ChartCard, { EmptyPlot } from '../components/ChartCard'
+import InfoTip from '../components/InfoTip'
+import { EdgeTick } from '../components/ChartAxis'
 import { useLocalStorage } from '../lib/useLocalStorage'
 import { filterByRange, rangeLabel, toDateKey } from '../lib/range'
 import { AXIS_TICK, GRID_PROPS, HOVER_FILL } from '../lib/chartColors'
-import { EdgeTick } from '../components/ChartAxis'
 import {
   ScatterChart, Scatter, XAxis, YAxis, ZAxis, Tooltip, ResponsiveContainer, CartesianGrid,
-  BarChart, Bar, Cell, LineChart, Line, ReferenceArea, ReferenceLine,
+  BarChart, Bar, Cell, LineChart, Line, ComposedChart, ReferenceArea, ReferenceLine,
 } from 'recharts'
-import { TrendingUp, Award, Target, Zap, Activity, Navigation } from 'lucide-react'
+import { Award, Target, Zap, Activity, Navigation, TrendingUp, Gauge, Flame } from 'lucide-react'
 
 type PR = { longest: Workout; fastest: Workout | null; highest: Workout }
+
+type TabId = 'records' | 'trends' | 'efficiency' | 'load'
+
+const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
+  { id: 'records', label: 'Records', icon: <Award size={15} /> },
+  { id: 'trends', label: 'Trends', icon: <TrendingUp size={15} /> },
+  { id: 'efficiency', label: 'Efficiency', icon: <Gauge size={15} /> },
+  { id: 'load', label: 'Load', icon: <Flame size={15} /> },
+]
+
+type Metric = 'pace' | 'hr' | 'maxHr' | 'distance' | 'duration' | 'elevation' | 'calories' | 'speed' | 'steps'
+
+const METRICS: { id: Metric; label: string; color: string; unit: string; format?: (v: number) => string }[] = [
+  { id: 'pace', label: 'Avg Pace', color: 'var(--primary)', unit: '/km', format: fmtPace },
+  { id: 'hr', label: 'Avg HR', color: '#ef4444', unit: 'bpm' },
+  { id: 'maxHr', label: 'Max HR', color: '#f97316', unit: 'bpm' },
+  { id: 'distance', label: 'Distance', color: 'var(--blue)', unit: 'km', format: v => (v / 1000).toFixed(1) },
+  { id: 'duration', label: 'Duration', color: 'var(--purple)', unit: 'min', format: v => Math.round(v / 60).toString() },
+  { id: 'elevation', label: 'Elevation Gain', color: 'var(--hike)', unit: 'm' },
+  { id: 'calories', label: 'Calories', color: 'var(--accent)', unit: 'kcal' },
+  { id: 'speed', label: 'Avg Speed', color: 'var(--swim)', unit: 'km/h', format: v => v.toFixed(1) },
+  { id: 'steps', label: 'Steps', color: 'var(--strength)', unit: '', format: v => Math.round(v).toLocaleString() },
+]
+
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 /** TSS-equivalent for one workout: duration scaled by relative heart-rate effort. */
 function loadOf(w: Workout): number {
   return Math.round(w.duration / 3600 * w.avgHR / 150 * 100)
+}
+
+/** Sortable key for the Monday-anchored week a YYYY-MM-DD date falls in. */
+function weekKey(date: string): string {
+  const d = new Date(`${date}T00:00:00`)
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7))
+  return toDateKey(d)
+}
+
+function monthLabel(key: string): string {
+  const [yr, mo] = key.split('-')
+  return `${MONTH_NAMES[Number(mo) - 1]} ${yr.slice(2)}`
 }
 
 /** Axis label placed below the plot, clear of the tick row. */
@@ -33,95 +72,199 @@ function yLabel(value: string) {
   }
 }
 
+/** Keeps roughly eight date labels on an axis however long the range is. */
+function tickInterval(n: number): number {
+  return Math.max(0, Math.ceil(n / 8) - 1)
+}
+
+/** Two-option segmented control used by the volume chart's toggles. */
+function Segmented<T extends string>({ value, onChange, options }: {
+  value: T
+  onChange: (v: T) => void
+  options: { id: T; label: string }[]
+}) {
+  return (
+    <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
+      {options.map(o => (
+        <button
+          key={o.id}
+          onClick={() => onChange(o.id)}
+          style={{
+            padding: '4px 10px', fontSize: 11, cursor: 'pointer', border: 'none',
+            background: value === o.id ? 'var(--primary-dim)' : 'var(--bg-3)',
+            color: value === o.id ? 'var(--primary)' : 'var(--text-3)',
+            fontWeight: value === o.id ? 600 : 400,
+          }}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export default function Analysis() {
   const { workouts: allWorkouts } = useWorkouts()
-  const [scatterType, setScatterType] = useState<WorkoutType | 'All'>('Run')
+  const [tab, setTab] = useLocalStorage<TabId>('al_an_tab', 'records')
   const [rangeDays, setRangeDays] = useLocalStorage<number>('al_an_range', 30)
+  const [typeFilter, setTypeFilter] = useLocalStorage<WorkoutType | 'All'>('al_an_type', 'All')
+  const [selectedMetrics, setSelectedMetrics] = useLocalStorage<Metric[]>('al_tl_metrics', ['pace', 'hr'])
+  const [volumeBucket, setVolumeBucket] = useLocalStorage<'week' | 'month'>('al_tl_bucket', 'week')
+  const [volumeMeasure, setVolumeMeasure] = useLocalStorage<'distance' | 'time'>('al_tl_vol', 'distance')
 
-  const workouts = useMemo(() => filterByRange(allWorkouts, rangeDays), [allWorkouts, rangeDays])
+  // One filter pair governs the whole page, so a question only has to be asked
+  // once rather than re-scoped on every tab.
+  const inRange = useMemo(() => filterByRange(allWorkouts, rangeDays), [allWorkouts, rangeDays])
+  const workouts = useMemo(
+    () => typeFilter === 'All' ? inRange : inRange.filter(w => w.type === typeFilter),
+    [inRange, typeFilter],
+  )
 
-  const { PRs, calByType, trainingLoad } = useMemo(() => {
-    // Personal records per type
+  // ── Records ──────────────────────────────────────────────────────────────
+  const { PRs, calByType } = useMemo(() => {
     const PRs: Partial<Record<WorkoutType, PR>> = {}
     for (const type of ['Run', 'Ride', 'Hike', 'Swim', 'Strength'] as WorkoutType[]) {
       const tw = workouts.filter(w => w.type === type)
       if (tw.length === 0) continue
+      const paced = tw.filter(w => w.avgPace)
       PRs[type] = {
         longest: tw.reduce((a, b) => a.distance > b.distance ? a : b),
-        fastest: tw.filter(w => w.avgPace).length > 0 ? tw.filter(w => w.avgPace).reduce((a, b) => a.avgPace < b.avgPace ? a : b) : null,
+        fastest: paced.length > 0 ? paced.reduce((a, b) => a.avgPace < b.avgPace ? a : b) : null,
         highest: tw.reduce((a, b) => a.elevationGain > b.elevationGain ? a : b),
       }
     }
-
-    // Calories by type: one bar per type, coloured per type via Cell. A
-    // separate <Bar> per type would create one series each and leave every bar
-    // offset in its own slot rather than centred on its category.
+    // One bar per type, coloured via Cell. A separate <Bar> per type would
+    // create one series each and leave every bar offset in its own slot
+    // rather than centred on its category.
     const calByType = (['Run', 'Ride', 'Hike', 'Swim', 'Strength'] as WorkoutType[]).map(t => ({
       type: t,
       total: Math.round(workouts.filter(w => w.type === t).reduce((a, w) => a + w.calories, 0)),
       count: workouts.filter(w => w.type === t).length,
       fill: TYPE_COLOR[t],
     })).filter(d => d.count > 0)
+    return { PRs, calByType }
+  }, [workouts])
 
-    // Training load (TSS-equivalent), one bar per day across the selected
-    // range. All-time is capped at a year so the chart stays legible.
-    const loadDays = Math.min(rangeDays > 0 ? rangeDays : 365, 365)
-    const byDate = new Map<string, number>()
+  // ── Trends ───────────────────────────────────────────────────────────────
+  const series = useMemo(() =>
+    [...workouts]
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map(w => ({
+        date: w.date,
+        dateLabel: new Date(`${w.date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        pace: w.avgPace || null,
+        hr: w.avgHR,
+        maxHr: w.maxHR || null,
+        distance: w.distance,
+        duration: w.duration,
+        elevation: w.elevationGain,
+        calories: w.calories,
+        speed: w.avgSpeed || null,
+        steps: w.steps || null,
+        name: w.name,
+        type: w.type,
+      })),
+  [workouts])
+
+  const seriesWithMA = useMemo(() => {
+    const window = 3
+    return series.map((d, i) => {
+      const slice = series.slice(Math.max(0, i - window + 1), i + 1)
+      const result: Record<string, number | null | string> = { ...d }
+      for (const m of METRICS) {
+        const vals = slice.map(s => s[m.id]).filter(v => v !== null) as number[]
+        result[`${m.id}_ma`] = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : null
+      }
+      return result
+    })
+  }, [series])
+
+  const summaryStats = useMemo(() => {
+    if (series.length === 0) return []
+    return METRICS.filter(m => selectedMetrics.includes(m.id)).map(m => {
+      const vals = series.map(d => d[m.id]).filter(v => v !== null) as number[]
+      if (vals.length === 0) return null
+      const avg = vals.reduce((a, b) => a + b, 0) / vals.length
+      const trend = vals.length > 3 ? ((vals[vals.length - 1] - vals[0]) / vals[0]) * 100 : 0
+      return { ...m, avg, min: Math.min(...vals), max: Math.max(...vals), trend }
+    }).filter(Boolean) as (typeof METRICS[number] & { avg: number; min: number; max: number; trend: number })[]
+  }, [series, selectedMetrics])
+
+  // Bars per bucket with a moving average over them. Both are the same measure
+  // on one axis — a second scale for the trend line would only invite misreading.
+  const volume = useMemo(() => {
+    const buckets = new Map<string, number>()
     for (const w of workouts) {
-      byDate.set(w.date, (byDate.get(w.date) ?? 0) + loadOf(w))
+      const key = volumeBucket === 'month' ? w.date.slice(0, 7) : weekKey(w.date)
+      buckets.set(key, (buckets.get(key) ?? 0) + (volumeMeasure === 'distance' ? w.distance / 1000 : w.duration / 3600))
     }
-    const trainingLoad: { date: string; tss: number }[] = []
-    for (let i = loadDays - 1; i >= 0; i--) {
-      const dt = new Date()
-      dt.setDate(dt.getDate() - i)
-      trainingLoad.push({
-        date: dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        tss: byDate.get(toDateKey(dt)) ?? 0,
-      })
-    }
+    const rows = [...buckets.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+    return rows.map(([key, value], i) => {
+      const win = rows.slice(Math.max(0, i - 3), i + 1)
+      return {
+        label: volumeBucket === 'month' ? monthLabel(key) : key.slice(5),
+        key,
+        value: Math.round(value * 10) / 10,
+        avg: Math.round((win.reduce((a, [, v]) => a + v, 0) / win.length) * 10) / 10,
+      }
+    })
+  }, [workouts, volumeBucket, volumeMeasure])
 
-    return { PRs, calByType, trainingLoad }
-  }, [workouts, rangeDays])
+  // ── Efficiency ───────────────────────────────────────────────────────────
+  const hrPaceData = useMemo(() =>
+    workouts.filter(w => w.avgPace > 0 && w.avgHR > 0).map(w => ({
+      hr: w.avgHR,
+      pace: Math.round(w.avgPace),
+      distKm: Math.round(w.distance / 100) / 10,
+      name: w.name,
+      date: w.date,
+    })),
+  [workouts])
 
-  // HR vs Pace scatter, filterable by activity type (or all combined). Pace is
-  // kept in seconds/km — the chart's native unit — and formatted as m:ss on the
-  // axis and in the tooltip, rather than shown as ambiguous decimal minutes.
-  const scatterData = useMemo(() =>
-    workouts
-      .filter(w => (scatterType === 'All' || w.type === scatterType) && w.avgPace > 0)
-      .map(w => ({
-        hr: w.avgHR,
-        pace: Math.round(w.avgPace),
-        distKm: Math.round(w.distance / 100) / 10,
-        name: w.name,
-        date: w.date,
-      })),
-  [workouts, scatterType])
-
-  // Distance vs pace: does pace hold up as the distance grows?
   const distPaceData = useMemo(() =>
-    workouts
-      .filter(w => (scatterType === 'All' || w.type === scatterType) && w.avgPace > 0 && w.distance > 0)
-      .map(w => ({
-        km: Math.round(w.distance / 100) / 10,
-        pace: Math.round(w.avgPace),
-        hr: w.avgHR,
-        name: w.name,
-        date: w.date,
-      })),
-  [workouts, scatterType])
+    workouts.filter(w => w.avgPace > 0 && w.distance > 0).map(w => ({
+      km: Math.round(w.distance / 100) / 10,
+      pace: Math.round(w.avgPace),
+      // Marker area encodes elevation gain, so the slow-because-hilly efforts
+      // separate visually from the slow-because-tired ones.
+      elev: Math.round(w.elevationGain),
+      hr: w.avgHR,
+      name: w.name,
+      date: w.date,
+    })),
+  [workouts])
 
-  // Acute:chronic workload ratio. Both averages are computed from the full
-  // library, not the visible range, because the 28-day chronic figure needs
-  // four weeks of history that sit before the window starts.
-  const acwr = useMemo(() => {
-    const byDate = new Map<string, number>()
-    for (const w of allWorkouts) {
-      byDate.set(w.date, (byDate.get(w.date) ?? 0) + loadOf(w))
+  const efficiency = useMemo(() => {
+    const usable = series.filter(d => d.hr > 0 && (d.speed ?? 0) > 0 && d.pace)
+    if (usable.length === 0) return { rows: [], refHr: 0 }
+    // The reference HR is this selection's median, so the adjusted pace lands
+    // in the same range as the real paces and needs no configuration.
+    const hrs = usable.map(d => d.hr).sort((a, b) => a - b)
+    const refHr = hrs[Math.floor(hrs.length / 2)]
+    return {
+      refHr,
+      rows: usable.map(d => ({
+        dateLabel: d.dateLabel,
+        name: d.name,
+        hrPerSpeed: Math.round((d.hr / (d.speed as number)) * 10) / 10,
+        adjPace: Math.round((d.pace as number) * (refHr / d.hr)),
+        pace: d.pace as number,
+        hr: d.hr,
+        speed: d.speed as number,
+      })),
     }
+  }, [series])
+
+  // ── Load ─────────────────────────────────────────────────────────────────
+  const { trainingLoad, acwr } = useMemo(() => {
     const days = Math.min(rangeDays > 0 ? rangeDays : 365, 365)
-    // One pass over the calendar: daily loads oldest-first, covering the
-    // visible window plus the 27 days of lead-in the chronic average needs.
+    // The chronic average needs four weeks of lead-in that sit before the
+    // window starts, so daily loads come from the unranged (but type-filtered)
+    // library rather than the visible selection.
+    const typed = typeFilter === 'All' ? allWorkouts : allWorkouts.filter(w => w.type === typeFilter)
+    const byDate = new Map<string, number>()
+    for (const w of typed) byDate.set(w.date, (byDate.get(w.date) ?? 0) + loadOf(w))
+
     const span = days + 27
     const daily: number[] = []
     const labels: string[] = []
@@ -136,22 +279,33 @@ export default function Analysis() {
     for (const v of daily) prefix.push(prefix[prefix.length - 1] + v)
     const meanEndingAt = (end: number, count: number) => (prefix[end + 1] - prefix[end + 1 - count]) / count
 
-    const out: { date: string; acute: number; chronic: number; ratio: number | null }[] = []
+    const trainingLoad: { date: string; tss: number }[] = []
+    const acwr: { date: string; acute: number; chronic: number; ratio: number | null }[] = []
     for (let end = span - days; end < span; end++) {
+      trainingLoad.push({ date: labels[end], tss: daily[end] })
       const acute = meanEndingAt(end, 7)
       const chronic = meanEndingAt(end, 28)
-      out.push({
+      acwr.push({
         date: labels[end],
         acute: Math.round(acute),
         chronic: Math.round(chronic),
         ratio: chronic > 0 ? Math.round((acute / chronic) * 100) / 100 : null,
       })
     }
-    return out
-  }, [allWorkouts, rangeDays])
+    return { trainingLoad, acwr }
+  }, [allWorkouts, typeFilter, rangeDays])
 
   const latestRatio = [...acwr].reverse().find(d => d.ratio != null)?.ratio ?? null
-  const tickInterval = (n: number) => Math.max(0, Math.ceil(n / 8) - 1)
+
+  function toggleMetric(m: Metric) {
+    setSelectedMetrics(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m])
+  }
+  function formatValue(metric: Metric, value: number): string {
+    const m = METRICS.find(x => x.id === metric)!
+    return m.format ? m.format(value) : value.toFixed(0)
+  }
+
+  const scope = `${rangeLabel(rangeDays)}${typeFilter === 'All' ? '' : ` · ${typeFilter.toLowerCase()}`}`
 
   return (
     <div>
@@ -159,252 +313,467 @@ export default function Analysis() {
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 16 }}>
           <h1 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>Analysis</h1>
           <span style={{ fontSize: 12, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
-            Performance insights · {workouts.length} activities
+            {workouts.length} activities · {scope}
           </span>
         </div>
-        <RangeDropdown value={rangeDays} onChange={setRangeDays} />
+        {/* One filter row governs every tab below it. */}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <TypeDropdown value={typeFilter} onChange={setTypeFilter} />
+          <RangeDropdown value={rangeDays} onChange={setRangeDays} />
+        </div>
       </div>
 
       <div className="page-content">
-        {/* Personal Records */}
-        <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Award size={16} color="var(--primary)" /> Personal Records
-        </h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10, marginBottom: 24 }}>
-          {(Object.entries(PRs) as [WorkoutType, NonNullable<typeof PRs[WorkoutType]>][]).map(([type, pr]) => (
-            <div key={type} className="card" style={{ borderTop: `3px solid ${TYPE_COLOR[type]}` }}>
-              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12, color: TYPE_COLOR[type] }}>{type}</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Longest</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600 }}>{(pr.longest.distance / 1000).toFixed(1)} km</span>
-                </div>
-                {pr.fastest && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Best Pace</span>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600, color: 'var(--primary)' }}>
-                      {fmtPace(pr.fastest.avgPace)} /km
-                    </span>
-                  </div>
-                )}
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Most Elevation</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600 }}>{Math.round(pr.highest.elevationGain)} m</span>
-                </div>
-              </div>
-            </div>
+        <nav className="tab-strip" style={{ marginBottom: 20 }} aria-label="Analysis sections">
+          {TABS.map(t => (
+            <button
+              key={t.id}
+              className={`tab-strip-item${tab === t.id ? ' active' : ''}`}
+              onClick={() => setTab(t.id)}
+              aria-current={tab === t.id ? 'page' : undefined}
+            >
+              {t.icon}
+              {t.label}
+            </button>
           ))}
-        </div>
+        </nav>
 
-        {/* Scatter plots share one activity-type filter, shown on the first. */}
-        <div className="grid-2" style={{ marginBottom: 24 }}>
-          <div className="card">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
-              <Target size={14} color="var(--primary)" />
-              <h3 style={{ fontSize: 13, fontWeight: 600 }}>HR vs Pace</h3>
-              <div style={{ marginLeft: 'auto' }}>
-                <TypeDropdown value={scatterType} onChange={setScatterType} />
-              </div>
+        {/* ── Records: what your best efforts look like ── */}
+        {tab === 'records' && (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+              <Award size={16} color="var(--primary)" />
+              <h3 style={{ fontSize: 14, fontWeight: 600 }}>Personal Records</h3>
+              <InfoTip text={`Your best single activity in each category, within the ${scope}. Widen the time range to see all-time bests — these follow the page filter, so a 30-day window shows your best month, not your best ever.`} label="Personal Records" />
             </div>
-            <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 12 }}>Lower HR at faster pace = improved aerobic efficiency. Marker size is distance.</p>
-            {scatterData.length === 0 ? (
-              <EmptyPlot height={230}>No paced activities in the {rangeLabel(rangeDays)}</EmptyPlot>
+            {Object.keys(PRs).length === 0 ? (
+              <div className="card"><EmptyPlot height={120}>No activities in the {rangeLabel(rangeDays)}</EmptyPlot></div>
             ) : (
-              <ResponsiveContainer width="100%" height={230}>
-                {/* Units live in the axis labels rather than on every tick: with
-                    " bpm" appended to each value the labels grew wide enough to
-                    be clipped by the plot area. */}
-                <ScatterChart margin={{ top: 8, right: 16, left: 4, bottom: 18 }}>
-                  <CartesianGrid {...GRID_PROPS} vertical />
-                  <XAxis
-                    type="number" dataKey="pace" name="Pace" domain={['dataMin - 20', 'dataMax + 20']}
-                    tick={AXIS_TICK} axisLine={false} tickLine={false} reversed
-                    tickFormatter={v => fmtPace(v)} label={xLabel('Pace (min/km) — faster →')}
-                  />
-                  <YAxis
-                    type="number" dataKey="hr" name="HR" domain={['dataMin - 5', 'dataMax + 5']} width={44}
-                    tick={AXIS_TICK} axisLine={false} tickLine={false} label={yLabel('HR (bpm)')}
-                  />
-                  {/* Marker area encodes distance, so long efforts stand out. */}
-                  <ZAxis type="number" dataKey="distKm" range={[40, 220]} name="Distance" />
-                  <Tooltip
-                    cursor={{ strokeDasharray: '3 3', stroke: 'var(--border-strong)' }}
-                    content={({ active, payload }) => {
-                      if (!active || !payload?.length) return null
-                      const d = payload[0].payload
-                      return (
-                        <div className="custom-tooltip">
-                          <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.name}</div>
-                          <div style={{ color: 'var(--text-3)' }}>{d.date}</div>
-                          <div>Pace: {fmtPace(d.pace)} /km</div>
-                          <div>HR: {d.hr} bpm</div>
-                          <div>Distance: {d.distKm} km</div>
-                        </div>
-                      )
-                    }}
-                  />
-                  <Scatter data={scatterData} fill="var(--primary)" opacity={0.6} />
-                </ScatterChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-
-          {/* Distance vs pace */}
-          <div className="card">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-              <Navigation size={14} color="var(--blue)" />
-              <h3 style={{ fontSize: 13, fontWeight: 600 }}>Distance vs Pace</h3>
-            </div>
-            <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 12 }}>A flat cloud means pace holds up as distance grows; a rising one means long efforts cost you speed.</p>
-            {distPaceData.length === 0 ? (
-              <EmptyPlot height={230}>No paced activities in the {rangeLabel(rangeDays)}</EmptyPlot>
-            ) : (
-              <ResponsiveContainer width="100%" height={230}>
-                <ScatterChart margin={{ top: 8, right: 16, left: 4, bottom: 18 }}>
-                  <CartesianGrid {...GRID_PROPS} vertical />
-                  <XAxis
-                    type="number" dataKey="km" name="Distance" domain={['dataMin - 1', 'dataMax + 1']}
-                    tick={AXIS_TICK} axisLine={false} tickLine={false} label={xLabel('Distance (km)')}
-                  />
-                  <YAxis
-                    type="number" dataKey="pace" name="Pace" domain={['dataMin - 20', 'dataMax + 20']} width={44}
-                    tick={AXIS_TICK} axisLine={false} tickLine={false} reversed
-                    tickFormatter={v => fmtPace(v)} label={yLabel('Pace (min/km)')}
-                  />
-                  <Tooltip
-                    cursor={{ strokeDasharray: '3 3', stroke: 'var(--border-strong)' }}
-                    content={({ active, payload }) => {
-                      if (!active || !payload?.length) return null
-                      const d = payload[0].payload
-                      return (
-                        <div className="custom-tooltip">
-                          <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.name}</div>
-                          <div style={{ color: 'var(--text-3)' }}>{d.date}</div>
-                          <div>Distance: {d.km} km</div>
-                          <div>Pace: {fmtPace(d.pace)} /km</div>
-                          <div>HR: {d.hr || '—'} bpm</div>
-                        </div>
-                      )
-                    }}
-                  />
-                  <Scatter data={distPaceData} fill="var(--blue)" opacity={0.6} />
-                </ScatterChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-        </div>
-
-        {/* Calories by type */}
-        <div className="card" style={{ marginBottom: 24 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16 }}>
-            <Zap size={14} color="var(--accent)" />
-            <h3 style={{ fontSize: 13, fontWeight: 600 }}>Total Calories by Type</h3>
-          </div>
-          {calByType.length === 0 ? (
-            <EmptyPlot height={200}>No activities in the {rangeLabel(rangeDays)}</EmptyPlot>
-          ) : (
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={calByType} margin={{ top: 4, right: 16, left: 4, bottom: 0 }}>
-                <CartesianGrid {...GRID_PROPS} />
-                <XAxis dataKey="type" tick={{ ...AXIS_TICK, fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={48} tickFormatter={v => v >= 1000 ? `${Math.round(v / 1000)}k` : `${v}`} />
-                <Tooltip
-                  cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
-                  content={({ active, payload }) => {
-                    if (!active || !payload?.length) return null
-                    const d = payload[0].payload
-                    return (
-                      <div className="custom-tooltip">
-                        <div style={{ fontWeight: 600 }}>{d.type}</div>
-                        <div>{d.total.toLocaleString()} kcal · {d.count} activities</div>
-                      </div>
-                    )
-                  }}
-                />
-                <Bar dataKey="total" radius={[4, 4, 0, 0]} maxBarSize={72} isAnimationActive={false}>
-                  {calByType.map(d => <Cell key={d.type} fill={d.fill} />)}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-
-        {/* Training load */}
-        <div className="card" style={{ marginBottom: 24 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-            <TrendingUp size={14} color="var(--blue)" />
-            <h3 style={{ fontSize: 13, fontWeight: 600 }}>Training Load</h3>
-            <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>TSS-equivalent score</span>
-          </div>
-          <ResponsiveContainer width="100%" height={160}>
-            <BarChart data={trainingLoad} margin={{ top: 4, right: 16, left: 4, bottom: 0 }}>
-              <CartesianGrid {...GRID_PROPS} />
-              <XAxis dataKey="date" tick={<EdgeTick fontSize={9} />} axisLine={false} tickLine={false} interval={tickInterval(trainingLoad.length)} />
-              <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={40} />
-              <Tooltip
-                cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
-                content={({ active, payload }) => {
-                  if (!active || !payload?.length) return null
-                  const d = payload[0].payload
-                  return <div className="custom-tooltip"><div>{d.date}</div><div style={{ color: 'var(--blue)' }}>TSS {d.tss}</div></div>
-                }}
-              />
-              <Bar dataKey="tss" fill="var(--blue)" radius={[2, 2, 0, 0]} opacity={0.8} isAnimationActive={false} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Acute:chronic workload ratio */}
-        <div className="card">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
-            <Activity size={14} color="var(--purple)" />
-            <h3 style={{ fontSize: 13, fontWeight: 600 }}>Acute : Chronic Workload</h3>
-            {latestRatio != null && (
-              <span style={{
-                marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700,
-                color: latestRatio > 1.5 ? '#ef4444' : latestRatio < 0.8 ? 'var(--text-3)' : '#22c55e',
-              }}>
-                {latestRatio.toFixed(2)} today
-              </span>
-            )}
-          </div>
-          <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 12 }}>
-            Last 7 days of load against the last 28. The shaded band (0.8–1.3) is the range where
-            you're building fitness without ramping up faster than your body adapts.
-          </p>
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={acwr} margin={{ top: 4, right: 16, left: 4, bottom: 0 }}>
-              <CartesianGrid {...GRID_PROPS} />
-              <XAxis dataKey="date" tick={<EdgeTick fontSize={9} />} axisLine={false} tickLine={false} interval={tickInterval(acwr.length)} />
-              <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={40} domain={[0, (max: number) => Math.max(2, Math.ceil(max * 10) / 10)]} />
-              <ReferenceArea y1={0.8} y2={1.3} fill="#22c55e" fillOpacity={0.1} />
-              <ReferenceLine y={1.5} stroke="#ef4444" strokeDasharray="4 4" strokeOpacity={0.6} />
-              <Tooltip
-                content={({ active, payload }) => {
-                  if (!active || !payload?.length) return null
-                  const d = payload[0].payload
-                  return (
-                    <div className="custom-tooltip">
-                      <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.date}</div>
-                      <div style={{ color: 'var(--purple)' }}>Ratio {d.ratio ?? '—'}</div>
-                      <div style={{ color: 'var(--text-3)' }}>Acute {d.acute} · Chronic {d.chronic}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10, marginBottom: 24 }}>
+                {(Object.entries(PRs) as [WorkoutType, PR][]).map(([type, pr]) => (
+                  <div key={type} className="card" style={{ borderTop: `3px solid ${TYPE_COLOR[type]}` }}>
+                    <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12, color: TYPE_COLOR[type] }}>{type}</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <PRRow label="Longest" value={`${(pr.longest.distance / 1000).toFixed(1)} km`} />
+                      {pr.fastest && <PRRow label="Best Pace" value={`${fmtPace(pr.fastest.avgPace)} /km`} accent />}
+                      <PRRow label="Most Elevation" value={`${Math.round(pr.highest.elevationGain)} m`} />
                     </div>
-                  )
-                }}
-              />
-              <Line type="monotone" dataKey="ratio" stroke="var(--purple)" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <ChartCard
+              title="Total Calories by Type"
+              icon={<Zap size={14} color="var(--accent)" />}
+              description="Where your energy went across the selected period."
+              info="Sums the calories of every activity of each type. Values reported by an imported file are used as-is; the rest are estimated from your body metrics and the calorie method set in Settings, so treat cross-sport comparisons as approximate."
+            >
+              {calByType.length === 0 ? (
+                <EmptyPlot height={220}>No activities in the {rangeLabel(rangeDays)}</EmptyPlot>
+              ) : (
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={calByType} margin={{ top: 4, right: 16, left: 8, bottom: 18 }}>
+                    <CartesianGrid {...GRID_PROPS} />
+                    <XAxis dataKey="type" tick={{ ...AXIS_TICK, fontSize: 11 }} axisLine={false} tickLine={false} label={xLabel('Activity type')} />
+                    <YAxis
+                      tick={AXIS_TICK} axisLine={false} tickLine={false} width={52}
+                      tickFormatter={v => v >= 1000 ? `${Math.round(v / 1000)}k` : `${v}`}
+                      label={yLabel('Calories (kcal)')}
+                    />
+                    <Tooltip
+                      cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
+                      content={({ active, payload }) => {
+                        if (!active || !payload?.length) return null
+                        const d = payload[0].payload
+                        return (
+                          <div className="custom-tooltip">
+                            <div style={{ fontWeight: 600 }}>{d.type}</div>
+                            <div>{d.total.toLocaleString()} kcal · {d.count} activities</div>
+                          </div>
+                        )
+                      }}
+                    />
+                    <Bar dataKey="total" radius={[4, 4, 0, 0]} maxBarSize={72} isAnimationActive={false}>
+                      {calByType.map(d => <Cell key={d.type} fill={d.fill} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </ChartCard>
+          </>
+        )}
+
+        {/* ── Trends: how the numbers move over time ── */}
+        {tab === 'trends' && (
+          <>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
+              {METRICS.map(m => (
+                <button
+                  key={m.id}
+                  onClick={() => toggleMetric(m.id)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '5px 12px', borderRadius: 99,
+                    border: `1px solid ${selectedMetrics.includes(m.id) ? m.color : 'var(--border)'}`,
+                    background: selectedMetrics.includes(m.id) ? `${m.color}18` : 'transparent',
+                    color: selectedMetrics.includes(m.id) ? m.color : 'var(--text-3)',
+                    fontSize: 12, fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s',
+                  }}
+                >
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: m.color, opacity: selectedMetrics.includes(m.id) ? 1 : 0.3 }} />
+                  {m.label}
+                </button>
+              ))}
+            </div>
+
+            {summaryStats.length > 0 && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10, marginBottom: 20 }}>
+                {summaryStats.map(s => (
+                  <div key={s.id} className="card" style={{ borderLeft: `3px solid ${s.color}` }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{s.label}</div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 700, color: s.color, letterSpacing: '-0.03em' }}>
+                      {formatValue(s.id, s.avg)} <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-3)' }}>{s.unit}</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 12, marginTop: 8, fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-3)' }}>
+                      <span>↓ {formatValue(s.id, s.min)}</span>
+                      <span>↑ {formatValue(s.id, s.max)}</span>
+                      <span style={{ color: s.trend > 0 ? '#22c55e' : s.trend < 0 ? '#ef4444' : 'var(--text-3)', marginLeft: 'auto' }}>
+                        {s.trend > 0 ? '▲' : s.trend < 0 ? '▼' : '—'} {Math.abs(s.trend).toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <ChartCard
+              title="Performance Over Time"
+              icon={<TrendingUp size={14} color="var(--primary)" />}
+              description={`One point per activity, with a bolder 3-activity moving average. ${series.length} activities.`}
+              info="Faint lines are individual activities; bold lines smooth them over three activities to show direction rather than noise. All selected metrics share one axis, so use it to read each line's shape and trend, not to compare their absolute heights. Filtering to a single sport makes pace and speed directly comparable."
+              style={{ marginBottom: 16 }}
+            >
+              {series.length === 0 ? (
+                <EmptyPlot height={300}>No activities in the {scope}</EmptyPlot>
+              ) : (
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={seriesWithMA} margin={{ top: 8, right: 16, left: 8, bottom: 18 }}>
+                    <CartesianGrid {...GRID_PROPS} />
+                    {/* EdgeTick anchors the first and last labels inward; with the
+                        default centred anchor the final date ran off the plot. */}
+                    <XAxis dataKey="dateLabel" tick={<EdgeTick />} axisLine={false} tickLine={false} interval={tickInterval(series.length)} label={xLabel('Activity date')} />
+                    <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={52} label={yLabel('Selected metrics')} />
+                    <Tooltip
+                      content={({ active, payload, label }) => {
+                        if (!active || !payload?.length) return null
+                        return (
+                          <div className="custom-tooltip">
+                            <div style={{ color: 'var(--text-2)', marginBottom: 6, fontWeight: 600 }}>{label}</div>
+                            {payload.filter(p => !String(p.dataKey).endsWith('_ma')).map(p => {
+                              const m = METRICS.find(x => x.id === p.dataKey)
+                              if (!m || !selectedMetrics.includes(m.id)) return null
+                              return (
+                                <div key={p.dataKey as string} style={{ color: m.color, marginBottom: 2 }}>
+                                  {m.label}: {p.value !== null ? formatValue(m.id, p.value as number) : '—'} {m.unit}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )
+                      }}
+                    />
+                    {selectedMetrics.map(metricId => {
+                      const m = METRICS.find(x => x.id === metricId)!
+                      return [
+                        <Line key={metricId} type="monotone" dataKey={metricId} stroke={m.color} strokeWidth={1.5} dot={{ r: 3, fill: m.color, strokeWidth: 0 }} connectNulls opacity={0.4} isAnimationActive={false} />,
+                        <Line key={`${metricId}_ma`} type="monotone" dataKey={`${metricId}_ma`} stroke={m.color} strokeWidth={2.5} dot={false} connectNulls isAnimationActive={false} />,
+                      ]
+                    })}
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </ChartCard>
+
+            <ChartCard
+              title="Training Volume"
+              icon={<Activity size={14} color="var(--primary)" />}
+              description="Total volume per bucket, with a 4-bucket moving average over the bars."
+              info="Bars are the raw total for each week or month; the line averages the last four buckets so a single big weekend doesn't read as a trend. Both use the same unit and axis — steady growth in the line is what progressive overload looks like, while a sharp spike is where injuries usually start."
+              actions={
+                <>
+                  <Segmented value={volumeMeasure} onChange={setVolumeMeasure} options={[{ id: 'distance', label: 'Distance' }, { id: 'time', label: 'Time' }]} />
+                  <Segmented value={volumeBucket} onChange={setVolumeBucket} options={[{ id: 'week', label: 'Weekly' }, { id: 'month', label: 'Monthly' }]} />
+                </>
+              }
+            >
+              {volume.length === 0 ? (
+                <EmptyPlot height={220}>No activities in the {scope}</EmptyPlot>
+              ) : (
+                <ResponsiveContainer width="100%" height={220}>
+                  <ComposedChart data={volume} margin={{ top: 4, right: 16, left: 8, bottom: 18 }}>
+                    <CartesianGrid {...GRID_PROPS} />
+                    <XAxis dataKey="label" tick={<EdgeTick fontSize={9} />} axisLine={false} tickLine={false} interval={tickInterval(volume.length)} label={xLabel(volumeBucket === 'week' ? 'Week starting' : 'Month')} />
+                    <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={52} label={yLabel(volumeMeasure === 'distance' ? 'Distance (km)' : 'Time (hours)')} />
+                    <Tooltip
+                      cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
+                      content={({ active, payload }) => {
+                        if (!active || !payload?.length) return null
+                        const d = payload[0].payload
+                        const unit = volumeMeasure === 'distance' ? 'km' : 'h'
+                        return (
+                          <div className="custom-tooltip">
+                            <div style={{ fontWeight: 600, marginBottom: 2 }}>{volumeBucket === 'week' ? `Week of ${d.key}` : d.label}</div>
+                            <div style={{ color: 'var(--primary)' }}>{d.value} {unit}</div>
+                            <div style={{ color: 'var(--text-3)' }}>4-bucket avg {d.avg} {unit}</div>
+                          </div>
+                        )
+                      }}
+                    />
+                    <Bar dataKey="value" fill="var(--primary)" opacity={0.35} radius={[3, 3, 0, 0]} maxBarSize={40} isAnimationActive={false} />
+                    <Line type="monotone" dataKey="avg" stroke="var(--primary)" strokeWidth={2.5} dot={false} isAnimationActive={false} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              )}
+            </ChartCard>
+          </>
+        )}
+
+        {/* ── Efficiency: what speed costs you in heartbeats ── */}
+        {tab === 'efficiency' && (
+          <>
+            <div className="grid-2" style={{ marginBottom: 16 }}>
+              <ChartCard
+                title="Efficiency Factor"
+                icon={<Gauge size={14} color="#ef4444" />}
+                description="Heartbeats spent per km/h of speed. Falling is improving."
+                info="Average heart rate divided by average speed for each activity. Because it normalises effort against output, it stays comparable across easy and hard days — unlike raw pace. A downward trend over weeks means your aerobic engine is getting stronger. Heat, altitude, fatigue and hills all push it up temporarily, so read the slope over a month rather than any single point."
+              >
+                {efficiency.rows.length === 0 ? (
+                  <EmptyPlot height={220}>Needs activities with both heart rate and speed</EmptyPlot>
+                ) : (
+                  <ResponsiveContainer width="100%" height={220}>
+                    <LineChart data={efficiency.rows} margin={{ top: 4, right: 16, left: 8, bottom: 18 }}>
+                      <CartesianGrid {...GRID_PROPS} />
+                      <XAxis dataKey="dateLabel" tick={<EdgeTick fontSize={9} />} axisLine={false} tickLine={false} interval={tickInterval(efficiency.rows.length)} label={xLabel('Activity date')} />
+                      <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={52} domain={['dataMin - 1', 'dataMax + 1']} label={yLabel('bpm per km/h')} />
+                      <Tooltip
+                        content={({ active, payload }) => {
+                          if (!active || !payload?.length) return null
+                          const d = payload[0].payload
+                          return (
+                            <div className="custom-tooltip">
+                              <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.name}</div>
+                              <div style={{ color: 'var(--text-3)' }}>{d.dateLabel}</div>
+                              <div style={{ color: '#ef4444' }}>{d.hrPerSpeed} bpm per km/h</div>
+                              <div style={{ color: 'var(--text-3)' }}>{d.hr} bpm · {d.speed.toFixed(1)} km/h</div>
+                            </div>
+                          )
+                        }}
+                      />
+                      <Line type="monotone" dataKey="hrPerSpeed" stroke="#ef4444" strokeWidth={2} dot={{ r: 2.5, strokeWidth: 0 }} isAnimationActive={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                )}
+              </ChartCard>
+
+              <ChartCard
+                title="Pace at Fixed HR"
+                icon={<Gauge size={14} color="var(--blue)" />}
+                description={`Every pace rescaled to ${efficiency.refHr || '—'} bpm, so easy and hard days compare directly.`}
+                info={`Each activity's pace is multiplied by the ratio of the reference heart rate to its own, answering "what would this pace have been at ${efficiency.refHr || 'a typical'} bpm?". The reference is the median heart rate of the current selection, so it recalibrates as you change the filters and needs no setup. A downward trend means you're covering ground faster at the same effort.`}
+              >
+                {efficiency.rows.length === 0 ? (
+                  <EmptyPlot height={220}>Needs activities with both heart rate and pace</EmptyPlot>
+                ) : (
+                  <ResponsiveContainer width="100%" height={220}>
+                    <LineChart data={efficiency.rows} margin={{ top: 4, right: 16, left: 8, bottom: 18 }}>
+                      <CartesianGrid {...GRID_PROPS} />
+                      <XAxis dataKey="dateLabel" tick={<EdgeTick fontSize={9} />} axisLine={false} tickLine={false} interval={tickInterval(efficiency.rows.length)} label={xLabel('Activity date')} />
+                      <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={56} reversed domain={['dataMin - 15', 'dataMax + 15']} tickFormatter={v => fmtPace(v)} label={yLabel('Adjusted pace (min/km)')} />
+                      <Tooltip
+                        content={({ active, payload }) => {
+                          if (!active || !payload?.length) return null
+                          const d = payload[0].payload
+                          return (
+                            <div className="custom-tooltip">
+                              <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.name}</div>
+                              <div style={{ color: 'var(--text-3)' }}>{d.dateLabel}</div>
+                              <div style={{ color: 'var(--blue)' }}>{fmtPace(d.adjPace)} /km adjusted</div>
+                              <div style={{ color: 'var(--text-3)' }}>{fmtPace(d.pace)} /km actual · {d.hr} bpm</div>
+                            </div>
+                          )
+                        }}
+                      />
+                      <Line type="monotone" dataKey="adjPace" stroke="var(--blue)" strokeWidth={2} dot={{ r: 2.5, strokeWidth: 0 }} isAnimationActive={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                )}
+              </ChartCard>
+            </div>
+
+            <div className="grid-2">
+              <ChartCard
+                title="HR vs Pace"
+                icon={<Target size={14} color="var(--primary)" />}
+                description="Lower HR at faster pace = improved aerobic efficiency. Marker size is distance."
+                info="Every activity plotted by its average pace and average heart rate, with marker area scaled to distance. As fitness improves the cloud drifts down and to the right — faster for fewer beats. Points high and left are hard efforts or bad days; large markers sitting low are your strongest long runs."
+              >
+                {hrPaceData.length === 0 ? (
+                  <EmptyPlot height={240}>No activities with pace and heart rate in the {rangeLabel(rangeDays)}</EmptyPlot>
+                ) : (
+                  <ResponsiveContainer width="100%" height={240}>
+                    <ScatterChart margin={{ top: 8, right: 16, left: 8, bottom: 18 }}>
+                      <CartesianGrid {...GRID_PROPS} vertical />
+                      {/* Units live in the axis labels rather than on every tick:
+                          with " bpm" appended to each value the labels grew wide
+                          enough to be clipped by the plot area. */}
+                      <XAxis type="number" dataKey="pace" name="Pace" domain={['dataMin - 20', 'dataMax + 20']} tick={AXIS_TICK} axisLine={false} tickLine={false} reversed tickFormatter={v => fmtPace(v)} label={xLabel('Pace (min/km) — faster →')} />
+                      <YAxis type="number" dataKey="hr" name="HR" domain={['dataMin - 5', 'dataMax + 5']} width={48} tick={AXIS_TICK} axisLine={false} tickLine={false} label={yLabel('Avg HR (bpm)')} />
+                      <ZAxis type="number" dataKey="distKm" range={[40, 220]} name="Distance" />
+                      <Tooltip
+                        cursor={{ strokeDasharray: '3 3', stroke: 'var(--border-strong)' }}
+                        content={({ active, payload }) => {
+                          if (!active || !payload?.length) return null
+                          const d = payload[0].payload
+                          return (
+                            <div className="custom-tooltip">
+                              <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.name}</div>
+                              <div style={{ color: 'var(--text-3)' }}>{d.date}</div>
+                              <div>Pace: {fmtPace(d.pace)} /km</div>
+                              <div>HR: {d.hr} bpm</div>
+                              <div>Distance: {d.distKm} km</div>
+                            </div>
+                          )
+                        }}
+                      />
+                      <Scatter data={hrPaceData} fill="var(--primary)" opacity={0.6} />
+                    </ScatterChart>
+                  </ResponsiveContainer>
+                )}
+              </ChartCard>
+
+              <ChartCard
+                title="Distance vs Pace"
+                icon={<Navigation size={14} color="var(--blue)" />}
+                description="Does pace hold up as distance grows? Marker size is elevation gain."
+                info="Each activity plotted by distance against pace, with marker area scaled to elevation gain. A flat cloud means your pace is durable over distance; one that slopes toward slower paces as distance grows points at endurance rather than speed being the limiter. Large markers low on the chart are hills, not fatigue — that's what the size encoding is there to separate."
+              >
+                {distPaceData.length === 0 ? (
+                  <EmptyPlot height={240}>No activities with distance and pace in the {rangeLabel(rangeDays)}</EmptyPlot>
+                ) : (
+                  <ResponsiveContainer width="100%" height={240}>
+                    <ScatterChart margin={{ top: 8, right: 16, left: 8, bottom: 18 }}>
+                      <CartesianGrid {...GRID_PROPS} vertical />
+                      <XAxis type="number" dataKey="km" name="Distance" domain={['dataMin - 1', 'dataMax + 1']} tick={AXIS_TICK} axisLine={false} tickLine={false} label={xLabel('Distance (km)')} />
+                      <YAxis type="number" dataKey="pace" name="Pace" domain={['dataMin - 20', 'dataMax + 20']} width={56} tick={AXIS_TICK} axisLine={false} tickLine={false} reversed tickFormatter={v => fmtPace(v)} label={yLabel('Pace (min/km)')} />
+                      {/* Elevation can legitimately be 0, so the range starts at
+                          a visible minimum rather than collapsing to a dot. */}
+                      <ZAxis type="number" dataKey="elev" range={[40, 220]} name="Elevation" />
+                      <Tooltip
+                        cursor={{ strokeDasharray: '3 3', stroke: 'var(--border-strong)' }}
+                        content={({ active, payload }) => {
+                          if (!active || !payload?.length) return null
+                          const d = payload[0].payload
+                          return (
+                            <div className="custom-tooltip">
+                              <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.name}</div>
+                              <div style={{ color: 'var(--text-3)' }}>{d.date}</div>
+                              <div>Distance: {d.km} km</div>
+                              <div>Pace: {fmtPace(d.pace)} /km</div>
+                              <div>Elevation: {d.elev} m</div>
+                              <div>HR: {d.hr || '—'} bpm</div>
+                            </div>
+                          )
+                        }}
+                      />
+                      <Scatter data={distPaceData} fill="var(--blue)" opacity={0.6} />
+                    </ScatterChart>
+                  </ResponsiveContainer>
+                )}
+              </ChartCard>
+            </div>
+          </>
+        )}
+
+        {/* ── Load: how hard you're pushing, and whether it's sustainable ── */}
+        {tab === 'load' && (
+          <>
+            <ChartCard
+              title="Daily Training Load"
+              icon={<Flame size={14} color="var(--blue)" />}
+              description="A TSS-equivalent score per day, from duration and heart-rate effort."
+              info="Each day's score is the sum of its activities, where one hour at 150 bpm scores about 100. It rewards both duration and intensity, so a short hard session and a long easy one can land in the same place. Gaps are rest days — they matter as much as the bars."
+              style={{ marginBottom: 16 }}
+            >
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={trainingLoad} margin={{ top: 4, right: 16, left: 8, bottom: 18 }}>
+                  <CartesianGrid {...GRID_PROPS} />
+                  <XAxis dataKey="date" tick={<EdgeTick fontSize={9} />} axisLine={false} tickLine={false} interval={tickInterval(trainingLoad.length)} label={xLabel('Date')} />
+                  <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={48} label={yLabel('Load (TSS-equivalent)')} />
+                  <Tooltip
+                    cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null
+                      const d = payload[0].payload
+                      return <div className="custom-tooltip"><div>{d.date}</div><div style={{ color: 'var(--blue)' }}>Load {d.tss}</div></div>
+                    }}
+                  />
+                  <Bar dataKey="tss" fill="var(--blue)" radius={[2, 2, 0, 0]} opacity={0.8} isAnimationActive={false} />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartCard>
+
+            <ChartCard
+              title="Acute : Chronic Workload"
+              icon={<Activity size={14} color="var(--purple)" />}
+              description="Last 7 days of load against the last 28. The shaded band (0.8–1.3) is the sweet spot."
+              info="Divides your average daily load over the past week by the same average over the past four weeks. Around 1.0 means this week matches what your body is already used to. Below 0.8 you're detraining or tapering; above 1.5 (the dashed line) is the range most associated with injury, because you're loading faster than tissue adapts. The four weeks of history behind each point come from your full library, so this stays correct even on a short time range."
+              actions={latestRatio != null && (
+                <span style={{
+                  fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700,
+                  color: latestRatio > 1.5 ? '#ef4444' : latestRatio < 0.8 ? 'var(--text-3)' : '#22c55e',
+                }}>
+                  {latestRatio.toFixed(2)} today
+                </span>
+              )}
+            >
+              <ResponsiveContainer width="100%" height={220}>
+                <LineChart data={acwr} margin={{ top: 4, right: 16, left: 8, bottom: 18 }}>
+                  <CartesianGrid {...GRID_PROPS} />
+                  <XAxis dataKey="date" tick={<EdgeTick fontSize={9} />} axisLine={false} tickLine={false} interval={tickInterval(acwr.length)} label={xLabel('Date')} />
+                  <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={48} domain={[0, (max: number) => Math.max(2, Math.ceil(max * 10) / 10)]} label={yLabel('Acute : chronic ratio')} />
+                  <ReferenceArea y1={0.8} y2={1.3} fill="#22c55e" fillOpacity={0.1} />
+                  <ReferenceLine y={1.5} stroke="#ef4444" strokeDasharray="4 4" strokeOpacity={0.6} />
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null
+                      const d = payload[0].payload
+                      return (
+                        <div className="custom-tooltip">
+                          <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.date}</div>
+                          <div style={{ color: 'var(--purple)' }}>Ratio {d.ratio ?? '—'}</div>
+                          <div style={{ color: 'var(--text-3)' }}>Acute {d.acute} · Chronic {d.chronic}</div>
+                        </div>
+                      )
+                    }}
+                  />
+                  <Line type="monotone" dataKey="ratio" stroke="var(--purple)" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </ChartCard>
+          </>
+        )}
       </div>
     </div>
   )
 }
 
-function EmptyPlot({ height, children }: { height: number; children: React.ReactNode }) {
+function PRRow({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
-    <div style={{ height, display: 'grid', placeItems: 'center', fontSize: 12, color: 'var(--text-3)', textAlign: 'center' }}>
-      {children}
+    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+      <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{label}</span>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600, color: accent ? 'var(--primary)' : undefined }}>{value}</span>
     </div>
   )
 }

@@ -391,6 +391,103 @@ body {
   font-family: var(--font-mono);
 }
 
+/* ── Chart card: title row, info tip, description ── */
+.chart-card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.chart-card-title { font-size: 13px; font-weight: 600; }
+.chart-card-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.chart-card-desc {
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+.infotip-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border: none;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  border-radius: 50%;
+  transition: color 0.12s;
+}
+.infotip-trigger:hover { color: var(--primary); }
+/* Positioned in JS and portalled to <body>, so it can't be clipped by the
+   chart card it belongs to. Only opacity is animated — animating `transform`
+   here would override the positioning and make the bubble visibly jump. */
+.infotip-bubble {
+  position: fixed;
+  max-width: min(320px, calc(100vw - 16px));
+  background: var(--bg-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.55;
+  color: var(--text-2);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.45);
+  z-index: 2000;
+  animation: infotipIn 0.12s ease;
+  white-space: normal;
+  text-align: left;
+  pointer-events: none;
+}
+
+@keyframes infotipIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ── Section tab strip (Analysis) ── */
+.tab-strip {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) * 1.5);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tab-strip::-webkit-scrollbar { display: none; }
+.tab-strip-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-3);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.tab-strip-item:hover { color: var(--text); }
+.tab-strip-item.active {
+  background: var(--bg-2);
+  color: var(--primary);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+@media (max-width: 768px) {
+  /* Labels would wrap or overflow at five tabs on a phone, so the strip
+     scrolls horizontally and the items tighten up. */
+  .tab-strip-item { padding: 8px 12px; font-size: 12px; gap: 6px; }
+}
+
 /* Compact filter dropdown, shared by the type and time-range pickers. */
 .al-dropdown {
   position: relative;
@@ -700,7 +797,17 @@ body {
     border-radius: var(--radius);
   }
   .bottom-bar-item.active { color: var(--primary); }
-  .bottom-bar-item span { font-size: 10px; font-weight: 500; }
+  /* Five slots share the width, and "Consistency" is the longest label — clip
+     rather than wrap so every item keeps the same height. */
+  .bottom-bar-item span {
+    font-size: 10px;
+    font-weight: 500;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .bottom-bar-item { padding: 8px 2px; min-width: 0; }
 
   .fab { bottom: calc(80px + 8px); }
 }

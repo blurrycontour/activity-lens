@@ -1,6 +1,6 @@
 import { useRef, useCallback } from 'react'
-import { LayoutDashboard, Dumbbell, MapIcon, BarChart2, Activity, HelpCircle, Plus, Watch } from 'lucide-react'
-import { type Page } from '../lib/nav'
+import { LayoutDashboard, Dumbbell, CalendarCheck, BarChart2, HelpCircle, Plus, Watch } from 'lucide-react'
+import { DESKTOP_PAGES, type Page } from '../lib/nav'
 
 interface SidebarProps {
   currentPage: Page
@@ -12,15 +12,21 @@ interface SidebarProps {
   isMobile: boolean
 }
 
-const navItems: { id: Page; label: string; icon: React.ReactNode }[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
-  { id: 'workouts', label: 'Workouts', icon: <Dumbbell size={18} /> },
-  { id: 'heatmap', label: 'Heatmap', icon: <MapIcon size={18} /> },
-  { id: 'timeline', label: 'Timeline', icon: <Activity size={18} /> },
-  { id: 'analysis', label: 'Analysis', icon: <BarChart2 size={18} /> },
-  { id: 'equipment', label: 'Equipment', icon: <Watch size={18} /> },
-  { id: 'help', label: 'Help', icon: <HelpCircle size={18} /> },
-]
+// Presentation only — DESKTOP_PAGES fixes the order, so the sidebar and the
+// mobile bottom bar can never drift apart.
+export const PAGE_META: Partial<Record<Page, { label: string; icon: (size: number) => React.ReactNode }>> = {
+  dashboard: { label: 'Dashboard', icon: s => <LayoutDashboard size={s} /> },
+  workouts: { label: 'Workouts', icon: s => <Dumbbell size={s} /> },
+  analysis: { label: 'Analysis', icon: s => <BarChart2 size={s} /> },
+  consistency: { label: 'Consistency', icon: s => <CalendarCheck size={s} /> },
+  equipment: { label: 'Equipment', icon: s => <Watch size={s} /> },
+  help: { label: 'Help', icon: s => <HelpCircle size={s} /> },
+}
+
+const navItems = DESKTOP_PAGES.flatMap(id => {
+  const meta = PAGE_META[id]
+  return meta ? [{ id, label: meta.label, icon: meta.icon(18) }] : []
+})
 
 export default function Sidebar({ currentPage, onNavigate, collapsed, sidebarWidth, onWidthChange, onImport, isMobile }: SidebarProps) {
   const dragRef = useRef(false)

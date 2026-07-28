@@ -10,6 +10,7 @@ import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
 import { useLocalStorage } from '../lib/useLocalStorage'
 import { DEFAULT_HR_ZONE_CHART, HR_ZONE_CHART_KEY, type HRZoneChart } from '../lib/dashboardConfig'
+import InfoTip from '../components/InfoTip'
 import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, Popup, useMap, useMapEvents } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import { divIcon } from 'leaflet'
@@ -1144,7 +1145,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
           {selectedMetrics.includes('hr') && w.hrTimeline.length > 0 && (
             <div className="card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><Heart size={14} color="#ef4444" /> Heart Rate</h3>
+                <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><Heart size={14} color="#ef4444" /> Heart Rate<InfoTip label="Heart Rate" text="Every heart-rate sample the file recorded, plotted against elapsed time. The line is coloured by training zone using your max HR — from Settings when the activity doesn't report its own. Click anywhere on the chart to move the playback cursor and the map marker to that moment." /></h3>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)' }}>Min {derived.hrMin ?? '—'} · Avg {w.avgHR} · Max {w.maxHR}</span>
                   <button className="btn-icon" onClick={() => setExpanded('hr')} title="Expand"><Maximize2 size={13} /></button>
@@ -1160,6 +1161,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                 <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
                   <Heart size={14} color="#ef4444" /> Heart Rate Zones
+                  <InfoTip label="Heart Rate Zones" text="How the activity's time split across the five effort zones, as a share of recorded samples. Zones are percentages of your max HR: under 60% is recovery, 60-70% endurance, 70-80% tempo, 80-90% threshold, and above 90% is maximal. Switch between the histogram and donut under Settings → Charts." />
                 </h3>
                 <button className="btn-icon" onClick={() => setExpanded('hrzones')} title="Expand"><Maximize2 size={13} /></button>
               </div>
@@ -1171,7 +1173,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
           {selectedMetrics.includes('pace') && w.paceTimeline.length > 0 && (
             <div className="card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><TrendingUp size={14} color={color} /> Pace <CalcIcon /></h3>
+                <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><TrendingUp size={14} color={color} /> Pace <CalcIcon /><InfoTip label="Pace" text="Pace derived from the distance and time between consecutive GPS fixes, then smoothed — very few files record pace directly, which is what the Σ marks. Segments shorter than three metres are skipped so standing still doesn't produce wild spikes. Lower on the chart is faster." /></h3>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)' }}>Min {derived.paceMin != null ? fmtPace(derived.paceMin) : '—'} · Avg {fmtPace(w.avgPace)} · Max {derived.paceMax != null ? fmtPace(derived.paceMax) : '—'} /km</span>
                   <button className="btn-icon" onClick={() => setExpanded('pace')} title="Expand"><Maximize2 size={13} /></button>
@@ -1185,7 +1187,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
           {selectedMetrics.includes('speed') && speedTimeline.length > 0 && (
             <div className="card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><Gauge size={14} color="var(--blue)" /> Speed <CalcIcon /></h3>
+                <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><Gauge size={14} color="var(--blue)" /> Speed <CalcIcon /><InfoTip label="Speed" text="The same GPS-derived measurement as the pace chart, expressed as km/h instead of minutes per kilometre. It's the more natural read for rides; pace is the more natural read for runs." /></h3>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)' }}>Min {derived.speedMin?.toFixed(1) ?? '—'} · Avg {w.avgSpeed > 0 ? w.avgSpeed.toFixed(1) : '—'} · Max {derived.speedMax?.toFixed(1) ?? '—'} km/h</span>
                   <button className="btn-icon" onClick={() => setExpanded('speed')} title="Expand"><Maximize2 size={13} /></button>
@@ -1199,7 +1201,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
           {selectedMetrics.includes('elevation') && w.elevTimeline.length > 0 && (
             <div className="card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><Mountain size={14} color="var(--hike)" /> Elevation</h3>
+                <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><Mountain size={14} color="var(--hike)" /> Elevation<InfoTip label="Elevation" text="Altitude recorded at each track point. Total gain sums only the upward steps between consecutive samples, so barometric noise on a flat route can inflate it slightly. Compare the shape against the heart-rate chart to see what the climbs actually cost you." /></h3>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)' }}>+{w.elevationGain} m gain · {derived.elevLoss} m loss</span>
                   <button className="btn-icon" onClick={() => setExpanded('elevation')} title="Expand"><Maximize2 size={13} /></button>
@@ -1213,7 +1215,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
           {selectedMetrics.includes('cadence') && cadenceTimeline.length > 0 && (
             <div className="card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><Activity size={14} color={CADENCE_COLOR} /> Cadence</h3>
+                <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><Activity size={14} color={CADENCE_COLOR} /> Cadence<InfoTip label="Cadence" text="Steps per minute on foot, or crank revolutions per minute on a bike. Foot pods report only one leg, so those values are doubled on import to give the total most trackers show — around 170-180 spm is a common target for runners. The series is lightly smoothed to ride over dropped samples." /></h3>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)' }}>Min {derived.cadMin ?? '—'} · Avg {derived.cadAvg ?? '—'} · Max {derived.cadMax ?? '—'} {cadenceUnit(w.type)}</span>
                   <button className="btn-icon" onClick={() => setExpanded('cadence')} title="Expand"><Maximize2 size={13} /></button>
