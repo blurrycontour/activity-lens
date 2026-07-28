@@ -9,6 +9,13 @@ export const API_CACHE = 'al-api'
 export const TILE_CACHE = 'al-map-tiles'
 
 /**
+ * Header the worker stamps on responses it served from cache because the
+ * network did not answer. Lives here rather than next to the network hook so
+ * the worker can import it without pulling React into its bundle.
+ */
+export const FROM_CACHE_HEADER = 'x-al-from-cache'
+
+/**
  * Drops every cached API response. Called on logout so one user's data is not
  * left on the device for the next person to sign in.
  */

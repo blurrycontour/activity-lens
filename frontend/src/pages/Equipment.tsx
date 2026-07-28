@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Plus, Watch, Bike, Shirt, Package, Footprints, Pencil, Trash2, X, ChevronRight, ArrowLeft, AlertTriangle, Search } from 'lucide-react'
 import { api, type Equipment, type EquipmentInput, type LinkedWorkout } from '../lib/api'
+import { useRefreshHandler } from '../context/RefreshContext'
 import { fmtDuration, fmtDist } from '../data/workouts'
 
 interface EquipmentPageProps {
@@ -58,6 +59,9 @@ export default function EquipmentPage({ onSelectWorkout }: EquipmentPageProps) {
   }, [])
 
   useEffect(() => { void load() }, [load])
+  // Equipment fetches its own data rather than reading the workout cache, so it
+  // has to opt into pull-to-refresh itself.
+  useRefreshHandler(load)
 
   const filtered = useMemo(() => {
     let result = [...items]

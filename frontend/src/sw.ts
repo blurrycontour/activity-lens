@@ -18,7 +18,7 @@ import { ExpirationPlugin } from 'workbox-expiration'
 import { CacheableResponsePlugin } from 'workbox-cacheable-response'
 
 import { SHARE_CACHE, SHARE_FILENAME_HEADER, SHARE_KEY, SHARE_QUERY_PARAM } from './lib/shareTarget'
-import { API_CACHE, TILE_CACHE } from './lib/swCache'
+import { API_CACHE, FROM_CACHE_HEADER, TILE_CACHE } from './lib/swCache'
 
 declare const self: ServiceWorkerGlobalScope
 
@@ -83,6 +83,22 @@ registerRoute(
     plugins: [
       new CacheableResponsePlugin({ statuses: [200] }),
       new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 7 }),
+      {
+        // Falling back to the cache means the network did not answer. Mark
+        // those responses so the app can tell "loaded" from "actually online"
+        // and show the offline banner. Headers on a cached Response are
+        // immutable, hence the rebuild.
+        cachedResponseWillBeUsed: async ({ cachedResponse }) => {
+          if (!cachedResponse) return cachedResponse
+          const headers = new Headers(cachedResponse.headers)
+          headers.set(FROM_CACHE_HEADER, '1')
+          return new Response(await cachedResponse.blob(), {
+            status: cachedResponse.status,
+            statusText: cachedResponse.statusText,
+            headers,
+          })
+        },
+      },
     ],
   }),
 )

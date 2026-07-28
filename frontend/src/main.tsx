@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { registerSW } from 'virtual:pwa-register'
 import App from './App'
 import { AuthProvider } from './context/AuthContext'
+import { RefreshProvider } from './context/RefreshContext'
 import './index.css'
 
 // Registering the worker is what makes the app installable, gives it an offline
@@ -14,7 +15,9 @@ registerSW({ immediate: true })
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <AuthProvider>
-      <App />
+      <RefreshProvider>
+        <App />
+      </RefreshProvider>
     </AuthProvider>
   </React.StrictMode>,
 )

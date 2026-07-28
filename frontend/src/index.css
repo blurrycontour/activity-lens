@@ -124,7 +124,8 @@ body {
 .app-layout {
   display: grid;
   grid-template-columns: var(--sidebar-w) 1fr;
-  grid-template-rows: 48px 1fr;
+  /* Rows: top bar, offline bar (0px unless shown), content. */
+  grid-template-rows: 48px auto 1fr;
   height: 100vh;
   width: 100vw;
   overflow: hidden;
@@ -151,7 +152,7 @@ body {
 
 .sidebar {
   grid-column: 1;
-  grid-row: 2;
+  grid-row: 3;
   background: var(--bg-2);
   border-right: 1px solid var(--border);
   display: flex;
@@ -180,11 +181,17 @@ body {
 
 .main-content {
   grid-column: 2;
-  grid-row: 2;
+  grid-row: 3;
   overflow-y: auto;
   overflow-x: hidden;
   background: var(--bg);
   padding-bottom: var(--bottombar-h);
+  /* Anchors the pull-to-refresh indicator and the swipe destination hint,
+     both of which are absolutely positioned against this container. */
+  position: relative;
+  /* The pull-to-refresh gesture handles over-scroll at the top itself; without
+     this the browser's own bounce competes with it on iOS and Chrome Android. */
+  overscroll-behavior-y: contain;
 }
 
 /* ── Shared UI primitives ── */
@@ -609,6 +616,49 @@ body {
 .options-menu-item.danger { color: var(--red, #dc2626); }
 .options-menu-item.danger:hover { background: rgba(220, 38, 38, 0.12); }
 
+
+/* Connectivity banner. Occupies its own grid row and collapses to nothing when
+   online, so it pushes content down instead of covering it. */
+.offline-bar {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  height: 0;
+  overflow: hidden;
+  border-bottom-width: 0 !important;
+  transition: height 0.22s ease, border-bottom-width 0.22s ease;
+}
+.offline-bar[data-visible='true'] {
+  height: 26px;
+  border-bottom-width: 1px !important;
+}
+
+/* Placeholder block for content that is still loading. The sweep runs left to
+   right over a flat base so it reads as "working" rather than "broken". */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-3) 0%,
+    var(--border-strong) 40%,
+    var(--bg-3) 80%
+  );
+  background-size: 220% 100%;
+  animation: skeletonSweep 1.3s ease-in-out infinite;
+}
+
+@keyframes skeletonSweep {
+  from { background-position: 120% 0; }
+  to { background-position: -40% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; }
+}
 
 /* ── Animations ── */
 @keyframes pulse {

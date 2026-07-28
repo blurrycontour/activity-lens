@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import { api } from '../lib/api'
+import { useRefreshHandler } from './RefreshContext'
 import { type Workout } from '../data/workouts'
 
 interface WorkoutsState {
@@ -19,7 +20,10 @@ export function WorkoutsProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
-    setLoading(true)
+    // Deliberately does not re-raise `loading`: this runs for pull-to-refresh
+    // and after an import, where replacing the page with a spinner would be a
+    // worse experience than briefly showing slightly stale rows. `loading` is
+    // therefore only ever true for the very first load.
     setError(null)
     try {
       const data = await api.listWorkouts()
@@ -34,6 +38,9 @@ export function WorkoutsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  // Most pages render this cache, so pulling to refresh should reload it.
+  useRefreshHandler(refresh)
 
   const removeWorkout = useCallback(async (id: string) => {
     await api.deleteWorkout(id)

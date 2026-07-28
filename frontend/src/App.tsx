@@ -4,6 +4,9 @@ import Sidebar from './components/Sidebar'
 import BottomBar from './components/BottomBar'
 import UserMenu from './components/UserMenu'
 import ImportModal from './components/ImportModal'
+import OfflineBar from './components/OfflineBar'
+import PullToRefresh from './components/PullToRefresh'
+import SwipePager from './components/SwipePager'
 import { applyAccent, ACCENTS } from './lib/theme'
 import Dashboard from './pages/Dashboard'
 import Workouts from './pages/Workouts'
@@ -18,6 +21,7 @@ import Admin from './pages/Admin'
 import Login from './pages/Login'
 import { type Workout } from './data/workouts'
 import { useAuth } from './context/AuthContext'
+import { useRefresh } from './context/RefreshContext'
 import { WorkoutsProvider } from './context/WorkoutsContext'
 import { adjacentPage, DESKTOP_PAGES, LEGACY_ROUTES, type Page } from './lib/nav'
 import { useSwipeNav } from './lib/useSwipeNav'
@@ -224,11 +228,19 @@ export default function App() {
     const next = adjacentPage(page, steps)
     if (next) navigate(next)
   }, [page, navigate])
-  useSwipeNav(mainRef, {
-    enabled: isMobile && !selectedWorkout && !showImport && !showUserMenu,
-    onPrev: () => swipeTo(-1),
-    onNext: () => swipeTo(1),
-  })
+  const gesturesEnabled = isMobile && !selectedWorkout && !showImport && !showUserMenu
+  const onPrev = useCallback(() => swipeTo(-1), [swipeTo])
+  const onNext = useCallback(() => swipeTo(1), [swipeTo])
+  const swipe = useSwipeNav(mainRef, { enabled: gesturesEnabled, onPrev, onNext })
+
+  // Pull-to-refresh reloads the data each page registered, never the document.
+  const { refresh } = useRefresh()
+
+  // Start each page at the top. Without this a swipe from a scrolled page
+  // animates the next one in already scrolled down, which reads as a glitch.
+  useEffect(() => {
+    mainRef.current?.scrollTo({ top: 0 })
+  }, [page])
 
   const layoutClass = [
     'app-layout',
@@ -261,6 +273,8 @@ export default function App() {
         user={user}
       />
 
+      <OfflineBar />
+
       {/* Desktop sidebar — hidden on mobile via CSS */}
       <Sidebar
         currentPage={page}
@@ -273,6 +287,8 @@ export default function App() {
       />
 
       <main className="main-content" ref={mainRef}>
+        <PullToRefresh scrollRef={mainRef} enabled={gesturesEnabled} onRefresh={refresh} />
+        <SwipePager page={page} swipe={swipe}>
         {selectedWorkout ? (
           <WorkoutDetail key={selectedWorkout.id} workout={selectedWorkout} accent={accent} onBack={() => selectWorkout(null)} />
         ) : page === 'dashboard' ? (
@@ -294,6 +310,7 @@ export default function App() {
         ) : (
           <Help />
         )}
+        </SwipePager>
       </main>
 
       {/* Mobile bottom bar */}

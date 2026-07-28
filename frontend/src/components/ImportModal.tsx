@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Upload, X, CheckCircle, FileText, AlertCircle, ArrowRight, Info } from 'lucide-react'
+import { Upload, X, CheckCircle, FileText, AlertCircle, ArrowRight, Info, Loader2 } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { api, ApiError, type Equipment } from '../lib/api'
 import { type Workout, fmtDist, fmtDuration, fmtPace } from '../data/workouts'
@@ -15,6 +15,21 @@ interface ImportModalProps {
 type Tab = 'file' | 'manual'
 
 const SUPPORTED = ['gpx', 'tcx']
+
+/** Stats shown for a parsed file, in order. The loading skeleton renders the
+ * same labels in the same grid so the panel does not reflow when values land. */
+const PREVIEW_FIELDS = ['Distance', 'Duration', 'Calories', 'Avg HR', 'Elevation', 'Avg Pace']
+
+function previewRows(p: Workout): [string, string][] {
+  return [
+    ['Distance', p.distance > 0 ? fmtDist(p.distance) : '—'],
+    ['Duration', p.duration > 0 ? fmtDuration(p.duration) : '—'],
+    ['Calories', p.calories > 0 ? `${p.calories} kcal` : '—'],
+    ['Avg HR', p.avgHR > 0 ? `${p.avgHR} bpm` : '—'],
+    ['Elevation', p.elevationGain > 0 ? `${Math.round(p.elevationGain)} m` : '—'],
+    ['Avg Pace', p.avgPace > 0 ? `${fmtPace(p.avgPace)} /km` : '—'],
+  ]
+}
 
 // parseDuration turns "mm:ss" or "h:mm:ss" into seconds (0 when empty/invalid).
 function parseDuration(v: string): number {
@@ -236,19 +251,30 @@ export default function ImportModal({ onClose, onViewWorkout, initialFile }: Imp
                       )}
                       {fileSupported && (previewBusy || preview) && (
                         <div style={{ marginTop: 14, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
-                          <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 8 }}>
-                            {previewBusy ? 'Reading file…' : 'Preview'}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-3)', marginBottom: 8 }}>
+                            {previewBusy && (
+                              <Loader2 size={12} style={{ animation: 'spin 0.9s linear infinite', flexShrink: 0 }} />
+                            )}
+                            <span>{previewBusy ? 'Reading file — calculating stats…' : 'Preview'}</span>
                           </div>
+                          {/* Skeleton in the shape of the real stat grid, so the
+                              panel does not jump when the numbers land. */}
+                          {previewBusy && (
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: 10 }}>
+                              {PREVIEW_FIELDS.map(label => (
+                                <div key={label}>
+                                  <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</div>
+                                  <div
+                                    className="skeleton"
+                                    style={{ height: 15, width: '72%', borderRadius: 4, marginTop: 4 }}
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          )}
                           {preview && (
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: 10 }}>
-                              {([
-                                ['Distance', preview.distance > 0 ? fmtDist(preview.distance) : '—'],
-                                ['Duration', preview.duration > 0 ? fmtDuration(preview.duration) : '—'],
-                                ['Calories', preview.calories > 0 ? `${preview.calories} kcal` : '—'],
-                                ['Avg HR', preview.avgHR > 0 ? `${preview.avgHR} bpm` : '—'],
-                                ['Elevation', preview.elevationGain > 0 ? `${Math.round(preview.elevationGain)} m` : '—'],
-                                ['Avg Pace', preview.avgPace > 0 ? `${fmtPace(preview.avgPace)} /km` : '—'],
-                              ] as [string, string][]).map(([label, value]) => (
+                              {previewRows(preview).map(([label, value]) => (
                                 <div key={label}>
                                   <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</div>
                                   <div style={{ fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-mono)', marginTop: 2 }}>{value}</div>
