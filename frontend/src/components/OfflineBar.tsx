@@ -43,9 +43,12 @@ export default function OfflineBar() {
       // transition is what makes it push the content down rather than overlap.
       data-visible={visible ? 'true' : 'false'}
       style={{
-        background: reconnected ? 'var(--primary-dim)' : 'rgba(217, 119, 6, 0.15)',
-        color: reconnected ? 'var(--primary)' : '#d97706',
-        borderBottom: `1px solid ${reconnected ? 'var(--primary)' : 'rgba(217, 119, 6, 0.35)'}`,
+        // Neutral greys pulled from the theme variables, so this follows the
+        // light/dark switch instead of being a fixed colour. Only the brief
+        // reconnect confirmation uses the accent.
+        background: reconnected ? 'var(--primary-dim)' : 'var(--bg-3)',
+        color: reconnected ? 'var(--primary)' : 'var(--text-2)',
+        borderBottom: `1px solid ${reconnected ? 'var(--primary)' : 'var(--border-strong)'}`,
       }}
     >
       {reconnected ? <Check size={13} /> : <CloudOff size={13} />}

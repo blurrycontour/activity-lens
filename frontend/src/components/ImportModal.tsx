@@ -126,6 +126,11 @@ export default function ImportModal({ onClose, onViewWorkout, initialFile }: Imp
 
   const ext = file?.name.split('.').pop()?.toUpperCase() ?? ''
   const fileSupported = SUPPORTED.includes((file?.name.split('.').pop() ?? '').toLowerCase())
+  // On the file tab, wait for the preview to finish so the user cannot submit
+  // before knowing what the file actually parses to (and before the derived
+  // calorie estimate is folded in).
+  const notReady = tab === 'file' ? (!file || !fileSupported || previewBusy) : !form.name.trim()
+  const submitDisabled = busy || notReady
 
   // Fetch a non-persisted preview of the derived numbers once a supported file
   // is selected, so the user can review them before saving.
@@ -430,8 +435,8 @@ export default function ImportModal({ onClose, onViewWorkout, initialFile }: Imp
                 <button
                   className="btn btn-primary"
                   onClick={handleImport}
-                  disabled={busy || (tab === 'file' ? (!file || !fileSupported) : !form.name.trim())}
-                  style={{ opacity: (busy || (tab === 'file' ? (!file || !fileSupported) : !form.name.trim())) ? 0.4 : 1 }}
+                  disabled={submitDisabled}
+                  style={{ opacity: submitDisabled ? 0.4 : 1 }}
                 >
                   {busy ? 'Saving…' : 'Add Workout'}
                 </button>

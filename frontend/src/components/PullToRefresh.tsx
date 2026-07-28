@@ -1,19 +1,38 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { RefreshCw } from 'lucide-react'
 
-/** How far the finger must travel before the pull commits to a refresh. */
-const TRIGGER_DISTANCE = 72
-/** Cap on how far the indicator travels, so a long drag doesn't run off-screen. */
-const MAX_PULL = 110
+/** Finger travel, in px, at which the pull arms and will refresh on release. */
+const ARM_FINGER_PX = 85
 /**
- * Damping applied to finger travel. Below 1 the indicator lags the finger,
- * which is what makes the pull feel elastic rather than stuck to the thumb.
+ * Damping applied to finger travel before the pull arms. Below 1 the indicator
+ * lags the finger, which is what makes the pull feel elastic rather than glued
+ * to the thumb.
  */
-const RESISTANCE = 0.5
+const PRE_ARM_RATIO = 0.6
+/**
+ * Damping applied after arming. Much heavier, so the indicator visibly resists
+ * further pulling instead of coasting a long way past the point where the
+ * gesture has already been decided.
+ */
+const POST_ARM_RATIO = 0.18
+/** Indicator travel at which the pull is armed. */
+const ARMED_AT = ARM_FINGER_PX * PRE_ARM_RATIO
+/** Hard cap on indicator travel. Reached only after a long, heavily damped tail. */
+const MAX_PULL = ARMED_AT + 28
 /** Vertical travel needed before we decide this is a pull and not a tap. */
 const SLOP = 8
-/** Indicator travel at which the pull is armed, i.e. TRIGGER_DISTANCE damped. */
-const ARMED_AT = TRIGGER_DISTANCE * RESISTANCE
+/** One full rotation of the spinner, in ms. Also the minimum time it stays up. */
+const SPIN_MS = 900
+
+/**
+ * Maps raw finger travel to indicator travel. Two slopes: responsive up to the
+ * arming point, then stiff, so the indicator keeps moving all the way to the
+ * cap without the last stretch feeling like dead travel.
+ */
+function dampPull(dy: number): number {
+  if (dy <= ARM_FINGER_PX) return dy * PRE_ARM_RATIO
+  return Math.min(MAX_PULL, ARMED_AT + (dy - ARM_FINGER_PX) * POST_ARM_RATIO)
+}
 
 interface PullToRefreshProps {
   /** The scroll container the gesture is measured against. */
@@ -105,7 +124,7 @@ export default function PullToRefresh({ scrollRef, enabled, onRefresh }: PullToR
       // bounce) now that the pull owns the gesture. Requires a non-passive
       // listener, which is why touchmove is registered with passive: false.
       e.preventDefault()
-      setPullDistance(Math.min(MAX_PULL, dy * RESISTANCE))
+      setPullDistance(dampPull(dy))
     }
 
     async function onTouchEnd() {
@@ -122,9 +141,17 @@ export default function PullToRefresh({ scrollRef, enabled, onRefresh }: PullToR
       setPullDistance(ARMED_AT)
       refreshingRef.current = true
       setRefreshing(true)
+      const startedAt = Date.now()
       try {
         await onRefresh()
       } finally {
+        // A warm refresh can return in tens of milliseconds, which would show
+        // as a flicker rather than feedback. Hold the spinner for at least one
+        // full rotation so the gesture visibly did something.
+        const elapsed = Date.now() - startedAt
+        if (elapsed < SPIN_MS) {
+          await new Promise(resolve => setTimeout(resolve, SPIN_MS - elapsed))
+        }
         refreshingRef.current = false
         setRefreshing(false)
         setPullDistance(0)
@@ -146,8 +173,12 @@ export default function PullToRefresh({ scrollRef, enabled, onRefresh }: PullToR
   if (!enabled || (pull === 0 && !refreshing)) return null
 
   const armed = pull >= ARMED_AT
-  // Fade and grow the indicator in as it is pulled, so it doesn't pop.
-  const progress = Math.min(1, pull / ARMED_AT)
+  // Fade and grow the indicator in over the first stretch of the pull, so it is
+  // fully visible well before the arming point rather than still appearing.
+  const appear = Math.min(1, pull / (ARMED_AT * 0.55))
+  // Rotation is driven by the whole travel range, including the damped tail
+  // past the arming point, so the icon never sits still while the finger moves.
+  const spun = Math.min(1, pull / MAX_PULL)
 
   return (
     <div
@@ -167,29 +198,30 @@ export default function PullToRefresh({ scrollRef, enabled, onRefresh }: PullToR
     >
       <div
         style={{
-          marginTop: 8,
-          width: 32,
-          height: 32,
+          marginTop: 10,
+          width: 42,
+          height: 42,
           borderRadius: '50%',
           background: 'var(--bg-2)',
-          border: '1px solid var(--border)',
-          boxShadow: '0 2px 10px rgba(0,0,0,0.28)',
+          border: `1px solid ${armed || refreshing ? 'var(--primary)' : 'var(--border)'}`,
+          boxShadow: '0 2px 12px rgba(0,0,0,0.3)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          opacity: progress,
-          transform: `scale(${0.7 + progress * 0.3})`,
-          transition: dragging ? 'none' : 'opacity 0.2s, transform 0.2s',
+          opacity: appear,
+          transform: `scale(${0.75 + appear * 0.25})`,
+          transition: dragging ? 'border-color 0.15s' : 'opacity 0.2s, transform 0.2s, border-color 0.15s',
         }}
       >
         <RefreshCw
-          size={16}
+          size={22}
+          strokeWidth={2.6}
           color={armed || refreshing ? 'var(--primary)' : 'var(--text-3)'}
           style={{
             // While pulling, the icon rotates with the drag; once refreshing it
             // hands over to a continuous spin.
-            animation: refreshing ? 'spin 0.8s linear infinite' : 'none',
-            transform: refreshing ? undefined : `rotate(${progress * 270}deg)`,
+            animation: refreshing ? `spin ${SPIN_MS}ms linear infinite` : 'none',
+            transform: refreshing ? undefined : `rotate(${spun * 360}deg)`,
             transition: dragging ? 'none' : 'transform 0.2s',
           }}
         />

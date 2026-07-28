@@ -37,6 +37,87 @@ function currentlyOnline(): boolean {
   return reported ?? true
 }
 
+// --- Active probing ---------------------------------------------------------
+//
+// Request outcomes alone only tell us something when a request happens, so
+// connectivity lost while the user sits on a page would go unnoticed until they
+// navigated. That is the common case behind a reverse proxy or a dev tunnel,
+// where the machine keeps its network interface (and `navigator.onLine` stays
+// true) while the backend becomes unreachable. So poll a cheap endpoint.
+
+/** Public, tiny, and already fetched at boot, so it is warm in the SW cache. */
+const PROBE_PATH = '/api/auth/config'
+const ONLINE_INTERVAL_MS = 15_000
+/** Poll harder while offline so reconnecting is noticed promptly. */
+const OFFLINE_INTERVAL_MS = 6_000
+/** A probe that has not answered by now counts as unreachable. */
+const PROBE_TIMEOUT_MS = 7_000
+
+let timer: number | null = null
+let monitoring = false
+
+/**
+ * Checks reachability right now, records the verdict, and returns it.
+ *
+ * A response only counts as proof of connectivity if it actually came off the
+ * network: the service worker answers from its cache when the network is down,
+ * which looks identical to a successful request from here without the marker.
+ */
+export async function probeReachability(): Promise<boolean> {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    reportReachability(false)
+    return false
+  }
+  const controller = new AbortController()
+  const timeout = window.setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS)
+  try {
+    const res = await fetch(PROBE_PATH, {
+      credentials: 'same-origin',
+      // Bypass the HTTP cache; the service worker still intercepts, and its
+      // from-cache marker is what actually distinguishes the two cases.
+      cache: 'no-store',
+      signal: controller.signal,
+    })
+    const live = res.headers.get(FROM_CACHE_HEADER) !== '1'
+    reportReachability(live)
+    return live
+  } catch {
+    // Transport failure, or the abort above.
+    reportReachability(false)
+    return false
+  } finally {
+    window.clearTimeout(timeout)
+  }
+}
+
+function schedule(): void {
+  if (timer !== null) window.clearTimeout(timer)
+  timer = window.setTimeout(tick, currentlyOnline() ? ONLINE_INTERVAL_MS : OFFLINE_INTERVAL_MS)
+}
+
+async function tick(): Promise<void> {
+  // Never poll a backgrounded tab; the check on resume covers that case.
+  if (document.visibilityState === 'visible') await probeReachability()
+  schedule()
+}
+
+/**
+ * Starts watching reachability for the lifetime of the app. Safe to call more
+ * than once; only the first call takes effect.
+ */
+export function startNetworkMonitor(): void {
+  if (monitoring) return
+  monitoring = true
+
+  document.addEventListener('visibilitychange', () => {
+    // Coming back to the app is the moment the answer is most likely stale.
+    if (document.visibilityState === 'visible') void tick()
+  })
+  // A regained interface says nothing about the backend, so confirm it.
+  window.addEventListener('online', () => void probeReachability())
+  schedule()
+}
+
 /**
  * Tracks whether the backend is reachable, combining the browser's own signal
  * with the observed outcome of API requests.
