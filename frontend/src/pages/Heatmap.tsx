@@ -5,14 +5,15 @@ import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
 import { useLocalStorage } from '../lib/useLocalStorage'
 import { filterByRange, rangeLabel, rangeStartDate, toDateKey } from '../lib/range'
+import { AXIS_TICK, GRID_PROPS, HOVER_FILL, recencyRamp } from '../lib/chartColors'
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, Cell,
 } from 'recharts'
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-/** Distinct hues for the year series of the year-over-year chart. */
-const YEAR_COLORS = ['var(--primary)', 'var(--blue)', 'var(--purple)', 'var(--hike)', 'var(--swim)', '#ec4899']
+/** Years compared side by side before the chart gets too dense to read. */
+const MAX_YEARS = 5
 
 /** What the heatmap and the distribution charts measure. */
 type Measure = 'count' | 'duration'
@@ -129,8 +130,8 @@ export default function Heatmap() {
       if (!byYear[year]) byYear[year] = Array(12).fill(0)
       byYear[year][Number(w.date.slice(5, 7)) - 1] += m.value(w)
     }
-    // Newest years first, capped so the chart stays readable.
-    const years = Object.keys(byYear).sort((a, b) => b.localeCompare(a)).slice(0, YEAR_COLORS.length)
+    // Newest years first, capped so the grouped bars stay readable.
+    const years = Object.keys(byYear).sort((a, b) => b.localeCompare(a)).slice(0, MAX_YEARS)
     const data = MONTHS.map((label, i) => {
       const row: Record<string, string | number> = { month: label }
       for (const y of years) row[y] = measure === 'duration' ? byYear[y][i] / 3600 : byYear[y][i]
@@ -139,9 +140,40 @@ export default function Heatmap() {
     return { yoyData: data, yoyYears: years }
   }, [typeWorkouts, m, measure])
 
+  // Cumulative distance per calendar year, sampled at each month end so the
+  // curves line up regardless of how many activities each year holds.
+  const { cumulativeData, cumulativeYears } = useMemo(() => {
+    const byYear: Record<string, number[]> = {}
+    for (const w of typeWorkouts) {
+      const year = w.date.slice(0, 4)
+      if (!byYear[year]) byYear[year] = Array(12).fill(0)
+      byYear[year][Number(w.date.slice(5, 7)) - 1] += w.distance / 1000
+    }
+    const years = Object.keys(byYear).sort((a, b) => b.localeCompare(a)).slice(0, MAX_YEARS)
+    const thisYear = String(new Date().getFullYear())
+    const thisMonth = new Date().getMonth()
+    const data = MONTHS.map((label, i) => {
+      const row: Record<string, string | number | null> = { month: label }
+      for (const y of years) {
+        // Don't draw the current year past today — a flat tail to December
+        // would read as a plateau rather than "not run yet".
+        row[y] = y === thisYear && i > thisMonth
+          ? null
+          : Math.round(byYear[y].slice(0, i + 1).reduce((a, b) => a + b, 0))
+      }
+      return row
+    })
+    return { cumulativeData: data, cumulativeYears: years }
+  }, [typeWorkouts])
+
   // Monthly / yearly rollups over the selected range.
   const monthlyStats = useMemo(() => rollup(filteredWorkouts, d => d.slice(0, 7)).slice(0, 6), [filteredWorkouts])
   const yearlyStats = useMemo(() => rollup(filteredWorkouts, d => d.slice(0, 4)), [filteredWorkouts])
+
+  // Resolved fresh each render rather than memoised, so switching the accent
+  // in Settings is reflected the next time this page draws.
+  const yearRamp = recencyRamp(yoyYears.length)
+  const cumulativeRamp = recencyRamp(cumulativeYears.length)
 
   function statValue(s: { count: number; duration: number }): number {
     return measure === 'count' ? s.count : s.duration
@@ -255,12 +287,12 @@ export default function Heatmap() {
             it answers the same "when do I train" question. */}
         <ChartCard title="Day of Week Distribution" subtitle={`by ${m.label.toLowerCase()}`}>
           <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={dayOfWeek} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
-              <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} unit={m.axisLabel || undefined} />
+            <BarChart data={dayOfWeek} margin={{ top: 4, right: 16, left: 4, bottom: 0 }}>
+              <CartesianGrid {...GRID_PROPS} />
+              <XAxis dataKey="label" tick={{ ...AXIS_TICK, fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={44} unit={m.axisLabel || undefined} />
               <Tooltip
-                cursor={{ fill: 'var(--bg-3)' }}
+                cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
                 content={({ active, payload, label }) => {
                   if (!active || !payload?.length) return null
                   return (
@@ -271,7 +303,7 @@ export default function Heatmap() {
                   )
                 }}
               />
-              <Bar dataKey="display" radius={[4, 4, 0, 0]} isAnimationActive={false}>
+              <Bar dataKey="display" radius={[4, 4, 0, 0]} maxBarSize={56} isAnimationActive={false}>
                 {dayOfWeek.map(d => <Cell key={d.label} fill="var(--primary)" opacity={d.value > 0 ? 0.85 : 0.25} />)}
               </Bar>
             </BarChart>
@@ -284,21 +316,26 @@ export default function Heatmap() {
           subtitle={yoyYears.length > 1 ? `monthly ${m.label.toLowerCase()}, all years` : 'needs more than one year of data'}
         >
           {yoyYears.length === 0 ? (
-            <div style={{ height: 220, display: 'grid', placeItems: 'center', fontSize: 12, color: 'var(--text-3)' }}>No activities yet</div>
+            <div style={{ height: 230, display: 'grid', placeItems: 'center', fontSize: 12, color: 'var(--text-3)' }}>No activities yet</div>
           ) : (
-            <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={yoyData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="month" tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} unit={m.axisLabel || undefined} />
+            <ResponsiveContainer width="100%" height={230}>
+              {/* Years are an ordered series, so they get a single-hue ramp
+                  stepping away from the accent rather than arbitrary hues —
+                  that stays legible whichever accent the user has picked. */}
+              <BarChart data={yoyData} margin={{ top: 4, right: 16, left: 4, bottom: 0 }} barCategoryGap="18%" barGap={2}>
+                <CartesianGrid {...GRID_PROPS} />
+                <XAxis dataKey="month" tick={AXIS_TICK} axisLine={false} tickLine={false} />
+                <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={44} unit={m.axisLabel || undefined} />
                 <Tooltip
+                  cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
                   content={({ active, payload, label }) => {
                     if (!active || !payload?.length) return null
                     return (
                       <div className="custom-tooltip">
                         <div style={{ fontWeight: 600, marginBottom: 4 }}>{label}</div>
                         {payload.map(p => (
-                          <div key={p.dataKey as string} style={{ color: p.color }}>
+                          <div key={p.dataKey as string} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ width: 8, height: 8, borderRadius: 2, background: p.color, flexShrink: 0 }} />
                             {p.dataKey as string}: {measure === 'duration' ? `${Number(p.value).toFixed(1)}h` : Math.round(Number(p.value))}
                           </div>
                         ))}
@@ -308,11 +345,45 @@ export default function Heatmap() {
                 />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 {yoyYears.map((y, i) => (
+                  <Bar key={y} dataKey={y} fill={yearRamp[i]} radius={[3, 3, 0, 0]} isAnimationActive={false} />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+
+        {/* Cumulative distance by year */}
+        <ChartCard title="Cumulative Distance by Year" subtitle="kilometres run to date, all years">
+          {cumulativeYears.length === 0 ? (
+            <div style={{ height: 230, display: 'grid', placeItems: 'center', fontSize: 12, color: 'var(--text-3)' }}>No activities yet</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={230}>
+              <LineChart data={cumulativeData} margin={{ top: 4, right: 16, left: 4, bottom: 0 }}>
+                <CartesianGrid {...GRID_PROPS} />
+                <XAxis dataKey="month" tick={AXIS_TICK} axisLine={false} tickLine={false} />
+                <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={48} unit="km" />
+                <Tooltip
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload?.length) return null
+                    return (
+                      <div className="custom-tooltip">
+                        <div style={{ fontWeight: 600, marginBottom: 4 }}>{label}</div>
+                        {payload.filter(p => p.value != null).map(p => (
+                          <div key={p.dataKey as string} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ width: 8, height: 8, borderRadius: 2, background: p.color, flexShrink: 0 }} />
+                            {p.dataKey as string}: {Math.round(Number(p.value)).toLocaleString()} km
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                {cumulativeYears.map((y, i) => (
                   <Line
                     key={y} type="monotone" dataKey={y}
-                    stroke={YEAR_COLORS[i]} strokeWidth={i === 0 ? 2.5 : 1.5}
-                    dot={{ r: 2.5, strokeWidth: 0 }} opacity={i === 0 ? 1 : 0.65}
-                    isAnimationActive={false}
+                    stroke={cumulativeRamp[i]} strokeWidth={i === 0 ? 2.5 : 2}
+                    dot={false} connectNulls={false} isAnimationActive={false}
                   />
                 ))}
               </LineChart>

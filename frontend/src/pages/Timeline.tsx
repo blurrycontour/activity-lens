@@ -5,9 +5,11 @@ import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
 import { useLocalStorage } from '../lib/useLocalStorage'
 import { filterByRange, rangeLabel } from '../lib/range'
+import { AXIS_TICK, GRID_PROPS, HOVER_FILL } from '../lib/chartColors'
+import { EdgeTick } from '../components/ChartAxis'
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  CartesianGrid,
+  CartesianGrid, ComposedChart, Bar,
 } from 'recharts'
 
 type Metric = 'pace' | 'hr' | 'maxHr' | 'distance' | 'duration' | 'elevation' | 'calories' | 'speed' | 'steps'
@@ -24,11 +26,53 @@ const METRICS: { id: Metric; label: string; color: string; unit: string; format?
   { id: 'steps', label: 'Steps', color: 'var(--strength)', unit: '', format: v => Math.round(v).toLocaleString() },
 ]
 
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/** Sortable key for the Monday-anchored week a YYYY-MM-DD date falls in. */
+function weekKey(date: string): string {
+  const d = new Date(`${date}T00:00:00`)
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7))
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function monthLabel(key: string): string {
+  const [yr, mo] = key.split('-')
+  return `${MONTH_NAMES[Number(mo) - 1]} ${yr.slice(2)}`
+}
+
+/** Two-option segmented control used by the volume chart's toggles. */
+function Segmented<T extends string>({ value, onChange, options }: {
+  value: T
+  onChange: (v: T) => void
+  options: { id: T; label: string }[]
+}) {
+  return (
+    <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
+      {options.map(o => (
+        <button
+          key={o.id}
+          onClick={() => onChange(o.id)}
+          style={{
+            padding: '4px 10px', fontSize: 11, cursor: 'pointer', border: 'none',
+            background: value === o.id ? 'var(--primary-dim)' : 'var(--bg-3)',
+            color: value === o.id ? 'var(--primary)' : 'var(--text-3)',
+            fontWeight: value === o.id ? 600 : 400,
+          }}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export default function Timeline() {
   const { workouts } = useWorkouts()
   const [typeFilter, setTypeFilter] = useState<WorkoutType | 'All'>('Run')
   const [selectedMetrics, setSelectedMetrics] = useLocalStorage<Metric[]>('al_tl_metrics', ['pace', 'hr'])
   const [rangeDays, setRangeDays] = useLocalStorage<number>('al_tl_range', 30)
+  const [volumeBucket, setVolumeBucket] = useLocalStorage<'week' | 'month'>('al_tl_bucket', 'week')
+  const [volumeMeasure, setVolumeMeasure] = useLocalStorage<'distance' | 'time'>('al_tl_vol', 'distance')
 
   const data = useMemo(() => {
     const inRange = filterByRange(workouts, rangeDays)
@@ -51,6 +95,49 @@ export default function Timeline() {
         type: w.type,
       }))
   }, [workouts, typeFilter, rangeDays])
+
+  // Volume: distance (or time) totalled per week or per month, with a
+  // 4-bucket moving average drawn over the bars. Bars and line share one unit
+  // and therefore one axis — no second scale to misread.
+  const volume = useMemo(() => {
+    const buckets = new Map<string, number>()
+    for (const w of data) {
+      const key = volumeBucket === 'month' ? w.date.slice(0, 7) : weekKey(w.date)
+      const value = volumeMeasure === 'distance' ? w.distance / 1000 : w.duration / 3600
+      buckets.set(key, (buckets.get(key) ?? 0) + value)
+    }
+    const rows = [...buckets.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+    return rows.map(([key, value], i) => {
+      const window = rows.slice(Math.max(0, i - 3), i + 1)
+      return {
+        label: volumeBucket === 'month' ? monthLabel(key) : key.slice(5),
+        key,
+        value: Math.round(value * 10) / 10,
+        avg: Math.round((window.reduce((a, [, v]) => a + v, 0) / window.length) * 10) / 10,
+      }
+    })
+  }, [data, volumeBucket, volumeMeasure])
+
+  // Efficiency: two views of the same idea — how much heart rate a given speed
+  // costs. Both trend downward as fitness improves.
+  const efficiency = useMemo(() => {
+    const usable = data.filter(d => d.hr > 0 && (d.speed ?? 0) > 0 && d.pace)
+    if (usable.length === 0) return { rows: [], refHr: 0 }
+    // The reference HR is this selection's median, so the adjusted pace lands
+    // in the same range as the real paces and needs no configuration.
+    const hrs = usable.map(d => d.hr).sort((a, b) => a - b)
+    const refHr = hrs[Math.floor(hrs.length / 2)]
+    const rows = usable.map(d => ({
+      dateLabel: d.dateLabel,
+      name: d.name,
+      hrPerSpeed: Math.round((d.hr / (d.speed as number)) * 10) / 10,
+      adjPace: Math.round((d.pace as number) * (refHr / d.hr)),
+      pace: d.pace as number,
+      hr: d.hr,
+      speed: d.speed as number,
+    }))
+    return { rows, refHr }
+  }, [data])
 
   function toggleMetric(m: Metric) {
     setSelectedMetrics(prev =>
@@ -162,15 +249,18 @@ export default function Timeline() {
               <span style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>{data.length} activities · 3-activity moving avg shown</span>
             </div>
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={dataWithMA} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
+              <LineChart data={dataWithMA} margin={{ top: 8, right: 16, left: 4, bottom: 0 }}>
+                <CartesianGrid {...GRID_PROPS} />
+                {/* EdgeTick anchors the first and last labels inward; with the
+                    default centred anchor the final date ran off the right
+                    edge of the plot and was clipped. */}
                 <XAxis
                   dataKey="dateLabel"
-                  tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}
+                  tick={<EdgeTick />}
                   axisLine={false} tickLine={false}
-                  interval={Math.max(1, Math.floor(data.length / 8))}
+                  interval={Math.max(0, Math.ceil(data.length / 8) - 1)}
                 />
-                <YAxis tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }} axisLine={false} tickLine={false} />
+                <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={44} />
                 <Tooltip
                   content={({ active, payload, label }) => {
                     if (!active || !payload?.length) return null
@@ -218,7 +308,138 @@ export default function Timeline() {
             </ResponsiveContainer>
           </div>
         )}
+
+        {/* Training volume: bars per bucket with a moving average over them.
+            Both are the same measure on one axis — a second scale for the
+            trend line would only invite misreading. */}
+        <div className="card" style={{ marginTop: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+            <h3 style={{ fontSize: 13, fontWeight: 600 }}>Training Volume</h3>
+            <span style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>4-bucket moving average</span>
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+              <Segmented
+                value={volumeMeasure} onChange={setVolumeMeasure}
+                options={[{ id: 'distance', label: 'Distance' }, { id: 'time', label: 'Time' }]}
+              />
+              <Segmented
+                value={volumeBucket} onChange={setVolumeBucket}
+                options={[{ id: 'week', label: 'Weekly' }, { id: 'month', label: 'Monthly' }]}
+              />
+            </div>
+          </div>
+          {volume.length === 0 ? (
+            <EmptyPlot height={200}>No activities in the {rangeLabel(rangeDays)}</EmptyPlot>
+          ) : (
+            <ResponsiveContainer width="100%" height={200}>
+              <ComposedChart data={volume} margin={{ top: 4, right: 16, left: 4, bottom: 0 }}>
+                <CartesianGrid {...GRID_PROPS} />
+                <XAxis dataKey="label" tick={<EdgeTick fontSize={9} />} axisLine={false} tickLine={false} interval={Math.max(0, Math.ceil(volume.length / 8) - 1)} />
+                <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={44} unit={volumeMeasure === 'distance' ? 'km' : 'h'} />
+                <Tooltip
+                  cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
+                  content={({ active, payload }) => {
+                    if (!active || !payload?.length) return null
+                    const d = payload[0].payload
+                    const unit = volumeMeasure === 'distance' ? 'km' : 'h'
+                    return (
+                      <div className="custom-tooltip">
+                        <div style={{ fontWeight: 600, marginBottom: 2 }}>
+                          {volumeBucket === 'week' ? `Week of ${d.key}` : d.label}
+                        </div>
+                        <div style={{ color: 'var(--primary)' }}>{d.value} {unit}</div>
+                        <div style={{ color: 'var(--text-3)' }}>Avg {d.avg} {unit}</div>
+                      </div>
+                    )
+                  }}
+                />
+                <Bar dataKey="value" fill="var(--primary)" opacity={0.35} radius={[3, 3, 0, 0]} maxBarSize={40} isAnimationActive={false} />
+                <Line type="monotone" dataKey="avg" stroke="var(--primary)" strokeWidth={2.5} dot={false} isAnimationActive={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        {/* Efficiency: two framings of "what does speed cost me in heartbeats". */}
+        <div className="grid-2" style={{ marginTop: 16 }}>
+          <div className="card">
+            <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Efficiency Factor</h3>
+            <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 12 }}>
+              Heartbeats spent per km/h of speed. A falling line means the same speed is costing you less effort.
+            </p>
+            {efficiency.rows.length === 0 ? (
+              <EmptyPlot height={200}>Needs activities with both heart rate and speed</EmptyPlot>
+            ) : (
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={efficiency.rows} margin={{ top: 4, right: 16, left: 4, bottom: 0 }}>
+                  <CartesianGrid {...GRID_PROPS} />
+                  <XAxis dataKey="dateLabel" tick={<EdgeTick fontSize={9} />} axisLine={false} tickLine={false} interval={Math.max(0, Math.ceil(efficiency.rows.length / 6) - 1)} />
+                  <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={44} domain={['dataMin - 1', 'dataMax + 1']} />
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null
+                      const d = payload[0].payload
+                      return (
+                        <div className="custom-tooltip">
+                          <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.name}</div>
+                          <div style={{ color: 'var(--text-3)' }}>{d.dateLabel}</div>
+                          <div style={{ color: '#ef4444' }}>{d.hrPerSpeed} bpm per km/h</div>
+                          <div style={{ color: 'var(--text-3)' }}>{d.hr} bpm · {d.speed.toFixed(1)} km/h</div>
+                        </div>
+                      )
+                    }}
+                  />
+                  <Line type="monotone" dataKey="hrPerSpeed" stroke="#ef4444" strokeWidth={2} dot={{ r: 2.5, strokeWidth: 0 }} isAnimationActive={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
+          <div className="card">
+            <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Pace at Fixed HR</h3>
+            <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 12 }}>
+              Each activity's pace rescaled to {efficiency.refHr || '—'} bpm (this selection's median), so easy and
+              hard days compare directly. Lower is fitter.
+            </p>
+            {efficiency.rows.length === 0 ? (
+              <EmptyPlot height={200}>Needs activities with both heart rate and pace</EmptyPlot>
+            ) : (
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={efficiency.rows} margin={{ top: 4, right: 16, left: 4, bottom: 0 }}>
+                  <CartesianGrid {...GRID_PROPS} />
+                  <XAxis dataKey="dateLabel" tick={<EdgeTick fontSize={9} />} axisLine={false} tickLine={false} interval={Math.max(0, Math.ceil(efficiency.rows.length / 6) - 1)} />
+                  <YAxis
+                    tick={AXIS_TICK} axisLine={false} tickLine={false} width={48} reversed
+                    domain={['dataMin - 15', 'dataMax + 15']} tickFormatter={v => fmtPace(v)}
+                  />
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null
+                      const d = payload[0].payload
+                      return (
+                        <div className="custom-tooltip">
+                          <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.name}</div>
+                          <div style={{ color: 'var(--text-3)' }}>{d.dateLabel}</div>
+                          <div style={{ color: 'var(--blue)' }}>{fmtPace(d.adjPace)} /km adjusted</div>
+                          <div style={{ color: 'var(--text-3)' }}>{fmtPace(d.pace)} /km actual · {d.hr} bpm</div>
+                        </div>
+                      )
+                    }}
+                  />
+                  <Line type="monotone" dataKey="adjPace" stroke="var(--blue)" strokeWidth={2} dot={{ r: 2.5, strokeWidth: 0 }} isAnimationActive={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
       </div>
+    </div>
+  )
+}
+
+function EmptyPlot({ height, children }: { height: number; children: React.ReactNode }) {
+  return (
+    <div style={{ height, display: 'grid', placeItems: 'center', fontSize: 12, color: 'var(--text-3)', textAlign: 'center', padding: '0 16px' }}>
+      {children}
     </div>
   )
 }
