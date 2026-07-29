@@ -24,8 +24,15 @@ import (
 	sqlitestore "github.com/blurrycontour/go-authkit/store/sqlite"
 )
 
-// version is set at build time via -ldflags "-X main.version=...".
-var version = "dev"
+// Build provenance, set at build time via -ldflags "-X main.<name>=...".
+// Everything but version is empty outside a Docker build; see the Dockerfile.
+var (
+	version  = "dev"
+	revision string
+	created  string
+	licenses string
+	source   string
+)
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -82,7 +89,13 @@ func run() error {
 	settingsStore := settings.New(db)
 	rawUploads := workout.NewRawUploadStore(cfg.DataDir)
 
-	apiServer := httpapi.New(cfg, authSvc, workoutSvc, equipmentSvc, settingsStore, rawUploads)
+	apiServer := httpapi.New(cfg, authSvc, workoutSvc, equipmentSvc, settingsStore, rawUploads, httpapi.BuildInfo{
+		Version:  version,
+		Revision: revision,
+		Created:  created,
+		Licenses: licenses,
+		Source:   source,
+	})
 	handler, err := apiServer.Handler()
 	if err != nil {
 		return err

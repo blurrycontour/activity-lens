@@ -12,6 +12,7 @@ import { downloadWorkoutGPX } from '../lib/download'
 import { useLocalStorage } from '../lib/useLocalStorage'
 import { DEFAULT_HR_ZONE_CHART, HR_ZONE_CHART_KEY, type HRZoneChart } from '../lib/dashboardConfig'
 import InfoTip from '../components/InfoTip'
+import { useIsMobile } from '../lib/useIsMobile'
 import UserAvatar, { userLabel } from '../components/UserAvatar'
 import ShareDialog from '../components/ShareDialog'
 import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, Popup, useMap, useMapEvents } from 'react-leaflet'
@@ -513,12 +514,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
    * to `owner`, which the API sets on feed rows and never on your own.
    */
   const readOnly = w.isOwner === undefined ? w.owner !== undefined : !w.isOwner
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 769)
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 769)
-    window.addEventListener('resize', check)
-    return () => window.removeEventListener('resize', check)
-  }, [])
+  const isMobile = useIsMobile()
   const color = TYPE_COLOR[w.type]
   const trailColor = accent || color
 

@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react'
-import { User, Settings, Shield, LogOut, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { User, Settings, Shield, LogOut, X, Info } from 'lucide-react'
+import AboutDialog from './AboutDialog'
 import type { ApiUser } from '../lib/api'
 
 interface UserMenuProps {
@@ -13,14 +14,16 @@ interface UserMenuProps {
 
 export default function UserMenu({ onClose, onAccount, onSettings, onAdmin, onLogout, user }: UserMenuProps) {
   const ref = useRef<HTMLDivElement>(null)
+  const [showAbout, setShowAbout] = useState(false)
 
   useEffect(() => {
+    if (showAbout) return
     function handle(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose()
     }
     setTimeout(() => document.addEventListener('mousedown', handle), 50)
     return () => document.removeEventListener('mousedown', handle)
-  }, [onClose])
+  }, [onClose, showAbout])
 
   const initials = (user.displayName || user.username || '?')
     .split(/\s+/)
@@ -33,7 +36,10 @@ export default function UserMenu({ onClose, onAccount, onSettings, onAdmin, onLo
     { icon: <User size={15} />, label: 'Account', sub: 'Profile, password, sessions', action: () => { onClose(); onAccount() } },
     { icon: <Settings size={15} />, label: 'Settings', sub: 'Appearance & preferences', action: () => { onClose(); onSettings() } },
     ...(user.isAdmin ? [{ icon: <Shield size={15} />, label: 'Admin Panel', sub: 'Users, email, SSO', action: () => { onClose(); onAdmin() } }] : []),
+    { icon: <Info size={15} />, label: 'About', sub: 'Version & app info', action: () => setShowAbout(true) },
   ]
+
+  if (showAbout) return <AboutDialog onClose={() => { setShowAbout(false); onClose() }} />
 
   return (
     <>

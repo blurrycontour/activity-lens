@@ -23,6 +23,14 @@ const MAX_PULL = ARMED_AT + 28
 const SLOP = 8
 /** One full rotation of the spinner, in ms. Also the minimum time it stays up. */
 const SPIN_MS = 900
+/**
+ * Surfaces that float above the page: bottom sheets, modals and their
+ * backdrops. They render inline in the component tree, so despite being
+ * positioned fixed they are still DOM descendants of the scroll container —
+ * without this, dragging a sheet down to dismiss it bubbles here and is read as
+ * a pull on the page behind it.
+ */
+const OVERLAY_SELECTOR = '.sheet, .modal, .modal-box, .overlay'
 
 /**
  * Maps raw finger travel to indicator travel. Two slopes: responsive up to the
@@ -97,6 +105,11 @@ export default function PullToRefresh({ scrollEl, enabled, onRefresh }: PullToRe
     function onTouchStart(e: TouchEvent) {
       // Only from a resting scroll position, and never mid-refresh.
       if (e.touches.length !== 1 || el.scrollTop > 0 || refreshingRef.current) {
+        active = false
+        return
+      }
+      // A drag that starts on a sheet or modal belongs to that surface.
+      if (e.target instanceof Element && e.target.closest(OVERLAY_SELECTOR)) {
         active = false
         return
       }
@@ -205,8 +218,8 @@ export default function PullToRefresh({ scrollEl, enabled, onRefresh }: PullToRe
       <div
         style={{
           marginTop: 10,
-          width: 42,
-          height: 42,
+          width: 38,
+          height: 38,
           borderRadius: '50%',
           background: 'var(--bg-2)',
           border: `1px solid ${armed || refreshing ? 'var(--primary)' : 'var(--border)'}`,
@@ -220,7 +233,7 @@ export default function PullToRefresh({ scrollEl, enabled, onRefresh }: PullToRe
         }}
       >
         <RefreshCw
-          size={22}
+          size={20}
           strokeWidth={2.6}
           color={armed || refreshing ? 'var(--primary)' : 'var(--text-3)'}
           style={{

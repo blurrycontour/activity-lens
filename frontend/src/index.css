@@ -804,6 +804,142 @@ body {
   font-weight: 600;
 }
 
+/* ── Bottom sheet (mobile filters) ──
+   Slides up from the bottom edge and never exceeds 80% of the viewport, so a
+   long option list scrolls inside it rather than pushing Done off-screen. */
+.sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1101;
+  display: flex;
+  flex-direction: column;
+  max-height: 80vh;
+  background: var(--bg-2);
+  border-top: 1px solid var(--border-strong);
+  border-radius: 18px 18px 0 0;
+  box-shadow: 0 -12px 48px rgba(0, 0, 0, 0.5);
+  animation: sheetUp 0.2s cubic-bezier(0.32, 0.72, 0, 1);
+  /* Clears the home indicator on gesture-nav phones. */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@keyframes sheetUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.sheet-grab {
+  width: 36px;
+  height: 4px;
+  border-radius: 99px;
+  background: var(--border-strong);
+  margin: 8px auto 2px;
+  flex-shrink: 0;
+}
+.sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.sheet-body { overflow-y: auto; padding: 4px 14px 8px; }
+.sheet-group { padding: 12px 0; }
+.sheet-group + .sheet-group { border-top: 1px solid var(--border); }
+.sheet-group-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+  margin-bottom: 9px;
+}
+.sheet-foot { padding: 10px 14px 14px; border-top: 1px solid var(--border); flex-shrink: 0; }
+
+/* Selectable option chips inside a sheet. Sized for a comfortable thumb tap. */
+.chip-row { display: flex; flex-wrap: wrap; gap: 7px; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 13px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  background: var(--bg-3);
+  color: var(--text-2);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.chip.active {
+  background: var(--primary-dim);
+  border-color: var(--primary);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+/* Trigger that opens the sheet, with a count of applied filters. */
+.filter-btn { position: relative; flex-shrink: 0; }
+.filter-btn .filter-count {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 99px;
+  background: var(--primary);
+  color: var(--bg);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 15px;
+  text-align: center;
+}
+
+/* Applied filters, echoed under the search box so what is in effect stays
+   visible without opening the sheet. */
+.active-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.active-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 6px 3px 9px;
+  border-radius: 99px;
+  background: var(--primary-dim);
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 600;
+}
+.active-filter button {
+  display: flex;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 1px;
+  border-radius: 50%;
+  opacity: 0.75;
+}
+.active-filter button:hover { opacity: 1; }
+
+/* About dialog fact table: label/value pairs in two columns. */
+.about-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+}
+.about-facts dt { color: var(--text-3); white-space: nowrap; }
+.about-facts dd { color: var(--text-2); text-align: right; min-width: 0; }
+/* Commit SHAs are long and unbreakable; keep them on one line and let the
+   cell scroll rather than forcing the dialog wider. */
+.about-sha { font-family: var(--font-mono); overflow-x: auto; white-space: nowrap; }
+.about-box { max-width: 440px; }
+
 /* Author byline on someone else's workout. */
 .owner-byline {
   display: inline-flex;

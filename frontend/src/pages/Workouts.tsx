@@ -1,15 +1,17 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
-import { fmtDuration, fmtDist, fmtPace, TYPE_COLOR, TYPE_ICON, type WorkoutType, type Workout } from '../data/workouts'
+import { fmtDuration, fmtDist, fmtPace, TYPE_COLOR, TYPE_ICON, WORKOUT_TYPES, type WorkoutType, type Workout } from '../data/workouts'
 import { useWorkouts } from '../context/WorkoutsContext'
-import { Search, ChevronRight, Clock, Mountain, Flame, Download, Plus, RefreshCw, Grid2X2, List, Navigation, Library, Inbox, Globe, Users, Share2 } from 'lucide-react'
+import { Search, ChevronRight, Clock, Mountain, Flame, Download, Plus, RefreshCw, Grid2X2, List, Navigation, Library, Inbox, Globe, Users, Share2, SlidersHorizontal, X } from 'lucide-react'
 import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
-import SortDropdown, { type SortKey } from '../components/SortDropdown'
+import SortDropdown, { compareBySort, SORT_OPTIONS, type SortKey } from '../components/SortDropdown'
+import FilterSheet, { type FilterGroup } from '../components/FilterSheet'
 import ShareDialog from '../components/ShareDialog'
 import UserAvatar, { userLabel } from '../components/UserAvatar'
-import { filterByRange } from '../lib/range'
+import { filterByRange, RANGE_OPTIONS } from '../lib/range'
 import { api } from '../lib/api'
 import { downloadWorkoutGPX } from '../lib/download'
+import { useIsMobile } from '../lib/useIsMobile'
 
 interface WorkoutsProps {
   onSelect: (w: Workout) => void
@@ -34,13 +36,15 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
   const [scope, setScope] = useState<Scope>('mine')
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState<WorkoutType | 'All'>('All')
-  const [sortBy, setSortBy] = useState<SortKey>('date')
+  const [sortBy, setSortBy] = useState<SortKey>('date-desc')
   const [rangeDays, setRangeDays] = useState(0)
   const [sharedOnly, setSharedOnly] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [sharing, setSharing] = useState<Workout | null>(null)
   const [feeds, setFeeds] = useState<Partial<Record<Scope, Workout[]>>>({})
   const [feedError, setFeedError] = useState<string | null>(null)
+  const [showFilters, setShowFilters] = useState(false)
+  const isMobile = useIsMobile()
   const [view, setView] = useState<'list' | 'grid'>(() => {
     const saved = localStorage.getItem('workouts.view')
     return saved === 'grid' || saved === 'list' ? saved : 'list'
@@ -77,6 +81,53 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
     }
   }
 
+  /**
+   * The three filters, described once. Desktop renders them as dropdowns and
+   * mobile as sheet groups, so neither surface can drift from the other.
+   */
+  const filterGroups: FilterGroup[] = [
+    {
+      key: 'type',
+      label: 'Activity',
+      value: typeFilter,
+      onChange: v => setTypeFilter(v as WorkoutType | 'All'),
+      options: [
+        { value: 'All', label: 'All types' },
+        ...WORKOUT_TYPES.map(t => ({ value: t, label: t, color: TYPE_COLOR[t] })),
+      ],
+    },
+    {
+      key: 'sort',
+      label: 'Sort by',
+      value: sortBy,
+      onChange: v => setSortBy(v as SortKey),
+      options: SORT_OPTIONS.map(o => ({ value: o.value, label: o.label })),
+    },
+    {
+      key: 'range',
+      label: 'Period',
+      value: rangeDays,
+      onChange: v => setRangeDays(v as number),
+      options: RANGE_OPTIONS.map(o => ({ value: o.value, label: o.label })),
+    },
+  ]
+
+  /** Only non-default filters count towards the badge and the chip row. */
+  const activeFilters = [
+    typeFilter !== 'All' && { key: 'type', label: typeFilter, clear: () => setTypeFilter('All') },
+    rangeDays !== 0 && { key: 'range', label: RANGE_OPTIONS.find(o => o.value === rangeDays)?.label ?? '', clear: () => setRangeDays(0) },
+    sortBy !== 'date-desc' && { key: 'sort', label: SORT_OPTIONS.find(o => o.value === sortBy)?.label ?? '', clear: () => setSortBy('date-desc') },
+    // Sharing only filters your own library, so it never counts elsewhere.
+    scope === 'mine' && sharedOnly && { key: 'shared', label: 'Shared only', clear: () => setSharedOnly(false) },
+  ].filter(Boolean) as { key: string; label: string; clear: () => void }[]
+
+  function resetFilters() {
+    setTypeFilter('All')
+    setSortBy('date-desc')
+    setRangeDays(0)
+    setSharedOnly(false)
+  }
+
   const source = scope === 'mine' ? workouts : feeds[scope]
   const busy = source === undefined || (scope === 'mine' && loading)
 
@@ -88,11 +139,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
       result = result.filter(w => w.visibility === 'public' || (w.sharedWithCount ?? 0) > 0)
     }
     result = filterByRange(result, rangeDays)
-    result.sort((a, b) => {
-      if (sortBy === 'date') return b.date.localeCompare(a.date)
-      if (sortBy === 'distance') return b.distance - a.distance
-      return b.duration - a.duration
-    })
+    result.sort(compareBySort(sortBy))
     return result
   }, [source, search, typeFilter, sortBy, rangeDays, scope, sharedOnly])
 
@@ -146,7 +193,9 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
           ))}
         </nav>
 
-        {/* One filter row governs whichever scope is showing. */}
+        {/* One filter row governs whichever scope is showing. Three 150px
+            dropdowns wrap to three rows on a phone, so mobile collapses them
+            into a sheet behind a single button. */}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <div className="workout-search" style={{ position: 'relative', flex: 1, minWidth: 180 }}>
             <Search size={14} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', pointerEvents: 'none' }} />
@@ -158,17 +207,43 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
               style={{ paddingLeft: 30, width: '100%' }}
             />
           </div>
-          <TypeDropdown value={typeFilter} onChange={v => setTypeFilter(v)} />
-          <SortDropdown value={sortBy} onChange={setSortBy} />
-          <RangeDropdown value={rangeDays} onChange={setRangeDays} />
-          {scope === 'mine' && (
-            <label className="switch" title="Show only workouts you have made public or shared">
-              <input type="checkbox" checked={sharedOnly} onChange={e => setSharedOnly(e.target.checked)} />
-              <span className="switch-track" />
-              Shared only
-            </label>
+
+          {isMobile ? (
+            <button
+              className="btn btn-ghost filter-btn"
+              onClick={() => setShowFilters(true)}
+              aria-label={`Filters${activeFilters.length ? `, ${activeFilters.length} applied` : ''}`}
+            >
+              <SlidersHorizontal size={15} />
+              {activeFilters.length > 0 && <span className="filter-count">{activeFilters.length}</span>}
+            </button>
+          ) : (
+            <>
+              <TypeDropdown value={typeFilter} onChange={v => setTypeFilter(v)} />
+              <SortDropdown value={sortBy} onChange={setSortBy} />
+              <RangeDropdown value={rangeDays} onChange={setRangeDays} />
+              {scope === 'mine' && (
+                <label className="switch" title="Show only workouts you have made public or shared">
+                  <input type="checkbox" checked={sharedOnly} onChange={e => setSharedOnly(e.target.checked)} />
+                  <span className="switch-track" />
+                  Shared only
+                </label>
+              )}
+            </>
           )}
         </div>
+
+        {/* What is in effect stays visible without reopening the sheet. */}
+        {isMobile && activeFilters.length > 0 && (
+          <div className="active-filters">
+            {activeFilters.map(f => (
+              <span key={f.key} className="active-filter">
+                {f.label}
+                <button onClick={f.clear} aria-label={`Clear ${f.label}`}><X size={11} /></button>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="page-content tight">
@@ -178,7 +253,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
           </div>
         ) : filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-3)' }}>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>{busy ? '⏳' : scope === 'mine' ? '🔍' : '🤝'}</div>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>{busy ? '⏳' : scope === 'mine' ? '🔍' : scope === 'public' ? '🌐' : '🤝'}</div>
             <p style={{ fontSize: 14 }}>{busy ? 'Loading workouts…' : emptyMessage(scope, sharedOnly)}</p>
           </div>
         ) : (
@@ -222,6 +297,22 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
           </div>
         )}
       </div>
+
+      {showFilters && (
+        <FilterSheet
+          groups={scope === 'mine'
+            ? [...filterGroups, {
+              key: 'shared',
+              label: 'Sharing',
+              value: sharedOnly,
+              onChange: v => setSharedOnly(v as boolean),
+              options: [{ value: false, label: 'All workouts' }, { value: true, label: 'Shared only' }],
+            }]
+            : filterGroups}
+          onClose={() => setShowFilters(false)}
+          onReset={activeFilters.length > 0 ? resetFilters : undefined}
+        />
+      )}
 
       {sharing && (
         <ShareDialog

@@ -15,6 +15,23 @@ export interface ApiUser {
   hasPassword: boolean
 }
 
+/**
+ * What build the server is running. Populated from the OCI image labels at
+ * Docker build time; the optional fields are absent on a local `go build`.
+ */
+export interface BuildInfo {
+  version: string
+  /** Full commit SHA the image was built from. */
+  revision?: string
+  /** Image build timestamp, RFC 3339. */
+  created?: string
+  licenses?: string
+  /** Repository URL. */
+  source?: string
+  goVersion: string
+  platform: string
+}
+
 export interface AuthFeatures {
   allowRegistration: boolean
   oidcEnabled: boolean
@@ -199,6 +216,7 @@ export const api = {
   // --- Auth ---
   authConfig: () => request<AuthFeatures>('/api/auth/config'),
   me: () => request<{ user: ApiUser; csrfToken: string }>('/api/auth/me'),
+  buildInfo: () => request<BuildInfo>('/api/build'),
   login: (identifier: string, password: string) =>
     request<{ user: ApiUser; csrfToken: string }>('/api/auth/login', {
       method: 'POST',

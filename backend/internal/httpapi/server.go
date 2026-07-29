@@ -25,11 +25,12 @@ type Server struct {
 	equipment  *equipment.Service
 	settings   *settings.Store
 	rawUploads *workout.RawUploadStore
+	build      BuildInfo
 }
 
 // New constructs a Server and its auth middleware/OIDC handler.
-func New(cfg config.Config, authSvc *auth.Service, workoutSvc *workout.Service, equipmentSvc *equipment.Service, settingsStore *settings.Store, rawUploads *workout.RawUploadStore) *Server {
-	s := &Server{cfg: cfg, auth: authSvc, workout: workoutSvc, equipment: equipmentSvc, settings: settingsStore, rawUploads: rawUploads}
+func New(cfg config.Config, authSvc *auth.Service, workoutSvc *workout.Service, equipmentSvc *equipment.Service, settingsStore *settings.Store, rawUploads *workout.RawUploadStore, build BuildInfo) *Server {
+	s := &Server{cfg: cfg, auth: authSvc, workout: workoutSvc, equipment: equipmentSvc, settings: settingsStore, rawUploads: rawUploads, build: build}
 	s.mw = &httpmw.Middleware{
 		Auth:   authSvc,
 		Secure: s.secure,
@@ -85,6 +86,7 @@ func (s *Server) apiRoutes() http.Handler {
 
 	// --- Auth (authenticated) ---
 	mux.Handle("GET /api/auth/me", s.authed(s.handleMe))
+	mux.Handle("GET /api/build", s.authed(s.handleBuildInfo))
 	mux.Handle("POST /api/auth/logout", s.authedCSRF(s.handleLogout))
 	mux.Handle("PATCH /api/auth/profile", s.authedCSRF(s.handleUpdateProfile))
 	mux.Handle("POST /api/auth/password", s.authedCSRF(s.handleChangePassword))

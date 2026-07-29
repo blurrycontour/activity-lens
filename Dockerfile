@@ -60,10 +60,24 @@ COPY --from=frontend /app/frontend/dist ./internal/web/dist
 
 # Pure-Go SQLite => CGO can stay off for a fully static binary. Dependencies
 # are already compiled in the backend stage's cache, so this is fast.
+# Build provenance, baked into the binary so the running app can report it.
+# A container cannot read its own OCI image labels without access to the Docker
+# socket, so the same values docker/metadata-action writes as labels are also
+# passed in here as build args. The image digest is deliberately absent: it is
+# only known after the push, so it cannot exist inside the image it names.
 ARG VERSION=dev
+ARG REVISION=""
+ARG CREATED=""
+ARG LICENSES=""
+ARG SOURCE=""
 RUN CGO_ENABLED=0 go build \
     -trimpath \
-    -ldflags "-s -w -X main.version=${VERSION}" \
+    -ldflags "-s -w \
+      -X main.version=${VERSION} \
+      -X main.revision=${REVISION} \
+      -X main.created=${CREATED} \
+      -X main.licenses=${LICENSES} \
+      -X main.source=${SOURCE}" \
     -o /out/activity-lens ./cmd/server
 
 

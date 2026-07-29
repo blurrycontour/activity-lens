@@ -1,14 +1,37 @@
 import { useState, useRef, useEffect } from 'react'
 import { ChevronDown, ArrowDownWideNarrow } from 'lucide-react'
 
-export type SortKey = 'date' | 'distance' | 'duration'
+/** A sort field paired with its direction, e.g. `distance-asc`. */
+export type SortKey =
+  | 'date-desc' | 'date-asc'
+  | 'distance-desc' | 'distance-asc'
+  | 'duration-desc' | 'duration-asc'
 
-/** Every sort is descending — newest, longest, furthest first. */
 export const SORT_OPTIONS: { value: SortKey; label: string; short: string }[] = [
-  { value: 'date', label: 'Newest first', short: 'Date' },
-  { value: 'distance', label: 'Longest distance', short: 'Dist' },
-  { value: 'duration', label: 'Longest time', short: 'Time' },
+  { value: 'date-desc', label: 'Newest first', short: '↓' },
+  { value: 'date-asc', label: 'Oldest first', short: '↑' },
+  { value: 'distance-desc', label: 'Longest distance', short: '↓' },
+  { value: 'distance-asc', label: 'Shortest distance', short: '↑' },
+  { value: 'duration-desc', label: 'Longest time', short: '↓' },
+  { value: 'duration-asc', label: 'Shortest time', short: '↑' },
 ]
+
+/**
+ * Orders workouts by the chosen field and direction. Dates are compared as
+ * YYYY-MM-DD strings, which sorts correctly without parsing into a Date and
+ * picking up timezone drift.
+ */
+export function compareBySort<T extends { date: string; distance: number; duration: number }>(
+  key: SortKey,
+): (a: T, b: T) => number {
+  const [field, dir] = key.split('-') as ['date' | 'distance' | 'duration', 'asc' | 'desc']
+  const sign = dir === 'asc' ? -1 : 1
+  return (a, b) => sign * (
+    field === 'date' ? b.date.localeCompare(a.date)
+      : field === 'distance' ? b.distance - a.distance
+        : b.duration - a.duration
+  )
+}
 
 interface SortDropdownProps {
   value: SortKey

@@ -1,3 +1,4 @@
+import { useIsMobile } from './lib/useIsMobile'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import TopBar, { type ThemeMode } from './components/TopBar'
 import Sidebar from './components/Sidebar'
@@ -88,15 +89,7 @@ export default function App() {
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const [sharedFile, setSharedFile] = useState<File | null>(null)
-  const [isMobile, setIsMobile] = useState(false)
-
-  // Detect mobile
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 769)
-    check()
-    window.addEventListener('resize', check)
-    return () => window.removeEventListener('resize', check)
-  }, [])
+  const isMobile = useIsMobile()
 
   // Theme
   useEffect(() => {

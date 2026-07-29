@@ -70,7 +70,15 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # The OCI labels metadata-action produces live on the image manifest,
+          # which the running container cannot read. Pass the same facts in as
+          # build args so they can be compiled into the binary and surfaced in
+          # the app's About dialog.
           build-args: |
             VERSION=${{ steps.version.outputs.version }}
+            REVISION=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.revision'] }}
+            CREATED=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
+            LICENSES=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.licenses'] }}
+            SOURCE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.source'] }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
