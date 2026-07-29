@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   backend:
-    name: Backend (vet + test)
+    name: Backend (vet + test + fmt)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -40,8 +40,16 @@ jobs:
         working-directory: backend
         run: go test ./...
 
+      - name: gofmt
+        working-directory: backend
+        run: |
+          unformatted=$(gofmt -l ./cmd ./internal)
+          if [ -n "$unformatted" ]; then
+            echo "These files need gofmt:"; echo "$unformatted"; exit 1
+          fi
+
   frontend:
-    name: Frontend (typecheck + build)
+    name: Frontend (typecheck + test + build)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -63,6 +71,10 @@ jobs:
       - name: Type check
         working-directory: frontend
         run: pnpm typecheck
+
+      - name: Unit tests
+        working-directory: frontend
+        run: pnpm test
 
       - name: Build
         working-directory: frontend

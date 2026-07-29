@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "format": "oxfmt"
+    "format": "oxfmt",
+    "test": "vitest run"
   },
   "packageManager": "pnpm@11.17.0",
   "dependencies": {
@@ -31,6 +32,7 @@
     "typescript": "^5.7.0",
     "vite": "^8.0.0",
     "vite-plugin-pwa": "^1.3.0",
+    "vitest": "^4.1.10",
     "workbox-cacheable-response": "^7.4.1",
     "workbox-expiration": "^7.4.1",
     "workbox-precaching": "^7.4.1",

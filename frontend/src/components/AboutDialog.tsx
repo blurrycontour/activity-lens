@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { X, ExternalLink, Activity, Copy, Check } from 'lucide-react'
+import { X, ExternalLink, Copy, Check } from 'lucide-react'
 import { api, type BuildInfo } from '../lib/api'
+import Logo from './Logo'
 
 /** Fallback link when the build carries no source URL of its own. */
 const REPO_URL = 'https://github.com/blurrycontour/activity-lens'
@@ -61,14 +62,10 @@ export default function AboutDialog({ onClose }: { onClose: () => void }) {
           </button>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
-            <div style={{
-              width: 48, height: 48, borderRadius: 14, flexShrink: 0,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: 'linear-gradient(135deg, var(--primary) 0%, var(--blue) 100%)',
-              color: '#fff',
-            }}>
-              <Activity size={26} strokeWidth={2.5} />
-            </div>
+            {/* The real logo, not a lucide stand-in: it is an inline SVG whose
+                tile is painted with var(--primary), so it follows the accent
+                the way the sidebar and login marks do. */}
+            <Logo size={48} radius={14} />
             <div style={{ minWidth: 0 }}>
               <h3 style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em' }}>Activity Lens</h3>
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)' }}>
