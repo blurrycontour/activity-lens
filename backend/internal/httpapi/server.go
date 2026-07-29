@@ -109,6 +109,19 @@ func (s *Server) apiRoutes() http.Handler {
 	mux.Handle("GET /api/preferences", s.authed(s.handleGetPreferences))
 	mux.Handle("PUT /api/preferences", s.authedCSRF(s.handleSavePreferences))
 
+	// --- Sharing (authenticated) ---
+	// Owner-facing: every route is scoped to the caller's own workouts.
+	mux.Handle("GET /api/workouts/{id}/shares", s.authed(s.handleListWorkoutShares))
+	mux.Handle("POST /api/workouts/{id}/shares", s.authedCSRF(s.handleAddWorkoutShare))
+	mux.Handle("DELETE /api/workouts/{id}/shares/{userId}", s.authedCSRF(s.handleRemoveWorkoutShare))
+	mux.Handle("PUT /api/workouts/{id}/visibility", s.authedCSRF(s.handleSetWorkoutVisibility))
+	// Viewer-facing: other people's workouts. Still behind auth — "public"
+	// means every signed-in user of this instance, never the open internet.
+	mux.Handle("GET /api/feed/public", s.authed(s.handleFeedPublic))
+	mux.Handle("GET /api/feed/shared", s.authed(s.handleFeedShared))
+	// Minimal user directory backing the share picker.
+	mux.Handle("GET /api/users", s.authed(s.handleListUserDirectory))
+
 	// --- Equipment (authenticated) ---
 	mux.Handle("GET /api/equipment", s.authed(s.handleListEquipment))
 	mux.Handle("POST /api/equipment", s.authedCSRF(s.handleCreateEquipment))

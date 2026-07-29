@@ -40,6 +40,31 @@ type Repository interface {
 	ListSummary(ctx context.Context, userID int64) ([]Workout, error)
 	Update(ctx context.Context, w *Workout) error
 	Delete(ctx context.Context, userID int64, id string) error
+
+	// GetViewable returns a workout viewerID is allowed to read: their own, a
+	// public one, or one shared directly with them. It is the only read path
+	// that crosses ownership — every other method stays owner-scoped, so a
+	// forgotten check fails closed with ErrNotFound rather than leaking.
+	GetViewable(ctx context.Context, viewerID int64, id string) (*Workout, error)
+	// ListPublicSummary returns other users' public workouts, newest first.
+	ListPublicSummary(ctx context.Context, viewerID int64) ([]Workout, error)
+	// ListSharedWithMeSummary returns workouts shared directly with viewerID.
+	ListSharedWithMeSummary(ctx context.Context, viewerID int64) ([]Workout, error)
+	// SetVisibility flips a workout the caller owns; ErrNotFound otherwise.
+	SetVisibility(ctx context.Context, ownerID int64, id string, v Visibility) error
+	// ShareRecipients lists the user ids a workout the caller owns is shared
+	// with, oldest share first.
+	ShareRecipients(ctx context.Context, ownerID int64, workoutID string) ([]int64, error)
+	// ShareCounts maps workout id to recipient count across everything ownerID
+	// owns, in one query, so listing a library never fans out per row.
+	ShareCounts(ctx context.Context, ownerID int64) (map[string]int, error)
+	// AddShare is idempotent. Both AddShare and RemoveShare return ErrNotFound
+	// when the caller does not own the workout.
+	AddShare(ctx context.Context, ownerID int64, workoutID string, targetID int64) error
+	RemoveShare(ctx context.Context, ownerID int64, workoutID string, targetID int64) error
+	// DeleteSharesForUser removes every share row naming a user, for cleanup
+	// when that account is deleted.
+	DeleteSharesForUser(ctx context.Context, userID int64) error
 }
 
 // SQLiteRepository implements Repository on top of *sql.DB (SQLite dialect).
@@ -61,6 +86,14 @@ const workoutSummaryCols = `id, user_id, name, type, start_time, duration, dista
 // insertCols extends workoutCols with the de-duplication identity, which is
 // written on insert but never read back into the model on normal reads.
 const insertCols = workoutCols + `, external_id, content_hash`
+
+// Selection column sets add visibility, which reads back into the model but is
+// deliberately absent from insertCols and from the UPDATE in Update: sharing
+// state has its own method, so no create or patch path can ever change it.
+const (
+	selectCols        = workoutCols + `, visibility`
+	selectSummaryCols = workoutSummaryCols + `, visibility`
+)
 
 func (r *SQLiteRepository) Create(ctx context.Context, w *Workout) error {
 	s, err := marshalSeries(w)
@@ -85,7 +118,7 @@ func (r *SQLiteRepository) Create(ctx context.Context, w *Workout) error {
 }
 
 func (r *SQLiteRepository) GetByExternalID(ctx context.Context, userID int64, source Source, externalID string) (*Workout, error) {
-	row := r.db.QueryRowContext(ctx, `SELECT `+workoutCols+` FROM workouts
+	row := r.db.QueryRowContext(ctx, `SELECT `+selectCols+` FROM workouts
 		WHERE user_id = ? AND source = ? AND external_id = ?`, userID, string(source), externalID)
 	w, err := scanWorkout(row)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -95,7 +128,7 @@ func (r *SQLiteRepository) GetByExternalID(ctx context.Context, userID int64, so
 }
 
 func (r *SQLiteRepository) Get(ctx context.Context, userID int64, id string) (*Workout, error) {
-	row := r.db.QueryRowContext(ctx, `SELECT `+workoutCols+` FROM workouts WHERE id = ? AND user_id = ?`, id, userID)
+	row := r.db.QueryRowContext(ctx, `SELECT `+selectCols+` FROM workouts WHERE id = ? AND user_id = ?`, id, userID)
 	w, err := scanWorkout(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -104,7 +137,7 @@ func (r *SQLiteRepository) Get(ctx context.Context, userID int64, id string) (*W
 }
 
 func (r *SQLiteRepository) List(ctx context.Context, userID int64) ([]Workout, error) {
-	rows, err := r.db.QueryContext(ctx, `SELECT `+workoutCols+` FROM workouts WHERE user_id = ? ORDER BY start_time DESC`, userID)
+	rows, err := r.db.QueryContext(ctx, `SELECT `+selectCols+` FROM workouts WHERE user_id = ? ORDER BY start_time DESC`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("query workouts: %w", err)
 	}
@@ -121,7 +154,7 @@ func (r *SQLiteRepository) List(ctx context.Context, userID int64) ([]Workout, e
 }
 
 func (r *SQLiteRepository) ListSummary(ctx context.Context, userID int64) ([]Workout, error) {
-	rows, err := r.db.QueryContext(ctx, `SELECT `+workoutSummaryCols+` FROM workouts WHERE user_id = ? ORDER BY start_time DESC`, userID)
+	rows, err := r.db.QueryContext(ctx, `SELECT `+selectSummaryCols+` FROM workouts WHERE user_id = ? ORDER BY start_time DESC`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("query workouts: %w", err)
 	}
@@ -290,17 +323,19 @@ func scanWorkout(row interface{ Scan(...any) error }) (*Workout, error) {
 		calReported int
 		stepManual  int
 		source      string
+		visibility  string
 	)
 	if err := row.Scan(&w.ID, &w.UserID, &w.Name, &typ, &startTime, &w.Duration, &w.Distance,
 		&w.AvgHR, &w.MaxHR, &w.ElevationGain, &w.Calories, &w.Steps, &w.AvgPace, &w.AvgSpeed,
 		&s.route, &s.hr, &s.pace, &s.elev, &s.cadence, &w.Notes,
-		&calManual, &calReported, &stepManual, &source); err != nil {
+		&calManual, &calReported, &stepManual, &source, &visibility); err != nil {
 		return nil, err
 	}
 	w.CaloriesManual = calManual != 0
 	w.CaloriesReported = calReported != 0
 	w.StepsManual = stepManual != 0
 	w.Source = Source(source)
+	w.Visibility = Visibility(visibility)
 	if err := applyScalarFields(&w, typ, startTime); err != nil {
 		return nil, err
 	}
@@ -328,16 +363,18 @@ func scanWorkoutSummary(row interface{ Scan(...any) error }) (*Workout, error) {
 		calReported int
 		stepManual  int
 		source      string
+		visibility  string
 	)
 	if err := row.Scan(&w.ID, &w.UserID, &w.Name, &typ, &startTime, &w.Duration, &w.Distance,
 		&w.AvgHR, &w.MaxHR, &w.ElevationGain, &w.Calories, &w.Steps, &w.AvgPace, &w.AvgSpeed, &w.Notes,
-		&calManual, &calReported, &stepManual, &source); err != nil {
+		&calManual, &calReported, &stepManual, &source, &visibility); err != nil {
 		return nil, err
 	}
 	w.CaloriesManual = calManual != 0
 	w.CaloriesReported = calReported != 0
 	w.StepsManual = stepManual != 0
 	w.Source = Source(source)
+	w.Visibility = Visibility(visibility)
 	if err := applyScalarFields(&w, typ, startTime); err != nil {
 		return nil, err
 	}

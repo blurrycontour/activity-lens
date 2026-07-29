@@ -8,6 +8,11 @@ import (
 
 type fakeRepo struct {
 	workouts map[string]*Workout
+	// The sharing half of Repository is a SQL authorization predicate; an
+	// in-memory reimplementation would only test itself. Those methods are
+	// exercised against the real migrated schema in sharing_test.go, so the
+	// fake embeds a stub that fails loudly if a test reaches for one.
+	unimplementedSharing
 }
 
 func newFakeRepo() *fakeRepo {

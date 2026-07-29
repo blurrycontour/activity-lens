@@ -1,8 +1,13 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { fmtDuration, fmtDist, fmtPace, TYPE_COLOR, TYPE_ICON, type WorkoutType, type Workout } from '../data/workouts'
 import { useWorkouts } from '../context/WorkoutsContext'
-import { Search, ChevronRight, Clock, Mountain, Flame, Download, Plus, RefreshCw, Grid2X2, List, Navigation } from 'lucide-react'
+import { Search, ChevronRight, Clock, Mountain, Flame, Download, Plus, RefreshCw, Grid2X2, List, Navigation, Library, Inbox, Globe, Users, Share2 } from 'lucide-react'
 import TypeDropdown from '../components/TypeDropdown'
+import RangeDropdown from '../components/RangeDropdown'
+import SortDropdown, { type SortKey } from '../components/SortDropdown'
+import ShareDialog from '../components/ShareDialog'
+import UserAvatar, { userLabel } from '../components/UserAvatar'
+import { filterByRange } from '../lib/range'
 import { api } from '../lib/api'
 import { downloadWorkoutGPX } from '../lib/download'
 
@@ -11,13 +16,31 @@ interface WorkoutsProps {
   onImport: () => void
 }
 
+/**
+ * Which library is on screen. "Mine" comes from WorkoutsContext, which is
+ * shared with the dashboard and analytics and must stay owner-only; the other
+ * two are fetched here and kept in local state so they never contaminate it.
+ */
+type Scope = 'mine' | 'shared' | 'public'
+
+const SCOPES: { id: Scope; label: string; icon: React.ReactNode }[] = [
+  { id: 'mine', label: 'My workouts', icon: <Library size={15} /> },
+  { id: 'shared', label: 'Shared with me', icon: <Inbox size={15} /> },
+  { id: 'public', label: 'Public', icon: <Globe size={15} /> },
+]
+
 export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
   const { workouts, loading, refresh } = useWorkouts()
+  const [scope, setScope] = useState<Scope>('mine')
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState<WorkoutType | 'All'>('All')
-  const [sortBy, setSortBy] = useState<'date' | 'distance' | 'duration'>('date')
-  const [dateRange, setDateRange] = useState<'all' | '7d' | '30d' | '90d'>('all')
+  const [sortBy, setSortBy] = useState<SortKey>('date')
+  const [rangeDays, setRangeDays] = useState(0)
+  const [sharedOnly, setSharedOnly] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const [sharing, setSharing] = useState<Workout | null>(null)
+  const [feeds, setFeeds] = useState<Partial<Record<Scope, Workout[]>>>({})
+  const [feedError, setFeedError] = useState<string | null>(null)
   const [view, setView] = useState<'list' | 'grid'>(() => {
     const saved = localStorage.getItem('workouts.view')
     return saved === 'grid' || saved === 'list' ? saved : 'list'
@@ -28,56 +51,103 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
     localStorage.setItem('workouts.view', v)
   }
 
+  const loadFeed = useCallback(async (s: Scope) => {
+    if (s === 'mine') return
+    setFeedError(null)
+    try {
+      const rows = s === 'public' ? await api.feedPublic() : await api.feedShared()
+      setFeeds(f => ({ ...f, [s]: rows }))
+    } catch {
+      setFeedError('Could not load these workouts.')
+    }
+  }, [])
+
+  // Feeds load on first visit to their tab rather than on mount, so opening
+  // Workouts costs the same as it always did.
+  useEffect(() => {
+    if (scope !== 'mine' && feeds[scope] === undefined) void loadFeed(scope)
+  }, [scope, feeds, loadFeed])
+
   async function handleRefresh() {
     setRefreshing(true)
     try {
-      await refresh()
+      await (scope === 'mine' ? refresh() : loadFeed(scope))
     } finally {
       setRefreshing(false)
     }
   }
 
+  const source = scope === 'mine' ? workouts : feeds[scope]
+  const busy = source === undefined || (scope === 'mine' && loading)
+
   const filtered = useMemo(() => {
-    let result = [...workouts]
+    let result = [...(source ?? [])]
     if (typeFilter !== 'All') result = result.filter(w => w.type === typeFilter)
     if (search) result = result.filter(w => w.name.toLowerCase().includes(search.toLowerCase()))
-    if (dateRange !== 'all') {
-      const days = dateRange === '7d' ? 7 : dateRange === '30d' ? 30 : 90
-      const cutoff = new Date()
-      cutoff.setDate(cutoff.getDate() - days)
-      result = result.filter(w => new Date(w.date) >= cutoff)
+    if (scope === 'mine' && sharedOnly) {
+      result = result.filter(w => w.visibility === 'public' || (w.sharedWithCount ?? 0) > 0)
     }
+    result = filterByRange(result, rangeDays)
     result.sort((a, b) => {
-      if (sortBy === 'date') return new Date(b.date).getTime() - new Date(a.date).getTime()
+      if (sortBy === 'date') return b.date.localeCompare(a.date)
       if (sortBy === 'distance') return b.distance - a.distance
       return b.duration - a.duration
     })
     return result
-  }, [workouts, search, typeFilter, sortBy, dateRange])
+  }, [source, search, typeFilter, sortBy, rangeDays, scope, sharedOnly])
 
   return (
     <div>
       <div className="page-header">
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 14 }}>
           <h1 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>Workouts</h1>
-          <span style={{ fontSize: 12, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>{filtered.length} of {workouts.length}</span>
+          <span style={{ fontSize: 12, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
+            {filtered.length} of {source?.length ?? 0}
+          </span>
           <button
             className="btn-icon"
             onClick={handleRefresh}
-            disabled={refreshing || loading}
-            title="Refresh workouts"
+            disabled={refreshing || busy}
+            title="Refresh"
             style={{ marginLeft: 'auto' }}
           >
-            <RefreshCw size={15} style={{ animation: (refreshing || loading) ? 'spin 0.8s linear infinite' : 'none' }} />
+            <RefreshCw size={15} className={refreshing || busy ? 'spin' : undefined} />
           </button>
-          <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
-            <button className="btn-icon" onClick={() => changeView('list')} title="List view" style={{ borderRadius: 0, background: view === 'list' ? 'var(--bg-3)' : 'transparent' }}><List size={15} /></button>
-            <button className="btn-icon" onClick={() => changeView('grid')} title="Grid view" style={{ borderRadius: 0, background: view === 'grid' ? 'var(--bg-3)' : 'transparent' }}><Grid2X2 size={15} /></button>
+          <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
+            {([['list', <List key="l" size={15} />], ['grid', <Grid2X2 key="g" size={15} />]] as const).map(([id, icon]) => (
+              <button
+                key={id}
+                onClick={() => changeView(id)}
+                title={id === 'list' ? 'List view' : 'Grid view'}
+                aria-pressed={view === id}
+                style={{
+                  display: 'flex', alignItems: 'center', padding: '6px 12px', border: 'none', cursor: 'pointer',
+                  background: view === id ? 'var(--primary-dim)' : 'var(--bg-3)',
+                  color: view === id ? 'var(--primary)' : 'var(--text-3)',
+                }}
+              >
+                {icon}
+              </button>
+            ))}
           </div>
         </div>
 
+        <nav className="tab-strip" style={{ marginBottom: 12 }} aria-label="Workout scope">
+          {SCOPES.map(t => (
+            <button
+              key={t.id}
+              className={`tab-strip-item${scope === t.id ? ' active' : ''}`}
+              onClick={() => setScope(t.id)}
+              aria-current={scope === t.id ? 'page' : undefined}
+            >
+              {t.icon}
+              {t.label}
+            </button>
+          ))}
+        </nav>
+
+        {/* One filter row governs whichever scope is showing. */}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          {/* Search */}
           <div className="workout-search" style={{ position: 'relative', flex: 1, minWidth: 180 }}>
             <Search size={14} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', pointerEvents: 'none' }} />
             <input
@@ -88,50 +158,114 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
               style={{ paddingLeft: 30, width: '100%' }}
             />
           </div>
-
-          {/* Type filter dropdown */}
           <TypeDropdown value={typeFilter} onChange={v => setTypeFilter(v)} />
-
-          {/* Sort */}
-          <select className="select" value={sortBy} onChange={e => setSortBy(e.target.value as typeof sortBy)}>
-            <option value="date">By Date</option>
-            <option value="distance">By Distance</option>
-            <option value="duration">By Duration</option>
-          </select>
-
-          {/* Date range */}
-          <select className="select" value={dateRange} onChange={e => setDateRange(e.target.value as typeof dateRange)}>
-            <option value="all">All time</option>
-            <option value="7d">Last 7 days</option>
-            <option value="30d">Last 30 days</option>
-            <option value="90d">Last 90 days</option>
-          </select>
+          <SortDropdown value={sortBy} onChange={setSortBy} />
+          <RangeDropdown value={rangeDays} onChange={setRangeDays} />
+          {scope === 'mine' && (
+            <label className="switch" title="Show only workouts you have made public or shared">
+              <input type="checkbox" checked={sharedOnly} onChange={e => setSharedOnly(e.target.checked)} />
+              <span className="switch-track" />
+              Shared only
+            </label>
+          )}
         </div>
       </div>
 
       <div className="page-content tight">
-        {filtered.length === 0 ? (
+        {feedError ? (
           <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-3)' }}>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>{loading ? '⏳' : '🔍'}</div>
-            <p style={{ fontSize: 14 }}>{loading ? 'Loading workouts…' : 'No workouts found'}</p>
+            <p style={{ fontSize: 14 }}>{feedError}</p>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-3)' }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>{busy ? '⏳' : scope === 'mine' ? '🔍' : '🤝'}</div>
+            <p style={{ fontSize: 14 }}>{busy ? 'Loading workouts…' : emptyMessage(scope, sharedOnly)}</p>
           </div>
         ) : (
-          <div className={view === 'grid' ? 'workout-grid' : undefined} style={view === 'list' ? { display: 'flex', flexDirection: 'column', gap: 6 } : undefined}>
-            {filtered.map(w => <WorkoutCard key={w.id} workout={w} variant={view} onClick={() => onSelect(w)} />)}
+          <div className={view === 'grid' ? 'workout-grid' : 'workout-list'}>
+            {filtered.map(w => (
+              <WorkoutCard
+                key={w.id}
+                workout={w}
+                variant={view}
+                onClick={() => onSelect(w)}
+                badge={scope === 'mine' ? <ShareBadge workout={w} /> : undefined}
+                aside={scope === 'mine'
+                  ? (
+                    <>
+                      <button
+                        className="btn-icon"
+                        title="Share"
+                        onClick={e => { e.stopPropagation(); setSharing(w) }}
+                        style={{ opacity: 0.6 }}
+                      >
+                        <Share2 size={15} />
+                      </button>
+                      <button
+                        className="btn-icon card-export-btn"
+                        title="Export as GPX"
+                        onClick={e => { void exportWorkout(w, e) }}
+                        style={{ opacity: 0.6 }}
+                      >
+                        <Download size={15} />
+                      </button>
+                    </>
+                  )
+                  : w.owner && (
+                    <span className="owner-byline">
+                      <UserAvatar user={w.owner} size={22} />
+                      <span>{userLabel(w.owner)}</span>
+                    </span>
+                  )}
+              />
+            ))}
           </div>
         )}
       </div>
 
-      {/* Floating + button */}
-      <button
-        className="fab"
-        onClick={onImport}
-        title="Add Workout"
-        aria-label="Add workout"
-      >
-        <Plus size={24} strokeWidth={2.5} />
-      </button>
+      {sharing && (
+        <ShareDialog
+          workoutId={sharing.id}
+          workoutName={sharing.name}
+          onClose={() => setSharing(null)}
+          // The badges are driven by the library array, which WorkoutsContext
+          // owns and the dashboard also reads — so re-fetch rather than patch
+          // a local copy.
+          onChange={() => { void refresh() }}
+        />
+      )}
+
+      {/* Importing only makes sense in your own library. */}
+      {scope === 'mine' && (
+        <button className="fab" onClick={onImport} title="Add Workout" aria-label="Add workout">
+          <Plus size={24} strokeWidth={2.5} />
+        </button>
+      )}
     </div>
+  )
+}
+
+function emptyMessage(scope: Scope, sharedOnly: boolean): string {
+  if (scope === 'shared') return 'Nobody has shared a workout with you yet'
+  if (scope === 'public') return 'No public workouts on this instance yet'
+  return sharedOnly ? 'You have not shared any workouts yet' : 'No workouts found'
+}
+
+/** Marks a workout you have made public or shared with someone. */
+function ShareBadge({ workout: w }: { workout: Workout }) {
+  const count = w.sharedWithCount ?? 0
+  if (w.visibility !== 'public' && count === 0) return null
+  return (
+    <span
+      className="share-badge"
+      title={[
+        w.visibility === 'public' ? 'Visible to everyone on this instance' : null,
+        count > 0 ? `Shared with ${count} ${count === 1 ? 'person' : 'people'}` : null,
+      ].filter(Boolean).join(' · ')}
+    >
+      {w.visibility === 'public' ? <Globe size={10} /> : <Users size={10} />}
+      {count > 0 && count}
+    </span>
   )
 }
 
@@ -142,7 +276,17 @@ async function exportWorkout(w: Workout, e: React.MouseEvent) {
   downloadWorkoutGPX(await api.getWorkout(w.id))
 }
 
-function WorkoutCard({ workout: w, variant, onClick }: { workout: Workout; variant: 'list' | 'grid'; onClick: () => void }) {
+interface WorkoutCardProps {
+  workout: Workout
+  variant: 'list' | 'grid'
+  onClick: () => void
+  /** Sharing indicator shown beside the type tag on your own workouts. */
+  badge?: React.ReactNode
+  /** Trailing control — the export button when you own it, the owner otherwise. */
+  aside?: React.ReactNode
+}
+
+function WorkoutCard({ workout: w, variant, onClick, badge, aside }: WorkoutCardProps) {
   const color = TYPE_COLOR[w.type]
   const dateLabel = new Date(w.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 
@@ -180,6 +324,7 @@ function WorkoutCard({ workout: w, variant, onClick }: { workout: Workout; varia
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3 }}>
               <span className={`badge tag-${w.type.toLowerCase()}`}>{w.type}</span>
               <span style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>{dateLabel}</span>
+              {badge}
             </div>
           </div>
         </div>
@@ -212,108 +357,55 @@ function WorkoutCard({ workout: w, variant, onClick }: { workout: Workout; varia
             <Flame size={11} color="var(--text-3)" />
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-2)' }}>{w.calories} kcal</span>
           </div>
-          <button
-            className="btn-icon card-export-btn"
-            title="Export as GPX"
-            onClick={e => { void exportWorkout(w, e) }}
-            style={{ marginLeft: 'auto', opacity: 0.6 }}
-            onMouseEnter={e => e.currentTarget.style.opacity = '1'}
-            onMouseLeave={e => e.currentTarget.style.opacity = '0.6'}
-          >
-            <Download size={15} />
-          </button>
+          <div style={{ marginLeft: 'auto' }}>{aside}</div>
         </div>
       </div>
     )
   }
 
   return (
-    <div
-      onClick={onClick}
-      style={{
-        background: 'var(--bg-2)',
-        border: '1px solid var(--border)',
-        borderRadius: 12,
-        padding: '14px 16px',
-        display: 'grid',
-        gridTemplateColumns: '44px 1fr auto',
-        alignItems: 'center',
-        gap: 14,
-        cursor: 'pointer',
-        transition: 'all 0.15s',
-        position: 'relative',
-        overflow: 'hidden',
-      }}
-      onMouseEnter={e => {
-        e.currentTarget.style.borderColor = `${color}40`
-        e.currentTarget.style.background = 'var(--bg-3)'
-        e.currentTarget.style.transform = 'translateX(2px)'
-      }}
-      onMouseLeave={e => {
-        e.currentTarget.style.borderColor = 'var(--border)'
-        e.currentTarget.style.background = 'var(--bg-2)'
-        e.currentTarget.style.transform = 'translateX(0)'
-      }}
-    >
-      <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: color, borderRadius: '3px 0 0 3px' }} />
+    <div className="workout-row" onClick={onClick} style={{ '--row-accent': color } as React.CSSProperties}>
+      <div className="workout-row-icon">{TYPE_ICON[w.type]}</div>
 
-      <div style={{
-        width: 44, height: 44, borderRadius: 12, flexShrink: 0,
-        background: `${color}18`,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22,
-      }}>
-        {TYPE_ICON[w.type]}
-      </div>
-
-      <div style={{ minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-          <span style={{ fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.name}</span>
+      <div className="workout-row-body">
+        <div className="workout-row-title">
+          <span className="workout-row-name">{w.name}</span>
           <span className={`badge tag-${w.type.toLowerCase()}`}>{w.type}</span>
+          {badge}
         </div>
-        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-          <span style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
-            {new Date(w.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-          </span>
-          {w.distance > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-              <Navigation size={11} color="var(--text-3)" />
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-2)' }}>{fmtDist(w.distance)}</span>
+        {/* Date and stats share a line on desktop; the mobile rule in index.css
+            breaks the date onto its own line above them. */}
+        <div className="workout-row-meta">
+          <span className="workout-row-date">{dateLabel}</span>
+          <div className="workout-row-stats">
+            {w.distance > 0 && (
+              <div className="workout-row-stat">
+                <Navigation size={11} color="var(--text-3)" />
+                <span>{fmtDist(w.distance)}</span>
+              </div>
+            )}
+            <div className="workout-row-stat">
+              <Clock size={11} color="var(--text-3)" />
+              <span>{fmtDuration(w.duration)}</span>
             </div>
-          )}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-            <Clock size={11} color="var(--text-3)" />
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-2)' }}>{fmtDuration(w.duration)}</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-            <Mountain size={11} color="var(--text-3)" />
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-2)' }}>+{w.elevationGain}m</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-            <Flame size={11} color="var(--text-3)" />
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-2)' }}>{w.calories} kcal</span>
+            <div className="workout-row-stat optional">
+              <Mountain size={11} color="var(--text-3)" />
+              <span>+{w.elevationGain}m</span>
+            </div>
+            <div className="workout-row-stat optional">
+              <Flame size={11} color="var(--text-3)" />
+              <span>{w.calories} kcal</span>
+            </div>
           </div>
         </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 700, color }}>
-            {w.avgPace ? fmtPace(w.avgPace) : `${w.avgSpeed.toFixed(1)}`}
-          </div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-3)' }}>
-            {w.avgPace ? '/km' : 'km/h'}
-          </div>
+      <div className="workout-row-aside">
+        <div className="workout-row-pace">
+          <b>{w.avgPace ? fmtPace(w.avgPace) : `${w.avgSpeed.toFixed(1)}`}</b>
+          <small>{w.avgPace ? '/km' : 'km/h'}</small>
         </div>
-        <button
-          className="btn-icon card-export-btn"
-          title="Export as GPX"
-          onClick={e => { void exportWorkout(w, e) }}
-          style={{ opacity: 0.6 }}
-          onMouseEnter={e => e.currentTarget.style.opacity = '1'}
-          onMouseLeave={e => e.currentTarget.style.opacity = '0.6'}
-        >
-          <Download size={15} />
-        </button>
+        {aside}
         <ChevronRight size={16} color="var(--text-3)" />
       </div>
     </div>

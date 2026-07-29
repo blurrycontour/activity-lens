@@ -39,6 +39,35 @@ const (
 	SourceHealthConnect Source = "healthconnect" // synced from Android Health Connect
 )
 
+// Visibility controls who, beyond the owner, may read a workout. Direct shares
+// are tracked separately in workout_shares and are orthogonal to this: making a
+// workout private again does not revoke them.
+type Visibility string
+
+// Supported visibility values. There are deliberately only two — a "shared"
+// value would duplicate what workout_shares already records.
+const (
+	VisibilityPrivate Visibility = "private"
+	// VisibilityPublic means every signed-in user of this instance can read the
+	// workout. It is never readable without authentication.
+	VisibilityPublic Visibility = "public"
+)
+
+// ValidVisibility reports whether v is a known visibility value.
+func ValidVisibility(v Visibility) bool {
+	return v == VisibilityPrivate || v == VisibilityPublic
+}
+
+// OwnerRef identifies the author of a workout someone else is viewing. It is
+// populated by the API layer from the user directory; the workout table has no
+// join to the auth schema.
+type OwnerRef struct {
+	ID          int64  `json:"id"`
+	Username    string `json:"username"`
+	DisplayName string `json:"displayName"`
+	AvatarPath  string `json:"avatarPath"`
+}
+
 // LatLng is a geographic point [latitude, longitude], serialized as a 2-tuple
 // to match the frontend route format.
 type LatLng [2]float64
@@ -72,19 +101,19 @@ type CadencePoint struct {
 // Workout is the domain model. The JSON tags produce exactly the shape the
 // frontend expects.
 type Workout struct {
-	ID             string      `json:"id"`
-	UserID         int64       `json:"-"`
-	Name           string      `json:"name"`
-	Type           Type        `json:"type"`
-	Date           string      `json:"date"` // YYYY-MM-DD (derived from StartTime)
-	StartTime      time.Time   `json:"-"`
-	Duration       int         `json:"duration"` // seconds
-	Distance       float64     `json:"distance"` // meters
-	AvgHR          int         `json:"avgHR"`
-	MaxHR          int         `json:"maxHR"`
-	ElevationGain  float64     `json:"elevationGain"`
-	Calories       int         `json:"calories"`
-	CaloriesManual bool        `json:"caloriesManual"`
+	ID             string    `json:"id"`
+	UserID         int64     `json:"-"`
+	Name           string    `json:"name"`
+	Type           Type      `json:"type"`
+	Date           string    `json:"date"` // YYYY-MM-DD (derived from StartTime)
+	StartTime      time.Time `json:"-"`
+	Duration       int       `json:"duration"` // seconds
+	Distance       float64   `json:"distance"` // meters
+	AvgHR          int       `json:"avgHR"`
+	MaxHR          int       `json:"maxHR"`
+	ElevationGain  float64   `json:"elevationGain"`
+	Calories       int       `json:"calories"`
+	CaloriesManual bool      `json:"caloriesManual"`
 	// CaloriesReported marks calories that the imported file stated outright
 	// (TCX carries them per lap) rather than ones we estimated, so the UI
 	// doesn't badge a source-provided number as computed.
@@ -110,6 +139,24 @@ type Workout struct {
 	ContentHash string `json:"-"`
 	// Equipment is populated by the API layer for single-workout responses.
 	Equipment []EquipmentTag `json:"equipment,omitempty"`
+	// Visibility is persisted; it is cleared on responses to non-owners, who
+	// have no need to know why they can see the workout.
+	Visibility Visibility `json:"visibility,omitempty"`
+	// SharedWithCount is populated by the API layer on owner-facing lists so
+	// the library can badge workouts that have direct recipients.
+	SharedWithCount int `json:"sharedWithCount,omitempty"`
+	// Owner is populated by the API layer on responses to someone other than
+	// the owner, and is nil on your own workouts.
+	Owner *OwnerRef `json:"owner,omitempty"`
+}
+
+// Redact clears the fields that belong to the owner alone. The service applies
+// it to every workout returned to a user who does not own it, so redaction is
+// structural rather than something each API handler has to remember.
+func (w *Workout) Redact() {
+	w.Notes = ""
+	w.Equipment = nil
+	w.Visibility = ""
 }
 
 // EquipmentTag is a minimal reference to a piece of equipment linked to a

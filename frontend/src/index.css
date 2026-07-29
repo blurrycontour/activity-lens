@@ -741,6 +741,154 @@ body {
 .playback-bar { display: flex; align-items: center; gap: 10px; }
 .playback-controls { display: flex; align-items: center; gap: 10px; }
 .workout-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+
+.spin { animation: spin 0.8s linear infinite; }
+
+/* ── Share dialog ── */
+.share-section {
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+}
+.share-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.share-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 4px;
+  border-radius: 99px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  font-size: 12px;
+}
+.share-chip button {
+  display: flex;
+  border: none;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 50%;
+}
+.share-chip button:hover { color: var(--text); background: var(--bg-2); }
+/* Capped so a long member list scrolls inside the dialog rather than pushing
+   the footer off a phone screen. */
+.share-people { max-height: 200px; overflow-y: auto; margin-top: 6px; }
+.share-person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 6px;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.share-person:hover:not(:disabled) { background: var(--bg-3); }
+.share-person:disabled { opacity: 0.6; cursor: default; }
+
+/* Sharing indicator on your own workout rows and cards. */
+.share-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  padding: 2px 6px;
+  border-radius: 99px;
+  background: var(--primary-dim);
+  color: var(--primary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+/* Author byline on someone else's workout. */
+.owner-byline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-3);
+  min-width: 0;
+}
+.owner-byline span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Workout list row ──
+   The per-type accent is passed in as --row-accent so the colour stays
+   data-driven while the layout lives here — which is what lets the mobile
+   override below reflow the row without rewriting the component. */
+.workout-list { display: flex; flex-direction: column; gap: 6px; }
+.workout-row {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, transform 0.15s;
+}
+.workout-row:hover {
+  background: var(--bg-3);
+  border-color: color-mix(in srgb, var(--row-accent) 25%, transparent);
+  transform: translateX(2px);
+}
+/* Type stripe down the leading edge. */
+.workout-row::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--row-accent);
+}
+.workout-row-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  background: color-mix(in srgb, var(--row-accent) 12%, transparent);
+}
+.workout-row-body { min-width: 0; }
+.workout-row-title { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.workout-row-name {
+  font-weight: 600;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workout-row-date {
+  font-size: 11px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+.workout-row-meta { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.workout-row-stats { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.workout-row-stat { display: flex; align-items: center; gap: 3px; }
+.workout-row-stat span { font-family: var(--font-mono); font-size: 12px; color: var(--text-2); }
+.workout-row-aside { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.workout-row-pace { text-align: right; }
+.workout-row-pace b {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--row-accent);
+}
+.workout-row-pace small { font-family: var(--font-mono); font-size: 10px; color: var(--text-3); }
 .route-pin { background: none !important; border: none !important; display: grid; place-items: center; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5)); }
 .route-avatar { background: none !important; border: none !important; }
 .map-shade-select {
@@ -819,6 +967,20 @@ body {
     flex-basis: 100%;
     width: 100%;
   }
+
+  /* On a phone the date and four metric chips cannot share a line without
+     wrapping into a ragged third row, so the date gets its own line above the
+     stats and only the two core metrics (distance, time) stay. Elevation and
+     calories remain a tap away on the detail page. */
+  .workout-row { grid-template-columns: 38px 1fr auto; gap: 12px; padding: 12px; }
+  .workout-row-icon { width: 38px; height: 38px; border-radius: 10px; font-size: 19px; }
+  .workout-row-title { margin-bottom: 3px; }
+  .workout-row-meta { display: block; }
+  .workout-row-date { display: block; margin-bottom: 4px; }
+  .workout-row-stats { gap: 10px; }
+  .workout-row-stat.optional { display: none; }
+  /* Tap should not leave the row stuck in its hover state. */
+  .workout-row:hover { transform: none; }
 
   .sidebar {
     display: none !important;

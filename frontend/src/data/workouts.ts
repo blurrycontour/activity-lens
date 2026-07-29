@@ -31,6 +31,18 @@ export interface Workout {
   cadenceTimeline?: CadencePoint[]
   notes?: string
   equipment?: { id: string; name: string; type: string }[]
+  /** Sharing state. Present on your own workouts only. */
+  visibility?: 'private' | 'public'
+  /** How many people this workout is shared with directly. Your own only. */
+  sharedWithCount?: number
+  /** The author, present only on workouts belonging to someone else. */
+  owner?: { id: number; username: string; displayName: string; avatarPath: string }
+  /**
+   * Whether the signed-in user owns this workout. Only single-workout
+   * responses carry it; list rows are unambiguous (your library is all yours,
+   * a feed is all someone else's).
+   */
+  isOwner?: boolean
 }
 
 export const WORKOUT_TYPES: WorkoutType[] = ['Run', 'Ride', 'Hike', 'Swim', 'Strength']

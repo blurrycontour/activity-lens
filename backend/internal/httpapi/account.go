@@ -225,6 +225,7 @@ func (s *Server) handleConfirmAccountDeletion(w http.ResponseWriter, r *http.Req
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	s.purgeUserShares(r, user.ID)
 	// The account (and its sessions) are gone; clear cookies.
 	secure := s.secure(r)
 	http.SetCookie(w, s.auth.ClearSessionCookie(secure))

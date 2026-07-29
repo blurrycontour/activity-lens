@@ -251,6 +251,8 @@ export const api = {
 
   // --- Workouts ---
   listWorkouts: () => request<import('../data/workouts').Workout[]>('/api/workouts'),
+  // Resolves any workout the signed-in user may read: their own, a public one,
+  // or one shared with them. `isOwner` says whether to offer edit controls.
   getWorkout: (id: string) => request<import('../data/workouts').Workout>(`/api/workouts/${id}`),
   createWorkout: (payload: ManualWorkoutInput) =>
     request<import('../data/workouts').Workout>('/api/workouts', { method: 'POST', body: payload }),
@@ -278,6 +280,22 @@ export const api = {
   },
   stats: () => request<Stats>('/api/stats'),
 
+  // --- Sharing ---
+  // "Public" means every signed-in user of this instance; nothing here is
+  // readable without an account.
+  feedPublic: () => request<import('../data/workouts').Workout[]>('/api/feed/public'),
+  feedShared: () => request<import('../data/workouts').Workout[]>('/api/feed/shared'),
+  getShares: (id: string) => request<WorkoutShares>(`/api/workouts/${id}/shares`),
+  setVisibility: (id: string, visibility: Visibility) =>
+    request<WorkoutShares>(`/api/workouts/${id}/visibility`, { method: 'PUT', body: { visibility } }),
+  addShare: (id: string, userId: number) =>
+    request<WorkoutShares>(`/api/workouts/${id}/shares`, { method: 'POST', body: { userId } }),
+  removeShare: (id: string, userId: number) =>
+    request<unknown>(`/api/workouts/${id}/shares/${userId}`, { method: 'DELETE' }),
+  /** Minimal user directory backing the share picker. */
+  listUserDirectory: (q?: string) =>
+    request<{ users: UserRef[] }>(`/api/users${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+
   // --- Equipment ---
   listEquipment: () => request<Equipment[]>('/api/equipment'),
   getEquipment: (id: string) => request<Equipment & { workouts: LinkedWorkout[] }>(`/api/equipment/${id}`),
@@ -286,6 +304,23 @@ export const api = {
   patchEquipment: (id: string, patch: Partial<EquipmentInput>) =>
     request<Equipment>(`/api/equipment/${id}`, { method: 'PATCH', body: patch }),
   deleteEquipment: (id: string) => request<unknown>(`/api/equipment/${id}`, { method: 'DELETE' }),
+}
+
+/** Who, beyond the owner, can read a workout. Direct shares are separate. */
+export type Visibility = 'private' | 'public'
+
+/** A user as shown in the share picker and as a workout's author. */
+export interface UserRef {
+  id: number
+  username: string
+  displayName: string
+  avatarPath: string
+}
+
+/** The owner's view of one workout's sharing state. */
+export interface WorkoutShares {
+  visibility: Visibility
+  sharedWith: UserRef[]
 }
 
 export interface Equipment {

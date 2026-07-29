@@ -359,6 +359,7 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	s.purgeUserShares(r, targetID)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 

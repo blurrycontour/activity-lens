@@ -3,7 +3,7 @@ import { type Workout, type WorkoutType, WORKOUT_TYPES, fmtDuration, fmtDist, fm
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ReferenceDot, BarChart, Bar } from 'recharts'
 import {
   ArrowLeft, Heart, Mountain, Zap, Clock, TrendingUp, Navigation, Download, Pencil, Trash2, Gauge,
-  Check, X as XIcon, Play, Pause, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, Layers, AlertTriangle, Activity,
+  Check, X as XIcon, Play, Pause, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, Layers, AlertTriangle, Activity, Share2,
 } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useAuth } from '../context/AuthContext'
@@ -12,6 +12,8 @@ import { downloadWorkoutGPX } from '../lib/download'
 import { useLocalStorage } from '../lib/useLocalStorage'
 import { DEFAULT_HR_ZONE_CHART, HR_ZONE_CHART_KEY, type HRZoneChart } from '../lib/dashboardConfig'
 import InfoTip from '../components/InfoTip'
+import UserAvatar, { userLabel } from '../components/UserAvatar'
+import ShareDialog from '../components/ShareDialog'
 import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, Popup, useMap, useMapEvents } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import { divIcon } from 'leaflet'
@@ -54,7 +56,7 @@ function StatChip({ icon, label, value, calculated, manual }: { icon?: React.Rea
   )
 }
 
-function OptionsMenu({ onEdit, onExport, onRecalculate, onDelete, deleting }: { onEdit: () => void; onExport: () => void; onRecalculate: () => void; onDelete: () => void; deleting: boolean }) {
+function OptionsMenu({ onEdit, onExport, onShare, onRecalculate, onDelete, deleting }: { onEdit: () => void; onExport: () => void; onShare?: () => void; onRecalculate: () => void; onDelete: () => void; deleting: boolean }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -79,6 +81,11 @@ function OptionsMenu({ onEdit, onExport, onRecalculate, onDelete, deleting }: { 
           <button className="options-menu-item" onClick={() => { setOpen(false); onRecalculate() }}>
             <RotateCcw size={14} /> Recalculate
           </button>
+          {onShare && (
+            <button className="options-menu-item" onClick={() => { setOpen(false); onShare() }}>
+              <Share2 size={14} /> Share
+            </button>
+          )}
           <button className="options-menu-item" onClick={() => { setOpen(false); onExport() }}>
             <Download size={14} /> Export GPX
           </button>
@@ -496,6 +503,16 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
   const { updateWorkout, removeWorkout } = useWorkouts()
   const { user } = useAuth()
   const [w, setW] = useState(w0)
+  const [sharing, setSharing] = useState(false)
+  /**
+   * Whether this workout belongs to someone else — it was made public or
+   * shared directly with us. Everything stays visible (map, charts, splits);
+   * only the controls that would change the owner's data are withheld.
+   *
+   * List rows carry no `isOwner`, so until the full record loads we fall back
+   * to `owner`, which the API sets on feed rows and never on your own.
+   */
+  const readOnly = w.isOwner === undefined ? w.owner !== undefined : !w.isOwner
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 769)
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 769)
@@ -544,6 +561,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
   const [equipSel, setEquipSel] = useState<string[]>([])
   const [equipSaving, setEquipSaving] = useState(false)
   useEffect(() => {
+    if (readOnly) return
     api.listEquipment().then(setAllEquipment).catch(() => {})
   }, [])
   function startEditEquip() {
@@ -988,12 +1006,28 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
               <h1 style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em' }}>{w.name}</h1>
               <span className={`badge tag-${w.type.toLowerCase()}`}>{TYPE_ICON[w.type]} {w.type}</span>
             </div>
-            <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
-              {new Date(w.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 2 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                {new Date(w.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              </div>
+              {readOnly && w.owner && (
+                <span className="owner-byline">
+                  <UserAvatar user={w.owner} size={20} />
+                  <span>by {userLabel(w.owner)}</span>
+                </span>
+              )}
             </div>
           </div>
-          <div style={{ marginLeft: 'auto', flexShrink: 0 }}>
-            <OptionsMenu onEdit={startEdit} onExport={() => downloadWorkoutGPX(w)} onRecalculate={() => { setRecalcErr(null); setConfirmRecalc(true) }} onDelete={() => setConfirmDelete(true)} deleting={deleting} />
+          <div style={{ marginLeft: 'auto', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+            {readOnly ? (
+              // Export stays available even on someone else's workout: it is a
+              // purely client-side render of data already on screen.
+              <button className="btn-icon" title="Export as GPX" onClick={() => downloadWorkoutGPX(w)}>
+                <Download size={16} />
+              </button>
+            ) : (
+              <OptionsMenu onEdit={startEdit} onExport={() => downloadWorkoutGPX(w)} onShare={() => setSharing(true)} onRecalculate={() => { setRecalcErr(null); setConfirmRecalc(true) }} onDelete={() => setConfirmDelete(true)} deleting={deleting} />
+            )}
           </div>
         </div>
       </div>
@@ -1213,10 +1247,11 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
           </div>
         )}
 
+        {!readOnly && (
         <div className="card" style={{ marginTop: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
             <h3 style={{ fontSize: 13, fontWeight: 600 }}>Equipment</h3>
-            {!editingEquip && (
+            {!editingEquip && !readOnly && (
               <button className="btn btn-ghost" style={{ fontSize: 12, padding: '4px 10px' }} onClick={startEditEquip}>
                 {(w.equipment ?? []).length > 0 ? 'Edit' : 'Add'}
               </button>
@@ -1282,7 +1317,16 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
             <p style={{ fontSize: 13, color: 'var(--text-3)' }}>No equipment linked.</p>
           )}
         </div>
+        )}
       </div>
+
+      {sharing && (
+        <ShareDialog
+          workoutId={w.id}
+          workoutName={w.name}
+          onClose={() => setSharing(false)}
+        />
+      )}
 
       {expanded === 'map' && (
         <ExpandModal title="Route" onClose={() => setExpanded(null)}>

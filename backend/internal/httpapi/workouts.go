@@ -20,6 +20,8 @@ import (
 
 const maxUploadBytes = 25 << 20 // 25 MiB
 
+// handleListWorkouts returns the caller's own library — never anyone else's.
+// The dashboard, stats and consistency views all assume that.
 func (s *Server) handleListWorkouts(w http.ResponseWriter, r *http.Request) {
 	user := httpmw.UserFrom(r)
 	list, err := s.workout.ListSummary(r.Context(), user.ID)
@@ -27,18 +29,41 @@ func (s *Server) handleListWorkouts(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "could not load workouts")
 		return
 	}
+	// One grouped query annotates the whole library, so the list can badge
+	// shared workouts without a per-row lookup.
+	if counts, err := s.workout.ShareCounts(r.Context(), user.ID); err == nil {
+		for i := range list {
+			list[i].SharedWithCount = counts[list[i].ID]
+		}
+	} else {
+		slog.Warn("could not load share counts", "error", err)
+	}
 	writeJSON(w, http.StatusOK, list)
+}
+
+// workoutDetailResponse wraps a workout with whether the caller owns it, so the
+// client knows to offer edit controls. It is a response concern, not a domain
+// one, which is why it does not live on workout.Workout.
+type workoutDetailResponse struct {
+	*workout.Workout
+	IsOwner bool `json:"isOwner"`
 }
 
 func (s *Server) handleGetWorkout(w http.ResponseWriter, r *http.Request) {
 	user := httpmw.UserFrom(r)
-	wk, err := s.workout.Get(r.Context(), user.ID, r.PathValue("id"))
+	wk, isOwner, err := s.workout.GetViewable(r.Context(), user.ID, r.PathValue("id"))
 	if err != nil {
 		s.writeWorkoutError(w, err)
 		return
 	}
-	s.attachEquipment(r, user.ID, wk)
-	writeJSON(w, http.StatusOK, wk)
+	if isOwner {
+		s.attachEquipment(r, user.ID, wk)
+	} else if owner, derr := s.ownerRef(r, wk.UserID); derr == nil {
+		// Equipment is deliberately left off: it is the owner's private gear
+		// inventory, not part of the workout being shared.
+		wk.Owner = owner
+	}
+	writeJSON(w, http.StatusOK, workoutDetailResponse{Workout: wk, IsOwner: isOwner})
 }
 
 // createWorkoutRequest is the manual-entry payload from the import modal.
@@ -134,6 +159,11 @@ func (s *Server) handlePatchWorkout(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.attachEquipment(r, user.ID, wk)
+	// The client splices this response back into its cached list, so the share
+	// count has to come along or an unrelated edit would blank the row's badge.
+	if ids, err := s.workout.ShareRecipients(r.Context(), user.ID, wk.ID); err == nil {
+		wk.SharedWithCount = len(ids)
+	}
 	slog.Info("workout updated", "workout_id", wk.ID, "user_id", user.ID)
 	writeJSON(w, http.StatusOK, wk)
 }
