@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import { api, ApiError, type ApiUser, type AuthFeatures } from '../lib/api'
 import { clearApiCache } from '../lib/swCache'
+import { isGatewayError } from '../lib/network'
 
 interface AuthState {
   user: ApiUser | null
@@ -56,11 +57,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUserState(user)
       writeCachedUser(user)
     } catch (err) {
-      // Only the server gets to say you are signed out. An ApiError means it
-      // answered; anything else is a transport failure, where falling back to
-      // the login screen would be wrong — the session is very likely still
-      // valid and simply cannot be checked right now.
-      if (err instanceof ApiError) {
+      // Only the app itself gets to say you are signed out. A 401 is that
+      // verdict; a gateway error is a proxy reporting it could not reach the
+      // app at all, which is an outage and must be handled like a dropped
+      // connection — otherwise being offline logs you out.
+      if (err instanceof ApiError && !isGatewayError(err.status)) {
         if (err.status === 401) {
           setUserState(null)
           writeCachedUser(null)

@@ -13,6 +13,35 @@ import { FROM_CACHE_HEADER } from './swCache'
 // Re-exported so callers have one obvious import for network concerns.
 export { FROM_CACHE_HEADER }
 
+/**
+ * Statuses that mean an intermediary answered *on the backend's behalf* because
+ * it could not reach it. Behind a reverse proxy this is what "the server is
+ * down" actually looks like: the proxy is alive and replies 502, so the request
+ * neither throws nor comes from cache — it just never reached the app.
+ *
+ * Treating these as successful responses is what made the offline banner miss
+ * an outage entirely once the app moved behind Caddy. 521-524 are Cloudflare's
+ * equivalents, included so this keeps working behind one.
+ */
+const GATEWAY_ERROR_STATUSES = new Set([502, 503, 504, 521, 522, 523, 524])
+
+/** Whether a status means an intermediary could not reach the backend. */
+export function isGatewayError(status: number): boolean {
+  return GATEWAY_ERROR_STATUSES.has(status)
+}
+
+/**
+ * Whether a response is evidence that the backend itself is reachable.
+ *
+ * It is not enough for the fetch to resolve: the service worker answers from
+ * its cache when the network is down (marked with FROM_CACHE_HEADER), and a
+ * proxy answers with a gateway error when the origin is down. Only a response
+ * that came off the network *from the app* counts.
+ */
+export function respondedFromBackend(res: Response): boolean {
+  return res.headers.get(FROM_CACHE_HEADER) !== '1' && !isGatewayError(res.status)
+}
+
 type Listener = (reachable: boolean) => void
 
 const listeners = new Set<Listener>()
@@ -78,7 +107,7 @@ export async function probeReachability(): Promise<boolean> {
       cache: 'no-store',
       signal: controller.signal,
     })
-    const live = res.headers.get(FROM_CACHE_HEADER) !== '1'
+    const live = respondedFromBackend(res)
     reportReachability(live)
     return live
   } catch {

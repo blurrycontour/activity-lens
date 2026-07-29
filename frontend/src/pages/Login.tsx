@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { LogIn, UserPlus } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { ApiError } from '../lib/api'
-import { useOnlineStatus } from '../lib/network'
+import { isGatewayError, useOnlineStatus } from '../lib/network'
 import Logo from '../components/Logo'
 
 export default function Login() {
@@ -30,8 +30,9 @@ export default function Login() {
       // An ApiError means the server answered and rejected this; anything else
       // never reached it, and "Something went wrong" would send the user
       // looking for a typo in a password that was never checked.
-      setError(err instanceof ApiError
-        ? err.message
+      const reachedServer = err instanceof ApiError && !isGatewayError(err.status)
+      setError(reachedServer
+        ? (err as ApiError).message
         : "Can't reach the server. Check your connection and try again.")
     } finally {
       setBusy(false)

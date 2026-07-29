@@ -73,6 +73,11 @@ async function handleShare({ request }: { request: Request }): Promise<Response>
 // --- Runtime caching --------------------------------------------------------
 
 // API reads: always prefer the network so the user sees live data, but fall
+// Statuses an intermediary returns when it cannot reach the origin. Kept in
+// step with isGatewayError() in lib/network.ts — the worker cannot import from
+// the app bundle, so this is duplicated deliberately.
+const GATEWAY_ERROR_STATUSES = new Set([502, 503, 504, 521, 522, 523, 524])
+
 // back to the last successful response when offline. The short timeout keeps a
 // flaky mobile connection from hanging the UI. Writes are never cached.
 registerRoute(
@@ -83,6 +88,20 @@ registerRoute(
     plugins: [
       new CacheableResponsePlugin({ statuses: [200] }),
       new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 7 }),
+      {
+        // Behind a reverse proxy, "the backend is down" is not a failed fetch —
+        // the proxy is up and answers 502. Without this, NetworkFirst treats
+        // that as a successful response, returns it, and never falls back to
+        // the cache, so the app shows errors instead of saved data and cannot
+        // tell it is offline. Throwing turns it back into a network failure,
+        // which is what it actually is.
+        fetchDidSucceed: async ({ response }) => {
+          if (GATEWAY_ERROR_STATUSES.has(response.status)) {
+            throw new Error(`gateway error ${response.status}`)
+          }
+          return response
+        },
+      },
       {
         // Falling back to the cache means the network did not answer. Mark
         // those responses so the app can tell "loaded" from "actually online"

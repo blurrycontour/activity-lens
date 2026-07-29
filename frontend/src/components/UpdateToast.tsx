@@ -30,7 +30,7 @@ export default function UpdateToast() {
       </span>
       <button
         className="btn btn-primary"
-        style={{ fontSize: 12, padding: '7px 15px', flexShrink: 0 }}
+        style={{ fontSize: 13, padding: '7px 15px', flexShrink: 0 }}
         disabled={busy}
         onClick={() => { setBusy(true); void applyPendingUpdate() }}
       >

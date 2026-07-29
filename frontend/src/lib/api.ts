@@ -1,7 +1,7 @@
 // Typed client for the Activity Lens backend API. Handles JSON, CSRF tokens
 // (double-submit cookie echoed in a header), and error normalization.
 
-import { FROM_CACHE_HEADER, reportReachability } from './network'
+import { reportReachability, respondedFromBackend } from './network'
 
 export interface ApiUser {
   id: number
@@ -226,10 +226,11 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
     reportReachability(false)
     throw err
   }
-  // The service worker falls back to its cache when the network is down and
-  // stamps those responses, so a resolved fetch is not by itself proof of
-  // connectivity.
-  reportReachability(res.headers.get(FROM_CACHE_HEADER) !== '1')
+  // A resolved fetch is not by itself proof of connectivity: the service worker
+  // answers from cache when the network is down, and a reverse proxy answers
+  // with a gateway error when the backend is down. Only a response that came
+  // from the app itself counts.
+  reportReachability(respondedFromBackend(res))
 
   if (res.status === 204) return undefined as T
 
