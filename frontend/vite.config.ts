@@ -66,9 +66,14 @@ export default defineConfig(({ mode }) => {
           theme_color: '#0a0b0e',
           orientation: 'portrait',
           categories: ['fitness', 'health', 'sports'],
+          // Split by purpose rather than reusing one file for both. The mark is
+          // transparent so it sits on whatever surface the launcher gives it;
+          // only the maskable variant carries a tile, because Android crops it
+          // to its own shape and composites transparency to black.
           icons: [
-            { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
-            { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+            { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+            { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+            { src: '/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
           ],
           // Lets the installed app appear in the Android share sheet when a
           // tracker app shares a workout file. The POST is intercepted by the

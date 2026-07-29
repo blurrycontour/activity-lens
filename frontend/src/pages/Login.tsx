@@ -1,9 +1,10 @@
 import { useState, type FormEvent } from 'react'
-import { LogIn, UserPlus } from 'lucide-react'
+import { AlertCircle, Loader2, LogIn, UserPlus, WifiOff } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { ApiError } from '../lib/api'
 import { isGatewayError, useOnlineStatus } from '../lib/network'
 import Logo from '../components/Logo'
+import PasswordInput from '../components/PasswordInput'
 
 export default function Login() {
   const { login, register, features } = useAuth()
@@ -42,78 +43,158 @@ export default function Login() {
   const online = useOnlineStatus()
   const canRegister = features?.allowRegistration
   const oidc = features?.oidcEnabled
+  const registering = mode === 'register'
+
+  function switchMode(next: 'login' | 'register') {
+    setMode(next)
+    setError(null)
+  }
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, background: 'var(--bg)' }}>
-      <div style={{ width: '100%', maxWidth: 380 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center', marginBottom: 8 }}>
-          <Logo size={40} radius={12} />
-          <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>Activity Lens</span>
-        </div>
-        <p style={{ textAlign: 'center', color: 'var(--text-3)', fontSize: 13, marginBottom: 24 }}>
-          {mode === 'login' ? 'Sign in to your training log' : 'Create your account'}
-        </p>
+    <div className="auth-shell">
+      <div className="auth-ambient" aria-hidden="true">
+        <div className="auth-blob auth-blob-1" />
+        <div className="auth-blob auth-blob-2" />
+        {/* Each line ends with a straight run off the right edge. For that join
+            to read as smooth, the preceding curve has to *exit* along the same
+            direction — so every S command's second control point is placed on
+            the line between its endpoint and the final point. Move an endpoint
+            and you have to move its control point to match, or the curve kinks
+            where it meets the straight. */}
+        <svg className="auth-trace" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid slice" fill="none">
+          <g stroke="var(--primary)" strokeWidth="2" strokeLinecap="round">
+            <path d="M-40 430 C 120 400 180 250 320 280 S 520 342 660 300 L 860 240" />
+            <path d="M-40 520 C 140 500 220 380 360 400 S 572 450 700 410 L 860 360" opacity="0.6" />
+            <path d="M-40 330 C 100 300 200 180 300 200 S 508 220 640 190 L 860 140" opacity="0.4" />
+          </g>
+        </svg>
+      </div>
 
-        <form onSubmit={submit} className="card" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {mode === 'login' ? (
-            <Field label="Username or email">
-              <input className="input" value={identifier} onChange={e => setIdentifier(e.target.value)} autoFocus autoComplete="username" style={{ width: '100%' }} />
-            </Field>
-          ) : (
+      <div className="auth-card">
+        <div className="auth-head">
+          <div className="auth-brand">
+            <Logo size={40} />
+            <span className="auth-brand-name">Activity Lens</span>
+          </div>
+          <span className="auth-sub">
+            {registering ? 'Start logging your training in a minute.' : 'Sign in to your training log.'}
+          </span>
+        </div>
+
+        {/* Plain buttons with aria-pressed rather than role="tab": these swap
+            fields within one form, they don't switch between tabpanels. */}
+        {canRegister && (
+          <div className="auth-tabs">
+            <button type="button" aria-pressed={!registering} onClick={() => switchMode('login')}>
+              Sign in
+            </button>
+            <button type="button" aria-pressed={registering} onClick={() => switchMode('register')}>
+              Sign up
+            </button>
+          </div>
+        )}
+
+        <form onSubmit={submit} className="auth-form">
+          {registering ? (
             <>
               <Field label="Username">
-                <input className="input" value={username} onChange={e => setUsername(e.target.value)} autoFocus autoComplete="username" style={{ width: '100%' }} />
+                <input
+                  className="input"
+                  name="username"
+                  value={username}
+                  onChange={e => setUsername(e.target.value)}
+                  autoFocus
+                  autoComplete="username"
+                  style={{ width: '100%' }}
+                />
               </Field>
               <Field label="Email">
-                <input className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="email" style={{ width: '100%' }} />
+                <input
+                  className="input"
+                  type="email"
+                  name="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  autoComplete="email"
+                  style={{ width: '100%' }}
+                />
               </Field>
-              <Field label="Display name (optional)">
-                <input className="input" value={displayName} onChange={e => setDisplayName(e.target.value)} style={{ width: '100%' }} />
+              <Field label="Display name — optional">
+                <input
+                  className="input"
+                  name="displayName"
+                  value={displayName}
+                  onChange={e => setDisplayName(e.target.value)}
+                  autoComplete="name"
+                  style={{ width: '100%' }}
+                />
               </Field>
             </>
+          ) : (
+            <Field label="Username or email">
+              <input
+                className="input"
+                name="identifier"
+                value={identifier}
+                onChange={e => setIdentifier(e.target.value)}
+                autoFocus
+                autoComplete="username"
+                style={{ width: '100%' }}
+              />
+            </Field>
           )}
-          <Field label="Password">
-            <input className="input" type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} style={{ width: '100%' }} />
-          </Field>
+
+          {/* Not <Field>: that wraps its children in a <label>, and PasswordInput
+              contains a button, which must not be nested inside one. */}
+          <div className="auth-field">
+            <label className="auth-label" htmlFor="auth-password">Password</label>
+            <PasswordInput
+              id="auth-password"
+              name="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              autoComplete={registering ? 'new-password' : 'current-password'}
+              capsLockWarning
+            />
+          </div>
 
           {error && (
-            <div style={{ fontSize: 12, color: '#ef4444', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 8, padding: '8px 10px' }}>
-              {error}
+            <div className="auth-error" role="alert" aria-live="polite">
+              <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+              <span>{error}</span>
             </div>
           )}
 
-          <button className="btn btn-primary" type="submit" disabled={busy || !online} style={{ justifyContent: 'center', marginTop: 4, opacity: busy || !online ? 0.6 : 1 }}>
-            {mode === 'login' ? <LogIn size={15} /> : <UserPlus size={15} />}
-            {mode === 'login' ? 'Sign In' : 'Create Account'}
+          <button className="btn btn-primary auth-submit" type="submit" disabled={busy || !online}>
+            {busy
+              ? <Loader2 size={15} className="spin" />
+              : registering ? <UserPlus size={15} /> : <LogIn size={15} />}
+            {registering ? 'Create account' : 'Sign in'}
           </button>
 
-          {oidc && (
-            <>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '2px 0' }}>
-                <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-                <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>Or continue with</span>
-                <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-              </div>
-              <a className="btn btn-ghost" href="/api/auth/oidc/login" style={{ justifyContent: 'center', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 8 }}>
-                {features?.oidcLogoUrl && (
-                  <img src={features.oidcLogoUrl} alt="" width={18} height={18} style={{ borderRadius: 4, display: 'block' }} />
-                )}
-                Continue with {features?.oidcProviderName || 'SSO'}
-              </a>
-            </>
+          {!online && (
+            <span className="auth-note">
+              <WifiOff size={13} /> You're offline — reconnect to sign in.
+            </span>
           )}
         </form>
 
-        {canRegister && (
-          <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--text-3)', marginTop: 16 }}>
-            {mode === 'login' ? "Don't have an account? " : 'Already have an account? '}
-            <button
-              onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(null) }}
-              style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', fontSize: 12, fontWeight: 600, padding: 0 }}
-            >
-              {mode === 'login' ? 'Sign up' : 'Sign in'}
-            </button>
-          </p>
+        {oidc && (
+          <>
+            <div className="auth-divider"><span>or continue with</span></div>
+            <a className="auth-sso" href="/api/auth/oidc/login">
+              {features?.oidcLogoUrl && (
+                <img
+                  src={features.oidcLogoUrl}
+                  alt=""
+                  width={20}
+                  height={20}
+                  style={{ borderRadius: 4, display: 'block' }}
+                />
+              )}
+              {features?.oidcProviderName || 'SSO'}
+            </a>
+          </>
         )}
       </div>
     </div>
@@ -122,9 +203,9 @@ export default function Login() {
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div>
-      <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>{label}</label>
+    <label className="auth-field">
+      <span className="auth-label">{label}</span>
       {children}
-    </div>
+    </label>
   )
 }

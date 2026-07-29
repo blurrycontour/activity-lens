@@ -52,7 +52,7 @@ export default function TopBar({ onToggleSidebar, themeMode, onCycleTheme, onUse
           background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
         }}
       >
-        <Logo size={28} radius={8} />
+        <Logo size={28} />
         <span style={{ fontWeight: 700, fontSize: 15, letterSpacing: '-0.02em', color: 'var(--text)' }}>
           Activity Lens
         </span>

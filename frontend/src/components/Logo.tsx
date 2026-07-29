@@ -1,32 +1,50 @@
-// App logo rendered inline so its background tile follows the active accent
-// color (var(--primary)) instead of being baked into a static image.
+// App logo, drawn inline so it follows the active accent (var(--primary))
+// rather than baking a colour into a static image.
+//
+// The mark sits on a transparent ground so it works directly on whatever
+// surface hosts it — top bar, login card, browser tab. The only places that
+// bake in a dark tile are the maskable PWA icons and the Apple touch icon,
+// because those formats composite transparency to black. Those live in
+// public/ and are generated from the same geometry; see public/logo.svg.
+
+// Geometry is hand-tuned and must stay identical to public/logo.svg, which the
+// icon generator rasterises the PNGs from. Change one, change the other.
+const PULSE_PATH = 'M 380 256 H 319 L 287 360 L 224 151 L 193 256 H 130'
+
 interface LogoProps {
   size?: number
-  radius?: number
 }
 
-export default function Logo({ size = 28, radius = 8 }: LogoProps) {
+export default function Logo({ size = 28 }: LogoProps) {
   return (
     <svg
       width={size}
       height={size}
       viewBox="0 0 512 512"
       xmlns="http://www.w3.org/2000/svg"
-      style={{ display: 'block', borderRadius: radius }}
+      style={{ display: 'block' }}
       role="img"
       aria-label="Activity Lens"
     >
-      <rect width="512" height="512" rx="120" ry="120" fill="var(--primary)" />
-      <g
-        transform="translate(128,128) scale(10.6667)"
+      <circle
+        cx="256"
+        cy="256"
+        r="190"
         fill="none"
-        stroke="#0a0b0e"
-        strokeWidth="2.4"
+        stroke="var(--primary)"
+        strokeWidth="40"
+        strokeLinecap="round"
+        strokeDasharray="895 300"
+        transform="rotate(135 256 256)"
+      />
+      <path
+        d={PULSE_PATH}
+        fill="none"
+        stroke="var(--primary)"
+        strokeWidth="32"
         strokeLinecap="round"
         strokeLinejoin="round"
-      >
-        <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-      </g>
+      />
     </svg>
   )
 }

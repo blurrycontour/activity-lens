@@ -9,8 +9,9 @@ import {
   type OidcInput,
 } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
+import PasswordInput from '../components/PasswordInput'
 
-const ROLES = ['administrator', 'editor', 'reader']
+const ROLES =['administrator', 'editor', 'reader']
 const ENCRYPTIONS = ['starttls', 'tls', 'none']
 
 type Msg = { ok: boolean; text: string } | null
@@ -141,7 +142,7 @@ function SmtpSection({ settings, onSaved }: { settings: AdminSettings; onSaved: 
           <input className="input" style={{ width: '100%' }} value={username} disabled={ov.username} onChange={e => setUsername(e.target.value)} />
         </Field>
         <Field label="Password" over={ov.password}>
-          <input className="input" type="password" style={{ width: '100%' }}
+          <PasswordInput
             placeholder={s.passwordSet ? '•••••••• (unchanged)' : ''}
             value={password} disabled={ov.password} onChange={e => setPassword(e.target.value)} />
         </Field>
@@ -237,7 +238,7 @@ function OidcSection({ settings, onSaved }: { settings: AdminSettings; onSaved: 
           <input className="input" style={{ width: '100%' }} value={clientId} disabled={ov.clientId} onChange={e => setClientId(e.target.value)} />
         </Field>
         <Field label="Client Secret" over={ov.clientSecret}>
-          <input className="input" type="password" style={{ width: '100%' }}
+          <PasswordInput
             placeholder={s.clientSecretSet ? '•••••••• (unchanged)' : ''}
             value={clientSecret} disabled={ov.clientSecret} onChange={e => setClientSecret(e.target.value)} />
         </Field>
@@ -499,7 +500,7 @@ function CreateUser({ onDone, onCancel }: { onDone: () => void; onCancel: () => 
           <input className="input" style={{ width: '100%' }} value={displayName} onChange={e => setDisplayName(e.target.value)} />
         </Field>
         <Field label="Password">
-          <input className="input" type="password" style={{ width: '100%' }} value={password} onChange={e => setPassword(e.target.value)} />
+          <PasswordInput autoComplete="new-password" value={password} onChange={e => setPassword(e.target.value)} />
         </Field>
         <Field label="Role">
           <select className="input" style={{ width: '100%' }} value={role} onChange={e => setRole(e.target.value)}>

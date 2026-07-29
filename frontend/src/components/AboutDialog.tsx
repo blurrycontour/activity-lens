@@ -62,10 +62,10 @@ export default function AboutDialog({ onClose }: { onClose: () => void }) {
           </button>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
-            {/* The real logo, not a lucide stand-in: it is an inline SVG whose
-                tile is painted with var(--primary), so it follows the accent
-                the way the sidebar and login marks do. */}
-            <Logo size={48} radius={14} />
+            {/* The real logo, not a lucide stand-in: it is an inline SVG
+                stroked with var(--primary), so it follows the accent the way
+                the top bar and login marks do. */}
+            <Logo size={48} />
             <div style={{ minWidth: 0 }}>
               <h3 style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em' }}>Activity Lens</h3>
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)' }}>

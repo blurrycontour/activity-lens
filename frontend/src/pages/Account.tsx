@@ -3,6 +3,7 @@ import { Lock, ShieldCheck, User as UserIcon, Upload, Monitor, LogOut, Trash2, A
 import { useAuth } from '../context/AuthContext'
 import { api, ApiError, type SessionInfo } from '../lib/api'
 import { avatarUrl } from '../components/UserAvatar'
+import PasswordInput from '../components/PasswordInput'
 
 function formatDate(iso: string) {
   const d = new Date(iso)
@@ -251,11 +252,11 @@ export default function Account() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
                 <div>
                   <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Current Password</label>
-                  <input className="input" type="password" autoComplete="current-password" style={{ width: '100%' }} value={currentPw} onChange={e => setCurrentPw(e.target.value)} />
+                  <PasswordInput autoComplete="current-password" capsLockWarning value={currentPw} onChange={e => setCurrentPw(e.target.value)} />
                 </div>
                 <div>
                   <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>New Password</label>
-                  <input className="input" type="password" autoComplete="new-password" style={{ width: '100%' }} value={newPw} onChange={e => setNewPw(e.target.value)} />
+                  <PasswordInput autoComplete="new-password" capsLockWarning value={newPw} onChange={e => setNewPw(e.target.value)} />
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14 }}>

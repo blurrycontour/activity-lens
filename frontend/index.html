@@ -10,7 +10,9 @@
          manifest contents (see the VitePWA block in vite.config.ts). -->
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
-    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <!-- iOS composites a transparent touch icon onto black, so this one — and
+         only this one — carries the dark tile baked in. -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <!-- Matches the app's dark background so the phone status bar blends in
          rather than showing the accent colour. -->
     <meta name="theme-color" content="#0a0b0e" />
