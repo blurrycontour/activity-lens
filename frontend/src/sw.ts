@@ -126,10 +126,20 @@ registerRoute(
 )
 
 // --- Lifecycle --------------------------------------------------------------
-
-// registerType is 'autoUpdate', so take over as soon as a new worker is ready
-// rather than waiting for every tab to close.
-self.addEventListener('message', event => {
-  if (event.data?.type === 'SKIP_WAITING') void self.skipWaiting()
+//
+// registerType is 'autoUpdate' (see registerSW() in main.tsx), which the
+// vite-plugin-pwa client-side helper implements by reloading the page once a
+// new worker reports itself *activated* — see node_modules' build/register.js:
+// with autoUpdate it never sends a skip-waiting message, it only listens for
+// the 'activated' event. For the generateSW strategy the plugin injects
+// self.skipWaiting() into the worker it writes; injectManifest hands us a
+// worker we authored ourselves, so without this call a new build sits in
+// 'waiting' forever (every open tab pins the old worker as controller) and
+// the app keeps serving whatever was precached at last activation — the
+// "have to clear site data to see a new deploy" symptom.
+self.addEventListener('install', event => {
+  event.waitUntil(self.skipWaiting())
 })
-self.addEventListener('activate', () => self.clients.claim())
+self.addEventListener('activate', event => {
+  event.waitUntil(self.clients.claim())
+})
