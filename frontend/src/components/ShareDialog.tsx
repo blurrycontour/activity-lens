@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Globe, Lock, Search, X, Loader2 } from 'lucide-react'
 import { api, ApiError, type UserRef, type WorkoutShares } from '../lib/api'
+import { fmtDist, fmtDuration, TYPE_COLOR, TYPE_ICON, type Workout } from '../data/workouts'
 import UserAvatar, { userLabel } from './UserAvatar'
 
 interface ShareDialogProps {
-  workoutId: string
-  workoutName: string
+  /** The workout being shared. Identified prominently so there is no doubt
+   *  which one is about to become visible to other people. */
+  workout: Workout
   onClose: () => void
   /** Called with the new state after every change, so lists can re-badge. */
   onChange?: (state: WorkoutShares) => void
@@ -16,7 +18,8 @@ interface ShareDialogProps {
  * shared with directly. The two are deliberately independent — see the copy
  * under the toggle.
  */
-export default function ShareDialog({ workoutId, workoutName, onClose, onChange }: ShareDialogProps) {
+export default function ShareDialog({ workout, onClose, onChange }: ShareDialogProps) {
+  const workoutId = workout.id
   const [state, setState] = useState<WorkoutShares | null>(null)
   const [directory, setDirectory] = useState<UserRef[]>([])
   const [search, setSearch] = useState('')
@@ -69,13 +72,25 @@ export default function ShareDialog({ workoutId, workoutName, onClose, onChange 
       <div className="overlay" onClick={onClose} />
       <div className="modal">
         <div className="modal-box" style={{ maxWidth: 480 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
             <h3 style={{ fontSize: 16, fontWeight: 700, flex: 1 }}>Share workout</h3>
             <button className="btn-icon" onClick={onClose} aria-label="Close"><X size={16} /></button>
           </div>
-          <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 18, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {workoutName}
-          </p>
+
+          {/* Naming the workout plainly matters here: this dialog is the one
+              place where getting the wrong one wrong exposes it to other
+              people. */}
+          <div className="share-subject" style={{ '--row-accent': TYPE_COLOR[workout.type] } as React.CSSProperties}>
+            <span className="share-subject-icon">{TYPE_ICON[workout.type]}</span>
+            <span style={{ minWidth: 0, flex: 1 }}>
+              <span className="share-subject-name">{workout.name}</span>
+              <span className="share-subject-meta">
+                {new Date(workout.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                {workout.distance > 0 && <> · {fmtDist(workout.distance)}</>}
+                {workout.duration > 0 && <> · {fmtDuration(workout.duration)}</>}
+              </span>
+            </span>
+          </div>
 
           {error && (
             <p style={{ fontSize: 12, color: '#ef4444', marginBottom: 12 }}>{error}</p>

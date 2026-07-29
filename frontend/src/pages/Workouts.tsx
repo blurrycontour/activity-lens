@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react'
 import { fmtDuration, fmtDist, fmtPace, TYPE_COLOR, TYPE_ICON, WORKOUT_TYPES, type WorkoutType, type Workout } from '../data/workouts'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useRefreshHandler } from '../context/RefreshContext'
-import { Search, ChevronRight, Clock, Mountain, Flame, Download, Plus, Grid2X2, List, Navigation, Library, Inbox, Globe, Users, Share2, SlidersHorizontal, X } from 'lucide-react'
+import { Search, Clock, Mountain, Flame, Download, Plus, Grid2X2, List, Navigation, Library, Inbox, Globe, Users, Share2, SlidersHorizontal, X } from 'lucide-react'
 import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
 import SortDropdown, { compareBySort, SORT_OPTIONS, type SortKey } from '../components/SortDropdown'
@@ -275,12 +275,17 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
                       </button>
                     </>
                   )
-                  : w.owner && (
+                  : undefined}
+                // Owner names can be long, so they get their own row rather
+                // than competing with the pace figure for the trailing cluster.
+                footer={scope !== 'mine' && w.owner
+                  ? (
                     <span className="owner-byline">
-                      <UserAvatar user={w.owner} size={22} />
+                      <UserAvatar user={w.owner} size={18} />
                       <span>{userLabel(w.owner)}</span>
                     </span>
-                  )}
+                  )
+                  : undefined}
               />
             ))}
           </div>
@@ -305,8 +310,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
 
       {sharing && (
         <ShareDialog
-          workoutId={sharing.id}
-          workoutName={sharing.name}
+          workout={sharing}
           onClose={() => setSharing(null)}
           // The badges are driven by the library array, which WorkoutsContext
           // owns and the dashboard also reads — so re-fetch rather than patch
@@ -362,11 +366,13 @@ interface WorkoutCardProps {
   onClick: () => void
   /** Sharing indicator shown beside the type tag on your own workouts. */
   badge?: React.ReactNode
-  /** Trailing control — the export button when you own it, the owner otherwise. */
+  /** Trailing controls, shown beside the pace figure. */
   aside?: React.ReactNode
+  /** Full-width row at the bottom of the card, used for the author byline. */
+  footer?: React.ReactNode
 }
 
-function WorkoutCard({ workout: w, variant, onClick, badge, aside }: WorkoutCardProps) {
+function WorkoutCard({ workout: w, variant, onClick, badge, aside, footer }: WorkoutCardProps) {
   const color = TYPE_COLOR[w.type]
   const dateLabel = new Date(w.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 
@@ -439,6 +445,7 @@ function WorkoutCard({ workout: w, variant, onClick, badge, aside }: WorkoutCard
           </div>
           <div style={{ marginLeft: 'auto' }}>{aside}</div>
         </div>
+        {footer && <div className="workout-card-footer">{footer}</div>}
       </div>
     )
   }
@@ -478,6 +485,7 @@ function WorkoutCard({ workout: w, variant, onClick, badge, aside }: WorkoutCard
             </div>
           </div>
         </div>
+        {footer && <div className="workout-row-footer">{footer}</div>}
       </div>
 
       <div className="workout-row-aside">
@@ -486,7 +494,6 @@ function WorkoutCard({ workout: w, variant, onClick, badge, aside }: WorkoutCard
           <small>{w.avgPace ? '/km' : 'km/h'}</small>
         </div>
         {aside}
-        <ChevronRight size={16} color="var(--text-3)" />
       </div>
     </div>
   )

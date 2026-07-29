@@ -789,6 +789,44 @@ body {
 .share-person:hover:not(:disabled) { background: var(--bg-3); }
 .share-person:disabled { opacity: 0.6; cursor: default; }
 
+/* Which workout the share dialog is about. */
+.share-subject {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 12px;
+  border-radius: calc(var(--radius) * 1.5);
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--row-accent);
+}
+.share-subject-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  background: color-mix(in srgb, var(--row-accent) 14%, transparent);
+}
+.share-subject-name {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.share-subject-meta {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+}
+
 /* Sharing indicator on your own workout rows and cards. */
 .share-badge {
   display: inline-flex;
@@ -943,7 +981,20 @@ body {
 .about-sha { font-family: var(--font-mono); overflow-x: auto; white-space: nowrap; }
 .about-box { max-width: 440px; }
 
-/* Author byline on someone else's workout. */
+/* Author byline gets its own row: display names can be long, and squeezing one
+   into the trailing cluster would crowd the pace figure on a phone. */
+.workout-row-footer {
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px solid var(--border);
+}
+.workout-card-footer {
+  margin-top: 2px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+/* Author byline on someone else\'s workout. */
 .owner-byline {
   display: inline-flex;
   align-items: center;

@@ -1317,11 +1317,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
       </div>
 
       {sharing && (
-        <ShareDialog
-          workoutId={w.id}
-          workoutName={w.name}
-          onClose={() => setSharing(false)}
-        />
+        <ShareDialog workout={w} onClose={() => setSharing(false)} />
       )}
 
       {expanded === 'map' && (
