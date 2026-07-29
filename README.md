@@ -10,6 +10,7 @@ bests. Your data stays on your own server.
 
 [![CI](https://github.com/blurrycontour/activity-lens/actions/workflows/ci.yml/badge.svg)](https://github.com/blurrycontour/activity-lens/actions/workflows/ci.yml)
 [![Docker](https://github.com/blurrycontour/activity-lens/actions/workflows/docker.yml/badge.svg)](https://github.com/blurrycontour/activity-lens/actions/workflows/docker.yml)
+[![CodeQL](https://github.com/blurrycontour/activity-lens/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/blurrycontour/activity-lens/actions/workflows/github-code-scanning/codeql)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 </div>
