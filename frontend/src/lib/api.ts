@@ -66,6 +66,8 @@ export interface AuthFeatures {
   oidcEnabled: boolean
   oidcProviderName: string
   oidcLogoUrl: string
+  /** Optional dark-theme replacement for oidcLogoUrl; empty means use it in both. */
+  oidcLogoUrlDark: string
 }
 
 export interface SessionInfo {
@@ -97,6 +99,7 @@ export interface OidcSettings {
   adminGroup: string
   providerName: string
   logoUrl: string
+  logoUrlDark: string
   allowRegistration: boolean
   scopes: string[]
   overridden: Record<string, boolean>
@@ -159,6 +162,7 @@ export interface OidcInput {
   adminGroup: string
   providerName: string
   logoUrl: string
+  logoUrlDark: string
   allowRegistration: boolean
   scopes: string[]
 }

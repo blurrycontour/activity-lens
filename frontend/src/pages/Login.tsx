@@ -183,16 +183,8 @@ export default function Login() {
           <>
             <div className="auth-divider"><span>or continue with</span></div>
             <a className="auth-sso" href="/api/auth/oidc/login">
-              {features?.oidcLogoUrl && (
-                <img
-                  src={features.oidcLogoUrl}
-                  alt=""
-                  width={20}
-                  height={20}
-                  style={{ borderRadius: 4, display: 'block' }}
-                />
-              )}
-              {features?.oidcProviderName || 'SSO'}
+              <SsoLogo light={features?.oidcLogoUrl} dark={features?.oidcLogoUrlDark} />
+              Continue with {features?.oidcProviderName || 'SSO'}
             </a>
           </>
         )}
@@ -207,5 +199,29 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="auth-label">{label}</span>
       {children}
     </label>
+  )
+}
+
+/**
+ * The provider's logo on the SSO button.
+ *
+ * A provider logo is often dark ink that vanishes against the dark login card,
+ * so admins can supply a separate dark-theme version. When they have, both
+ * images are rendered and CSS picks one off the `.light` class that App.tsx
+ * puts on `:root` — that keeps this component ignorant of the theme, and means
+ * "system" mode follows the OS without a re-render.
+ */
+function SsoLogo({ light, dark }: { light?: string; dark?: string }) {
+  if (!light && !dark) return null
+
+  const size = { width: 20, height: 20, borderRadius: 4 }
+  if (!light || !dark) {
+    return <img src={(light || dark) as string} alt="" style={{ ...size, display: 'block' }} />
+  }
+  return (
+    <>
+      <img className="auth-sso-logo-light" src={light} alt="" style={size} />
+      <img className="auth-sso-logo-dark" src={dark} alt="" style={size} />
+    </>
   )
 }

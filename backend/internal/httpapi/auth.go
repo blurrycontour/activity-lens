@@ -32,6 +32,7 @@ func (s *Server) handleAuthConfig(w http.ResponseWriter, r *http.Request) {
 		"oidcEnabled":       oidcCfg.Enabled,
 		"oidcProviderName":  oidcCfg.ProviderName,
 		"oidcLogoUrl":       oidcCfg.LogoURL,
+		"oidcLogoUrlDark":   oidcCfg.LogoURLDark,
 	})
 }
 

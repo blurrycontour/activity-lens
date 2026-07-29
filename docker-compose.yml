@@ -30,6 +30,8 @@ services:
       AL_OIDC_REDIRECT_URL: "${AL_OIDC_REDIRECT_URL:-}"
       AL_OIDC_ADMIN_GROUP: "${AL_OIDC_ADMIN_GROUP:-}"
       AL_OIDC_PROVIDER_NAME: "${AL_OIDC_PROVIDER_NAME:-}"
+      AL_OIDC_LOGO_URL: "${AL_OIDC_LOGO_URL:-}"
+      AL_OIDC_LOGO_URL_DARK: "${AL_OIDC_LOGO_URL_DARK:-}"
       AL_OIDC_ALLOW_REGISTRATION: "${AL_OIDC_ALLOW_REGISTRATION:-}"
       AL_OIDC_SCOPES: "${AL_OIDC_SCOPES:-}"
       # SMTP (transactional email). Any value set here overrides the same

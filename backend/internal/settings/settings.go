@@ -36,14 +36,18 @@ type SMTP struct {
 
 // OIDC holds single sign-on settings.
 type OIDC struct {
-	Enabled           bool     `json:"enabled"`
-	IssuerURL         string   `json:"issuerUrl"`
-	ClientID          string   `json:"clientId"`
-	ClientSecret      string   `json:"clientSecret"`
-	RedirectURL       string   `json:"redirectUrl"`
-	AdminGroup        string   `json:"adminGroup"`
-	ProviderName      string   `json:"providerName"`
+	Enabled      bool   `json:"enabled"`
+	IssuerURL    string `json:"issuerUrl"`
+	ClientID     string `json:"clientId"`
+	ClientSecret string `json:"clientSecret"`
+	RedirectURL  string `json:"redirectUrl"`
+	AdminGroup   string `json:"adminGroup"`
+	ProviderName string `json:"providerName"`
+	// LogoURL is used in both themes. LogoURLDark, when set, replaces it while
+	// the dark theme is active — providers commonly ship a dark-ink logo that
+	// disappears against a dark background, and vice versa.
 	LogoURL           string   `json:"logoUrl"`
+	LogoURLDark       string   `json:"logoUrlDark"`
 	AllowRegistration bool     `json:"allowRegistration"`
 	Scopes            []string `json:"scopes"`
 }
@@ -400,6 +404,10 @@ func (s *Store) EffectiveOIDC(ctx context.Context) (OIDC, OIDCFields, error) {
 	if s, ok := lookup("AL_OIDC_LOGO_URL"); ok {
 		v.LogoURL = s
 		ov["logoUrl"] = true
+	}
+	if s, ok := lookup("AL_OIDC_LOGO_URL_DARK"); ok {
+		v.LogoURLDark = s
+		ov["logoUrlDark"] = true
 	}
 	if s, ok := lookup("AL_OIDC_ALLOW_REGISTRATION"); ok {
 		v.AllowRegistration, _ = strconv.ParseBool(s)

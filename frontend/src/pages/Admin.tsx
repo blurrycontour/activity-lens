@@ -193,6 +193,7 @@ function OidcSection({ settings, onSaved }: { settings: AdminSettings; onSaved: 
   const [adminGroup, setAdminGroup] = useState(s.adminGroup)
   const [providerName, setProviderName] = useState(s.providerName)
   const [logoUrl, setLogoUrl] = useState(s.logoUrl)
+  const [logoUrlDark, setLogoUrlDark] = useState(s.logoUrlDark)
   const [allowRegistration, setAllowRegistration] = useState(s.allowRegistration)
   const [scopes, setScopes] = useState((s.scopes || []).join(' '))
   const [busy, setBusy] = useState(false)
@@ -202,7 +203,7 @@ function OidcSection({ settings, onSaved }: { settings: AdminSettings; onSaved: 
     setBusy(true); setMsg(null)
     const payload: OidcInput = {
       enabled, issuerUrl, clientId, clientSecret, redirectUrl,
-      adminGroup, providerName, logoUrl, allowRegistration,
+      adminGroup, providerName, logoUrl, logoUrlDark, allowRegistration,
       scopes: scopes.split(/\s+/).map(x => x.trim()).filter(Boolean),
     }
     try {
@@ -247,7 +248,11 @@ function OidcSection({ settings, onSaved }: { settings: AdminSettings; onSaved: 
         </Field>
         <Field label="Logo URL" over={ov.logoUrl}>
           <input className="input" style={{ width: '100%' }} value={logoUrl} disabled={ov.logoUrl} placeholder="https://example.com/logo.svg" onChange={e => setLogoUrl(e.target.value)} />
-          <span style={{ fontSize: 10, color: 'var(--text-3)' }}>Shown on the SSO button on the login screen.</span>
+          <span style={{ fontSize: 10, color: 'var(--text-3)' }}>Shown on the SSO button on the login screen, in both themes unless a dark version is set below.</span>
+        </Field>
+        <Field label="Logo URL — dark theme (optional)" over={ov.logoUrlDark}>
+          <input className="input" style={{ width: '100%' }} value={logoUrlDark} disabled={ov.logoUrlDark} placeholder="https://example.com/logo-light.svg" onChange={e => setLogoUrlDark(e.target.value)} />
+          <span style={{ fontSize: 10, color: 'var(--text-3)' }}>Use when the logo above is dark ink that disappears on the dark login card. Leave empty to use the same logo everywhere.</span>
         </Field>
         <Field label="Admin Group" over={ov.adminGroup}>
           <input className="input" style={{ width: '100%' }} value={adminGroup} disabled={ov.adminGroup} onChange={e => setAdminGroup(e.target.value)} />

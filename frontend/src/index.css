@@ -455,6 +455,15 @@ body {
 }
 .auth-sso:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
+/* Per-theme provider logos. Both <img> tags are rendered and CSS chooses, so
+   the login page never needs to know which theme is active. Dark is the app's
+   default; `.light` on :root is the override, which also covers "system" mode
+   because App.tsx resolves that to the same class. */
+.auth-sso-logo-light { display: none; }
+.auth-sso-logo-dark { display: block; }
+:root.light .auth-sso-logo-light { display: block; }
+:root.light .auth-sso-logo-dark { display: none; }
+
 .auth-error {
   display: flex;
   align-items: flex-start;

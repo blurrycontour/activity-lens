@@ -63,6 +63,8 @@ All of these are also settable from **Admin → SSO**, which is usually easier.
 | `AL_OIDC_REDIRECT_URL` | Must be `https://<your-domain>/api/auth/oidc/callback` |
 | `AL_OIDC_ADMIN_GROUP` | Members of this group become administrators |
 | `AL_OIDC_PROVIDER_NAME` | Label on the sign-in button; defaults to `SSO` |
+| `AL_OIDC_LOGO_URL` | Logo shown on the sign-in button, in both themes |
+| `AL_OIDC_LOGO_URL_DARK` | Optional replacement used only while the dark theme is active. Set it when the main logo is dark ink that disappears against the dark login card; leave it empty to use one logo everywhere |
 | `AL_OIDC_ALLOW_REGISTRATION` | Create an account on first successful SSO login. Defaults to **`true`** — set it to `false` to restrict SSO to accounts that already exist |
 | `AL_OIDC_SCOPES` | Comma-separated; sensible defaults are used when empty |
 
