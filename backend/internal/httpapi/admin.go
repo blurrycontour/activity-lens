@@ -319,29 +319,19 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "cannot deactivate your own account")
 		return
 	}
-	if req.Role != auth.RoleAdministrator || !req.IsActive {
-		users, err := s.auth.ListUsers(r.Context())
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "could not load users")
-			return
-		}
-		activeAdmins := 0
-		for _, u := range users {
-			if u.Role == auth.RoleAdministrator && u.IsActive {
-				activeAdmins++
-			}
-		}
-		var target *auth.User
-		for i := range users {
-			if users[i].ID == targetID {
-				target = &users[i]
-				break
-			}
-		}
-		if target != nil && target.Role == auth.RoleAdministrator && target.IsActive && activeAdmins <= 1 {
-			writeError(w, http.StatusBadRequest, "cannot remove the last administrator account")
-			return
-		}
+	// Losing the last administrator locks everyone out of user management, SSO
+	// and email settings with no way back in short of editing the database by
+	// hand. Checked on every change rather than only on the ones that look
+	// dangerous: "administrator + active" being harmless is true but is one more
+	// thing to keep in step, and this is a rare, human-initiated request.
+	users, err := s.auth.ListUsers(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load users")
+		return
+	}
+	if activeAdminsAfter(users, targetID, req.Role, req.IsActive) == 0 {
+		writeError(w, http.StatusBadRequest, "cannot remove the last administrator account")
+		return
 	}
 	user, err := s.auth.AdminUpdateUser(r.Context(), caller.ID, targetID, req.Role, req.IsActive)
 	if err != nil {
@@ -379,6 +369,31 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 	s.purgeUserData(r.Context(), target)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+// activeAdminsAfter counts how many active administrators would remain if
+// targetID were changed to the given role and active flag.
+//
+// Written as "count the world afterwards" rather than as a set of rules about
+// which edits are dangerous. Demotion, deactivation and both at once then fall
+// out of one expression, and so does the case that rules tend to miss: an edit
+// is only unsafe relative to who else is left, so the same demotion is fine
+// with two administrators and fatal with one.
+//
+// A targetID that matches nobody simply leaves the tally untouched, which is the
+// right answer for an account deleted out from under the request.
+func activeAdminsAfter(users []auth.User, targetID int64, role string, isActive bool) int {
+	n := 0
+	for _, u := range users {
+		admin, active := u.Role == auth.RoleAdministrator, u.IsActive
+		if u.ID == targetID {
+			admin, active = role == auth.RoleAdministrator, isActive
+		}
+		if admin && active {
+			n++
+		}
+	}
+	return n
 }
 
 func validRole(role string) bool {

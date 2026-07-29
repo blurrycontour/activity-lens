@@ -121,3 +121,80 @@ func TestContentDispositionSanitizesFilenames(t *testing.T) {
 		t.Errorf("contentDisposition() = %q, want the encoded name in filename*", got)
 	}
 }
+
+// Losing the last active administrator is unrecoverable from inside the app:
+// user management, SSO and email settings are all admin-gated, so there is no
+// screen left that could hand the role back. The only fix is editing the
+// database by hand.
+//
+// The rule is about the world after the edit, not about the edit itself — the
+// same demotion is fine with two administrators and fatal with one — which is
+// why it is worth a table rather than a careful reading.
+func TestActiveAdminsAfter(t *testing.T) {
+	const (
+		soloAdmin  int64 = 1
+		otherAdmin int64 = 2
+		editor     int64 = 3
+	)
+	admin := func(id int64, active bool) auth.User {
+		return auth.User{ID: id, Role: auth.RoleAdministrator, IsActive: active}
+	}
+
+	oneAdmin := []auth.User{
+		admin(soloAdmin, true),
+		{ID: editor, Role: auth.RoleEditor, IsActive: true},
+	}
+	twoAdmins := []auth.User{admin(soloAdmin, true), admin(otherAdmin, true)}
+
+	tests := []struct {
+		name     string
+		users    []auth.User
+		targetID int64
+		role     string
+		isActive bool
+		want     int
+	}{
+		// The cases this guard exists for.
+		{"sole admin demotes self to editor", oneAdmin, soloAdmin, auth.RoleEditor, true, 0},
+		{"sole admin demotes self to reader", oneAdmin, soloAdmin, auth.RoleReader, true, 0},
+		{"sole admin deactivates self", oneAdmin, soloAdmin, auth.RoleAdministrator, false, 0},
+		{"sole admin demotes and deactivates at once", oneAdmin, soloAdmin, auth.RoleEditor, false, 0},
+
+		// Legitimate edits that must not be blocked.
+		{"one of two admins steps down", twoAdmins, soloAdmin, auth.RoleEditor, true, 1},
+		{"one of two admins is deactivated", twoAdmins, otherAdmin, auth.RoleAdministrator, false, 1},
+		{"sole admin re-saves unchanged", oneAdmin, soloAdmin, auth.RoleAdministrator, true, 1},
+		{"editor is promoted", oneAdmin, editor, auth.RoleAdministrator, true, 2},
+		{"editor is deactivated", oneAdmin, editor, auth.RoleEditor, false, 1},
+
+		// An inactive administrator cannot sign in, so they do not count as
+		// cover for demoting the one who can.
+		{
+			"inactive admin does not keep the active one safe",
+			[]auth.User{admin(soloAdmin, true), admin(otherAdmin, false)},
+			soloAdmin, auth.RoleEditor, true, 0,
+		},
+		{
+			"reactivating the inactive admin counts",
+			[]auth.User{admin(soloAdmin, true), admin(otherAdmin, false)},
+			otherAdmin, auth.RoleAdministrator, true, 2,
+		},
+
+		// An account deleted between the list and the edit leaves the tally
+		// alone rather than miscounting it as an administrator.
+		{"unknown target changes nothing", twoAdmins, 999, auth.RoleEditor, false, 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := activeAdminsAfter(tt.users, tt.targetID, tt.role, tt.isActive)
+			if got != tt.want {
+				t.Errorf("activeAdminsAfter() = %d, want %d", got, tt.want)
+			}
+			// What the handler actually branches on, stated explicitly so the
+			// intent survives a refactor of the count itself.
+			if locked := got == 0; locked != (tt.want == 0) {
+				t.Errorf("would %sblock this edit, want the opposite", map[bool]string{true: "", false: "not "}[locked])
+			}
+		})
+	}
+}

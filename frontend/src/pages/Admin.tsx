@@ -329,6 +329,22 @@ function UsersSection({ users, onChanged }: { users: AdminUser[]; onChanged: () 
 
   const activeAdminCount = users.filter(u => u.role === 'administrator' && u.isActive).length
 
+  /**
+   * Whether this account is the only administrator who can still sign in.
+   *
+   * Only used to mark the row. Losing this account would lock everyone out of
+   * user management, SSO and email settings with no screen left that could hand
+   * the role back, so it is worth flagging — but it needs no controls disabling
+   * of its own, because the last active administrator is always whoever is
+   * looking at this page, and your own row is read-only here regardless.
+   *
+   * Inactive administrators are not counted: they cannot sign in, so they are
+   * no help in getting back in.
+   */
+  function isLastActiveAdmin(u: AdminUser): boolean {
+    return u.role === 'administrator' && u.isActive && activeAdminCount <= 1
+  }
+
   function startEdit(u: AdminUser) {
     setDraftRole(u.role)
     setDraftActive(u.isActive)
@@ -409,17 +425,25 @@ function UsersSection({ users, onChanged }: { users: AdminUser[]; onChanged: () 
                       {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
                     </select>
                   ) : (
-                    <span>{u.role}</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                      {u.role}
+                      {/* Marks the account the instance cannot afford to lose.
+                          Purely informational — an icon rather than a tooltip
+                          alone so it still reads on a touch device. */}
+                      {isLastActiveAdmin(u) && (
+                        <span title="The only administrator who can sign in. Add a second one before changing this account." style={{ display: 'inline-flex', color: 'var(--text-3)' }}>
+                          <Lock size={11} />
+                        </span>
+                      )}
+                    </span>
                   )}
                 </td>
                 <td style={{ padding: '8px 10px' }}>
                   {editingId === u.id ? (
-                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: u.id === me?.id ? 'not-allowed' : 'pointer' }}>
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
                       <input
                         type="checkbox"
                         checked={draftActive}
-                        disabled={u.id === me?.id}
-                        title={u.id === me?.id ? 'You cannot deactivate your own account' : undefined}
                         onChange={e => setDraftActive(e.target.checked)}
                       />
                       <span style={{ fontSize: 12, color: draftActive ? 'var(--green, #16a34a)' : 'var(--red, #dc2626)' }}>
@@ -445,22 +469,33 @@ function UsersSection({ users, onChanged }: { users: AdminUser[]; onChanged: () 
                     </>
                   ) : (
                     <>
-                      <button
-                        className="btn btn-ghost"
-                        onClick={() => startEdit(u)}
-                        title={u.role === 'administrator' && u.isActive && activeAdminCount <= 1 ? 'Last administrator — role/status locked' : 'Edit user'}
-                      >
-                        <Pencil size={14} />
-                      </button>
-                      <button
-                        className="btn btn-ghost"
-                        onClick={() => removeUser(u)}
-                        title={u.id === me?.id ? 'You cannot delete your own account' : 'Delete user'}
-                        disabled={u.id === me?.id}
-                        style={{ color: 'var(--red, #dc2626)', marginLeft: 6 }}
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                      {/* Your own row carries no actions at all.
+                          Neither field is changeable on it: an administrator
+                          cannot take their own role away, cannot deactivate
+                          themselves, and cannot delete themselves from here —
+                          account deletion lives under Settings, behind an
+                          emailed confirmation code. Rendering the buttons
+                          disabled, or worse enabled, only invites a click that
+                          can end in an error. */}
+                      {u.id === me?.id ? (
+                        <span style={{ fontSize: 11, color: 'var(--text-3)' }} title="Your own account. Change your profile under Settings.">
+                          This is you
+                        </span>
+                      ) : (
+                        <>
+                          <button className="btn btn-ghost" onClick={() => startEdit(u)} title="Edit user">
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            className="btn btn-ghost"
+                            onClick={() => removeUser(u)}
+                            title="Delete user"
+                            style={{ color: 'var(--red, #dc2626)', marginLeft: 6 }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </>
+                      )}
                     </>
                   )}
                 </td>
