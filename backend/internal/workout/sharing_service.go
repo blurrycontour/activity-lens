@@ -88,3 +88,11 @@ func (s *Service) RemoveShare(ctx context.Context, ownerID int64, workoutID stri
 func (s *Service) PurgeUserShares(ctx context.Context, userID int64) error {
 	return s.repo.DeleteSharesForUser(ctx, userID)
 }
+
+// PurgeUserWorkouts deletes everything a user owns and returns the workout ids,
+// so the caller can remove the archived upload files that go with them. Called
+// when an account is deleted, for the same reason as PurgeUserShares: authkit
+// removes the account without knowing this schema exists.
+func (s *Service) PurgeUserWorkouts(ctx context.Context, userID int64) ([]string, error) {
+	return s.repo.DeleteAllForUser(ctx, userID)
+}

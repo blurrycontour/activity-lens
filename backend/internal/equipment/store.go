@@ -27,6 +27,9 @@ type Repository interface {
 	SetWorkoutEquipment(ctx context.Context, userID int64, workoutID string, ids []string) error
 	// ForWorkout returns the equipment linked to a workout.
 	ForWorkout(ctx context.Context, userID int64, workoutID string) ([]Equipment, error)
+	// DeleteAllForUser removes every piece of equipment a user owns, for
+	// cleanup when that account is deleted.
+	DeleteAllForUser(ctx context.Context, userID int64) error
 }
 
 // SQLiteRepository implements Repository on top of *sql.DB (SQLite dialect).
@@ -122,6 +125,16 @@ func (r *SQLiteRepository) Delete(ctx context.Context, userID int64, id string) 
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
+	}
+	return nil
+}
+
+// DeleteAllForUser removes a user's whole gear inventory. The foreign key on
+// workout_equipment clears the links, so this is the only statement needed.
+// Deleting nothing is success: not everyone owns gear.
+func (r *SQLiteRepository) DeleteAllForUser(ctx context.Context, userID int64) error {
+	if _, err := r.db.ExecContext(ctx, `DELETE FROM equipment WHERE user_id = ?`, userID); err != nil {
+		return fmt.Errorf("delete equipment for user: %w", err)
 	}
 	return nil
 }

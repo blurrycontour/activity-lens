@@ -85,6 +85,29 @@ them and never joins to them:
   API layer, not a SQL join — so auth could move to its own database without
   touching any query.
 
+### Deleting an account deletes everything
+
+Because nothing keys to `users`, removing an account cleans up nothing on its
+own. `httpapi.purgeUserData` is the single list of what a user owns — workouts
+and their archived uploads, gear, shares in both directions, notifications and
+push subscriptions, preferences, last-login, and the avatar file — and both
+deletion paths (admin, and self-service from Settings) go through it.
+
+Two things make this easy to get wrong, so both are pinned by tests:
+
+- **A new user-scoped table is a silent storage leak.** Nothing breaks when its
+  rows are orphaned; they just accumulate. `TestEveryUserScopedTableHasAnOwnerForPurging`
+  enumerates every table with a `user_id` column and fails if one is not
+  accounted for.
+- **SQLite reuses user ids.** A deleted account's id is handed to the next user
+  created, so a surviving `user_prefs` row means someone inherits a stranger's
+  body weight, max HR and training goals.
+
+Each step is best-effort and logged rather than fatal: the account is already
+gone by then, so failing the response would report the wrong outcome and invite
+a retry that cannot work. The purge also runs on a context detached from the
+request, so a browser navigating away mid-delete cannot cancel it half-finished.
+
 ### Sharing: public means "signed in here"
 
 There are no share tokens and no unauthenticated read path. `visibility` is a

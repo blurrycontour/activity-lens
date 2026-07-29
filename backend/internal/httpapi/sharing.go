@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"log/slog"
 	"net/http"
 	"sort"
 	"strconv"
@@ -215,19 +214,6 @@ func (s *Server) userDirectory(r *http.Request) (map[int64]workout.OwnerRef, err
 		dir[u.ID] = userRef(u)
 	}
 	return dir, nil
-}
-
-// purgeUserShares drops every share naming a deleted account. It is best-effort
-// and logged rather than fatal: the account is already gone by the time this
-// runs, and leftover rows are inert (they are filtered out when recipients are
-// resolved) — failing the delete response over them would be worse.
-func (s *Server) purgeUserShares(r *http.Request, userID int64) {
-	if err := s.workout.PurgeUserShares(r.Context(), userID); err != nil {
-		slog.Error("could not purge workout shares for deleted user", "userId", userID, "error", err)
-	}
-	if err := s.notify.PurgeUser(r.Context(), userID); err != nil {
-		slog.Error("could not purge notifications for deleted user", "userId", userID, "error", err)
-	}
 }
 
 // ownerRef resolves a single user id for a detail response. It returns nil when

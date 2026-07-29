@@ -1,5 +1,5 @@
 ## Development
-The development of the app needs to happen in a maintainable and efficient way. At any point in time, if you come across bad implementation or better ideas, do let me know and then the way forward can be decided. This app is intended for long-term use by several users, on both mobile and desktop.
+The development of the app needs to happen in a maintainable and efficient way. At any point in time, if you come across bad implementation or better ideas, do let me know and then the way forward can be decided. This app is intended for long-term use by several users, on both mobile and desktop. Add test cases with low cost and high impact, whenever some important, fragile or security functionality is added.
 
 Less code is better than lot of sloppy code. Avoid unnecessary complexity and keep the codebase clean and maintainable. Always write code with future developers in mind, including yourself.
 

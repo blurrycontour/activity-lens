@@ -184,11 +184,18 @@ func (s *Server) linkEquipment(r *http.Request, userID int64, wk *workout.Workou
 
 func (s *Server) handleDeleteWorkout(w http.ResponseWriter, r *http.Request) {
 	user := httpmw.UserFrom(r)
-	if err := s.workout.Delete(r.Context(), user.ID, r.PathValue("id")); err != nil {
+	id := r.PathValue("id")
+	if err := s.workout.Delete(r.Context(), user.ID, id); err != nil {
 		s.writeWorkoutError(w, err)
 		return
 	}
-	slog.Info("workout deleted", "workout_id", r.PathValue("id"), "user_id", user.ID)
+	// The archived upload is part of the workout, so it goes too. Best-effort
+	// and logged rather than fatal: the workout row is already gone, and
+	// failing the response over a leftover file would be worse than the leak.
+	if err := s.rawUploads.Delete(r.Context(), id); err != nil {
+		slog.Warn("could not delete archived upload", "workout_id", id, "error", err)
+	}
+	slog.Info("workout deleted", "workout_id", id, "user_id", user.ID)
 	w.WriteHeader(http.StatusNoContent)
 }
 

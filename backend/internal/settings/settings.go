@@ -278,6 +278,21 @@ func (s *Store) RecordLogin(ctx context.Context, userID int64, at time.Time) err
 	return err
 }
 
+// PurgeUser removes the per-user rows this store owns, for account deletion.
+// Both tables are keyed by a user id that go-authkit does not know about, so
+// nothing else would ever clear them.
+func (s *Store) PurgeUser(ctx context.Context, userID int64) error {
+	for _, q := range []string{
+		`DELETE FROM user_prefs WHERE user_id = ?`,
+		`DELETE FROM user_last_login WHERE user_id = ?`,
+	} {
+		if _, err := s.db.ExecContext(ctx, q, userID); err != nil {
+			return fmt.Errorf("delete user settings: %w", err)
+		}
+	}
+	return nil
+}
+
 // LastLogins returns a map of user id to last-login timestamp (RFC3339).
 func (s *Store) LastLogins(ctx context.Context) (map[int64]string, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT user_id, last_login_at FROM user_last_login`)

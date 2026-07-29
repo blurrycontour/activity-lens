@@ -105,6 +105,11 @@ func (s *Service) Delete(ctx context.Context, userID int64, id string) error {
 	return s.repo.Delete(ctx, userID, id)
 }
 
+// PurgeUser removes a user's entire gear inventory, for account deletion.
+func (s *Service) PurgeUser(ctx context.Context, userID int64) error {
+	return s.repo.DeleteAllForUser(ctx, userID)
+}
+
 // LinkedWorkouts returns summaries of the workouts using this equipment.
 func (s *Service) LinkedWorkouts(ctx context.Context, userID int64, id string) ([]LinkedWorkout, error) {
 	return s.repo.LinkedWorkouts(ctx, userID, id)

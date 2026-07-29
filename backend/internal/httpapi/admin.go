@@ -355,11 +355,22 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "cannot delete your own account")
 		return
 	}
+	// Read before the delete: the purge needs the avatar path, and once the
+	// account is gone there is no way to find out what it was.
+	target := auth.User{ID: targetID}
+	if users, err := s.auth.ListUsers(r.Context()); err == nil {
+		for _, u := range users {
+			if u.ID == targetID {
+				target = u
+				break
+			}
+		}
+	}
 	if err := s.auth.AdminDeleteUser(r.Context(), caller.ID, targetID); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	s.purgeUserShares(r, targetID)
+	s.purgeUserData(r.Context(), target)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 

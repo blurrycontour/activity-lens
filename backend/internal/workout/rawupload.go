@@ -2,9 +2,11 @@ package workout
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/klauspost/compress/zstd"
 )
@@ -33,6 +35,61 @@ type RawUploadStore struct {
 // NewRawUploadStore builds a raw-upload store rooted at dataDir.
 func NewRawUploadStore(dataDir string) *RawUploadStore {
 	return &RawUploadStore{dir: filepath.Join(dataDir, "raw-uploads")}
+}
+
+// Delete removes the archived file for a workout, if one was ever kept.
+//
+// The stored name is <workout ID><original extension>.zst and the extension
+// comes from whatever the user uploaded, so the exact filename is not derivable
+// from the id alone — the directory is scanned instead.
+//
+// Missing files are not an error: archiving is an admin-configurable setting,
+// so a workout imported while it was off has nothing to remove.
+func (s *RawUploadStore) Delete(ctx context.Context, workoutID string) error {
+	return s.DeleteMany(ctx, []string{workoutID})
+}
+
+// DeleteMany removes the archived files for many workouts in a single directory
+// scan. Deleting an account can mean thousands of workouts at once, and calling
+// Delete in a loop would re-read the whole directory for each one.
+//
+// Names are matched by splitting at the first dot rather than by prefix, which
+// is exact: Save always writes <id><ext>.zst and substitutes ".bin" when the
+// upload had no extension, so every stored name contains a dot and everything
+// before the first one is the workout id. That is also what stops one id from
+// matching another's file when it happens to be a prefix of it.
+func (s *RawUploadStore) DeleteMany(ctx context.Context, workoutIDs []string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if len(workoutIDs) == 0 {
+		return nil
+	}
+	wanted := make(map[string]struct{}, len(workoutIDs))
+	for _, id := range workoutIDs {
+		wanted[id] = struct{}{}
+	}
+	entries, err := os.ReadDir(s.dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read raw uploads directory: %w", err)
+	}
+	for _, e := range entries {
+		name := e.Name()
+		dot := strings.IndexByte(name, '.')
+		if e.IsDir() || dot <= 0 {
+			continue
+		}
+		if _, ok := wanted[name[:dot]]; !ok {
+			continue
+		}
+		if err := os.Remove(filepath.Join(s.dir, name)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("delete raw upload: %w", err)
+		}
+	}
+	return nil
 }
 
 // Save stores the original file as <workout ID><original extension>.zst.

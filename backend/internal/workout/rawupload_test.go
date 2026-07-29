@@ -59,3 +59,167 @@ func TestRawUploadStoreSaveCompresses(t *testing.T) {
 		t.Errorf("raw-uploads contains %d entries, want only the saved file", len(entries))
 	}
 }
+
+// Deleting a workout has to take its archived upload with it, or the data
+// directory grows forever with files nothing references.
+func TestRawUploadStoreDeleteRemovesFile(t *testing.T) {
+	dir := t.TempDir()
+	store := NewRawUploadStore(dir)
+	ctx := context.Background()
+
+	if err := store.Save(ctx, "w_abc", "ride.gpx", "application/gpx+xml", []byte("<gpx/>")); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	if got := countFiles(t, filepath.Join(dir, "raw-uploads")); got != 1 {
+		t.Fatalf("expected the archive to exist, found %d files", got)
+	}
+
+	if err := store.Delete(ctx, "w_abc"); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if got := countFiles(t, filepath.Join(dir, "raw-uploads")); got != 0 {
+		t.Fatalf("%d files left after Delete()", got)
+	}
+}
+
+// The filename carries the uploaded extension, so the delete has to find the
+// file whatever it was imported as.
+func TestRawUploadStoreDeleteHandlesAnyExtension(t *testing.T) {
+	ctx := context.Background()
+	for _, name := range []string{"a.gpx", "a.tcx", "a.TCX", "noextension"} {
+		dir := t.TempDir()
+		store := NewRawUploadStore(dir)
+		if err := store.Save(ctx, "w_abc", name, "", []byte("x")); err != nil {
+			t.Fatalf("Save(%q) error = %v", name, err)
+		}
+		if err := store.Delete(ctx, "w_abc"); err != nil {
+			t.Fatalf("Delete() after %q error = %v", name, err)
+		}
+		if got := countFiles(t, filepath.Join(dir, "raw-uploads")); got != 0 {
+			t.Errorf("%q left %d files behind", name, got)
+		}
+	}
+}
+
+// Matching on the id alone would let one workout's delete take another's file
+// when one id is a prefix of the other. Splitting the stored name at its first
+// dot is what prevents it.
+func TestRawUploadStoreDeleteLeavesOtherWorkoutsAlone(t *testing.T) {
+	dir := t.TempDir()
+	store := NewRawUploadStore(dir)
+	ctx := context.Background()
+
+	for _, id := range []string{"w_abc", "w_abcdef"} {
+		if err := store.Save(ctx, id, "r.gpx", "", []byte("x")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := store.Delete(ctx, "w_abc"); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+
+	remaining := filepath.Join(dir, "raw-uploads", "w_abcdef.gpx.zst")
+	if _, err := os.Stat(remaining); err != nil {
+		t.Fatalf("deleting w_abc also removed w_abcdef's archive: %v", err)
+	}
+	if got := countFiles(t, filepath.Join(dir, "raw-uploads")); got != 1 {
+		t.Fatalf("expected exactly the other workout's file to remain, found %d", got)
+	}
+}
+
+// Archiving is an admin setting, so plenty of workouts never had a file. That
+// must not make deleting them an error.
+func TestRawUploadStoreDeleteIsQuietWhenNothingStored(t *testing.T) {
+	ctx := context.Background()
+
+	// Directory exists but holds nothing for this workout.
+	dir := t.TempDir()
+	store := NewRawUploadStore(dir)
+	if err := store.Save(ctx, "w_other", "r.gpx", "", []byte("x")); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Delete(ctx, "w_missing"); err != nil {
+		t.Errorf("Delete() for a workout with no archive: %v", err)
+	}
+
+	// Directory never created at all — archiving has been off since install.
+	fresh := NewRawUploadStore(t.TempDir())
+	if err := fresh.Delete(ctx, "w_missing"); err != nil {
+		t.Errorf("Delete() with no raw-uploads directory: %v", err)
+	}
+}
+
+func countFiles(t *testing.T, dir string) int {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return 0
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	return len(entries)
+}
+
+// Deleting an account can mean thousands of workouts, so the purge hands the
+// whole id list over at once rather than calling Delete in a loop. It must
+// still be exact about which files it takes.
+func TestRawUploadStoreDeleteManyRemovesExactlyTheGivenWorkouts(t *testing.T) {
+	dir := t.TempDir()
+	store := NewRawUploadStore(dir)
+	ctx := context.Background()
+
+	for _, id := range []string{"w_one", "w_two", "w_three", "w_keep"} {
+		if err := store.Save(ctx, id, "r.gpx", "", []byte("x")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := store.DeleteMany(ctx, []string{"w_one", "w_two", "w_three"}); err != nil {
+		t.Fatalf("DeleteMany() error = %v", err)
+	}
+
+	if got := countFiles(t, filepath.Join(dir, "raw-uploads")); got != 1 {
+		t.Fatalf("%d files left, want only w_keep's", got)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "raw-uploads", "w_keep.gpx.zst")); err != nil {
+		t.Errorf("the file that should have survived is gone: %v", err)
+	}
+}
+
+// An id that is a prefix of another must not drag its neighbour's file along,
+// the same guarantee Delete makes — DeleteMany matches on the id up to the
+// first dot rather than on a raw prefix.
+func TestRawUploadStoreDeleteManyLeavesPrefixNeighboursAlone(t *testing.T) {
+	dir := t.TempDir()
+	store := NewRawUploadStore(dir)
+	ctx := context.Background()
+
+	for _, id := range []string{"w_abc", "w_abcdef"} {
+		if err := store.Save(ctx, id, "r.gpx", "", []byte("x")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := store.DeleteMany(ctx, []string{"w_abc"}); err != nil {
+		t.Fatalf("DeleteMany() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "raw-uploads", "w_abcdef.gpx.zst")); err != nil {
+		t.Errorf("deleting w_abc took w_abcdef's file: %v", err)
+	}
+}
+
+// An empty list must not be read as "delete everything".
+func TestRawUploadStoreDeleteManyWithNoIDsIsANoOp(t *testing.T) {
+	dir := t.TempDir()
+	store := NewRawUploadStore(dir)
+	ctx := context.Background()
+
+	if err := store.Save(ctx, "w_abc", "r.gpx", "", []byte("x")); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DeleteMany(ctx, nil); err != nil {
+		t.Fatalf("DeleteMany(nil) error = %v", err)
+	}
+	if got := countFiles(t, filepath.Join(dir, "raw-uploads")); got != 1 {
+		t.Errorf("DeleteMany(nil) removed files: %d left, want 1", got)
+	}
+}

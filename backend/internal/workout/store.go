@@ -65,6 +65,9 @@ type Repository interface {
 	// DeleteSharesForUser removes every share row naming a user, for cleanup
 	// when that account is deleted.
 	DeleteSharesForUser(ctx context.Context, userID int64) error
+	// DeleteAllForUser removes every workout a user owns and returns the ids it
+	// deleted, for cleanup when that account is deleted.
+	DeleteAllForUser(ctx context.Context, userID int64) ([]string, error)
 }
 
 // SQLiteRepository implements Repository on top of *sql.DB (SQLite dialect).
@@ -203,6 +206,47 @@ func (r *SQLiteRepository) Delete(ctx context.Context, userID int64, id string) 
 		return ErrNotFound
 	}
 	return nil
+}
+
+// DeleteAllForUser removes every workout a user owns, returning the ids that
+// were deleted so the caller can also drop the archived upload files, which
+// live on disk rather than in the database.
+//
+// The ids are read before the delete rather than derived from it because
+// database/sql has no portable "returning" support across SQLite and Postgres.
+// Nothing can slip between the two statements in practice: this only runs once
+// the account itself is gone, so there is no session left that could create a
+// workout for it.
+//
+// The foreign keys on workout_equipment and workout_shares take their rows with
+// them, so this is the only statement needed for the workout side.
+func (r *SQLiteRepository) DeleteAllForUser(ctx context.Context, userID int64) ([]string, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT id FROM workouts WHERE user_id = ?`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list workouts for user: %w", err)
+	}
+	defer rows.Close()
+	ids := make([]string, 0)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	// Released before the delete, not just by the deferred call: the pool is
+	// capped at one connection, so an open result set would leave the Exec
+	// below waiting for a connection that only it can free. Close is
+	// idempotent, so the defer above stays as the error-path safety net.
+	rows.Close()
+
+	if _, err := r.db.ExecContext(ctx, `DELETE FROM workouts WHERE user_id = ?`, userID); err != nil {
+		return nil, fmt.Errorf("delete workouts for user: %w", err)
+	}
+	return ids, nil
 }
 
 // seriesBlobs holds the encoded per-point series of one workout, in the order
