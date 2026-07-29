@@ -3,6 +3,7 @@ package workout
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -221,5 +222,64 @@ func TestRawUploadStoreDeleteManyWithNoIDsIsANoOp(t *testing.T) {
 	}
 	if got := countFiles(t, filepath.Join(dir, "raw-uploads")); got != 1 {
 		t.Errorf("DeleteMany(nil) removed files: %d left, want 1", got)
+	}
+}
+
+// The point of archiving is being able to hand the exact bytes back, so a
+// round-trip through Save and Open must be lossless.
+func TestRawUploadStoreOpenReturnsTheOriginalBytes(t *testing.T) {
+	dir := t.TempDir()
+	store := NewRawUploadStore(dir)
+	ctx := context.Background()
+	original := []byte(`<?xml version="1.0"?><gpx creator="Garmin"><trk/></gpx>`)
+
+	if err := store.Save(ctx, "w_abc", "morning run.gpx", "application/gpx+xml", original); err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.Open(ctx, "w_abc", "morning run.gpx")
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	if !bytes.Equal(got, original) {
+		t.Errorf("Open() returned %q, want the original %q", got, original)
+	}
+}
+
+// Save and Open have to agree on the on-disk name for every extension, since
+// only the recorded filename tells Open where to look.
+func TestRawUploadStoreOpenFindsEveryExtension(t *testing.T) {
+	ctx := context.Background()
+	for _, name := range []string{"a.gpx", "a.tcx", "a.TCX", "noextension", "dotted.name.gpx"} {
+		dir := t.TempDir()
+		store := NewRawUploadStore(dir)
+		if err := store.Save(ctx, "w_abc", name, "", []byte("payload")); err != nil {
+			t.Fatalf("Save(%q) error = %v", name, err)
+		}
+		got, err := store.Open(ctx, "w_abc", name)
+		if err != nil {
+			t.Errorf("Open() after saving %q: %v", name, err)
+			continue
+		}
+		if string(got) != "payload" {
+			t.Errorf("Open() after saving %q returned %q", name, got)
+		}
+	}
+}
+
+// Most workouts have no archive — keeping originals is off by default — so
+// "nothing to download" must be an ordinary answer, not a failure.
+func TestRawUploadStoreOpenReportsNothingArchived(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	store := NewRawUploadStore(dir)
+
+	// Imported while archiving was off: no filename was ever recorded.
+	if _, err := store.Open(ctx, "w_abc", ""); !errors.Is(err, ErrNoRawUpload) {
+		t.Errorf("Open() with no recorded filename = %v, want ErrNoRawUpload", err)
+	}
+	// A recorded filename whose file is not there — a pruned or moved data
+	// directory. Still "nothing to download" as far as the caller is concerned.
+	if _, err := store.Open(ctx, "w_abc", "gone.gpx"); !errors.Is(err, ErrNoRawUpload) {
+		t.Errorf("Open() with a missing file = %v, want ErrNoRawUpload", err)
 	}
 }

@@ -68,6 +68,9 @@ type Repository interface {
 	// DeleteAllForUser removes every workout a user owns and returns the ids it
 	// deleted, for cleanup when that account is deleted.
 	DeleteAllForUser(ctx context.Context, userID int64) ([]string, error)
+	// SetRawFilename records the name of the file a workout was imported from,
+	// once its original has been archived to disk.
+	SetRawFilename(ctx context.Context, workoutID, filename string) error
 }
 
 // SQLiteRepository implements Repository on top of *sql.DB (SQLite dialect).
@@ -94,7 +97,7 @@ const insertCols = workoutCols + `, external_id, content_hash`
 // deliberately absent from insertCols and from the UPDATE in Update: sharing
 // state has its own method, so no create or patch path can ever change it.
 const (
-	selectCols        = workoutCols + `, visibility`
+	selectCols        = workoutCols + `, visibility, raw_filename`
 	selectSummaryCols = workoutSummaryCols + `, visibility`
 )
 
@@ -204,6 +207,22 @@ func (r *SQLiteRepository) Delete(ctx context.Context, userID int64, id string) 
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
+	}
+	return nil
+}
+
+// SetRawFilename records which file a workout was imported from. It runs after
+// the archive is written, so the column is only ever set when a file really is
+// on disk — which is what lets the detail response answer "is there an original"
+// from the row it already loaded.
+//
+// Not part of Create: archiving is decided by an admin setting that is read
+// after the workout exists, and folding it into the insert would mean threading
+// that decision down into the ingest path for one optional column.
+func (r *SQLiteRepository) SetRawFilename(ctx context.Context, workoutID, filename string) error {
+	if _, err := r.db.ExecContext(ctx,
+		`UPDATE workouts SET raw_filename = ? WHERE id = ?`, filename, workoutID); err != nil {
+		return fmt.Errorf("set raw filename: %w", err)
 	}
 	return nil
 }
@@ -372,7 +391,7 @@ func scanWorkout(row interface{ Scan(...any) error }) (*Workout, error) {
 	if err := row.Scan(&w.ID, &w.UserID, &w.Name, &typ, &startTime, &w.Duration, &w.Distance,
 		&w.AvgHR, &w.MaxHR, &w.ElevationGain, &w.Calories, &w.Steps, &w.AvgPace, &w.AvgSpeed,
 		&s.route, &s.hr, &s.pace, &s.elev, &s.cadence, &w.Notes,
-		&calManual, &calReported, &stepManual, &source, &visibility); err != nil {
+		&calManual, &calReported, &stepManual, &source, &visibility, &w.RawFilename); err != nil {
 		return nil, err
 	}
 	w.CaloriesManual = calManual != 0

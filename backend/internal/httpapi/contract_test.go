@@ -83,3 +83,41 @@ func TestUserRefOmitsEmail(t *testing.T) {
 		}
 	}
 }
+
+// The archived filename came from an upload form, so it reaches the download
+// header as untrusted text. A newline in it would let a caller append their own
+// response headers; a path would let the browser write outside its downloads
+// folder. Neither is reachable through the normal UI, which is exactly why it
+// needs a test rather than a careful reader.
+func TestContentDispositionSanitizesFilenames(t *testing.T) {
+	tests := []struct {
+		name      string
+		filename  string
+		wantASCII string
+	}{
+		{"plain name is kept", "morning run.gpx", `"morning run.gpx"`},
+		{"header injection is neutralized", "a\r\nX-Evil: 1.gpx", `"a__X-Evil: 1.gpx"`},
+		{"quotes cannot close the value", `a"b.gpx`, `"a_b.gpx"`},
+		{"path traversal is stripped", "../../etc/passwd", `"passwd"`},
+		{"windows path is stripped", `C:\Windows\evil.gpx`, `"evil.gpx"`},
+		{"non-ascii falls back in the quoted form", "läuf.gpx", `"l_uf.gpx"`},
+		{"an empty name still downloads", "", `"workout"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := contentDisposition(tt.filename)
+			if !strings.Contains(got, tt.wantASCII) {
+				t.Errorf("contentDisposition(%q) = %q, want it to contain %s", tt.filename, got, tt.wantASCII)
+			}
+			if strings.ContainsAny(got, "\r\n") {
+				t.Errorf("contentDisposition(%q) = %q, which can inject headers", tt.filename, got)
+			}
+		})
+	}
+
+	// The RFC 5987 form is what carries the real name to browsers that read it,
+	// so a non-ASCII name must survive there even though the quoted copy cannot.
+	if got := contentDisposition("läuf.gpx"); !strings.Contains(got, "filename*=UTF-8''l%C3%A4uf.gpx") {
+		t.Errorf("contentDisposition() = %q, want the encoded name in filename*", got)
+	}
+}

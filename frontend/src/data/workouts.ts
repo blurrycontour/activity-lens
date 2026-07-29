@@ -43,6 +43,12 @@ export interface Workout {
    * a feed is all someone else's).
    */
   isOwner?: boolean
+  /**
+   * Whether the file this workout was imported from was archived and can be
+   * downloaded. Only true on your own workouts, and only when the server was
+   * keeping originals at the time of the import.
+   */
+  hasOriginal?: boolean
 }
 
 export const WORKOUT_TYPES: WorkoutType[] = ['Run', 'Ride', 'Hike', 'Swim', 'Strength']

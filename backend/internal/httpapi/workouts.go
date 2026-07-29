@@ -5,10 +5,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"mime/multipart"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -49,6 +52,12 @@ func (s *Server) handleListWorkouts(w http.ResponseWriter, r *http.Request) {
 type workoutDetailResponse struct {
 	*workout.Workout
 	IsOwner bool `json:"isOwner"`
+	// HasOriginal reports that the file this workout was imported from was
+	// archived and can be downloaded. A boolean rather than the filename: the
+	// client only needs to know whether to offer the action, and the name is
+	// sent with the file itself. Owner-only, so Redact clearing RawFilename is
+	// enough to keep it false for everyone else.
+	HasOriginal bool `json:"hasOriginal,omitempty"`
 }
 
 func (s *Server) handleGetWorkout(w http.ResponseWriter, r *http.Request) {
@@ -65,7 +74,76 @@ func (s *Server) handleGetWorkout(w http.ResponseWriter, r *http.Request) {
 		// inventory, not part of the workout being shared.
 		wk.Owner = owner
 	}
-	writeJSON(w, http.StatusOK, workoutDetailResponse{Workout: wk, IsOwner: isOwner})
+	writeJSON(w, http.StatusOK, workoutDetailResponse{
+		Workout: wk, IsOwner: isOwner, HasOriginal: wk.RawFilename != "",
+	})
+}
+
+// handleDownloadOriginal streams back the exact file a workout was imported
+// from. The GPX the client can already build from the parsed timelines is a
+// re-serialization: device extensions, the original timestamps and anything the
+// parser did not model are not in it. This is the unmodified bytes, which is
+// what someone moving their history elsewhere actually needs.
+//
+// Owner-only, deliberately: a shared or public workout shows the track, but the
+// source file can carry more than the owner chose to share — device serial
+// numbers, software versions, extension fields nothing renders. Get returns
+// ErrNotFound for anyone else, so this needs no separate ownership check.
+func (s *Server) handleDownloadOriginal(w http.ResponseWriter, r *http.Request) {
+	user := httpmw.UserFrom(r)
+	wk, err := s.workout.Get(r.Context(), user.ID, r.PathValue("id"))
+	if err != nil {
+		s.writeWorkoutError(w, err)
+		return
+	}
+	if s.rawUploads == nil {
+		writeError(w, http.StatusNotFound, "no original file was archived for this workout")
+		return
+	}
+	data, err := s.rawUploads.Open(r.Context(), wk.ID, wk.RawFilename)
+	if errors.Is(err, workout.ErrNoRawUpload) {
+		writeError(w, http.StatusNotFound, "no original file was archived for this workout")
+		return
+	}
+	if err != nil {
+		slog.Error("could not read archived upload", "workout_id", wk.ID, "error", err)
+		writeError(w, http.StatusInternalServerError, "could not read the original file")
+		return
+	}
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+	w.Header().Set("Content-Disposition", contentDisposition(wk.RawFilename))
+	// The archive never changes once written, so a client that already has it
+	// need not fetch it twice. Private: it is one user's file.
+	w.Header().Set("Cache-Control", "private, max-age=3600")
+	if _, err := w.Write(data); err != nil {
+		slog.Warn("could not write archived upload", "workout_id", wk.ID, "error", err)
+	}
+}
+
+// contentDisposition builds an attachment header for a user-supplied filename.
+// The name is quoted with the RFC 5987 form alongside it so non-ASCII survives,
+// and stripped of anything that could break out of the header or the browser's
+// download directory — it originally came from an upload form, so it is not
+// trusted here even though Save only ever used its extension.
+func contentDisposition(filename string) string {
+	// Both separators, explicitly: filepath.Base only knows the running OS's,
+	// so on Linux it would leave "C:\dir\file.gpx" whole — and some clients do
+	// send a full Windows path as the multipart filename.
+	name := filename
+	if i := strings.LastIndexAny(name, `/\`); i >= 0 {
+		name = name[i+1:]
+	}
+	ascii := strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f || r == '"' || r == '\\' || r > 0x7e {
+			return '_'
+		}
+		return r
+	}, name)
+	if ascii == "" || ascii == "." || ascii == ".." {
+		ascii = "workout"
+	}
+	return fmt.Sprintf(`attachment; filename="%s"; filename*=UTF-8''%s`, ascii, url.PathEscape(name))
 }
 
 // createWorkoutRequest is the manual-entry payload from the import modal.
@@ -244,6 +322,14 @@ func (s *Server) handleImportWorkout(w http.ResponseWriter, r *http.Request) {
 			}
 			if err := s.rawUploads.Save(r.Context(), wk.ID, header.Filename, contentType, data); err != nil {
 				slog.Warn("could not save original upload", "workout_id", wk.ID, "error", err)
+			} else if err := s.workout.RecordRawFilename(r.Context(), wk.ID, header.Filename); err != nil {
+				// Only recorded once the file is safely on disk, so the column
+				// never promises a download that is not there. The reverse — a
+				// file with no column — costs a little disk and is cleaned up
+				// with the workout either way, since deletes sweep by id.
+				slog.Warn("could not record original upload filename", "workout_id", wk.ID, "error", err)
+			} else {
+				wk.RawFilename = header.Filename
 			}
 		}
 	}

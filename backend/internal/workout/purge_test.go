@@ -107,3 +107,94 @@ func containsID(ids []string, want string) bool {
 	}
 	return false
 }
+
+// The recorded filename is what makes "is there an original to download"
+// answerable from the row the detail request already loaded, and what lets the
+// download offer the file back under its own name.
+func TestSetRawFilenameRoundTrips(t *testing.T) {
+	ctx := context.Background()
+	repo := NewSQLiteRepository(newTestDB(t))
+	svc := NewService(repo)
+	id := seed(t, svc, alice, "Imported run")
+
+	// Nothing archived yet: the default must be empty, not NULL, or the scan
+	// into a string would fail.
+	before, err := repo.Get(ctx, alice, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before.RawFilename != "" {
+		t.Errorf("a fresh workout reports RawFilename = %q, want empty", before.RawFilename)
+	}
+
+	if err := svc.RecordRawFilename(ctx, id, "morning run.gpx"); err != nil {
+		t.Fatalf("RecordRawFilename() error = %v", err)
+	}
+	after, err := repo.Get(ctx, alice, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.RawFilename != "morning run.gpx" {
+		t.Errorf("RawFilename = %q, want %q", after.RawFilename, "morning run.gpx")
+	}
+}
+
+// Editing a workout must not silently discard the link to its archived file.
+// raw_filename is absent from both insertCols and the UPDATE in Update, so this
+// pins that a patch leaves it alone.
+func TestUpdateDoesNotClearRawFilename(t *testing.T) {
+	ctx := context.Background()
+	repo := NewSQLiteRepository(newTestDB(t))
+	svc := NewService(repo)
+	id := seed(t, svc, alice, "Imported run")
+
+	if err := svc.RecordRawFilename(ctx, id, "ride.tcx"); err != nil {
+		t.Fatal(err)
+	}
+	renamed := "Evening ride"
+	if _, err := svc.Update(ctx, alice, id, Patch{Name: &renamed}); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	got, err := repo.Get(ctx, alice, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.RawFilename != "ride.tcx" {
+		t.Errorf("after a rename RawFilename = %q, want it untouched", got.RawFilename)
+	}
+}
+
+// The original file is the owner's. Redact is what keeps hasOriginal false for
+// everyone else, so a shared workout must never carry the filename through.
+func TestRedactClearsRawFilename(t *testing.T) {
+	ctx := context.Background()
+	repo := NewSQLiteRepository(newTestDB(t))
+	svc := NewService(repo)
+	id := seed(t, svc, alice, "Shared run")
+
+	if err := svc.RecordRawFilename(ctx, id, "private-folder-name.gpx"); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.SetVisibility(ctx, alice, id, VisibilityPublic); err != nil {
+		t.Fatal(err)
+	}
+
+	asOwner, isOwner, err := svc.GetViewable(ctx, alice, id)
+	if err != nil || !isOwner {
+		t.Fatalf("owner read failed: %v (isOwner = %v)", err, isOwner)
+	}
+	if asOwner.RawFilename == "" {
+		t.Error("the owner lost their own RawFilename")
+	}
+
+	asStranger, isOwner, err := svc.GetViewable(ctx, bob, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if isOwner {
+		t.Fatal("bob was reported as the owner")
+	}
+	if asStranger.RawFilename != "" {
+		t.Errorf("a non-owner sees RawFilename = %q", asStranger.RawFilename)
+	}
+}

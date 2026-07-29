@@ -139,6 +139,12 @@ type Workout struct {
 	ContentHash string `json:"-"`
 	// Equipment is populated by the API layer for single-workout responses.
 	Equipment []EquipmentTag `json:"equipment,omitempty"`
+	// RawFilename is the name of the file this workout was imported from, when
+	// the original was archived. Empty otherwise, which is how "is there an
+	// original to download" is answered without touching the disk. Not exposed
+	// directly — the API layer turns it into a boolean for the owner only, so a
+	// filename can never say something about the owner to anyone else.
+	RawFilename string `json:"-"`
 	// Visibility is persisted; it is cleared on responses to non-owners, who
 	// have no need to know why they can see the workout.
 	Visibility Visibility `json:"visibility,omitempty"`
@@ -157,6 +163,11 @@ func (w *Workout) Redact() {
 	w.Notes = ""
 	w.Equipment = nil
 	w.Visibility = ""
+	// The original file is the owner's, and its name can carry more than the
+	// workout does — a device's export naming, a folder, a personal label. It
+	// is never serialized, but clearing it here means no later code path can
+	// derive a "download original" affordance for someone who may not have it.
+	w.RawFilename = ""
 }
 
 // EquipmentTag is a minimal reference to a piece of equipment linked to a

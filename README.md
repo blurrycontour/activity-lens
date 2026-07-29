@@ -34,6 +34,8 @@ services. It is built for a handful of people using it for years, not for scale.
 - Calories and steps are taken from the file when it states them, and estimated
   otherwise (heart-rate or distance based, your choice).
 - Private notes on any workout.
+- Export any workout as GPX, and — when the server is set to keep originals —
+  download the exact file it was imported from. Your data stays yours to take.
 
 **Understand**
 - **Dashboard** — stat cards with period-over-period deltas and sparklines,

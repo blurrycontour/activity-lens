@@ -83,10 +83,21 @@ Only needed for account-deletion confirmation codes. Also settable from
 
 ## Settings that live only in the admin UI
 
-- **Keep original uploads** — archive the raw `.gpx`/`.tcx` bytes alongside each
-  workout so it can be re-parsed or exported later. They are zstd-compressed,
-  which typically shrinks them more than tenfold, but they still grow the data
+- **Keep original uploads** — archive the `.gpx`/`.tcx` file each workout was
+  imported from, under `<data dir>/raw-uploads`. They are zstd-compressed, which
+  typically shrinks them more than tenfold, but they still grow the data
   directory over time.
+
+  With this on, a workout's **⋯ → Download original** returns the file exactly
+  as it was uploaded. That is not the same as **Export GPX**, which rebuilds a
+  GPX from the parsed data and therefore drops device extensions and anything
+  the importer does not model — the archive is the only copy of those. Archives
+  are the owner's alone: they are not offered on shared or public workouts.
+
+  The setting only affects imports made while it is on. Turning it on later does
+  not backfill, and workouts imported while it was off simply have no
+  **Download original**. Archives are deleted with their workout, and with their
+  owner's account.
 
 ## Per-user preferences
 

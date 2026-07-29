@@ -21,9 +21,6 @@ var appSchema string
 //go:embed migrations/0002_admin.sql
 var adminSchema string
 
-//go:embed migrations/0003_raw_uploads.sql
-var rawUploadsSchema string
-
 //go:embed migrations/0004_user_prefs.sql
 var userPrefsSchema string
 
@@ -66,6 +63,9 @@ var notificationsSchema string
 //go:embed migrations/0017_notification_icon.sql
 var notificationIconSchema string
 
+//go:embed migrations/0018_raw_uploads_on_disk.sql
+var rawUploadsOnDiskSchema string
+
 // OpenSQLite opens (and pings) a pure-Go SQLite database at dbPath with
 // foreign keys and WAL enabled for concurrency and integrity.
 func OpenSQLite(dbPath string) (*sql.DB, error) {
@@ -92,9 +92,6 @@ func MigrateApp(ctx context.Context, db *sql.DB) error {
 	}
 	if _, err := db.ExecContext(ctx, adminSchema); err != nil {
 		return fmt.Errorf("apply admin schema: %w", err)
-	}
-	if _, err := db.ExecContext(ctx, rawUploadsSchema); err != nil {
-		return fmt.Errorf("apply raw uploads schema: %w", err)
 	}
 	if _, err := db.ExecContext(ctx, userPrefsSchema); err != nil {
 		return fmt.Errorf("apply user prefs schema: %w", err)
@@ -127,6 +124,7 @@ func MigrateApp(ctx context.Context, db *sql.DB) error {
 		{"workout sharing", workoutSharingSchema},
 		{"notifications", notificationsSchema},
 		{"notification icon", notificationIconSchema},
+		{"raw uploads on disk", rawUploadsOnDiskSchema},
 	} {
 		if err := applyAlters(ctx, db, m.schema); err != nil {
 			return fmt.Errorf("apply %s schema: %w", m.name, err)

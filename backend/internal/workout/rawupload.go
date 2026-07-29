@@ -24,6 +24,10 @@ var rawEncoder, _ = zstd.NewWriter(nil,
 	zstd.WithWindowSize(1<<22),
 )
 
+// rawDecoder is shared for the same reason as rawEncoder: a zstd reader is safe
+// for concurrent use, and DecodeAll on a nil-source reader is stateless.
+var rawDecoder, _ = zstd.NewReader(nil)
+
 // RawUploadStore persists original imported activity files under the configured
 // data directory, gated by an admin-configurable setting. Files are stored
 // zstd-compressed; activity XML compresses roughly 10:1, which matters once a
@@ -92,6 +96,53 @@ func (s *RawUploadStore) DeleteMany(ctx context.Context, workoutIDs []string) er
 	return nil
 }
 
+// ErrNoRawUpload is returned by Open when no original was archived for a
+// workout — the normal case, since keeping originals is an admin setting that
+// is off by default.
+var ErrNoRawUpload = errors.New("workout: no archived upload")
+
+// Open returns the decompressed bytes of a workout's archived upload.
+//
+// filename is the name the file was imported under, as recorded on the workout
+// row; it is what determines the path, so callers pass the value they read from
+// the database rather than having this scan for it. An empty filename means the
+// workout predates archiving or was imported while it was off.
+func (s *RawUploadStore) Open(ctx context.Context, workoutID, filename string) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if filename == "" {
+		return nil, ErrNoRawUpload
+	}
+	compressed, err := os.ReadFile(filepath.Join(s.dir, storedName(workoutID, filename)))
+	if errors.Is(err, os.ErrNotExist) {
+		// The row says there should be a file and there is not: the data
+		// directory has been moved or pruned behind the application's back.
+		// Reported as "nothing archived" rather than as a failure, because
+		// that is what it means to the person asking for it.
+		return nil, ErrNoRawUpload
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read raw upload: %w", err)
+	}
+	data, err := rawDecoder.DecodeAll(compressed, nil)
+	if err != nil {
+		return nil, fmt.Errorf("decompress raw upload: %w", err)
+	}
+	return data, nil
+}
+
+// storedName is the on-disk name for an upload: the workout id, the extension
+// it arrived with, and the compression suffix. Save and Open must agree on
+// this, so it lives in one place.
+func storedName(workoutID, filename string) string {
+	ext := filepath.Ext(filepath.Base(filename))
+	if ext == "" {
+		ext = ".bin"
+	}
+	return workoutID + ext + rawUploadExt
+}
+
 // Save stores the original file as <workout ID><original extension>.zst.
 func (s *RawUploadStore) Save(ctx context.Context, workoutID, filename, contentType string, data []byte) error {
 	if err := ctx.Err(); err != nil {
@@ -100,11 +151,7 @@ func (s *RawUploadStore) Save(ctx context.Context, workoutID, filename, contentT
 	if err := os.MkdirAll(s.dir, 0o750); err != nil {
 		return fmt.Errorf("create raw uploads directory: %w", err)
 	}
-	ext := filepath.Ext(filepath.Base(filename))
-	if ext == "" {
-		ext = ".bin"
-	}
-	path := filepath.Join(s.dir, workoutID+ext+rawUploadExt)
+	path := filepath.Join(s.dir, storedName(workoutID, filename))
 	tmp, err := os.CreateTemp(s.dir, ".upload-*")
 	if err != nil {
 		return fmt.Errorf("create raw upload: %w", err)

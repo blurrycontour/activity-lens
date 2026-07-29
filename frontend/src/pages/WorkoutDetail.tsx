@@ -3,12 +3,12 @@ import { type Workout, type WorkoutType, WORKOUT_TYPES, fmtDuration, fmtDist, fm
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ReferenceDot, BarChart, Bar } from 'recharts'
 import {
   ArrowLeft, Heart, Mountain, Zap, Clock, TrendingUp, Navigation, Download, Pencil, Trash2, Gauge,
-  Check, X as XIcon, Play, Pause, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, Layers, AlertTriangle, Activity, Share2, Lock,
+  Check, X as XIcon, Play, Pause, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, Layers, AlertTriangle, Activity, Share2, Lock, FileDown,
 } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
-import { downloadWorkoutGPX } from '../lib/download'
+import { downloadWorkoutGPX, downloadWorkoutOriginal } from '../lib/download'
 import { useLocalStorage } from '../lib/useLocalStorage'
 import { DEFAULT_HR_ZONE_CHART, HR_ZONE_CHART_KEY, type HRZoneChart } from '../lib/dashboardConfig'
 import InfoTip from '../components/InfoTip'
@@ -57,7 +57,7 @@ function StatChip({ icon, label, value, calculated, manual }: { icon?: React.Rea
   )
 }
 
-function OptionsMenu({ onEdit, onExport, onShare, onRecalculate, onDelete, deleting }: { onEdit: () => void; onExport: () => void; onShare?: () => void; onRecalculate: () => void; onDelete: () => void; deleting: boolean }) {
+function OptionsMenu({ onEdit, onExport, onDownloadOriginal, onShare, onRecalculate, onDelete, deleting }: { onEdit: () => void; onExport: () => void; onDownloadOriginal?: () => void; onShare?: () => void; onRecalculate: () => void; onDelete: () => void; deleting: boolean }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -90,6 +90,13 @@ function OptionsMenu({ onEdit, onExport, onShare, onRecalculate, onDelete, delet
           <button className="options-menu-item" onClick={() => { setOpen(false); onExport() }}>
             <Download size={14} /> Export GPX
           </button>
+          {/* Only when an original was actually archived. "Export GPX" above is
+              rebuilt from the parsed data; this is the file as imported. */}
+          {onDownloadOriginal && (
+            <button className="options-menu-item" onClick={() => { setOpen(false); onDownloadOriginal() }}>
+              <FileDown size={14} /> Download original
+            </button>
+          )}
           <button className="options-menu-item danger" onClick={() => { setOpen(false); onDelete() }} disabled={deleting}>
             <Trash2 size={14} /> {deleting ? 'Deleting…' : 'Delete workout'}
           </button>
@@ -638,6 +645,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
   const [confirmRecalc, setConfirmRecalc] = useState(false)
   const [recalculating, setRecalculating] = useState(false)
   const [recalcErr, setRecalcErr] = useState<string | null>(null)
+  const [originalErr, setOriginalErr] = useState<string | null>(null)
 
   const [selectedMetrics, setSelectedMetrics] = useLocalStorage<Metric[]>('al_wd_metrics', ['hr', 'pace', 'speed', 'elevation'])
   function toggleMetric(m: Metric) {
@@ -804,6 +812,23 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
     if (data.length === 0) return []
     const visible = data.filter(d => d.t <= t)
     return visible.length ? visible : [data[0]]
+  }
+
+  /**
+   * Hands back the file this workout was imported from.
+   *
+   * Failure is worth surfacing rather than swallowing: the menu item only
+   * appears when the workout says an original exists, so an error here means
+   * something is genuinely wrong — the archive was pruned from the data
+   * directory, or the server cannot read it.
+   */
+  async function downloadOriginal() {
+    setOriginalErr(null)
+    try {
+      await downloadWorkoutOriginal(w)
+    } catch (err) {
+      setOriginalErr(err instanceof Error ? err.message : 'could not download the original file')
+    }
   }
 
   function startEdit() {
@@ -1118,13 +1143,30 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
                 <Download size={16} />
               </button>
             ) : (
-              <OptionsMenu onEdit={startEdit} onExport={() => downloadWorkoutGPX(w)} onShare={() => setSharing(true)} onRecalculate={() => { setRecalcErr(null); setConfirmRecalc(true) }} onDelete={() => setConfirmDelete(true)} deleting={deleting} />
+              <OptionsMenu
+                onEdit={startEdit}
+                onExport={() => downloadWorkoutGPX(w)}
+                onDownloadOriginal={w.hasOriginal ? downloadOriginal : undefined}
+                onShare={() => setSharing(true)}
+                onRecalculate={() => { setRecalcErr(null); setConfirmRecalc(true) }}
+                onDelete={() => setConfirmDelete(true)}
+                deleting={deleting}
+              />
             )}
           </div>
         </div>
       </div>
 
       <div className="page-content">
+        {originalErr && (
+          <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', marginBottom: 16, color: '#ef4444', fontSize: 13 }}>
+            <AlertTriangle size={15} style={{ flexShrink: 0 }} />
+            <span style={{ flex: 1, minWidth: 0 }}>{originalErr}</span>
+            <button className="btn-icon" aria-label="Dismiss" onClick={() => setOriginalErr(null)}>
+              <XIcon size={14} />
+            </button>
+          </div>
+        )}
         {/* Map (flexible width) + Summary card (fixed, narrower) side by
             side on desktop; stacked on mobile so the map never gets
             squeezed. */}

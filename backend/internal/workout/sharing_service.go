@@ -89,6 +89,12 @@ func (s *Service) PurgeUserShares(ctx context.Context, userID int64) error {
 	return s.repo.DeleteSharesForUser(ctx, userID)
 }
 
+// RecordRawFilename notes which file a workout was imported from, after its
+// original has been archived.
+func (s *Service) RecordRawFilename(ctx context.Context, workoutID, filename string) error {
+	return s.repo.SetRawFilename(ctx, workoutID, filename)
+}
+
 // PurgeUserWorkouts deletes everything a user owns and returns the workout ids,
 // so the caller can remove the archived upload files that go with them. Called
 // when an account is deleted, for the same reason as PurgeUserShares: authkit

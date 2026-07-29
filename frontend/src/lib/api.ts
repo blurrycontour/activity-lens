@@ -244,6 +244,69 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   return data as T
 }
 
+/** A file downloaded from the API, with the name the server offered it under. */
+export interface DownloadedFile {
+  blob: Blob
+  filename: string
+}
+
+/**
+ * Fetches a binary response as a blob, mirroring `request`'s error and
+ * reachability handling but without assuming JSON.
+ *
+ * Error bodies are still JSON, so a failure is read the same way as anywhere
+ * else and surfaces as an ApiError the caller can show.
+ */
+async function fetchFile(path: string): Promise<DownloadedFile> {
+  let res: Response
+  try {
+    res = await fetch(path, { credentials: 'same-origin' })
+  } catch (err) {
+    reportReachability(false)
+    throw err
+  }
+  reportReachability(respondedFromBackend(res))
+
+  if (!res.ok) {
+    let message = res.statusText || 'request failed'
+    try {
+      const data = JSON.parse(await res.text())
+      if (data?.error) message = data.error as string
+    } catch {
+      // A non-JSON error body (a proxy's HTML page) leaves the status text.
+    }
+    throw new ApiError(res.status, message)
+  }
+  return {
+    blob: await res.blob(),
+    filename: filenameFromDisposition(res.headers.get('Content-Disposition')),
+  }
+}
+
+/**
+ * Reads the download filename out of a Content-Disposition header.
+ *
+ * Exported for tests: the two header forms and their precedence are easy to get
+ * subtly wrong, and getting it wrong means files land under the wrong name.
+ *
+ * The RFC 5987 `filename*` form is preferred because it is the one that carries
+ * non-ASCII names; the quoted `filename` is an ASCII-only fallback the server
+ * sends alongside it. Returns "" when neither is usable, which callers replace
+ * with a name of their own.
+ */
+export function filenameFromDisposition(header: string | null): string {
+  if (!header) return ''
+  const encoded = /filename\*=UTF-8''([^;]+)/i.exec(header)
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded[1])
+    } catch {
+      // Malformed percent-encoding: fall through to the quoted form.
+    }
+  }
+  return /filename="([^"]*)"/i.exec(header)?.[1] ?? ''
+}
+
 export const api = {
   // --- Auth ---
   authConfig: () => request<AuthFeatures>('/api/auth/config'),
@@ -319,6 +382,9 @@ export const api = {
   // Resolves any workout the signed-in user may read: their own, a public one,
   // or one shared with them. `isOwner` says whether to offer edit controls.
   getWorkout: (id: string) => request<import('../data/workouts').Workout>(`/api/workouts/${id}`),
+  // The archived source file, when the server kept it. Not `request`: that
+  // parses every response as JSON, and this one is the original bytes.
+  getWorkoutOriginal: (id: string) => fetchFile(`/api/workouts/${id}/original`),
   createWorkout: (payload: ManualWorkoutInput) =>
     request<import('../data/workouts').Workout>('/api/workouts', { method: 'POST', body: payload }),
   patchWorkout: (id: string, patch: { name?: string; type?: string; notes?: string; date?: string; calories?: number; steps?: number; equipmentIds?: string[] }) =>

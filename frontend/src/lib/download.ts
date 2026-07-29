@@ -7,6 +7,7 @@
 // WebView and has to go through a native file-save bridge.
 
 import { type Workout } from '../data/workouts'
+import { api } from './api'
 
 /** Escapes text for inclusion in XML character data or an attribute value. */
 function escapeXML(value: string): string {
@@ -63,4 +64,22 @@ export function saveFile(filename: string, blob: Blob): void {
 export function downloadWorkoutGPX(w: Workout): void {
   const blob = new Blob([workoutToGPX(w)], { type: 'application/gpx+xml' })
   saveFile(workoutFileName(w, 'gpx'), blob)
+}
+
+/**
+ * Downloads the file a workout was imported from, exactly as it arrived.
+ *
+ * Distinct from `downloadWorkoutGPX`, which re-serializes a GPX from the parsed
+ * timelines: that loses device extensions, the original timestamps and every
+ * field the importer does not model. This is the bytes themselves, which is
+ * what matters when moving a history somewhere else.
+ *
+ * Only available when the server was archiving originals at import time, so
+ * callers should gate on `w.hasOriginal`.
+ */
+export async function downloadWorkoutOriginal(w: Workout): Promise<void> {
+  const { blob, filename } = await api.getWorkoutOriginal(w.id)
+  // The server names the file, since it knows what the upload was called. The
+  // fallback keeps the extension it was stored under rather than assuming gpx.
+  saveFile(filename || workoutFileName(w, 'original'), blob)
 }
