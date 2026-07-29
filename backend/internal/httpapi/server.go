@@ -78,6 +78,11 @@ func (s *Server) apiRoutes() http.Handler {
 	// --- Auth (public) ---
 	mux.HandleFunc("POST /api/auth/login", s.handleLogin)
 	mux.HandleFunc("GET /api/auth/config", s.handleAuthConfig)
+	// Public: an OS-level push notification fetches the sender's avatar from
+	// outside any session, so this cannot require a cookie. Filenames are
+	// random, the handler reads no user state, and an avatar is low-sensitivity
+	// — but it is readable by anyone holding the URL.
+	mux.HandleFunc("GET /api/avatars/{file}", s.handleServeAvatar)
 	if s.cfg.AllowRegistration {
 		mux.HandleFunc("POST /api/auth/register", s.handleRegister)
 	}
@@ -93,7 +98,7 @@ func (s *Server) apiRoutes() http.Handler {
 	mux.Handle("PATCH /api/auth/profile", s.authedCSRF(s.handleUpdateProfile))
 	mux.Handle("POST /api/auth/password", s.authedCSRF(s.handleChangePassword))
 	mux.Handle("POST /api/auth/avatar", s.authedCSRF(s.handleUploadAvatar))
-	mux.Handle("GET /api/avatars/{file}", s.authed(s.handleServeAvatar))
+
 	mux.Handle("GET /api/auth/sessions", s.authed(s.handleListSessions))
 	mux.Handle("POST /api/auth/sessions/revoke-others", s.authedCSRF(s.handleRevokeOtherSessions))
 	mux.Handle("DELETE /api/auth/sessions/{id}", s.authedCSRF(s.handleRevokeSession))

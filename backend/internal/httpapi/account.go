@@ -160,7 +160,9 @@ func (s *Server) handleServeAvatar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "image/jpeg")
-	w.Header().Set("Cache-Control", "private, max-age=86400")
+	// Public rather than private: the route is now unauthenticated, and a
+	// shared cache holding an avatar is harmless.
+	w.Header().Set("Cache-Control", "public, max-age=86400")
 	http.ServeContent(w, r, name, info.ModTime(), f)
 }
 

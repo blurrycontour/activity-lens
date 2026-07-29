@@ -161,8 +161,11 @@ self.addEventListener('push', event => {
     body: data.body,
     // The sender's avatar when a person caused this, the app mark otherwise.
     icon: data.icon || '/icon-192.png',
-    // The badge is the small monochrome status-bar mark; it always stays ours.
-    badge: '/icon-192.png',
+    // The status-bar badge. Android renders this from its alpha channel alone —
+    // every opaque pixel becomes white — so it has to be a transparent
+    // silhouette. Pointing it at the full-colour app icon, whose alpha is
+    // entirely opaque, produces a solid white square.
+    badge: '/badge-96.png',
     // Tapping should land on the workout (or wherever the event points).
     data: { link: data.link || '/' },
     // Collapses repeats of the same notification rather than stacking them.
