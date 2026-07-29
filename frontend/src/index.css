@@ -951,6 +951,75 @@ body {
   .notif-dismiss { opacity: 0.6; }
 }
 
+/* ── Update prompt ──
+   Bottom-anchored, unlike the notification banner at the top, so the two can
+   never collide. Clears the mobile bottom bar and the FAB. */
+.update-toast {
+  position: fixed;
+  bottom: calc(16px + var(--bottombar-h));
+  left: 50%;
+  transform: translateX(-50%);
+  /* Above every other layer, including modals (2000) — an update is worth
+     seeing whatever else is on screen. */
+  z-index: 2200;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 380px;
+  max-width: calc(100vw - 24px);
+  padding: 10px 10px 10px 14px;
+  border-radius: 99px;
+  animation: toastIn 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Frosted rather than opaque, so it reads as floating above the page instead
+     of being another card in it. The blur is on the toast alone — dimming the
+     whole app would imply the update is modal, and it is not. */
+  background: color-mix(in srgb, var(--bg-2) 80%, transparent);
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  /* Accent ring plus a matching glow: enough separation to catch the eye
+     without the alarm of a coloured fill. */
+  border: 1px solid var(--primary);
+  box-shadow:
+    0 0 0 4px var(--primary-dim),
+    0 16px 48px rgba(0, 0, 0, 0.55);
+}
+/* Backdrop blur silently does nothing on some browsers, which would leave a
+   see-through toast; fall back to a solid surface there. */
+@supports not (backdrop-filter: blur(1px)) {
+  .update-toast { background: var(--bg-2); }
+}
+@keyframes toastIn {
+  from { transform: translate(-50%, 14px); opacity: 0; }
+  to { transform: translate(-50%, 0); opacity: 1; }
+}
+.update-toast-title { display: block; font-size: 13px; font-weight: 600; }
+.update-toast-body { display: block; font-size: 11px; color: var(--text-3); margin-top: 1px; }
+@media (max-width: 480px) {
+  /* The explanatory line is the first thing to go when space is tight; the
+     title and the button already say what will happen. */
+  .update-toast-body { display: none; }
+}
+@media (max-width: 768px) {
+  /* Clear the floating add button, which shares this corner: the toast is
+     nearly full width on a phone, so it would otherwise sit underneath it.
+     52px button + its 24px offset + a 12px gap. */
+  .update-toast { bottom: calc(88px + var(--bottombar-h)); }
+}
+
+/* Marks the user menu as holding a pending app update. */
+.update-dot {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--primary);
+  /* Ring in the bar's own colour so it reads as sitting on the avatar. */
+  box-shadow: 0 0 0 2px var(--bg-2);
+}
+
 /* ── In-app notification banner ──
    Shown when a push lands while the app is on screen and the OS notification is
    suppressed. Sits below the top bar and above everything except modals. */

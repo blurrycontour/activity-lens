@@ -1,5 +1,6 @@
 import NotificationBell from './NotificationBell'
 import { avatarUrl } from './UserAvatar'
+import { useUpdatePending } from '../lib/appUpdate'
 import { Menu, Sun, Moon, Monitor, HelpCircle } from 'lucide-react'
 import type { ApiUser } from '../lib/api'
 import Logo from './Logo'
@@ -33,6 +34,8 @@ const THEME_LABELS: Record<ThemeMode, string> = {
 }
 
 export default function TopBar({ onToggleSidebar, themeMode, onCycleTheme, onUserMenu, onHelp, onHome, onNavigate, isMobile, user }: TopBarProps) {
+  const updatePending = useUpdatePending()
+
   return (
     <header className="topbar">
       {!isMobile && (
@@ -79,6 +82,7 @@ export default function TopBar({ onToggleSidebar, themeMode, onCycleTheme, onUse
       <button
         onClick={onUserMenu}
         style={{
+          position: 'relative',
           width: 32, height: 32, borderRadius: '50%',
           background: 'var(--bg-3)',
           border: '2px solid var(--border)',
@@ -93,6 +97,9 @@ export default function TopBar({ onToggleSidebar, themeMode, onCycleTheme, onUse
         title="User menu"
       >
         <img src={avatarUrl(user)} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        {/* A dismissed update still has to be findable; the menu is where it
+            lives, so the avatar carries the only hint that it is in there. */}
+        {updatePending && <span className="update-dot" aria-hidden="true" />}
       </button>
     </header>
   )

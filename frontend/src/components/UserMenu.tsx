@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { User, Settings, Shield, LogOut, X, Info } from 'lucide-react'
+import { User, Settings, Shield, LogOut, X, Info, ArrowUpCircle } from 'lucide-react'
 import AboutDialog from './AboutDialog'
+import { applyPendingUpdate, useUpdatePending } from '../lib/appUpdate'
 import { avatarUrl } from './UserAvatar'
 import type { ApiUser } from '../lib/api'
 
@@ -16,6 +17,9 @@ interface UserMenuProps {
 export default function UserMenu({ onClose, onAccount, onSettings, onAdmin, onLogout, user }: UserMenuProps) {
   const ref = useRef<HTMLDivElement>(null)
   const [showAbout, setShowAbout] = useState(false)
+  // Dismissing the update toast should not lose the update; this is where it
+  // stays reachable afterwards.
+  const updatePending = useUpdatePending()
 
   useEffect(() => {
     if (showAbout) return
@@ -32,6 +36,9 @@ export default function UserMenu({ onClose, onAccount, onSettings, onAdmin, onLo
     { icon: <Settings size={15} />, label: 'Settings', sub: 'Appearance & preferences', action: () => { onClose(); onSettings() } },
     ...(user.isAdmin ? [{ icon: <Shield size={15} />, label: 'Admin Panel', sub: 'Users, email, SSO', action: () => { onClose(); onAdmin() } }] : []),
     { icon: <Info size={15} />, label: 'About', sub: 'Version & app info', action: () => setShowAbout(true) },
+    ...(updatePending
+      ? [{ icon: <ArrowUpCircle size={15} />, label: 'Update app', sub: 'A new version is ready', accent: true, action: () => { void applyPendingUpdate() } }]
+      : []),
   ]
 
   if (showAbout) return <AboutDialog onClose={() => { setShowAbout(false); onClose() }} />
@@ -83,9 +90,9 @@ export default function UserMenu({ onClose, onAccount, onSettings, onAdmin, onLo
               onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-3)'}
               onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
             >
-              <span style={{ color: 'var(--text-2)', flexShrink: 0 }}>{item.icon}</span>
+              <span style={{ color: item.accent ? 'var(--primary)' : 'var(--text-2)', flexShrink: 0 }}>{item.icon}</span>
               <div>
-                <div style={{ fontSize: 13, fontWeight: 500 }}>{item.label}</div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: item.accent ? 'var(--primary)' : undefined }}>{item.label}</div>
                 <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>{item.sub}</div>
               </div>
             </button>

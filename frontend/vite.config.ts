@@ -47,7 +47,9 @@ export default defineConfig(({ mode }) => {
         strategies: 'injectManifest',
         srcDir: 'src',
         filename: 'sw.ts',
-        registerType: 'autoUpdate',
+        // 'prompt', not 'autoUpdate': the latter reloads the page the moment a
+        // new worker activates, which can discard whatever the user was typing.
+        registerType: 'prompt',
         // Registration happens explicitly in main.tsx.
         injectRegister: null,
         injectManifest: {

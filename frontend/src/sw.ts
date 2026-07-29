@@ -127,16 +127,15 @@ registerRoute(
 
 // --- Lifecycle --------------------------------------------------------------
 //
-// registerType is 'autoUpdate' (see registerSW() in main.tsx), which the
-// vite-plugin-pwa client-side helper implements by reloading the page once a
-// new worker reports itself *activated* — see node_modules' build/register.js:
-// with autoUpdate it never sends a skip-waiting message, it only listens for
-// the 'activated' event. For the generateSW strategy the plugin injects
-// self.skipWaiting() into the worker it writes; injectManifest hands us a
-// worker we authored ourselves, so without this call a new build sits in
-// 'waiting' forever (every open tab pins the old worker as controller) and
-// the app keeps serving whatever was precached at last activation — the
-// "have to clear site data to see a new deploy" symptom.
+// registerType is 'prompt' (see registerSW() in main.tsx). The plugin's client
+// helper reports a waiting worker through onNeedRefresh and applies it only
+// when the app calls updateSW(), which posts SKIP_WAITING below.
+//
+// injectManifest hands us a worker we authored, so nothing calls skipWaiting()
+// for us. That message handler is therefore load-bearing: without it a new
+// build would sit in 'waiting' forever (every open tab pins the old worker as
+// controller) and the app would keep serving whatever was precached at the last
+// activation — the "have to clear site data to see a new deploy" symptom.
 // ── Web Push ──
 // The backend sends a JSON payload; anything unparseable still shows a generic
 // notification, because Chrome revokes push permission from a worker that
@@ -239,9 +238,18 @@ self.addEventListener('notificationclick', event => {
   })())
 })
 
-self.addEventListener('install', event => {
-  event.waitUntil(self.skipWaiting())
+// A new worker installs and then *waits*, rather than taking over immediately.
+// Activating on its own would force a reload while the user is mid-task —
+// losing a half-written note or a filled-in import form — so the app prompts
+// instead and only then sends SKIP_WAITING (see registerSW in main.tsx).
+self.addEventListener('message', event => {
+  if ((event.data as { type?: string } | undefined)?.type === 'SKIP_WAITING') {
+    void self.skipWaiting()
+  }
 })
+
 self.addEventListener('activate', event => {
+  // Claim open pages so the newly activated worker controls them at once; the
+  // reload that follows is driven by the app, not by this.
   event.waitUntil(self.clients.claim())
 })

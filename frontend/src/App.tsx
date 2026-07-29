@@ -1,6 +1,7 @@
 import { useIsMobile } from './lib/useIsMobile'
 import NotificationBanner, { type BannerNotification } from './components/NotificationBanner'
 import { PUSH_EVENT } from './components/NotificationBell'
+import UpdateToast from './components/UpdateToast'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import TopBar, { type ThemeMode } from './components/TopBar'
 import Sidebar from './components/Sidebar'
@@ -332,6 +333,8 @@ export default function App() {
           onDismiss={() => setBanner(null)}
         />
       )}
+
+      <UpdateToast />
 
       <OfflineBar />
 
