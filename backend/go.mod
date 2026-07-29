@@ -3,6 +3,7 @@ module github.com/blurrycontour/activity-lens/backend
 go 1.26
 
 require (
+	github.com/SherClockHolmes/webpush-go v1.4.0
 	github.com/blurrycontour/go-authkit v1.0.0
 	github.com/klauspost/compress v1.19.1
 	github.com/wneessen/go-mail v0.8.1
@@ -11,7 +12,6 @@ require (
 )
 
 require (
-	github.com/SherClockHolmes/webpush-go v1.4.0 // indirect
 	github.com/coreos/go-oidc/v3 v3.20.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
