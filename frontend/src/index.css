@@ -821,6 +821,9 @@ body {
   border-radius: 18px 18px 0 0;
   box-shadow: 0 -12px 48px rgba(0, 0, 0, 0.5);
   animation: sheetUp 0.2s cubic-bezier(0.32, 0.72, 0, 1);
+  /* Eases the sheet back into place when a dismiss drag is released short of
+     the threshold; the drag itself overrides this to track the finger. */
+  transition: transform 0.22s cubic-bezier(0.32, 0.72, 0, 1);
   /* Clears the home indicator on gesture-nav phones. */
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }

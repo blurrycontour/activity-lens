@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { fmtDuration, fmtDist, fmtPace, TYPE_COLOR, TYPE_ICON, WORKOUT_TYPES, type WorkoutType, type Workout } from '../data/workouts'
 import { useWorkouts } from '../context/WorkoutsContext'
-import { Search, ChevronRight, Clock, Mountain, Flame, Download, Plus, RefreshCw, Grid2X2, List, Navigation, Library, Inbox, Globe, Users, Share2, SlidersHorizontal, X } from 'lucide-react'
+import { useRefreshHandler } from '../context/RefreshContext'
+import { Search, ChevronRight, Clock, Mountain, Flame, Download, Plus, Grid2X2, List, Navigation, Library, Inbox, Globe, Users, Share2, SlidersHorizontal, X } from 'lucide-react'
 import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
 import SortDropdown, { compareBySort, SORT_OPTIONS, type SortKey } from '../components/SortDropdown'
@@ -39,7 +40,6 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
   const [sortBy, setSortBy] = useState<SortKey>('date-desc')
   const [rangeDays, setRangeDays] = useState(0)
   const [sharedOnly, setSharedOnly] = useState(false)
-  const [refreshing, setRefreshing] = useState(false)
   const [sharing, setSharing] = useState<Workout | null>(null)
   const [feeds, setFeeds] = useState<Partial<Record<Scope, Workout[]>>>({})
   const [feedError, setFeedError] = useState<string | null>(null)
@@ -72,14 +72,12 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
     if (scope !== 'mine' && feeds[scope] === undefined) void loadFeed(scope)
   }, [scope, feeds, loadFeed])
 
-  async function handleRefresh() {
-    setRefreshing(true)
-    try {
-      await (scope === 'mine' ? refresh() : loadFeed(scope))
-    } finally {
-      setRefreshing(false)
-    }
-  }
+  // Pull-to-refresh reloads whatever tab is showing. WorkoutsContext already
+  // registers the owned library, so this only has to cover the feeds.
+  useRefreshHandler(useCallback(
+    () => (scope === 'mine' ? Promise.resolve() : loadFeed(scope)),
+    [scope, loadFeed],
+  ))
 
   /**
    * The three filters, described once. Desktop renders them as dropdowns and
@@ -151,16 +149,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
           <span style={{ fontSize: 12, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
             {filtered.length} of {source?.length ?? 0}
           </span>
-          <button
-            className="btn-icon"
-            onClick={handleRefresh}
-            disabled={refreshing || busy}
-            title="Refresh"
-            style={{ marginLeft: 'auto' }}
-          >
-            <RefreshCw size={15} className={refreshing || busy ? 'spin' : undefined} />
-          </button>
-          <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
+          <div style={{ marginLeft: 'auto', display: 'flex', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
             {([['list', <List key="l" size={15} />], ['grid', <Grid2X2 key="g" size={15} />]] as const).map(([id, icon]) => (
               <button
                 key={id}

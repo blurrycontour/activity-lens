@@ -32,7 +32,7 @@ go.work.sum
 # .vscode/
 
 # Runtime data (SQLite database, uploads)
-/.data/
+.data/
 
 # Backend embedded frontend build output (generated); keep the placeholder that
 # the go:embed directive needs so a fresh checkout still builds.

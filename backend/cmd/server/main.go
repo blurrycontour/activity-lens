@@ -71,6 +71,7 @@ func run() error {
 	if err := store.MigrateApp(ctx, db); err != nil {
 		return err
 	}
+	slog.Info("database ready", "path", dbPath, "data_dir", cfg.DataDir)
 
 	authSvc := auth.NewService(authStore, auth.Config{
 		SessionCookieName: cfg.CookieName,
@@ -82,6 +83,9 @@ func run() error {
 		Password: cfg.AdminPass,
 	}); err != nil {
 		return err
+	}
+	if users, err := authSvc.ListUsers(ctx); err == nil {
+		slog.Info("accounts", "count", len(users))
 	}
 
 	workoutSvc := workout.NewService(workout.NewSQLiteRepository(db))
@@ -108,7 +112,14 @@ func run() error {
 	}
 
 	go func() {
-		slog.Info("activity-lens starting", "version", version, "addr", cfg.Addr, "oidc", cfg.OIDC.Enabled)
+		// revision/built only exist in a Docker build; omit them otherwise
+		// rather than logging empty strings on every local run.
+		ready := []any{"version", version, "addr", cfg.Addr, "oidc", cfg.OIDC.Enabled,
+			"registration", cfg.AllowRegistration, "secure_cookies", cfg.SecureCookies}
+		if revision != "" {
+			ready = append(ready, "revision", revision, "built", created)
+		}
+		slog.Info("activity-lens ready", ready...)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("listen and serve", "error", err)
 			os.Exit(1)

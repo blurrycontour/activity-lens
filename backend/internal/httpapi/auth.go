@@ -46,9 +46,13 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	user, sid, exp, err := s.auth.Login(r.Context(), req.Identifier, req.Password, r.UserAgent(), clientIP(r))
 	if err != nil {
+		// Failed sign-ins are the one thing worth reading these logs for, so
+		// they are logged with the attempted identifier and source address.
+		slog.Warn("login failed", "identifier", req.Identifier, "ip", clientIP(r), "error", err)
 		s.writeLoginError(w, err)
 		return
 	}
+	slog.Info("login", "user", user.Username, "user_id", user.ID, "ip", clientIP(r))
 	s.startSession(w, r, user, sid, exp)
 }
 

@@ -64,7 +64,7 @@ func (s *Server) Handler() (http.Handler, error) {
 	}
 
 	root := http.NewServeMux()
-	root.Handle("/api/", api)
+	root.Handle("/api/", withAccessLog(api))
 	root.Handle("/", spa)
 	return root, nil
 }
