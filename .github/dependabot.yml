@@ -1,0 +1,74 @@
+# Dependabot version updates.
+#
+# This file only controls *scheduled version bumps*. Security updates are a
+# separate mechanism, enabled under Settings -> Code security, and they open
+# PRs as soon as an advisory lands regardless of the schedule below.
+#
+# Everything here is tuned for one maintainer: monthly rather than weekly, and
+# minor/patch bumps batched into a single PR per ecosystem. Majors are left
+# ungrouped on purpose — they carry breaking changes and deserve to be read one
+# at a time. Worst case that is three routine PRs a month, which is a volume a
+# solo project can actually keep up with; a scanner nobody reads is worse than
+# no scanner.
+#
+# Note: `ignore` rules would also suppress security updates for the same
+# dependency, so none are used here.
+version: 2
+
+updates:
+  # --- Go backend -----------------------------------------------------------
+  # Six direct dependencies, so bumps are rare and usually trivial. govulncheck
+  # in CI is what catches the ones that matter between these runs; it is
+  # reachability-based, so it only fails on code paths actually reached.
+  - package-ecosystem: gomod
+    directory: /backend
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(backend)"
+    groups:
+      go-minor-and-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # --- React frontend -------------------------------------------------------
+  # `npm` is the right ecosystem for pnpm; Dependabot reads pnpm-lock.yaml and
+  # keeps it in sync, which matters because CI installs with
+  # --frozen-lockfile and fails on a lockfile that drifts from package.json.
+  #
+  # Dev and runtime dependencies are grouped separately. A Vite or Vitest bump
+  # cannot affect the shipped bundle, so it only needs the build to stay green,
+  # while a React, Recharts or Leaflet bump wants a look at the actual UI.
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(frontend)"
+    groups:
+      frontend-runtime-minor-and-patch:
+        dependency-type: production
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+      frontend-build-minor-and-patch:
+        dependency-type: development
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # --- GitHub Actions -------------------------------------------------------
+  # The one ecosystem where staying current is a supply-chain concern rather
+  # than housekeeping: a compromised action runs with GITHUB_TOKEN and can push
+  # to ghcr.io. Diffs are one line each, so all of them go in a single PR.
+  #
+  # Drop this block if you would rather bump action versions by hand.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "chore(ci)"
+    groups:
+      actions:
+        patterns: ["*"]
