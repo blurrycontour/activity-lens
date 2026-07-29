@@ -32,8 +32,9 @@ func (s *Server) notifyWorkoutShared(r *http.Request, sender auth.User, targetID
 		Title:  fmt.Sprintf("%s shared a workout with you", from),
 		Body:   fmt.Sprintf("%s · %s", wk.Name, summarizeWorkout(wk)),
 		Link:   "/workouts/" + wk.ID,
-		// A share came from a person, so it wears their face rather than ours.
-		Icon: sender.AvatarPath,
+		// A share came from a person, so it wears their face rather than ours —
+		// their upload, or the avatar generated from their username.
+		Icon: effectiveAvatar(sender),
 		// No dedupe key: each share is a distinct event, and re-sharing after
 		// a revoke should notify again.
 	})

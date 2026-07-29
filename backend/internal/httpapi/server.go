@@ -82,6 +82,7 @@ func (s *Server) apiRoutes() http.Handler {
 	// outside any session, so this cannot require a cookie. Filenames are
 	// random, the handler reads no user state, and an avatar is low-sensitivity
 	// — but it is readable by anyone holding the URL.
+	mux.HandleFunc("GET /api/avatars/auto/{seed}", s.handleAutoAvatar)
 	mux.HandleFunc("GET /api/avatars/{file}", s.handleServeAvatar)
 	if s.cfg.AllowRegistration {
 		mux.HandleFunc("POST /api/auth/register", s.handleRegister)
@@ -98,6 +99,7 @@ func (s *Server) apiRoutes() http.Handler {
 	mux.Handle("PATCH /api/auth/profile", s.authedCSRF(s.handleUpdateProfile))
 	mux.Handle("POST /api/auth/password", s.authedCSRF(s.handleChangePassword))
 	mux.Handle("POST /api/auth/avatar", s.authedCSRF(s.handleUploadAvatar))
+	mux.Handle("DELETE /api/auth/avatar", s.authedCSRF(s.handleDeleteAvatar))
 
 	mux.Handle("GET /api/auth/sessions", s.authed(s.handleListSessions))
 	mux.Handle("POST /api/auth/sessions/revoke-others", s.authedCSRF(s.handleRevokeOtherSessions))

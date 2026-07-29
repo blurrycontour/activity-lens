@@ -951,6 +951,75 @@ body {
   .notif-dismiss { opacity: 0.6; }
 }
 
+/* ── In-app notification banner ──
+   Shown when a push lands while the app is on screen and the OS notification is
+   suppressed. Sits below the top bar and above everything except modals. */
+.notif-banner {
+  position: fixed;
+  top: 56px;
+  right: 12px;
+  left: auto;
+  width: 340px;
+  max-width: calc(100vw - 24px);
+  z-index: 1150;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px 10px 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--border-strong);
+  border-left: 3px solid var(--primary);
+  border-radius: calc(var(--radius) * 1.5);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+  animation: bannerIn 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+@keyframes bannerIn {
+  from { transform: translateY(-12px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.notif-banner-icon {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--bg-3);
+}
+.notif-banner-glyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--primary-dim);
+  color: var(--primary);
+}
+.notif-banner-title {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.notif-banner-body {
+  display: block;
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--text-3);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 768px) {
+  /* Full width on a phone, where a 340px card floating at the right edge
+     looks like a mistake. */
+  .notif-banner { top: 52px; left: 10px; right: 10px; width: auto; max-width: none; }
+}
+
 /* ── Workout notes ── */
 .notes-text {
   font-size: 13px;

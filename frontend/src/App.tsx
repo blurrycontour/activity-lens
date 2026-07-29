@@ -1,4 +1,6 @@
 import { useIsMobile } from './lib/useIsMobile'
+import NotificationBanner, { type BannerNotification } from './components/NotificationBanner'
+import { PUSH_EVENT } from './components/NotificationBell'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import TopBar, { type ThemeMode } from './components/TopBar'
 import Sidebar from './components/Sidebar'
@@ -75,6 +77,8 @@ export default function App() {
   const initialLocation = useRef(parseLocation()).current
   const [page, setPage] = useState<Page>(initialLocation.page)
   const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null)
+  // A push that arrived while the app was on screen, shown as a banner.
+  const [banner, setBanner] = useState<BannerNotification | null>(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const saved = localStorage.getItem(SIDEBAR_KEY)
@@ -202,12 +206,19 @@ export default function App() {
     window.history.pushState(null, '', pathForPage(loc.page))
   }, [])
 
-  // A tapped push notification focuses an existing window and asks it to route.
+  // Two things arrive from the service worker: a tapped OS notification asking
+  // us to route, and a push that landed while the app was visible, which it
+  // suppressed in favour of the in-app banner.
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return
     function onMessage(e: MessageEvent) {
-      const data = e.data as { type?: string; url?: string } | undefined
+      const data = e.data as { type?: string; url?: string; payload?: BannerNotification } | undefined
       if (data?.type === 'NAVIGATE' && data.url) openLink(data.url)
+      if (data?.type === 'IN_APP_NOTIFICATION' && data.payload) {
+        setBanner(data.payload)
+        // Tell the bell to refresh its count now rather than on its next poll.
+        window.dispatchEvent(new Event(PUSH_EVENT))
+      }
     }
     navigator.serviceWorker.addEventListener('message', onMessage)
     return () => navigator.serviceWorker.removeEventListener('message', onMessage)
@@ -313,6 +324,14 @@ export default function App() {
         isMobile={isMobile}
         user={user}
       />
+
+      {banner && (
+        <NotificationBanner
+          notification={banner}
+          onOpen={link => { setBanner(null); openLink(link) }}
+          onDismiss={() => setBanner(null)}
+        />
+      )}
 
       <OfflineBar />
 

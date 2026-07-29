@@ -266,6 +266,6 @@ func userRef(u auth.User) workout.OwnerRef {
 		ID:          u.ID,
 		Username:    u.Username,
 		DisplayName: u.DisplayName,
-		AvatarPath:  u.AvatarPath,
+		AvatarPath:  effectiveAvatar(u),
 	}
 }

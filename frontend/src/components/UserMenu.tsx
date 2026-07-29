@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { User, Settings, Shield, LogOut, X, Info } from 'lucide-react'
 import AboutDialog from './AboutDialog'
+import { avatarUrl } from './UserAvatar'
 import type { ApiUser } from '../lib/api'
 
 interface UserMenuProps {
@@ -25,12 +26,6 @@ export default function UserMenu({ onClose, onAccount, onSettings, onAdmin, onLo
     return () => document.removeEventListener('mousedown', handle)
   }, [onClose, showAbout])
 
-  const initials = (user.displayName || user.username || '?')
-    .split(/\s+/)
-    .map(s => s[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase()
 
   const items = [
     { icon: <User size={15} />, label: 'Account', sub: 'Profile, password, sessions', action: () => { onClose(); onAccount() } },
@@ -64,18 +59,7 @@ export default function UserMenu({ onClose, onAccount, onSettings, onAdmin, onLo
         }}
       >
         <div style={{ padding: '16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12 }}>
-          {user.avatarPath ? (
-            <img src={user.avatarPath} alt="Avatar" style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-          ) : (
-            <div style={{
-              width: 44, height: 44, borderRadius: '50%',
-              background: 'linear-gradient(135deg, var(--primary) 0%, var(--blue) 100%)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 18, fontWeight: 700, color: '#fff', flexShrink: 0,
-            }}>
-              {initials}
-            </div>
-          )}
+          <img src={avatarUrl(user)} alt="Avatar" style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, background: 'var(--bg-3)' }} />
           <div>
             <div style={{ fontWeight: 600, fontSize: 14 }}>{user.displayName || user.username}</div>
             <div style={{ fontSize: 12, color: 'var(--text-3)' }}>{user.email}</div>

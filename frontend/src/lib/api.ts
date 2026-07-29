@@ -274,6 +274,7 @@ export const api = {
     request<{ user: ApiUser }>('/api/auth/profile', { method: 'PATCH', body: { displayName, email } }),
   changePassword: (currentPassword: string, newPassword: string) =>
     request<unknown>('/api/auth/password', { method: 'POST', body: { currentPassword, newPassword } }),
+  deleteAvatar: () => request<{ user: ApiUser }>('/api/auth/avatar', { method: 'DELETE' }),
   uploadAvatar: (file: File) => {
     const form = new FormData()
     form.append('file', file)

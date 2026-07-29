@@ -150,6 +150,15 @@ interface PushPayload {
   icon?: string
 }
 
+/**
+ * True when a window of this app is on screen right now. An OS notification
+ * would be redundant then — the app shows an in-app banner instead.
+ */
+async function appIsVisible(): Promise<boolean> {
+  const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+  return windows.some(c => c.visibilityState === 'visible')
+}
+
 self.addEventListener('push', event => {
   let data: PushPayload = {}
   try {
@@ -157,7 +166,24 @@ self.addEventListener('push', event => {
   } catch {
     data = { title: 'Activity Lens' }
   }
-  event.waitUntil(self.registration.showNotification(data.title || 'Activity Lens', {
+  event.waitUntil(handlePush(data))
+})
+
+async function handlePush(data: PushPayload) {
+  // While the app is on screen, hand the payload to it and skip the OS
+  // notification — being interrupted by a banner for something already visible
+  // is noise.
+  //
+  // Chrome permits this within a budget rather than unconditionally: a push
+  // that shows nothing is allowed, but sustained abuse eventually makes it show
+  // a generic "site updated in the background" notice itself. Only suppressing
+  // while a window is actually visible keeps us well inside that.
+  if (await appIsVisible()) {
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+    for (const client of windows) client.postMessage({ type: 'IN_APP_NOTIFICATION', payload: data })
+    return
+  }
+  await self.registration.showNotification(data.title || 'Activity Lens', {
     body: data.body,
     // The sender's avatar when a person caused this, the app mark otherwise.
     icon: data.icon || '/icon-192.png',
@@ -168,9 +194,21 @@ self.addEventListener('push', event => {
     badge: '/badge-96.png',
     // Tapping should land on the workout (or wherever the event points).
     data: { link: data.link || '/' },
-    // Collapses repeats of the same notification rather than stacking them.
+    // Collapses repeats of the same notification rather than stacking them,
+    // and lets the app close this one by id once it has been read.
     tag: data.id,
-  }))
+  })
+}
+
+// The app asks for an OS notification to be dismissed once it has been read
+// in-app, so reading on one device does not leave a stale banner on this one.
+self.addEventListener('message', event => {
+  const data = event.data as { type?: string; tag?: string } | undefined
+  if (data?.type !== 'DISMISS_NOTIFICATION') return
+  event.waitUntil((async () => {
+    const shown = await self.registration.getNotifications(data.tag ? { tag: data.tag } : {})
+    for (const n of shown) n.close()
+  })())
 })
 
 self.addEventListener('notificationclick', event => {

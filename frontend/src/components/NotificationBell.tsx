@@ -2,8 +2,14 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { createPortal } from 'react-dom'
 import { Bell, Check, Share2, Footprints, Trophy, Clock, X, Trash2 } from 'lucide-react'
 import { api, type AppNotification, type NotificationKind } from '../lib/api'
-import { enablePush, maybePromptForPush, pushState, type PushState } from '../lib/push'
+import { dismissOSNotification, enablePush, maybePromptForPush, pushState, syncPushSubscription, type PushState } from '../lib/push'
 import { useIsMobile } from '../lib/useIsMobile'
+
+/**
+ * Dispatched by App when the service worker forwards a push that arrived while
+ * the app was visible, so the bell updates instantly instead of on the poll.
+ */
+export const PUSH_EVENT = 'al:push'
 
 /** How often to re-check the unread count while the app is open. */
 const POLL_MS = 60_000
@@ -80,7 +86,10 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
   useEffect(() => {
     void (async () => {
       const key = await load()
-      if (key) setPush(await maybePromptForPush(key))
+      if (!key) return
+      // Keep the server's record of this device in step with the browser's.
+      await syncPushSubscription()
+      setPush(await maybePromptForPush(key))
     })()
     // Runs once on mount; the polling effect below keeps it current after that.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -92,9 +101,13 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
     const tick = () => { if (document.visibilityState === 'visible') void load() }
     const id = setInterval(tick, POLL_MS)
     document.addEventListener('visibilitychange', tick)
+    // A push that landed while the app was open is the fastest signal there is,
+    // so refresh on it rather than waiting out the poll.
+    window.addEventListener(PUSH_EVENT, tick)
     return () => {
       clearInterval(id)
       document.removeEventListener('visibilitychange', tick)
+      window.removeEventListener(PUSH_EVENT, tick)
     }
   }, [load])
 
@@ -127,6 +140,8 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
       setUnread(c => Math.max(0, c - 1))
       await api.markNotificationRead(n.id).catch(() => {})
     }
+    // Reading it here should clear it from the OS tray too.
+    void dismissOSNotification(n.id)
     if (n.link) onNavigate(n.link)
   }
 
@@ -139,9 +154,11 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
   }
 
   async function markAll() {
+    const unreadIds = items.filter(i => !i.readAt).map(i => i.id)
     setItems(prev => prev.map(i => i.readAt ? i : { ...i, readAt: new Date().toISOString() }))
     setUnread(0)
     await api.markAllNotificationsRead().catch(() => {})
+    for (const id of unreadIds) void dismissOSNotification(id)
   }
 
   async function clearAll() {

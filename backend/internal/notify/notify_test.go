@@ -192,3 +192,32 @@ func TestSubscribeRejectedWhenPushUnconfigured(t *testing.T) {
 		t.Fatal("PushPublicKey() should be empty when push is unconfigured")
 	}
 }
+
+// The actor's avatar has to survive the round trip, since both the in-app panel
+// and the push payload render from it.
+func TestIconRoundTrips(t *testing.T) {
+	ctx := context.Background()
+	svc := newTestService(t, DefaultPrefs())
+
+	svc.Notify(ctx, Event{
+		UserID: alice, Kind: KindWorkoutShared, Title: "Bob shared a workout",
+		Icon: "/api/avatars/2-1234.jpg",
+	})
+	// A system event carries no actor, so the client falls back to a kind icon.
+	svc.Notify(ctx, Event{UserID: alice, Kind: KindGearWorn, Title: "Shoes are due"})
+
+	list, err := svc.List(ctx, alice)
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	byKind := map[Kind]Notification{}
+	for _, n := range list {
+		byKind[n.Kind] = n
+	}
+	if got := byKind[KindWorkoutShared].Icon; got != "/api/avatars/2-1234.jpg" {
+		t.Fatalf("shared Icon = %q, want the sender's avatar", got)
+	}
+	if got := byKind[KindGearWorn].Icon; got != "" {
+		t.Fatalf("system Icon = %q, want empty", got)
+	}
+}

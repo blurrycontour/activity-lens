@@ -2,10 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Lock, ShieldCheck, User as UserIcon, Upload, Monitor, LogOut, Trash2, AlertTriangle } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { api, ApiError, type SessionInfo } from '../lib/api'
-
-function initialsOf(name: string) {
-  return (name || '?').split(/\s+/).map(s => s[0]).slice(0, 2).join('').toUpperCase()
-}
+import { avatarUrl } from '../components/UserAvatar'
 
 function formatDate(iso: string) {
   const d = new Date(iso)
@@ -98,6 +95,20 @@ export default function Account() {
     }
   }
 
+  async function removeAvatar() {
+    setAvatarBusy(true)
+    setProfileMsg(null)
+    try {
+      const { user: updated } = await api.deleteAvatar()
+      setUser(updated)
+      setProfileMsg({ ok: true, text: 'Picture removed — using your generated avatar' })
+    } catch (err) {
+      setProfileMsg({ ok: false, text: err instanceof ApiError ? err.message : 'Could not remove picture' })
+    } finally {
+      setAvatarBusy(false)
+    }
+  }
+
   async function signOutOthers() {
     setSessionsBusy(true)
     try {
@@ -172,29 +183,29 @@ export default function Account() {
           </h3>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
-            {user.avatarPath ? (
-              <img
-                src={user.avatarPath}
-                alt="Avatar"
-                style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
-              />
-            ) : (
-              <div style={{
-                width: 64, height: 64, borderRadius: '50%',
-                background: 'linear-gradient(135deg, var(--primary) 0%, var(--blue) 100%)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 24, fontWeight: 700, color: '#fff', flexShrink: 0,
-              }}>
-                {initialsOf(user.displayName || user.username)}
-              </div>
-            )}
+            <img
+              src={avatarUrl(user)}
+              alt="Avatar"
+              style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, background: 'var(--bg-3)' }}
+            />
             <div>
               <input ref={fileRef} type="file" accept="image/*" hidden onChange={onAvatarPick} />
-              <button className="btn btn-ghost" onClick={() => fileRef.current?.click()} disabled={avatarBusy}>
-                <Upload size={14} /> {avatarBusy ? 'Uploading…' : 'Change picture'}
-              </button>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button className="btn btn-ghost" onClick={() => fileRef.current?.click()} disabled={avatarBusy}>
+                  <Upload size={14} /> {avatarBusy ? 'Uploading…' : user.avatarPath ? 'Change picture' : 'Upload picture'}
+                </button>
+                {/* Only offered when there is an upload to remove — the
+                    generated avatar is not something you can delete. */}
+                {user.avatarPath && (
+                  <button className="btn btn-ghost" onClick={removeAvatar} disabled={avatarBusy}>
+                    <Trash2 size={14} /> Remove
+                  </button>
+                )}
+              </div>
               <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 6 }}>
-                JP, PNG or GIF. Large images are scaled down automatically.
+                {user.avatarPath
+                  ? 'JPG, PNG or GIF. Large images are scaled down automatically.'
+                  : 'This picture was generated from your username. Upload one to replace it.'}
               </div>
             </div>
           </div>

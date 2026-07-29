@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/blurrycontour/activity-lens/backend/internal/imageutil"
 	"github.com/blurrycontour/activity-lens/backend/internal/mail"
 
+	"github.com/blurrycontour/go-authkit/auth"
 	"github.com/blurrycontour/go-authkit/httpmw"
 )
 
@@ -141,6 +143,47 @@ func (s *Server) handleUploadAvatar(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"user": updated})
 }
 
+// handleDeleteAvatar removes an uploaded picture, falling the user back to
+// their generated avatar. There is no "no avatar" state — every user always
+// has something to show, which is why this is a delete rather than a clear.
+func (s *Server) handleDeleteAvatar(w http.ResponseWriter, r *http.Request) {
+	user := httpmw.UserFrom(r)
+	updated, prevPath, err := s.auth.SetAvatar(r.Context(), user.ID, "")
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not update profile")
+		return
+	}
+	if prev := avatarDiskPath(s.avatarsDir(), prevPath); prev != "" {
+		_ = os.Remove(prev)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"user": updated})
+}
+
+// handleAutoAvatar renders the deterministic avatar for a seed (a username).
+// It is generated on demand rather than stored: the same seed always produces
+// the same image, so there is nothing worth persisting, and it means an account
+// has a usable picture from the moment it exists.
+//
+// Public for the same reason uploaded avatars are — an OS-level push
+// notification fetches it from outside any session.
+func (s *Server) handleAutoAvatar(w http.ResponseWriter, r *http.Request) {
+	seed := strings.TrimSuffix(filepath.Base(r.PathValue("seed")), ".png")
+	if seed == "" || seed == "." {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+	img, err := imageutil.Identicon(seed)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not render avatar")
+		return
+	}
+	w.Header().Set("Content-Type", "image/png")
+	// Deterministic output, so it can be cached hard and forever.
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(img)
+}
+
 func (s *Server) handleServeAvatar(w http.ResponseWriter, r *http.Request) {
 	name := filepath.Base(r.PathValue("file"))
 	if name == "." || name == "/" || strings.ContainsAny(name, `/\`) {
@@ -164,6 +207,22 @@ func (s *Server) handleServeAvatar(w http.ResponseWriter, r *http.Request) {
 	// shared cache holding an avatar is harmless.
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	http.ServeContent(w, r, name, info.ModTime(), f)
+}
+
+// effectiveAvatar is the picture to show for a user: their upload if they have
+// one, otherwise the deterministic avatar generated from their username. Every
+// caller that renders a person should use this, so "no avatar" never reaches
+// the UI or a push notification.
+func effectiveAvatar(u auth.User) string {
+	if u.AvatarPath != "" {
+		return u.AvatarPath
+	}
+	return autoAvatarURL(u.Username)
+}
+
+// autoAvatarURL is the public URL of the generated avatar for a seed.
+func autoAvatarURL(username string) string {
+	return avatarURLPrefix + "auto/" + url.PathEscape(username) + ".png"
 }
 
 // avatarDiskPath maps a stored avatar public URL back to a safe on-disk path

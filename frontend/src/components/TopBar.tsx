@@ -1,4 +1,5 @@
 import NotificationBell from './NotificationBell'
+import { avatarUrl } from './UserAvatar'
 import { Menu, Sun, Moon, Monitor, HelpCircle } from 'lucide-react'
 import type { ApiUser } from '../lib/api'
 import Logo from './Logo'
@@ -32,12 +33,6 @@ const THEME_LABELS: Record<ThemeMode, string> = {
 }
 
 export default function TopBar({ onToggleSidebar, themeMode, onCycleTheme, onUserMenu, onHelp, onHome, onNavigate, isMobile, user }: TopBarProps) {
-  const initials = (user.displayName || user.username || '?')
-    .split(/\s+/)
-    .map(s => s[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase()
   return (
     <header className="topbar">
       {!isMobile && (
@@ -85,7 +80,7 @@ export default function TopBar({ onToggleSidebar, themeMode, onCycleTheme, onUse
         onClick={onUserMenu}
         style={{
           width: 32, height: 32, borderRadius: '50%',
-          background: user.avatarPath ? 'transparent' : 'linear-gradient(135deg, var(--primary) 0%, var(--blue) 100%)',
+          background: 'var(--bg-3)',
           border: '2px solid var(--border)',
           cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -97,9 +92,7 @@ export default function TopBar({ onToggleSidebar, themeMode, onCycleTheme, onUse
         onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = 'none' }}
         title="User menu"
       >
-        {user.avatarPath
-          ? <img src={user.avatarPath} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-          : initials}
+        <img src={avatarUrl(user)} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
       </button>
     </header>
   )

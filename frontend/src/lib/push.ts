@@ -32,6 +32,28 @@ export async function pushState(): Promise<PushState> {
 }
 
 /**
+ * Re-registers this browser's existing subscription with the backend, once per
+ * load.
+ *
+ * This exists because the browser's subscription and the server's record of it
+ * are two separate pieces of state that can silently diverge: a failed
+ * registration call, a restored database, or a subscription the browser
+ * refreshed on its own all leave a device that believes it is subscribed while
+ * the server has nobody to push to. Nothing would ever retry, because every
+ * check the UI makes — `getSubscription()` — only ever asks the browser.
+ *
+ * Re-sending is a cheap upsert keyed on the endpoint, so doing it unconditionally
+ * is far more robust than trying to detect the mismatch.
+ */
+export async function syncPushSubscription(): Promise<void> {
+  if (!pushSupported() || Notification.permission !== 'granted') return
+  const reg = await navigator.serviceWorker.ready
+  const sub = await reg.pushManager.getSubscription()
+  if (!sub) return
+  await api.pushSubscribe(sub.toJSON() as PushSubscriptionJSON).catch(() => {})
+}
+
+/**
  * Asks permission if needed, subscribes, and registers the subscription with
  * the backend. Returns the resulting state so the caller can explain a refusal
  * rather than silently doing nothing.
@@ -98,4 +120,15 @@ export async function maybePromptForPush(vapidKey: string): Promise<PushState> {
   } catch {
     return 'off'
   }
+}
+
+/**
+ * Closes an OS notification that has since been read inside the app, so a
+ * banner does not linger in the tray after you have dealt with it elsewhere.
+ * Notifications are tagged with their id, which is what makes this targetable.
+ */
+export async function dismissOSNotification(tag: string): Promise<void> {
+  if (!('serviceWorker' in navigator)) return
+  const reg = await navigator.serviceWorker.ready
+  reg.active?.postMessage({ type: 'DISMISS_NOTIFICATION', tag })
 }

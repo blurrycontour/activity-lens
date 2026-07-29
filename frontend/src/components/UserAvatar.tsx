@@ -6,32 +6,29 @@ export function userLabel(u: UserRef): string {
 }
 
 /**
- * Small round avatar for a user, falling back to their initial on an accent
- * gradient when they have not uploaded a picture — matching TopBar's treatment.
+ * The picture to show for a user: their upload, or the deterministic avatar the
+ * server generates from their username. Mirrors effectiveAvatar in the backend,
+ * for the places the client builds a reference itself.
  */
+export function avatarUrl(u: { avatarPath?: string; username: string }): string {
+  return u.avatarPath || `/api/avatars/auto/${encodeURIComponent(u.username)}.png`
+}
+
+/** Small round avatar for a user. */
 export default function UserAvatar({ user, size = 28 }: { user: UserRef; size?: number }) {
-  const label = userLabel(user)
   return (
-    <span
-      title={label}
+    <img
+      src={avatarUrl(user)}
+      alt=""
+      title={userLabel(user)}
       style={{
         width: size,
         height: size,
         borderRadius: '50%',
         flexShrink: 0,
-        overflow: 'hidden',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontSize: Math.round(size * 0.42),
-        fontWeight: 700,
-        color: '#fff',
-        background: user.avatarPath ? 'transparent' : 'linear-gradient(135deg, var(--primary) 0%, var(--blue) 100%)',
+        objectFit: 'cover',
+        background: 'var(--bg-3)',
       }}
-    >
-      {user.avatarPath
-        ? <img src={user.avatarPath} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        : label.charAt(0).toUpperCase()}
-    </span>
+    />
   )
 }

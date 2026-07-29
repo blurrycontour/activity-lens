@@ -3,7 +3,7 @@ The development of the app needs to happen in a maintainable and efficient way. 
 
 Less code is better than lot of sloppy code. Avoid unnecessary complexity and keep the codebase clean and maintainable. Always write code with future developers in mind, including yourself.
 
-IMPORTANT: If there are multiple ways to implement a major feature, show me the options along with pros and cons of each approach, so that we can decide the best way forward.
+IMPORTANT: If there are multiple ways to implement a major or medium feature, show me the options along with pros and cons of each approach, so that we can decide the best way forward.
 
 ### Frontend
 Stack: React + Vite + Tailwind CSS
@@ -24,4 +24,4 @@ Currently project uses Sqlite for simplicity, but all the backend should be comp
 
 
 ## Deployment
-Final deployment will be via Docker Compose and a local instance is running on port 9090.
+Deployment will be typically via docker compose and a local instance is running on port 9090.
