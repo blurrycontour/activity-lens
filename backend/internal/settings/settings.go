@@ -20,6 +20,7 @@ const (
 	keySMTP    = "smtp"
 	keyOIDC    = "oidc"
 	keyStorage = "storage"
+	keyVAPID   = "vapid"
 )
 
 // SMTP holds outbound email settings.
@@ -72,6 +73,40 @@ type UserPrefs struct {
 	// Goals the dashboard tracks, e.g. two 5 km runs a week plus two hikes a
 	// month. Empty means the user has not set any.
 	Goals []Goal `json:"goals"`
+	// Notify holds the per-kind notification switches. Stored as opaque JSON
+	// so the settings package does not have to know what kinds exist.
+	Notify json.RawMessage `json:"notify,omitempty"`
+}
+
+// VAPID is the Web Push keypair identifying this server to browser push
+// services. It is generated once on first run and kept for the lifetime of the
+// deployment: regenerating it invalidates every existing subscription.
+type VAPID struct {
+	Public  string `json:"public"`
+	Private string `json:"private"`
+}
+
+// VAPIDKeys returns the stored keypair, generating and persisting one the first
+// time it is asked for. Doing this here rather than through configuration means
+// push works on a fresh self-hosted install with nothing to set up.
+func (s *Store) VAPIDKeys(ctx context.Context, generate func() (private, public string, err error)) (VAPID, error) {
+	var v VAPID
+	found, err := s.get(ctx, keyVAPID, &v)
+	if err != nil {
+		return VAPID{}, err
+	}
+	if found && v.Public != "" && v.Private != "" {
+		return v, nil
+	}
+	priv, pub, err := generate()
+	if err != nil {
+		return VAPID{}, err
+	}
+	v = VAPID{Public: pub, Private: priv}
+	if err := s.set(ctx, keyVAPID, v); err != nil {
+		return VAPID{}, err
+	}
+	return v, nil
 }
 
 // Goal is one training target: `Count` qualifying activities per `Period`.
@@ -168,15 +203,16 @@ func (s *Store) UserPreferences(ctx context.Context, userID int64) (UserPrefs, e
 	v := UserPrefs{CalorieMethod: "heart-rate", BodyWeightKg: 70, Goals: []Goal{}}
 	var (
 		goalsJSON   string
+		notifyJSON  string
 		legacyCount int
 		legacyType  string
 		legacyMinKm float64
 	)
 	err := s.db.QueryRowContext(ctx,
 		`SELECT calorie_method, body_weight_kg, sex, birth_year, height_cm, max_hr, resting_hr, threshold_pace, ftp, step_length_cm,
-		        goals, weekly_goal_count, weekly_goal_type, weekly_goal_min_km FROM user_prefs WHERE user_id = ?`, userID).
+		        goals, notify_prefs, weekly_goal_count, weekly_goal_type, weekly_goal_min_km FROM user_prefs WHERE user_id = ?`, userID).
 		Scan(&v.CalorieMethod, &v.BodyWeightKg, &v.Sex, &v.BirthYear, &v.HeightCm, &v.MaxHR, &v.RestingHR, &v.ThresholdPace, &v.FTP, &v.StepLengthCm,
-			&goalsJSON, &legacyCount, &legacyType, &legacyMinKm)
+			&goalsJSON, &notifyJSON, &legacyCount, &legacyType, &legacyMinKm)
 	if errors.Is(err, sql.ErrNoRows) {
 		return v, nil
 	}
@@ -195,6 +231,9 @@ func (s *Store) UserPreferences(ctx context.Context, userID int64) (UserPrefs, e
 	if v.Goals == nil {
 		v.Goals = []Goal{}
 	}
+	if notifyJSON != "" {
+		v.Notify = json.RawMessage(notifyJSON)
+	}
 	return v, nil
 }
 
@@ -209,8 +248,8 @@ func (s *Store) SaveUserPreferences(ctx context.Context, userID int64, v UserPre
 	}
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO user_prefs (user_id, calorie_method, body_weight_kg, sex, birth_year, height_cm, max_hr, resting_hr, threshold_pace, ftp, step_length_cm,
-		                         goals, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		                         goals, notify_prefs, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(user_id) DO UPDATE SET
 		   calorie_method = excluded.calorie_method,
 		   body_weight_kg = excluded.body_weight_kg,
@@ -223,9 +262,10 @@ func (s *Store) SaveUserPreferences(ctx context.Context, userID int64, v UserPre
 		   ftp = excluded.ftp,
 		   step_length_cm = excluded.step_length_cm,
 		   goals = excluded.goals,
+		   notify_prefs = excluded.notify_prefs,
 		   updated_at = excluded.updated_at`,
 		userID, v.CalorieMethod, v.BodyWeightKg, v.Sex, v.BirthYear, v.HeightCm, v.MaxHR, v.RestingHR, v.ThresholdPace, v.FTP, v.StepLengthCm,
-		string(goalsJSON), time.Now().UTC().Format(time.RFC3339))
+		string(goalsJSON), string(v.Notify), time.Now().UTC().Format(time.RFC3339))
 	return err
 }
 

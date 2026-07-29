@@ -1,3 +1,4 @@
+import NotificationBell from './NotificationBell'
 import { Menu, Sun, Moon, Monitor, HelpCircle } from 'lucide-react'
 import type { ApiUser } from '../lib/api'
 import Logo from './Logo'
@@ -12,6 +13,8 @@ interface TopBarProps {
   onHelp: () => void
   /** Clicking the brand returns to the dashboard, like any site logo. */
   onHome: () => void
+  /** Opens an in-app path, e.g. from a notification's deep link. */
+  onNavigate: (link: string) => void
   isMobile: boolean
   user: ApiUser
 }
@@ -28,7 +31,7 @@ const THEME_LABELS: Record<ThemeMode, string> = {
   system: 'System theme',
 }
 
-export default function TopBar({ onToggleSidebar, themeMode, onCycleTheme, onUserMenu, onHelp, onHome, isMobile, user }: TopBarProps) {
+export default function TopBar({ onToggleSidebar, themeMode, onCycleTheme, onUserMenu, onHelp, onHome, onNavigate, isMobile, user }: TopBarProps) {
   const initials = (user.displayName || user.username || '?')
     .split(/\s+/)
     .map(s => s[0])
@@ -75,6 +78,8 @@ export default function TopBar({ onToggleSidebar, themeMode, onCycleTheme, onUse
       >
         {THEME_ICONS[themeMode]}
       </button>
+
+      <NotificationBell onNavigate={onNavigate} />
 
       <button
         onClick={onUserMenu}

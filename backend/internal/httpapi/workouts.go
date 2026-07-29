@@ -3,6 +3,7 @@ package httpapi
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/blurrycontour/activity-lens/backend/internal/ingest"
+	"github.com/blurrycontour/activity-lens/backend/internal/notify"
 	"github.com/blurrycontour/activity-lens/backend/internal/settings"
 	"github.com/blurrycontour/activity-lens/backend/internal/workout"
 
@@ -117,6 +119,7 @@ func (s *Server) handleCreateWorkout(w http.ResponseWriter, r *http.Request) {
 	}
 	s.linkEquipment(r, user.ID, wk, req.EquipmentIDs)
 	slog.Info("workout created", "workout_id", wk.ID, "user_id", user.ID, "source", "manual")
+	s.afterWorkoutRecorded(r, user.ID)
 	writeJSON(w, http.StatusCreated, wk)
 }
 
@@ -224,6 +227,7 @@ func (s *Server) handleImportWorkout(w http.ResponseWriter, r *http.Request) {
 	}
 	s.linkEquipment(r, user.ID, wk, equipmentIDs)
 	slog.Info("workout imported", "workout_id", wk.ID, "user_id", user.ID, "filename", header.Filename, "bytes", len(data))
+	s.afterWorkoutRecorded(r, user.ID)
 
 	if s.rawUploads != nil {
 		if keep, err := s.settings.StoredStorage(r.Context()); err == nil && keep.KeepOriginalUploads {
@@ -405,6 +409,11 @@ func (s *Server) handleSavePreferences(w http.ResponseWriter, r *http.Request) {
 			Type   string  `json:"type"`
 			MinKm  float64 `json:"minKm"`
 		} `json:"goals"`
+
+		Notify *struct {
+			Kinds map[string]bool `json:"kinds"`
+			Push  bool            `json:"push"`
+		} `json:"notify"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -472,6 +481,22 @@ func (s *Server) handleSavePreferences(w http.ResponseWriter, r *http.Request) {
 		StepLengthCm:  clampStepLength(req.StepLengthCm),
 
 		Goals: goals,
+	}
+	// Unknown kinds are dropped so a stale or hand-crafted client cannot write
+	// switches that nothing reads.
+	if req.Notify != nil {
+		kinds := make(map[notify.Kind]bool, len(req.Notify.Kinds))
+		for k, enabled := range req.Notify.Kinds {
+			if notify.ValidKind(notify.Kind(k)) {
+				kinds[notify.Kind(k)] = enabled
+			}
+		}
+		encoded, err := json.Marshal(notify.Prefs{Kinds: kinds, Push: req.Notify.Push})
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "could not save preferences")
+			return
+		}
+		prefs.Notify = encoded
 	}
 	if err := s.settings.SaveUserPreferences(r.Context(), user.ID, prefs); err != nil {
 		writeError(w, http.StatusInternalServerError, "could not save preferences")

@@ -3,7 +3,8 @@ import { Check, Plus, Trash2 } from 'lucide-react'
 import { ACCENTS, applyAccent } from '../lib/theme'
 import { WORKOUT_TYPES, TYPE_ICON } from '../data/workouts'
 import { describeGoal, newGoal, type Goal } from '../lib/insights'
-import { api, ApiError } from '../lib/api'
+import { enablePush, disablePush, pushState as pushState_, type PushState } from '../lib/push'
+import { api, ApiError, type NotificationKind, type NotifyPrefs } from '../lib/api'
 import { useLocalStorage } from '../lib/useLocalStorage'
 import {
   DASHBOARD_CFG_KEY, DEFAULT_DASHBOARD_CONFIG, STAT_CARDS, WINDOW_OPTIONS,
@@ -14,6 +15,20 @@ import {
 interface SettingsProps {
   accent: string
   onAccentChange: (a: string) => void
+}
+
+/** The switches Settings offers, in the order they are listed. */
+const NOTIFY_KINDS: { id: NotificationKind; label: string }[] = [
+  { id: 'workout_shared', label: 'Someone shares a workout with me' },
+  { id: 'gear_worn', label: 'Gear reaches its replacement distance' },
+  { id: 'goal_met', label: 'I complete a training goal' },
+  { id: 'goal_at_risk', label: "A goal's period is nearly over and I'm short" },
+]
+
+/** Everything on, matching the server's default for a user who never saved. */
+const DEFAULT_NOTIFY: NotifyPrefs = {
+  kinds: Object.fromEntries(NOTIFY_KINDS.map(k => [k.id, true])) as NotifyPrefs['kinds'],
+  push: true,
 }
 
 export default function Settings({ accent, onAccentChange }: SettingsProps) {
@@ -46,6 +61,12 @@ export default function Settings({ accent, onAccentChange }: SettingsProps) {
   const [calBusy, setCalBusy] = useState(false)
   const [calMsg, setCalMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
+  const [notify, setNotify] = useState<NotifyPrefs>(DEFAULT_NOTIFY)
+  const [notifyMsg, setNotifyMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [pushKey, setPushKey] = useState('')
+  const [pushState, setPushState] = useState<PushState>('off')
+  const [pushBusy, setPushBusy] = useState(false)
+
   const [goals, setGoals] = useState<Goal[]>([])
   const [goalBusy, setGoalBusy] = useState(false)
   const [goalMsg, setGoalMsg] = useState<{ ok: boolean; text: string } | null>(null)
@@ -72,6 +93,7 @@ export default function Settings({ accent, onAccentChange }: SettingsProps) {
         setRestingHr(p.restingHr ? String(p.restingHr) : '')
         setThresholdPace(p.thresholdPace)
         setFtp(p.ftp ? String(p.ftp) : '')
+        setNotify(p.notify ?? DEFAULT_NOTIFY)
         setGoals((p.goals ?? []).map(g => ({
           id: g.id || Math.random().toString(36).slice(2, 10),
           count: g.count,
@@ -81,6 +103,21 @@ export default function Settings({ accent, onAccentChange }: SettingsProps) {
         })))
       })
       .catch(() => { /* fall back to defaults */ })
+    return () => { active = false }
+  }, [])
+
+  // The VAPID key comes from the notifications endpoint rather than its own
+  // route, since the panel already fetches it on every load.
+  useEffect(() => {
+    let active = true
+    void (async () => {
+      try {
+        const [res, state] = await Promise.all([api.notifications(), pushState_()])
+        if (!active) return
+        setPushKey(res.pushKey ?? '')
+        setPushState(res.pushKey ? state : 'unsupported')
+      } catch { /* leave push showing as unavailable */ }
+    })()
     return () => { active = false }
   }, [])
 
@@ -97,6 +134,35 @@ export default function Settings({ accent, onAccentChange }: SettingsProps) {
       thresholdPace,
       ftp: Number(ftp) || 0,
       goals,
+      notify,
+    }
+  }
+
+  /** Persists the notification switches on their own. */
+  async function saveNotify(next: NotifyPrefs) {
+    setNotify(next)
+    setNotifyMsg(null)
+    try {
+      await api.savePreferences({ ...buildPayload(), notify: next })
+    } catch (e) {
+      setNotifyMsg({ ok: false, text: e instanceof ApiError ? e.message : 'Save failed' })
+    }
+  }
+
+  /** Enrols or removes this browser from push, reporting why if it refuses. */
+  async function togglePush(on: boolean) {
+    setPushBusy(true)
+    setNotifyMsg(null)
+    try {
+      const state = on ? await enablePush(pushKey) : await disablePush()
+      setPushState(state)
+      if (state === 'denied') {
+        setNotifyMsg({ ok: false, text: 'Your browser is blocking notifications. Allow them for this site in its settings, then try again.' })
+      }
+    } catch (e) {
+      setNotifyMsg({ ok: false, text: e instanceof ApiError ? e.message : 'Could not change push notifications' })
+    } finally {
+      setPushBusy(false)
     }
   }
 
@@ -260,6 +326,72 @@ export default function Settings({ accent, onAccentChange }: SettingsProps) {
             Change is measured against the equally long period immediately before your time
             window, so it is unavailable when the window is set to All time.
           </p>
+        </section>
+
+        {/* Notifications */}
+        <section className="card">
+          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Notifications</h3>
+          <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 16 }}>
+            What Activity Lens tells you about, and whether it may reach you when the app is closed.
+          </p>
+
+          {/* The master switch leads: whether notifications can reach you at all
+              matters more than which ones, and the per-kind list below is
+              meaningless to someone who has not granted permission. */}
+          <div style={{ paddingBottom: 16, borderBottom: '1px solid var(--border)' }}>
+            {pushState === 'unsupported' ? (
+              <>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Push Notifications</div>
+                <p style={{ fontSize: 11, color: 'var(--text-3)', lineHeight: 1.5 }}>
+                  Unavailable in this browser. On iPhone or iPad, add Activity Lens to your Home
+                  Screen first — Safari only allows push for installed apps.
+                </p>
+              </>
+            ) : (
+              <>
+                <label className="switch" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
+                  <input
+                    type="checkbox"
+                    checked={pushState === 'on' && notify.push}
+                    disabled={pushBusy || pushState === 'denied'}
+                    onChange={async e => {
+                      const on = e.target.checked
+                      await saveNotify({ ...notify, push: on })
+                      await togglePush(on)
+                    }}
+                  />
+                  <span className="switch-track" />
+                  Push Notifications
+                </label>
+                <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8, lineHeight: 1.5 }}>
+                  Reaches you even when Activity Lens is closed. This is per browser and per device,
+                  so turn it on anywhere you want to be notified.
+                </p>
+              </>
+            )}
+            {notifyMsg && (
+              <p style={{ fontSize: 12, marginTop: 10, color: notifyMsg.ok ? 'var(--primary)' : '#ef4444' }}>{notifyMsg.text}</p>
+            )}
+          </div>
+
+          <div style={{ marginTop: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-3)', marginBottom: 12 }}>
+              Notify me when
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {NOTIFY_KINDS.map(k => (
+                <label className="switch" key={k.id} style={{ fontSize: 13, color: 'var(--text-2)' }}>
+                  <input
+                    type="checkbox"
+                    checked={notify.kinds[k.id] !== false}
+                    onChange={e => void saveNotify({ ...notify, kinds: { ...notify.kinds, [k.id]: e.target.checked } })}
+                  />
+                  <span className="switch-track" />
+                  {k.label}
+                </label>
+              ))}
+            </div>
+          </div>
         </section>
 
         {/* Training goals */}

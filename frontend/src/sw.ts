@@ -137,6 +137,67 @@ registerRoute(
 // 'waiting' forever (every open tab pins the old worker as controller) and
 // the app keeps serving whatever was precached at last activation — the
 // "have to clear site data to see a new deploy" symptom.
+// ── Web Push ──
+// The backend sends a JSON payload; anything unparseable still shows a generic
+// notification, because Chrome revokes push permission from a worker that
+// receives a push and shows nothing.
+interface PushPayload {
+  id?: string
+  kind?: string
+  title?: string
+  body?: string
+  link?: string
+  icon?: string
+}
+
+self.addEventListener('push', event => {
+  let data: PushPayload = {}
+  try {
+    data = event.data?.json() as PushPayload ?? {}
+  } catch {
+    data = { title: 'Activity Lens' }
+  }
+  event.waitUntil(self.registration.showNotification(data.title || 'Activity Lens', {
+    body: data.body,
+    // The sender's avatar when a person caused this, the app mark otherwise.
+    icon: data.icon || '/icon-192.png',
+    // The badge is the small monochrome status-bar mark; it always stays ours.
+    badge: '/icon-192.png',
+    // Tapping should land on the workout (or wherever the event points).
+    data: { link: data.link || '/' },
+    // Collapses repeats of the same notification rather than stacking them.
+    tag: data.id,
+  }))
+})
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close()
+  const link = (event.notification.data as { link?: string } | undefined)?.link || '/'
+  const url = new URL(link, self.location.origin).href
+
+  // Prefer focusing an open tab and navigating it: opening a second copy of an
+  // installed PWA is disorienting, and the SPA can route without a reload.
+  event.waitUntil((async () => {
+    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+    for (const client of clients) {
+      if (new URL(client.url).origin === self.location.origin) {
+        await client.focus()
+        // navigate() is not implemented everywhere; fall back to a message the
+        // app handles with its own history push.
+        if ('navigate' in client) {
+          try {
+            await client.navigate(url)
+            return
+          } catch { /* fall through to postMessage */ }
+        }
+        client.postMessage({ type: 'NAVIGATE', url: link })
+        return
+      }
+    }
+    await self.clients.openWindow(url)
+  })())
+})
+
 self.addEventListener('install', event => {
   event.waitUntil(self.skipWaiting())
 })

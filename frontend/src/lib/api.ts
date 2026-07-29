@@ -32,6 +32,35 @@ export interface BuildInfo {
   platform: string
 }
 
+/** What happened, driving the icon the notification panel renders. */
+export type NotificationKind = 'workout_shared' | 'gear_worn' | 'goal_met' | 'goal_at_risk'
+
+export interface AppNotification {
+  id: string
+  kind: NotificationKind
+  title: string
+  body?: string
+  /** In-app path to open when tapped, e.g. "/workouts/abc123". */
+  link?: string
+  /** Avatar of whoever caused this; absent for system-generated events. */
+  icon?: string
+  readAt?: string
+  createdAt: string
+}
+
+export interface NotificationsResponse {
+  notifications: AppNotification[]
+  unread: number
+  /** VAPID public key; absent when the server has push disabled. */
+  pushKey?: string
+}
+
+/** Per-kind notification switches, plus the master push toggle. */
+export interface NotifyPrefs {
+  kinds: Partial<Record<NotificationKind, boolean>>
+  push: boolean
+}
+
 export interface AuthFeatures {
   allowRegistration: boolean
   oidcEnabled: boolean
@@ -96,6 +125,8 @@ export interface UserPreferences {
   stepLengthCm: number
   /** Training goals tracked on the dashboard; empty means none set. */
   goals: ApiGoal[]
+  /** Notification switches; absent until the user saves them once. */
+  notify?: NotifyPrefs
 }
 
 export interface ApiGoal {
@@ -217,6 +248,20 @@ export const api = {
   authConfig: () => request<AuthFeatures>('/api/auth/config'),
   me: () => request<{ user: ApiUser; csrfToken: string }>('/api/auth/me'),
   buildInfo: () => request<BuildInfo>('/api/build'),
+
+  // --- Notifications ---
+  notifications: () => request<NotificationsResponse>('/api/notifications'),
+  markNotificationRead: (id: string) =>
+    request<unknown>(`/api/notifications/${id}/read`, { method: 'POST' }),
+  markAllNotificationsRead: () =>
+    request<unknown>('/api/notifications/read-all', { method: 'POST' }),
+  deleteNotification: (id: string) =>
+    request<unknown>(`/api/notifications/${id}`, { method: 'DELETE' }),
+  clearNotifications: () => request<unknown>('/api/notifications', { method: 'DELETE' }),
+  pushSubscribe: (sub: PushSubscriptionJSON) =>
+    request<unknown>('/api/push/subscribe', { method: 'POST', body: sub }),
+  pushUnsubscribe: (endpoint: string) =>
+    request<unknown>('/api/push/unsubscribe', { method: 'POST', body: { endpoint } }),
   login: (identifier: string, password: string) =>
     request<{ user: ApiUser; csrfToken: string }>('/api/auth/login', {
       method: 'POST',

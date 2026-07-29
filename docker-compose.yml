@@ -41,6 +41,8 @@ services:
       AL_SMTP_FROM: "${AL_SMTP_FROM:-}"
       AL_SMTP_FROM_NAME: "${AL_SMTP_FROM_NAME:-}"
       AL_SMTP_ENCRYPTION: "${AL_SMTP_ENCRYPTION:-}"
+      # push notifications
+      AL_PUSH_SUBJECT: "${AL_PUSH_SUBJECT:-}"
     volumes:
       - ./.data:/data
     ports:

@@ -3,7 +3,7 @@ import { type Workout, type WorkoutType, WORKOUT_TYPES, fmtDuration, fmtDist, fm
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ReferenceDot, BarChart, Bar } from 'recharts'
 import {
   ArrowLeft, Heart, Mountain, Zap, Clock, TrendingUp, Navigation, Download, Pencil, Trash2, Gauge,
-  Check, X as XIcon, Play, Pause, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, Layers, AlertTriangle, Activity, Share2,
+  Check, X as XIcon, Play, Pause, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, Layers, AlertTriangle, Activity, Share2, Lock,
 } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useAuth } from '../context/AuthContext'
@@ -94,6 +94,101 @@ function OptionsMenu({ onEdit, onExport, onShare, onRecalculate, onDelete, delet
             <Trash2 size={14} /> {deleting ? 'Deleting…' : 'Delete workout'}
           </button>
         </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * The workout's private notes. Always present so there is somewhere obvious to
+ * write, rather than a field that only appears once a note exists.
+ *
+ * Notes never leave the owner: the API redacts them from every response to
+ * anyone else, which is why this card is not rendered at all in read-only mode.
+ */
+function NotesCard({ workout: w, onSaved }: { workout: Workout; onSaved: (w: Workout) => void }) {
+  const { updateWorkout } = useWorkouts()
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(w.notes ?? '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const areaRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    if (editing) areaRef.current?.focus()
+  }, [editing])
+
+  function start() {
+    setDraft(w.notes ?? '')
+    setError(null)
+    setEditing(true)
+  }
+
+  async function save(next: string) {
+    setSaving(true)
+    setError(null)
+    try {
+      onSaved(await updateWorkout(w.id, { notes: next.trim() }))
+      setEditing(false)
+    } catch {
+      setError('Could not save your note.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const hasNotes = (w.notes ?? '').trim().length > 0
+
+  return (
+    <div className="card" style={{ marginTop: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
+        <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+          Notes
+          <span className="notes-private" title="Notes stay private — they are never included when a workout is shared or made public">
+            <Lock size={10} /> Private
+          </span>
+        </h3>
+        {!editing && (
+          <button className="btn btn-ghost" style={{ fontSize: 12, padding: '4px 10px' }} onClick={start}>
+            {hasNotes ? 'Edit' : 'Add note'}
+          </button>
+        )}
+      </div>
+
+      {error && <p style={{ fontSize: 12, color: '#ef4444', marginBottom: 8 }}>{error}</p>}
+
+      {editing ? (
+        <>
+          <textarea
+            ref={areaRef}
+            className="notes-input"
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            placeholder="How did it feel? Weather, route, niggles, anything worth remembering."
+            rows={5}
+            disabled={saving}
+          />
+          <div style={{ display: 'flex', gap: 8, marginTop: 10, justifyContent: 'flex-end' }}>
+            {hasNotes && (
+              <button
+                className="btn btn-ghost"
+                style={{ fontSize: 12, marginRight: 'auto', color: '#ef4444' }}
+                onClick={() => void save('')}
+                disabled={saving}
+              >
+                Remove
+              </button>
+            )}
+            <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => setEditing(false)} disabled={saving}>Cancel</button>
+            <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={() => void save(draft)} disabled={saving}>
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </>
+      ) : hasNotes ? (
+        <p className="notes-text">{w.notes}</p>
+      ) : (
+        <p style={{ fontSize: 13, color: 'var(--text-3)' }}>No notes yet.</p>
       )}
     </div>
   )
@@ -1236,12 +1331,16 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
           )}
         </div>
 
-        {w.notes && (
-          <div className="card" style={{ marginTop: 16 }}>
-            <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Notes</h3>
-            <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6 }}>{w.notes}</p>
-          </div>
-        )}
+        {/* Notes are stripped from every response to a non-owner, so a shared
+            workout has none to show and no field to offer. */}
+        {readOnly
+          ? w.notes && (
+            <div className="card" style={{ marginTop: 16 }}>
+              <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Notes</h3>
+              <p className="notes-text">{w.notes}</p>
+            </div>
+          )
+          : <NotesCard workout={w} onSaved={setW} />}
 
         {!readOnly && (
         <div className="card" style={{ marginTop: 16 }}>

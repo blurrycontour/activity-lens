@@ -60,6 +60,12 @@ var workoutDedupeSchema string
 //go:embed migrations/0015_workout_sharing.sql
 var workoutSharingSchema string
 
+//go:embed migrations/0016_notifications.sql
+var notificationsSchema string
+
+//go:embed migrations/0017_notification_icon.sql
+var notificationIconSchema string
+
 // OpenSQLite opens (and pings) a pure-Go SQLite database at dbPath with
 // foreign keys and WAL enabled for concurrency and integrity.
 func OpenSQLite(dbPath string) (*sql.DB, error) {
@@ -119,6 +125,8 @@ func MigrateApp(ctx context.Context, db *sql.DB) error {
 		{"multi goals", multiGoalsSchema},
 		{"workout dedupe", workoutDedupeSchema},
 		{"workout sharing", workoutSharingSchema},
+		{"notifications", notificationsSchema},
+		{"notification icon", notificationIconSchema},
 	} {
 		if err := applyAlters(ctx, db, m.schema); err != nil {
 			return fmt.Errorf("apply %s schema: %w", m.name, err)

@@ -20,9 +20,10 @@ type Config struct {
 	DatabaseURL string // when set, overrides the default sqlite path (kept for future Postgres support)
 
 	// Bootstrap admin (created on first run if it does not exist)
-	AdminUser  string
-	AdminEmail string
-	AdminPass  string
+	AdminUser   string
+	AdminEmail  string
+	AdminPass   string
+	PushSubject string
 
 	// Session
 	SessionTTL    time.Duration
@@ -66,12 +67,15 @@ type OIDCConfig struct {
 // Load reads configuration from the environment, applying defaults.
 func Load() (Config, error) {
 	c := Config{
-		Addr:              env("AL_ADDR", ":8080"),
-		DataDir:           env("AL_DATA_DIR", "./.data"),
-		DatabaseURL:       os.Getenv("AL_DATABASE_URL"),
-		AdminUser:         os.Getenv("AL_ADMIN_USER"),
-		AdminEmail:        os.Getenv("AL_ADMIN_EMAIL"),
-		AdminPass:         os.Getenv("AL_ADMIN_PASS"),
+		Addr:        env("AL_ADDR", ":8080"),
+		DataDir:     env("AL_DATA_DIR", "./.data"),
+		DatabaseURL: os.Getenv("AL_DATABASE_URL"),
+		AdminUser:   os.Getenv("AL_ADMIN_USER"),
+		AdminEmail:  os.Getenv("AL_ADMIN_EMAIL"),
+		AdminPass:   os.Getenv("AL_ADMIN_PASS"),
+		// Contact address embedded in Web Push messages, required by the spec
+		// so a push service has someone to reach about abuse.
+		PushSubject:       env("AL_PUSH_SUBJECT", "mailto:admin@localhost"),
 		CookieName:        env("AL_COOKIE_NAME", "al_session"),
 		SecureCookies:     boolEnv("AL_SECURE_COOKIES", false),
 		AllowRegistration: boolEnv("AL_ALLOW_REGISTRATION", false),

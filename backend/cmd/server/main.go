@@ -16,6 +16,7 @@ import (
 	"github.com/blurrycontour/activity-lens/backend/internal/config"
 	"github.com/blurrycontour/activity-lens/backend/internal/equipment"
 	"github.com/blurrycontour/activity-lens/backend/internal/httpapi"
+	"github.com/blurrycontour/activity-lens/backend/internal/notify"
 	"github.com/blurrycontour/activity-lens/backend/internal/settings"
 	"github.com/blurrycontour/activity-lens/backend/internal/store"
 	"github.com/blurrycontour/activity-lens/backend/internal/workout"
@@ -93,7 +94,26 @@ func run() error {
 	settingsStore := settings.New(db)
 	rawUploads := workout.NewRawUploadStore(cfg.DataDir)
 
-	apiServer := httpapi.New(cfg, authSvc, workoutSvc, equipmentSvc, settingsStore, rawUploads, httpapi.BuildInfo{
+	// Web Push keys are generated on first run and kept in the database, so a
+	// fresh self-hosted install has working push with nothing to configure.
+	vapid, err := settingsStore.VAPIDKeys(ctx, notify.GenerateVAPIDKeys)
+	if err != nil {
+		slog.Warn("push notifications unavailable", "error", err)
+	}
+	notifySvc := notify.NewService(
+		notify.NewSQLiteRepository(db),
+		notify.VAPIDKeys{Public: vapid.Public, Private: vapid.Private, Subject: cfg.PushSubject},
+		func(ctx context.Context, userID int64) (notify.Prefs, error) {
+			prefs, err := settingsStore.UserPreferences(ctx, userID)
+			if err != nil {
+				return notify.DefaultPrefs(), err
+			}
+			return notify.DecodePrefs(prefs.Notify), nil
+		},
+	)
+	slog.Info("notifications ready", "push", vapid.Public != "")
+
+	apiServer := httpapi.New(cfg, authSvc, workoutSvc, equipmentSvc, settingsStore, rawUploads, notifySvc, httpapi.BuildInfo{
 		Version:  version,
 		Revision: revision,
 		Created:  created,
@@ -110,6 +130,9 @@ func run() error {
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
+
+	// Time-driven notification checks (goal periods running out).
+	go apiServer.StartScheduler(ctx)
 
 	go func() {
 		// revision/built only exist in a Docker build; omit them otherwise

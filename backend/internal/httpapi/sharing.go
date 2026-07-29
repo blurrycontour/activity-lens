@@ -83,6 +83,9 @@ func (s *Server) handleAddWorkoutShare(w http.ResponseWriter, r *http.Request) {
 		s.writeWorkoutError(w, err)
 		return
 	}
+	if wk, err := s.workout.Get(r.Context(), user.ID, id); err == nil {
+		s.notifyWorkoutShared(r, *user, req.UserID, wk)
+	}
 	s.writeShares(w, r, user.ID, id, http.StatusCreated)
 }
 
@@ -221,6 +224,9 @@ func (s *Server) userDirectory(r *http.Request) (map[int64]workout.OwnerRef, err
 func (s *Server) purgeUserShares(r *http.Request, userID int64) {
 	if err := s.workout.PurgeUserShares(r.Context(), userID); err != nil {
 		slog.Error("could not purge workout shares for deleted user", "userId", userID, "error", err)
+	}
+	if err := s.notify.PurgeUser(r.Context(), userID); err != nil {
+		slog.Error("could not purge notifications for deleted user", "userId", userID, "error", err)
 	}
 }
 

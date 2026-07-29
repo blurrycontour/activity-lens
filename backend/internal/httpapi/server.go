@@ -6,6 +6,7 @@ import (
 
 	"github.com/blurrycontour/activity-lens/backend/internal/config"
 	"github.com/blurrycontour/activity-lens/backend/internal/equipment"
+	"github.com/blurrycontour/activity-lens/backend/internal/notify"
 	"github.com/blurrycontour/activity-lens/backend/internal/settings"
 	"github.com/blurrycontour/activity-lens/backend/internal/web"
 	"github.com/blurrycontour/activity-lens/backend/internal/workout"
@@ -25,12 +26,13 @@ type Server struct {
 	equipment  *equipment.Service
 	settings   *settings.Store
 	rawUploads *workout.RawUploadStore
+	notify     *notify.Service
 	build      BuildInfo
 }
 
 // New constructs a Server and its auth middleware/OIDC handler.
-func New(cfg config.Config, authSvc *auth.Service, workoutSvc *workout.Service, equipmentSvc *equipment.Service, settingsStore *settings.Store, rawUploads *workout.RawUploadStore, build BuildInfo) *Server {
-	s := &Server{cfg: cfg, auth: authSvc, workout: workoutSvc, equipment: equipmentSvc, settings: settingsStore, rawUploads: rawUploads, build: build}
+func New(cfg config.Config, authSvc *auth.Service, workoutSvc *workout.Service, equipmentSvc *equipment.Service, settingsStore *settings.Store, rawUploads *workout.RawUploadStore, notifySvc *notify.Service, build BuildInfo) *Server {
+	s := &Server{cfg: cfg, auth: authSvc, workout: workoutSvc, equipment: equipmentSvc, settings: settingsStore, rawUploads: rawUploads, notify: notifySvc, build: build}
 	s.mw = &httpmw.Middleware{
 		Auth:   authSvc,
 		Secure: s.secure,
@@ -123,6 +125,15 @@ func (s *Server) apiRoutes() http.Handler {
 	mux.Handle("GET /api/feed/shared", s.authed(s.handleFeedShared))
 	// Minimal user directory backing the share picker.
 	mux.Handle("GET /api/users", s.authed(s.handleListUserDirectory))
+
+	// --- Notifications (authenticated) ---
+	mux.Handle("GET /api/notifications", s.authed(s.handleListNotifications))
+	mux.Handle("POST /api/notifications/read-all", s.authedCSRF(s.handleMarkAllNotificationsRead))
+	mux.Handle("POST /api/notifications/{id}/read", s.authedCSRF(s.handleMarkNotificationRead))
+	mux.Handle("DELETE /api/notifications/{id}", s.authedCSRF(s.handleDeleteNotification))
+	mux.Handle("DELETE /api/notifications", s.authedCSRF(s.handleClearNotifications))
+	mux.Handle("POST /api/push/subscribe", s.authedCSRF(s.handlePushSubscribe))
+	mux.Handle("POST /api/push/unsubscribe", s.authedCSRF(s.handlePushUnsubscribe))
 
 	// --- Equipment (authenticated) ---
 	mux.Handle("GET /api/equipment", s.authed(s.handleListEquipment))

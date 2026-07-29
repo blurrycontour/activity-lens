@@ -41,8 +41,8 @@ function pathForPage(p: Page): string {
   return p === 'dashboard' ? '/' : `/${p}`
 }
 
-function parseLocation(): { page: Page; workoutId: string | null; redirect?: boolean } {
-  const segs = window.location.pathname.split('/').filter(Boolean)
+function parseLocation(pathname = window.location.pathname): { page: Page; workoutId: string | null; redirect?: boolean } {
+  const segs = pathname.split('/').filter(Boolean)
   if (segs.length === 0) return { page: 'dashboard', workoutId: null }
   if (segs[0] === 'workouts' && segs[1]) return { page: 'workouts', workoutId: segs[1] }
   const candidate = segs[0] as Page
@@ -175,6 +175,44 @@ export default function App() {
     window.history.pushState(null, '', pathForPage(p))
   }, [])
 
+  /**
+   * Opens an in-app path — a notification's deep link, or a navigation request
+   * relayed by the service worker when a push is tapped. Parsed rather than
+   * assigned to location.href so the SPA routes without a full reload.
+   */
+  const openLink = useCallback((link: string) => {
+    const loc = parseLocation(new URL(link, window.location.origin).pathname)
+    if (loc.workoutId) {
+      api.getWorkout(loc.workoutId)
+        .then(w => {
+          setSelectedWorkout(w)
+          window.history.pushState(null, '', `/workouts/${w.id}`)
+        })
+        // A workout that has since been unshared or deleted: land on the list
+        // rather than a dead end.
+        .catch(() => {
+          setSelectedWorkout(null)
+          setPage('workouts')
+          window.history.pushState(null, '', pathForPage('workouts'))
+        })
+      return
+    }
+    setSelectedWorkout(null)
+    setPage(loc.page)
+    window.history.pushState(null, '', pathForPage(loc.page))
+  }, [])
+
+  // A tapped push notification focuses an existing window and asks it to route.
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return
+    function onMessage(e: MessageEvent) {
+      const data = e.data as { type?: string; url?: string } | undefined
+      if (data?.type === 'NAVIGATE' && data.url) openLink(data.url)
+    }
+    navigator.serviceWorker.addEventListener('message', onMessage)
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage)
+  }, [openLink])
+
   const selectWorkout = useCallback((w: Workout | null) => {
     setSelectedWorkout(w)
     window.history.pushState(null, '', w ? `/workouts/${w.id}` : pathForPage('workouts'))
@@ -271,6 +309,7 @@ export default function App() {
         onUserMenu={() => setShowUserMenu(v => !v)}
         onHelp={() => navigate('help')}
         onHome={() => navigate('dashboard')}
+        onNavigate={openLink}
         isMobile={isMobile}
         user={user}
       />
