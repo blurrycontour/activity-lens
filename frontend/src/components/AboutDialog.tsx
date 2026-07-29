@@ -87,10 +87,11 @@ export default function AboutDialog({ onClose }: { onClose: () => void }) {
           <dl className="about-facts">
             {build?.created && (<><dt>Built</dt><dd>{fmtBuildDate(build.created)}</dd></>)}
             {build?.revision && (
-              <><dt>Commit</dt><dd className="about-sha" title={build.revision}>{build.revision.slice(0, 12)}</dd></>
+              <><dt>Revision</dt><dd className="about-sha" title={build.revision}>{build.revision.slice(0, 16)}</dd></>
             )}
             {build && (<><dt>Server</dt><dd>{build.goVersion} · {build.platform}</dd></>)}
-            <dt>Interface</dt><dd>React &amp; Vite · {__APP_VERSION__}</dd>
+            <dt>Interface</dt><dd>React &amp; Vite</dd>
+            <dt>Version</dt><dd>{__APP_VERSION__}</dd>
             {build?.licenses && (<><dt>Licence</dt><dd>{build.licenses}</dd></>)}
           </dl>
 
