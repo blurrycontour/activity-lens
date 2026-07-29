@@ -221,9 +221,18 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [navigate, toggleSidebar, selectWorkout])
 
+  // The <main> element, tracked as state via a callback ref rather than a
+  // plain useRef. isMobile can already be true (and so gesturesEnabled true)
+  // before <main> exists — the loading/login screens render a different tree
+  // — and a useRef's identity never changes when .current is first attached,
+  // so an effect keyed on the ref object would bind before the element exists
+  // and then never notice it mount. Threading the element through state makes
+  // that transition a real dependency change for useSwipeNav/PullToRefresh.
+  const [mainEl, setMainEl] = useState<HTMLElement | null>(null)
+  const mainRef = useCallback((node: HTMLElement | null) => setMainEl(node), [])
+
   // Mobile swipe navigation across the bottom-bar pages. Disabled while a
   // workout detail is open, where horizontal drags belong to the map.
-  const mainRef = useRef<HTMLElement>(null)
   const swipeTo = useCallback((steps: number) => {
     const next = adjacentPage(page, steps)
     if (next) navigate(next)
@@ -231,7 +240,7 @@ export default function App() {
   const gesturesEnabled = isMobile && !selectedWorkout && !showImport && !showUserMenu
   const onPrev = useCallback(() => swipeTo(-1), [swipeTo])
   const onNext = useCallback(() => swipeTo(1), [swipeTo])
-  const swipe = useSwipeNav(mainRef, { enabled: gesturesEnabled, onPrev, onNext })
+  const swipe = useSwipeNav(mainEl, { enabled: gesturesEnabled, onPrev, onNext })
 
   // Pull-to-refresh reloads the data each page registered, never the document.
   const { refresh } = useRefresh()
@@ -239,8 +248,8 @@ export default function App() {
   // Start each page at the top. Without this a swipe from a scrolled page
   // animates the next one in already scrolled down, which reads as a glitch.
   useEffect(() => {
-    mainRef.current?.scrollTo({ top: 0 })
-  }, [page])
+    mainEl?.scrollTo({ top: 0 })
+  }, [page, mainEl])
 
   const layoutClass = [
     'app-layout',
@@ -287,7 +296,7 @@ export default function App() {
       />
 
       <main className="main-content" ref={mainRef}>
-        <PullToRefresh scrollRef={mainRef} enabled={gesturesEnabled} onRefresh={refresh} />
+        <PullToRefresh scrollEl={mainEl} enabled={gesturesEnabled} onRefresh={refresh} />
         <SwipePager page={page} swipe={swipe}>
         {selectedWorkout ? (
           <WorkoutDetail key={selectedWorkout.id} workout={selectedWorkout} accent={accent} onBack={() => selectWorkout(null)} />

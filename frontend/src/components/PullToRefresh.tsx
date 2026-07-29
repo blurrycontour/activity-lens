@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
 
 /** Finger travel, in px, at which the pull arms and will refresh on release. */
@@ -36,7 +36,7 @@ function dampPull(dy: number): number {
 
 interface PullToRefreshProps {
   /** The scroll container the gesture is measured against. */
-  scrollRef: RefObject<HTMLElement | null>
+  scrollEl: HTMLElement | null
   /** Disables the gesture (desktop, or while a modal owns the screen). */
   enabled: boolean
   /** Runs the refresh. The spinner spins until this settles. */
@@ -50,11 +50,17 @@ interface PullToRefreshProps {
  * re-download and re-parse the bundle and flash a blank screen, which is
  * exactly the clunkiness this is meant to avoid.
  *
- * Renders only the indicator; the gesture is bound to `scrollRef`, and only
+ * Renders only the indicator; the gesture is bound to `scrollEl`, and only
  * starts when that container is already scrolled to the top so it can never
  * fight normal scrolling.
+ *
+ * Takes the element itself (typically from a callback-ref-backed `useState`)
+ * rather than a `RefObject`. A plain ref's identity never changes, so an
+ * effect keyed on the ref object can bind before the element exists (e.g.
+ * during a loading screen) and then never notice it mount — this hook needs to
+ * react to the element itself arriving.
  */
-export default function PullToRefresh({ scrollRef, enabled, onRefresh }: PullToRefreshProps) {
+export default function PullToRefresh({ scrollEl, enabled, onRefresh }: PullToRefreshProps) {
   // Distance the indicator is pulled down, in px.
   const [pull, setPull] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
@@ -75,8 +81,8 @@ export default function PullToRefresh({ scrollRef, enabled, onRefresh }: PullToR
   }
 
   useEffect(() => {
-    const el = scrollRef.current
-    if (!enabled || !el) return
+    if (!enabled || !scrollEl) return
+    const el = scrollEl
 
     let startY = 0
     let active = false
@@ -90,7 +96,7 @@ export default function PullToRefresh({ scrollRef, enabled, onRefresh }: PullToR
 
     function onTouchStart(e: TouchEvent) {
       // Only from a resting scroll position, and never mid-refresh.
-      if (e.touches.length !== 1 || el!.scrollTop > 0 || refreshingRef.current) {
+      if (e.touches.length !== 1 || el.scrollTop > 0 || refreshingRef.current) {
         active = false
         return
       }
@@ -113,7 +119,7 @@ export default function PullToRefresh({ scrollRef, enabled, onRefresh }: PullToR
       if (!decided) {
         if (dy < SLOP) return
         // The container may have scrolled between touchstart and now.
-        if (el!.scrollTop > 0) {
+        if (el.scrollTop > 0) {
           active = false
           return
         }
@@ -168,7 +174,7 @@ export default function PullToRefresh({ scrollRef, enabled, onRefresh }: PullToR
       el.removeEventListener('touchend', onTouchEnd)
       el.removeEventListener('touchcancel', onTouchEnd)
     }
-  }, [scrollRef, enabled, onRefresh])
+  }, [scrollEl, enabled, onRefresh])
 
   if (!enabled || (pull === 0 && !refreshing)) return null
 

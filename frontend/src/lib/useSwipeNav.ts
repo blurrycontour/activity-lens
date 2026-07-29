@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 /** Fraction of the viewport width a drag must cross to commit to a navigation. */
 const COMMIT_FRACTION = 0.28
@@ -68,9 +68,17 @@ function startedInHorizontalScroller(target: EventTarget | null): boolean {
  *
  * `onPrev` / `onNext` are invoked at the hand-over point, between the exit and
  * enter animations.
+ *
+ * Takes the target element itself rather than a ref object. A plain `useRef`
+ * never changes identity when its `.current` is first attached, so an effect
+ * depending on the ref object alone can bind before the element exists (e.g.
+ * while a loading/login screen is showing) and then never re-run once the real
+ * element mounts. Passing the element as a value — typically from a
+ * `useState` pair fed by a callback ref — makes that transition a real
+ * dependency change.
  */
 export function useSwipeNav(
-  ref: RefObject<HTMLElement | null>,
+  el: HTMLElement | null,
   { enabled, onPrev, onNext }: { enabled: boolean; onPrev: () => void; onNext: () => void },
 ): SwipeState {
   const [state, setState] = useState<SwipeState>(IDLE)
@@ -100,8 +108,8 @@ export function useSwipeNav(
   }, [enabled, clearTimers])
 
   useEffect(() => {
-    const el = ref.current
     if (!enabled || !el) return
+    const target = el
 
     let startX = 0
     let startY = 0
@@ -166,7 +174,7 @@ export function useSwipeNav(
       if (!decided) return
       decided = false
 
-      const width = el!.clientWidth || window.innerWidth
+      const width = target.clientWidth || window.innerWidth
       const dx = lastX - startX
       const far = Math.abs(dx) > width * COMMIT_FRACTION
       const flicked = Math.abs(velocity) > FLICK_VELOCITY && Math.abs(dx) > FLICK_MIN_DISTANCE
@@ -202,17 +210,17 @@ export function useSwipeNav(
       )
     }
 
-    el.addEventListener('touchstart', onTouchStart, { passive: true })
-    el.addEventListener('touchmove', onTouchMove, { passive: false })
-    el.addEventListener('touchend', onTouchEnd, { passive: true })
-    el.addEventListener('touchcancel', onTouchEnd, { passive: true })
+    target.addEventListener('touchstart', onTouchStart, { passive: true })
+    target.addEventListener('touchmove', onTouchMove, { passive: false })
+    target.addEventListener('touchend', onTouchEnd, { passive: true })
+    target.addEventListener('touchcancel', onTouchEnd, { passive: true })
     return () => {
-      el.removeEventListener('touchstart', onTouchStart)
-      el.removeEventListener('touchmove', onTouchMove)
-      el.removeEventListener('touchend', onTouchEnd)
-      el.removeEventListener('touchcancel', onTouchEnd)
+      target.removeEventListener('touchstart', onTouchStart)
+      target.removeEventListener('touchmove', onTouchMove)
+      target.removeEventListener('touchend', onTouchEnd)
+      target.removeEventListener('touchcancel', onTouchEnd)
     }
-  }, [ref, enabled, clearTimers])
+  }, [el, enabled, clearTimers])
 
   return state
 }

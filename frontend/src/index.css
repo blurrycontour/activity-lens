@@ -769,6 +769,20 @@ body {
 
   .card-export-btn { display: none; }
 
+  /* No visible scrollbar on mobile: touch scrolling doesn't need one, and a
+     persistent thumb reads as a leftover desktop affordance in an installed
+     PWA. Mobile Chrome otherwise renders a permanent thin thumb (rather than
+     its usual auto-fading overlay) once ::-webkit-scrollbar is styled at all,
+     which is what the global thin-scrollbar rule near the top of this file
+     does — this override keeps that styling for desktop and removes its
+     mobile side effect. */
+  .main-content {
+    scrollbar-width: none;
+  }
+  .main-content::-webkit-scrollbar {
+    display: none;
+  }
+
   .app-layout {
     grid-template-columns: 1fr;
   }

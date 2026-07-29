@@ -57,11 +57,18 @@ export default function ImportModal({ onClose, onViewWorkout, initialFile }: Imp
   const [previewBusy, setPreviewBusy] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  // Equipment selection (shared across both tabs)
+  // Equipment selection (shared across both tabs). The section renders
+  // immediately with a loading placeholder rather than waiting for the fetch
+  // and popping in once it resolves — that pop-in was visibly resizing the
+  // modal a moment after it opened.
   const [equipmentList, setEquipmentList] = useState<Equipment[]>([])
+  const [equipmentLoading, setEquipmentLoading] = useState(true)
   const [selectedEquipment, setSelectedEquipment] = useState<string[]>([])
   useEffect(() => {
-    api.listEquipment().then(list => setEquipmentList(list.filter(e => !e.retired))).catch(() => {})
+    api.listEquipment()
+      .then(list => setEquipmentList(list.filter(e => !e.retired)))
+      .catch(() => {})
+      .finally(() => setEquipmentLoading(false))
   }, [])
 
   // Manual form state
@@ -384,31 +391,40 @@ export default function ImportModal({ onClose, onViewWorkout, initialFile }: Imp
                 </div>
               )}
 
-              {equipmentList.length > 0 && (
-                <div style={{ marginTop: 18 }}>
-                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 8 }}>Equipment (optional)</label>
-                  {selectedEquipment.length > 0 && (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
-                      {selectedEquipment.map(id => {
-                        const e = equipmentList.find(x => x.id === id)
-                        if (!e) return null
-                        return (
-                          <span key={id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 8px 5px 12px', borderRadius: 20, fontSize: 12, border: '1px solid var(--primary)', background: 'var(--primary-dim)', color: 'var(--primary)' }}>
-                            {e.name}
-                            <button
-                              type="button"
-                              onClick={() => setSelectedEquipment(prev => prev.filter(x => x !== id))}
-                              title="Remove"
-                              style={{ display: 'inline-flex', border: 'none', background: 'transparent', color: 'inherit', cursor: 'pointer', padding: 0 }}
-                            >
-                              <X size={13} />
-                            </button>
-                          </span>
-                        )
-                      })}
-                    </div>
-                  )}
-                  {equipmentList.some(e => !selectedEquipment.includes(e.id)) && (
+              {/* Always rendered, including before the fetch resolves and even
+                  when the account has no equipment yet, so the modal's height
+                  never jumps once it's open. */}
+              <div style={{ marginTop: 18 }}>
+                <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 8 }}>Equipment (optional)</label>
+                {selectedEquipment.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                    {selectedEquipment.map(id => {
+                      const e = equipmentList.find(x => x.id === id)
+                      if (!e) return null
+                      return (
+                        <span key={id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 8px 5px 12px', borderRadius: 20, fontSize: 12, border: '1px solid var(--primary)', background: 'var(--primary-dim)', color: 'var(--primary)' }}>
+                          {e.name}
+                          <button
+                            type="button"
+                            onClick={() => setSelectedEquipment(prev => prev.filter(x => x !== id))}
+                            title="Remove"
+                            style={{ display: 'inline-flex', border: 'none', background: 'transparent', color: 'inherit', cursor: 'pointer', padding: 0 }}
+                          >
+                            <X size={13} />
+                          </button>
+                        </span>
+                      )
+                    })}
+                  </div>
+                )}
+                {equipmentLoading ? (
+                  <div className="skeleton" style={{ height: 34, borderRadius: 'var(--radius)' }} />
+                ) : equipmentList.length === 0 ? (
+                  <div style={{ fontSize: 12, color: 'var(--text-3)', padding: '8px 0' }}>
+                    No equipment added yet — add some from the Equipment page.
+                  </div>
+                ) : (
+                  equipmentList.some(e => !selectedEquipment.includes(e.id)) && (
                     <select
                       className="select"
                       value=""
@@ -420,9 +436,9 @@ export default function ImportModal({ onClose, onViewWorkout, initialFile }: Imp
                         <option key={e.id} value={e.id}>{e.name}</option>
                       ))}
                     </select>
-                  )}
-                </div>
-              )}
+                  )
+                )}
+              </div>
 
               {error && (
                 <div style={{ display: 'flex', gap: 6, marginTop: 16, alignItems: 'center', color: '#ef4444', fontSize: 12 }}>
