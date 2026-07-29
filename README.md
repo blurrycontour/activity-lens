@@ -1,6 +1,6 @@
 <div align="center">
 
-# Activity Lens
+# <img src="frontend/public/logo.svg" width="64" valign="middle" alt="Activity Lens logo" /> Activity Lens
 
 **A self-hosted home for your training history.**
 
