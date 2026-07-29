@@ -15,6 +15,36 @@ interface AuthState {
 
 const AuthContext = createContext<AuthState | null>(null)
 
+/**
+ * The last user the server confirmed, kept so a cold start with the backend
+ * unreachable opens the app instead of the login screen.
+ *
+ * This is a UI convenience, not a credential: every request still carries the
+ * session cookie and the server still decides. The worst case is that an
+ * offline app shows its shell and cached data to someone whose session has
+ * since expired, and every action they attempt fails once the network returns.
+ */
+const CACHED_USER_KEY = 'auth.user'
+
+function readCachedUser(): ApiUser | null {
+  try {
+    const raw = localStorage.getItem(CACHED_USER_KEY)
+    return raw ? JSON.parse(raw) as ApiUser : null
+  } catch {
+    return null
+  }
+}
+
+function writeCachedUser(u: ApiUser | null): void {
+  try {
+    if (u) localStorage.setItem(CACHED_USER_KEY, JSON.stringify(u))
+    else localStorage.removeItem(CACHED_USER_KEY)
+  } catch {
+    // Private mode, or storage full — the app works, it just cannot resume
+    // offline.
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUserState] = useState<ApiUser | null>(null)
   const [features, setFeatures] = useState<AuthFeatures | null>(null)
@@ -24,12 +54,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const { user } = await api.me()
       setUserState(user)
+      writeCachedUser(user)
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        setUserState(null)
-      } else {
-        throw err
+      // Only the server gets to say you are signed out. An ApiError means it
+      // answered; anything else is a transport failure, where falling back to
+      // the login screen would be wrong — the session is very likely still
+      // valid and simply cannot be checked right now.
+      if (err instanceof ApiError) {
+        if (err.status === 401) {
+          setUserState(null)
+          writeCachedUser(null)
+        }
+        return
       }
+      const cached = readCachedUser()
+      if (cached) {
+        setUserState(cached)
+        return
+      }
+      throw err
     }
   }, [])
 
@@ -58,6 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (identifier: string, password: string) => {
     const { user } = await api.login(identifier, password)
     setUserState(user)
+    writeCachedUser(user)
   }, [])
 
   const register = useCallback(
@@ -73,6 +117,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await api.logout()
     } finally {
       setUserState(null)
+      // The cached identity is this user's too, so it goes with the rest.
+      writeCachedUser(null)
       // The service worker caches API GETs so the app works offline. Those
       // responses are this user's data, so drop them on the way out rather
       // than leaving them readable to whoever logs in next on this device.
@@ -80,7 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const setUser = useCallback((u: ApiUser) => setUserState(u), [])
+  const setUser = useCallback((u: ApiUser) => { setUserState(u); writeCachedUser(u) }, [])
 
   return (
     <AuthContext.Provider value={{ user, features, loading, login, register, logout, refresh, setUser }}>

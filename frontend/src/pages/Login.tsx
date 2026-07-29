@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { LogIn, UserPlus } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { ApiError } from '../lib/api'
+import { useOnlineStatus } from '../lib/network'
 import Logo from '../components/Logo'
 
 export default function Login() {
@@ -26,12 +27,18 @@ export default function Login() {
         await register({ username, email, displayName: displayName || username, password })
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong')
+      // An ApiError means the server answered and rejected this; anything else
+      // never reached it, and "Something went wrong" would send the user
+      // looking for a typo in a password that was never checked.
+      setError(err instanceof ApiError
+        ? err.message
+        : "Can't reach the server. Check your connection and try again.")
     } finally {
       setBusy(false)
     }
   }
 
+  const online = useOnlineStatus()
   const canRegister = features?.allowRegistration
   const oidc = features?.oidcEnabled
 
@@ -74,7 +81,7 @@ export default function Login() {
             </div>
           )}
 
-          <button className="btn btn-primary" type="submit" disabled={busy} style={{ justifyContent: 'center', marginTop: 4 }}>
+          <button className="btn btn-primary" type="submit" disabled={busy || !online} style={{ justifyContent: 'center', marginTop: 4, opacity: busy || !online ? 0.6 : 1 }}>
             {mode === 'login' ? <LogIn size={15} /> : <UserPlus size={15} />}
             {mode === 'login' ? 'Sign In' : 'Create Account'}
           </button>

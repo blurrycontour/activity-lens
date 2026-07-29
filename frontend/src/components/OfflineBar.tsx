@@ -11,7 +11,17 @@ const RECONNECT_FLASH_MS = 2200
  *
  * Renders nothing at all while online, so it has no effect on the normal UI.
  */
-export default function OfflineBar() {
+interface OfflineBarProps {
+  /**
+   * Renders pinned to the top of the viewport instead of occupying the app
+   * layout's second grid row. Needed on the login screen, which has no app
+   * layout to sit inside — and which is precisely where an offline user ends
+   * up if their session cannot be checked.
+   */
+  floating?: boolean
+}
+
+export default function OfflineBar({ floating = false }: OfflineBarProps) {
   const online = useOnlineStatus()
   const [showReconnected, setShowReconnected] = useState(false)
   // Tracks whether we have actually been offline, so a normal page load does
@@ -38,7 +48,7 @@ export default function OfflineBar() {
     <div
       role="status"
       aria-live="polite"
-      className="offline-bar"
+      className={`offline-bar${floating ? ' floating' : ''}`}
       // Kept mounted and collapsed so both directions animate; the height
       // transition is what makes it push the content down rather than overlap.
       data-visible={visible ? 'true' : 'false'}

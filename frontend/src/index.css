@@ -636,6 +636,14 @@ body {
   height: 26px;
   border-bottom-width: 1px !important;
 }
+/* Standalone variant for screens with no app layout grid (the login page). */
+.offline-bar.floating {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2100;
+}
 
 /* Placeholder block for content that is still loading. The sweep runs left to
    right over a flat base so it reads as "working" rather than "broken". */
@@ -967,7 +975,7 @@ body {
   gap: 10px;
   width: 380px;
   max-width: calc(100vw - 24px);
-  padding: 10px 10px 10px 14px;
+  padding: 14px 12px 14px 18px;
   border-radius: 99px;
   animation: toastIn 0.24s cubic-bezier(0.22, 1, 0.36, 1);
 
@@ -993,8 +1001,8 @@ body {
   from { transform: translate(-50%, 14px); opacity: 0; }
   to { transform: translate(-50%, 0); opacity: 1; }
 }
-.update-toast-title { display: block; font-size: 13px; font-weight: 600; }
-.update-toast-body { display: block; font-size: 11px; color: var(--text-3); margin-top: 1px; }
+.update-toast-title { display: block; font-size: 13.5px; font-weight: 600; }
+.update-toast-body { display: block; font-size: 11.5px; color: var(--text-3); margin-top: 3px; }
 @media (max-width: 480px) {
   /* The explanatory line is the first thing to go when space is tight; the
      title and the button already say what will happen. */
@@ -1010,14 +1018,15 @@ body {
 /* Marks the user menu as holding a pending app update. */
 .update-dot {
   position: absolute;
-  top: -1px;
-  right: -1px;
+  top: -2px;
+  right: -2px;
   width: 10px;
   height: 10px;
   border-radius: 50%;
   background: var(--primary);
   /* Ring in the bar's own colour so it reads as sitting on the avatar. */
   box-shadow: 0 0 0 2px var(--bg-2);
+  pointer-events: none;
 }
 
 /* ── In-app notification banner ──

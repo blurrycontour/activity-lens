@@ -102,6 +102,15 @@ async function tick(): Promise<void> {
 }
 
 /**
+ * Re-arms the timer whenever the verdict changes, so going offline switches to
+ * the faster cadence immediately instead of after the interval already in
+ * flight — which is what made reconnection feel slow to notice.
+ */
+listeners.add(() => {
+  if (monitoring) schedule()
+})
+
+/**
  * Starts watching reachability for the lifetime of the app. Safe to call more
  * than once; only the first call takes effect.
  */
@@ -128,12 +137,12 @@ export function useOnlineStatus(): boolean {
   useEffect(() => {
     const update = () => setOnline(currentlyOnline())
 
-    // The browser regaining an interface is not proof the backend is reachable,
-    // but it does invalidate the previous verdict — let the next request decide.
-    const onBrowserOnline = () => {
-      reported = null
-      update()
-    }
+    // A regained interface is not evidence the backend came back, so the last
+    // verdict is kept until a probe replaces it. Clearing it here instead would
+    // make currentlyOnline() fall back to its optimistic default and hide the
+    // offline bar while the server is still down — startNetworkMonitor already
+    // probes on this event, and that result is what should decide.
+    const onBrowserOnline = () => { void probeReachability() }
     const onBrowserOffline = () => update()
 
     const listener: Listener = () => update()

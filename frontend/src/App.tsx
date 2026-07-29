@@ -308,7 +308,14 @@ export default function App() {
   }
 
   if (!user) {
-    return <Login />
+    // The offline bar comes along: landing here because the backend is
+    // unreachable, with no explanation, is what made this confusing.
+    return (
+      <>
+        <OfflineBar floating />
+        <Login />
+      </>
+    )
   }
 
   return (

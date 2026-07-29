@@ -79,28 +79,31 @@ export default function TopBar({ onToggleSidebar, themeMode, onCycleTheme, onUse
 
       <NotificationBell onNavigate={onNavigate} />
 
-      <button
-        onClick={onUserMenu}
-        style={{
-          position: 'relative',
-          width: 32, height: 32, borderRadius: '50%',
-          background: 'var(--bg-3)',
-          border: '2px solid var(--border)',
-          cursor: 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 13, fontWeight: 700, color: '#fff',
-          transition: 'transform 0.15s, box-shadow 0.15s',
-          flexShrink: 0, overflow: 'hidden', padding: 0,
-        }}
-        onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.08)'; e.currentTarget.style.boxShadow = '0 0 0 3px var(--primary-glow)' }}
-        onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = 'none' }}
-        title="User menu"
-      >
-        <img src={avatarUrl(user)} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      {/* The dot sits on this wrapper, not inside the button: the button clips
+          its contents to a circle so the avatar fills it, which would cut the
+          dot in half. */}
+      <span style={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}>
+        <button
+          onClick={onUserMenu}
+          style={{
+            width: 32, height: 32, borderRadius: '50%',
+            background: 'var(--bg-3)',
+            border: '2px solid var(--border)',
+            cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'transform 0.15s, box-shadow 0.15s',
+            overflow: 'hidden', padding: 0,
+          }}
+          onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.08)'; e.currentTarget.style.boxShadow = '0 0 0 3px var(--primary-glow)' }}
+          onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = 'none' }}
+          title="User menu"
+        >
+          <img src={avatarUrl(user)} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        </button>
         {/* A dismissed update still has to be findable; the menu is where it
             lives, so the avatar carries the only hint that it is in there. */}
         {updatePending && <span className="update-dot" aria-hidden="true" />}
-      </button>
+      </span>
     </header>
   )
 }
