@@ -1097,17 +1097,18 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
               <h1 style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em' }}>{w.name}</h1>
               <span className={`badge tag-${w.type.toLowerCase()}`}>{TYPE_ICON[w.type]} {w.type}</span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 2 }}>
-              <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
-                {new Date(w.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-              </div>
-              {readOnly && w.owner && (
-                <span className="owner-byline">
-                  <UserAvatar user={w.owner} size={20} />
-                  <span>by {userLabel(w.owner)}</span>
-                </span>
-              )}
+            <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
+              {new Date(w.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
             </div>
+            {/* Its own line rather than sharing one with the date: a long
+                display name would otherwise squeeze the date or wrap raggedly. */}
+            {readOnly && w.owner && (
+              <span className="owner-byline" style={{ marginTop: 4 }}>
+                <span>Shared by</span>
+                <UserAvatar user={w.owner} size={20} />
+                <span>{userLabel(w.owner)}</span>
+              </span>
+            )}
           </div>
           <div style={{ marginLeft: 'auto', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
             {readOnly ? (
