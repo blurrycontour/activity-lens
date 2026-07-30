@@ -17,7 +17,7 @@ import { CacheFirst, NetworkFirst } from 'workbox-strategies'
 import { ExpirationPlugin } from 'workbox-expiration'
 import { CacheableResponsePlugin } from 'workbox-cacheable-response'
 
-import { SHARE_CACHE, SHARE_FILENAME_HEADER, SHARE_KEY, SHARE_QUERY_PARAM } from './lib/shareTarget'
+import { MAX_SHARED_FILES, SHARE_CACHE, SHARE_FILENAME_HEADER, SHARE_QUERY_PARAM, shareKeyAt } from './lib/shareTarget'
 import { API_CACHE, FROM_CACHE_HEADER, TILE_CACHE } from './lib/swCache'
 
 declare const self: ServiceWorkerGlobalScope
@@ -47,22 +47,30 @@ async function handleShare({ request }: { request: Request }): Promise<Response>
   const landing = (status: string) => `${SHARE_LANDING}?${SHARE_QUERY_PARAM}=${status}`
   try {
     const form = await request.formData()
-    // Android may send several files even though the manifest asks for one;
-    // the import flow handles a single workout, so take the first.
-    const file = form.getAll('file').find((v): v is File => v instanceof File && v.size > 0)
-    if (!file) {
+    // Android sends every selected file in this field. All of them are kept:
+    // the import flow takes a batch, so sharing a folder's worth of workouts in
+    // one go lands as one import rather than silently importing only the first.
+    const files = form.getAll('file').filter((v): v is File => v instanceof File && v.size > 0)
+    if (files.length === 0) {
       return Response.redirect(landing('empty'), 303)
     }
     const cache = await caches.open(SHARE_CACHE)
-    await cache.put(
-      SHARE_KEY,
-      new Response(file, {
-        headers: {
-          'Content-Type': file.type || 'application/octet-stream',
-          // Header values must be latin-1, and filenames can be anything.
-          [SHARE_FILENAME_HEADER]: encodeURIComponent(file.name || 'shared-workout.gpx'),
-        },
-      }),
+    // Stale entries from an abandoned share would otherwise be picked up as
+    // part of this one, since the app reads until it finds a gap.
+    await Promise.all((await cache.keys()).map(req => cache.delete(req)))
+    await Promise.all(
+      files.slice(0, MAX_SHARED_FILES).map((file, i) =>
+        cache.put(
+          shareKeyAt(i),
+          new Response(file, {
+            headers: {
+              'Content-Type': file.type || 'application/octet-stream',
+              // Header values must be latin-1, and filenames can be anything.
+              [SHARE_FILENAME_HEADER]: encodeURIComponent(file.name || 'shared-workout.gpx'),
+            },
+          }),
+        ),
+      ),
     )
     return Response.redirect(landing('1'), 303)
   } catch {

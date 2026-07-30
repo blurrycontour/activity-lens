@@ -29,7 +29,7 @@ import { useRefresh } from './context/RefreshContext'
 import { WorkoutsProvider } from './context/WorkoutsContext'
 import { adjacentPage, DESKTOP_PAGES, LEGACY_ROUTES, type Page } from './lib/nav'
 import { useSwipeNav } from './lib/useSwipeNav'
-import { consumeShareParam, takeSharedFile } from './lib/shareTarget'
+import { consumeShareParam, takeSharedFiles } from './lib/shareTarget'
 import { api } from './lib/api'
 
 const SIDEBAR_KEY = 'al_sidebar_w'
@@ -93,7 +93,9 @@ export default function App() {
   })
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showImport, setShowImport] = useState(false)
-  const [sharedFile, setSharedFile] = useState<File | null>(null)
+  // Files handed to the app from outside: the Android share sheet, or a
+  // desktop "Open with". Both land in the import modal the same way.
+  const [incomingFiles, setIncomingFiles] = useState<File[] | null>(null)
   const isMobile = useIsMobile()
 
   // Theme
@@ -151,12 +153,29 @@ export default function App() {
     let cancelled = false
     // The modal opens either way: if the handoff failed, an empty import modal
     // is a better outcome than the share appearing to do nothing.
-    takeSharedFile().then(f => {
+    takeSharedFiles().then(files => {
       if (cancelled) return
-      setSharedFile(f)
+      setIncomingFiles(files.length > 0 ? files : null)
       setShowImport(true)
     })
     return () => { cancelled = true }
+  }, [user])
+
+  // "Open with" on desktop. An installed PWA that declares file_handlers is
+  // launched with the files in launchQueue; Chrome and Edge on desktop are the
+  // only places this exists, so the whole block is feature-detected away
+  // elsewhere. Android has no file association for PWAs — the share sheet above
+  // is that platform's equivalent, and it already works.
+  useEffect(() => {
+    if (!user || !('launchQueue' in window)) return
+    const queue = (window as { launchQueue?: LaunchQueue }).launchQueue
+    queue?.setConsumer(async params => {
+      if (!params.files?.length) return
+      const files = await Promise.all(params.files.map(handle => handle.getFile()))
+      if (files.length === 0) return
+      setIncomingFiles(files)
+      setShowImport(true)
+    })
   }, [user])
 
   // Keep app state in sync with browser back/forward navigation.
@@ -401,9 +420,9 @@ export default function App() {
       )}
       {showImport && (
         <ImportModal
-          initialFile={sharedFile}
-          onClose={() => { setShowImport(false); setSharedFile(null) }}
-          onViewWorkout={w => { selectWorkout(w); setShowImport(false); setSharedFile(null) }}
+          initialFiles={incomingFiles}
+          onClose={() => { setShowImport(false); setIncomingFiles(null) }}
+          onViewWorkout={w => { selectWorkout(w); setShowImport(false); setIncomingFiles(null) }}
         />
       )}
       </div>

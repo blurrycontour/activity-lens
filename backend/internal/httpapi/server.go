@@ -116,6 +116,10 @@ func (s *Server) apiRoutes() http.Handler {
 	mux.Handle("GET /api/workouts/{id}/original", s.authed(s.handleDownloadOriginal))
 	mux.Handle("POST /api/workouts/{id}/recalculate", s.authedCSRF(s.handleRecalculateWorkout))
 	mux.Handle("POST /api/workouts/import", s.authedCSRF(s.handleImportWorkout))
+	// Bulk import support: ask once which files are already held, and run the
+	// deferred gear/goal checks once when the batch finishes.
+	mux.Handle("POST /api/workouts/import/known", s.authedCSRF(s.handleKnownImports))
+	mux.Handle("POST /api/workouts/import/finalize", s.authedCSRF(s.handleFinalizeImport))
 	mux.Handle("POST /api/workouts/preview", s.authedCSRF(s.handlePreviewWorkout))
 	mux.Handle("GET /api/stats", s.authed(s.handleStats))
 	mux.Handle("GET /api/preferences", s.authed(s.handleGetPreferences))

@@ -27,9 +27,13 @@ services. It is built for a handful of people using it for years, not for scale.
 ## Features
 
 **Track**
-- Import `.gpx` and `.tcx` files, or enter a workout by hand. Re-importing the
-  same file is a no-op — imports are content-addressed, so a repeated share from
-  a tracker app updates nothing instead of creating a duplicate.
+- Import `.gpx` and `.tcx` files — one at a time, hundreds at once, or a whole
+  Strava/Garmin export `.zip` dropped in as it came. Re-importing the same file
+  is a no-op: imports are content-addressed, so a repeated share from a tracker
+  app updates nothing instead of creating a duplicate.
+- Before a batch commits you see exactly what will happen — how many are new,
+  how many you already have, and which could not be read — and a corrupt file
+  never costs you the rest of the import. Or enter a workout by hand.
 - Route map with playback, plus heart-rate, pace, elevation and cadence charts
   and splits. Track shading by pace, heart rate, elevation or cadence.
 - Calories and steps are taken from the file when it states them, and estimated
@@ -55,7 +59,8 @@ services. It is built for a handful of people using it for years, not for scale.
 
 **Live with**
 - Installable PWA with an offline shell, pull-to-refresh, and Android
-  share-sheet import.
+  share-sheet import — several files at once. On desktop it also registers as
+  an "Open with" handler for `.gpx` and `.tcx`.
 - Web Push notifications for shares, gear wear and training goals — including
   when the app is closed.
 - Light and dark themes with a choice of accent colours.

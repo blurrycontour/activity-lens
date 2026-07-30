@@ -194,3 +194,32 @@ The SHA-256 of the uploaded bytes becomes the workout's external ID, under a
 partial unique index on `(user_id, source, external_id)`. Re-importing the same
 file resolves to the existing workout untouched rather than duplicating it, and
 without clobbering edits made since.
+
+That identity is also what makes bulk import cheap. `POST /api/workouts/import/known`
+takes a batch of hashes the client computed locally and returns the subset
+already stored, so the second import of an export archive — or any rescan of a
+folder — costs **one small request** instead of re-uploading every file to
+discover it was a duplicate. The client hashes with `crypto.subtle` over the
+same bytes the server hashes, so the two agree by construction; a test on each
+side pins the value so they cannot drift apart silently.
+
+### Bulk import defers the post-import checks
+
+Recording a workout normally triggers a gear-wear and goal evaluation, and each
+one reads the user's **entire** library. That is fine once and quadratic across
+a few hundred files, so an import can pass `deferChecks` and call
+`POST /api/workouts/import/finalize` once when the batch ends. Notifications are
+deduped by key, so one evaluation for the batch produces exactly what the
+per-file version would have. Measured against a 400-workout library, 25 imports
+run roughly twice as fast deferred — and the gap widens as the library grows,
+which is precisely when it matters.
+
+### Archives are unpacked in the browser
+
+A Strava export is a `.zip` of `activities/*.gpx.gz`, so both layers come off
+before there is anything the parser recognises. `lib/importQueue.ts` does that
+client-side with `fflate`: it avoids uploading a multi-hundred-megabyte archive,
+and it keeps zip-bomb handling out of the backend entirely. Expansion is bounded
+on entry count and total bytes, and anything it cannot use — the `activities.csv`,
+a `.fit` this build cannot parse yet — is *reported* rather than dropped, so
+every file the user selected is accounted for in the counts they see.

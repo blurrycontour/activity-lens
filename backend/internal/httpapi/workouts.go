@@ -312,7 +312,12 @@ func (s *Server) handleImportWorkout(w http.ResponseWriter, r *http.Request) {
 	}
 	s.linkEquipment(r, user.ID, wk, equipmentIDs)
 	slog.Info("workout imported", "workout_id", wk.ID, "user_id", user.ID, "filename", header.Filename, "bytes", len(data))
-	s.afterWorkoutRecorded(r, user.ID)
+	// Gear and goal checks re-read the whole library, so running them per file
+	// makes a bulk import quadratic. A batching client sets deferChecks and
+	// calls /api/workouts/import/finalize once at the end instead.
+	if !formBool(r, "deferChecks") {
+		s.afterWorkoutRecorded(r, user.ID)
+	}
 
 	if s.rawUploads != nil {
 		if keep, err := s.settings.StoredStorage(r.Context()); err == nil && keep.KeepOriginalUploads {
@@ -337,6 +342,65 @@ func (s *Server) handleImportWorkout(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, importResponse{Workout: wk})
 }
 
+// formBool reads a multipart form value as a boolean. Absent, "", "0" and
+// "false" are all false, so a client that omits the field behaves exactly as
+// before it existed.
+func formBool(r *http.Request, name string) bool {
+	switch strings.ToLower(strings.TrimSpace(r.FormValue(name))) {
+	case "1", "true", "yes":
+		return true
+	default:
+		return false
+	}
+}
+
+// handleKnownImports reports which of the supplied content hashes the caller
+// has already imported.
+//
+// Uploading a known file is harmless — imports are content-addressed, so it
+// resolves to the stored workout — but it costs a full upload and parse each
+// time. One round trip for a whole batch is what keeps re-importing an export
+// archive, or re-scanning a folder, from re-uploading everything.
+//
+// The hashes are the client's own SHA-256 of the file bytes, the same value
+// parseWorkoutUpload derives server-side, so the two agree by construction.
+func (s *Server) handleKnownImports(w http.ResponseWriter, r *http.Request) {
+	user := httpmw.UserFrom(r)
+	var req struct {
+		Hashes []string `json:"hashes"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	known, err := s.workout.KnownContentHashes(r.Context(), user.ID, req.Hashes)
+	if err != nil {
+		if errors.Is(err, workout.ErrInvalid) {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "could not check imported files")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"known": known})
+}
+
+// handleFinalizeImport runs the post-import checks a batch deferred.
+//
+// Importing a file normally triggers a gear-wear and goal evaluation, each of
+// which reads the user's entire library. That is fine once, and quadratic
+// across a few hundred files, so a bulk import skips them per file and calls
+// this at the end. Notifications are deduped by key, so one evaluation for the
+// batch produces the same notifications the per-file version would have.
+//
+// Safe to call with no preceding import, and safe to call twice — the checks
+// are pure reads plus deduped notifications, so this needs no batch identity.
+func (s *Server) handleFinalizeImport(w http.ResponseWriter, r *http.Request) {
+	user := httpmw.UserFrom(r)
+	s.afterWorkoutRecorded(r, user.ID)
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // handlePreviewWorkout parses an uploaded file and returns the derived metrics
 // without persisting anything, so the client can show the numbers before the
 // user commits to saving the workout.
@@ -351,7 +415,17 @@ func (s *Server) handlePreviewWorkout(w http.ResponseWriter, r *http.Request) {
 		s.writeWorkoutError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, wk)
+	// Whether importing this would create anything, answered before committing.
+	// Reuses the identity parseWorkoutUpload already derived, so a batch can
+	// show "already imported" alongside the parsed numbers. A lookup failure
+	// only costs the flag — the preview itself is still worth returning.
+	duplicate := false
+	if in.ExternalID != "" {
+		if _, err := s.workout.GetBySourceID(r.Context(), user.ID, in.Source, in.ExternalID); err == nil {
+			duplicate = true
+		}
+	}
+	writeJSON(w, http.StatusOK, importResponse{Workout: wk, Duplicate: duplicate})
 }
 
 // parseWorkoutUpload reads a multipart file upload, parses it into a workout

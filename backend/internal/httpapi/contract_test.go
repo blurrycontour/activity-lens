@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -196,5 +197,45 @@ func TestActiveAdminsAfter(t *testing.T) {
 				t.Errorf("would %sblock this edit, want the opposite", map[bool]string{true: "", false: "not "}[locked])
 			}
 		})
+	}
+}
+
+// deferChecks is what keeps a bulk import from being quadratic: the gear and
+// goal checks each re-read the user's whole library, so running them per file
+// across a few hundred imports is hundreds of full scans. Absence must mean
+// "run them", so that a client which knows nothing about batching — the share
+// target, the single-file modal — behaves exactly as it did before the flag
+// existed.
+func TestFormBoolDefaultsToFalseAndAcceptsTheUsualTruths(t *testing.T) {
+	tests := []struct {
+		value string
+		want  bool
+	}{
+		{"1", true},
+		{"true", true},
+		{"TRUE", true},
+		{" true ", true},
+		{"yes", true},
+		{"", false},
+		{"0", false},
+		{"false", false},
+		{"nonsense", false},
+	}
+	for _, tt := range tests {
+		t.Run("value="+tt.value, func(t *testing.T) {
+			form := url.Values{"deferChecks": {tt.value}}
+			r := httptest.NewRequest("POST", "/api/workouts/import", strings.NewReader(form.Encode()))
+			r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			if got := formBool(r, "deferChecks"); got != tt.want {
+				t.Errorf("formBool(%q) = %v, want %v", tt.value, got, tt.want)
+			}
+		})
+	}
+
+	// The field omitted entirely — every existing client.
+	r := httptest.NewRequest("POST", "/api/workouts/import", strings.NewReader(""))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if formBool(r, "deferChecks") {
+		t.Error("an absent deferChecks was read as true, which would silently skip the post-import checks")
 	}
 }

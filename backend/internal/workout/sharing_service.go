@@ -89,6 +89,32 @@ func (s *Service) PurgeUserShares(ctx context.Context, userID int64) error {
 	return s.repo.DeleteSharesForUser(ctx, userID)
 }
 
+// GetBySourceID resolves the workout a (source, external id) pair already
+// refers to, or ErrNotFound. It answers "would importing this create anything?"
+// without importing — the same lookup CreateIdempotent makes, exposed so a
+// preview can report a duplicate before the user commits.
+func (s *Service) GetBySourceID(ctx context.Context, userID int64, source Source, externalID string) (*Workout, error) {
+	if externalID == "" {
+		return nil, ErrNotFound
+	}
+	return s.repo.GetByExternalID(ctx, userID, source, externalID)
+}
+
+// MaxHashBatch caps how many hashes one KnownContentHashes call may ask about.
+// Every hash becomes a bound parameter, and SQLite's default limit is 999;
+// staying well under it keeps the query valid without the caller having to know
+// the dialect. Clients chunk larger batches.
+const MaxHashBatch = 500
+
+// KnownContentHashes reports which of these files the user has already
+// imported, so a bulk import can skip uploading them.
+func (s *Service) KnownContentHashes(ctx context.Context, userID int64, hashes []string) ([]string, error) {
+	if len(hashes) > MaxHashBatch {
+		return nil, fmt.Errorf("%w: at most %d hashes per request", ErrInvalid, MaxHashBatch)
+	}
+	return s.repo.KnownContentHashes(ctx, userID, hashes)
+}
+
 // RecordRawFilename notes which file a workout was imported from, after its
 // original has been archived.
 func (s *Service) RecordRawFilename(ctx context.Context, workoutID, filename string) error {

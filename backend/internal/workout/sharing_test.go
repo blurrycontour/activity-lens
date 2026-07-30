@@ -49,6 +49,9 @@ func (unimplementedSharing) DeleteAllForUser(context.Context, int64) ([]string, 
 func (unimplementedSharing) SetRawFilename(context.Context, string, string) error {
 	panic("sharing is only exercised against the real schema; see sharing_test.go")
 }
+func (unimplementedSharing) KnownContentHashes(context.Context, int64, []string) ([]string, error) {
+	panic("sharing is only exercised against the real schema; see sharing_test.go")
+}
 
 const (
 	alice int64 = 1

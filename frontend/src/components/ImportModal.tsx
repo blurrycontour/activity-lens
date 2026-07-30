@@ -1,20 +1,31 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { Upload, X, CheckCircle, FileText, AlertCircle, ArrowRight, Info, Loader2 } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { api, ApiError, type Equipment } from '../lib/api'
 import { type Workout, fmtDist, fmtDuration, fmtPace } from '../data/workouts'
+import BatchImportList from './BatchImportList'
+import {
+  expand, preflight, runImport, summarize,
+  type ImportItem, type ImportRunResult, type SkippedFile,
+} from '../lib/importQueue'
 
 interface ImportModalProps {
   onClose: () => void
   onViewWorkout?: (workout: Workout) => void
-  // Pre-selected file, set when the modal was opened by a file shared into the
-  // app rather than by the user picking one.
-  initialFile?: File | null
+  // Files the modal was opened with, rather than picked in it: shared in from
+  // the Android share sheet, or handed over by a desktop "Open with".
+  initialFiles?: File[] | null
 }
 
 type Tab = 'file' | 'manual'
 
 const SUPPORTED = ['gpx', 'tcx']
+
+/** What the file picker offers. Archives are unpacked in the browser. */
+const ACCEPT_ATTR = '.gpx,.tcx,.zip,.gz'
+
+/** Where a batch is in its lifecycle. `null` items means single-file mode. */
+type BatchPhase = 'expanding' | 'preflight' | 'review' | 'importing' | 'done'
 
 /** Stats shown for a parsed file, in order. The loading skeleton renders the
  * same labels in the same grid so the panel does not reflow when values land. */
@@ -41,11 +52,19 @@ function parseDuration(v: string): number {
   return 0
 }
 
-export default function ImportModal({ onClose, onViewWorkout, initialFile }: ImportModalProps) {
+export default function ImportModal({ onClose, onViewWorkout, initialFiles }: ImportModalProps) {
   const { refresh } = useWorkouts()
   const [tab, setTab] = useState<Tab>('file')
   const [dragging, setDragging] = useState(false)
-  const [file, setFile] = useState<File | null>(initialFile ?? null)
+  const [file, setFile] = useState<File | null>(null)
+
+  // Batch mode. `items` is null for a single file, which keeps that path — the
+  // common one, and the one the share target uses — exactly as it was.
+  const [items, setItems] = useState<ImportItem[] | null>(null)
+  const [skipped, setSkipped] = useState<SkippedFile[]>([])
+  const [phase, setPhase] = useState<BatchPhase>('review')
+  const [progress, setProgress] = useState({ done: 0, total: 0 })
+  const [batchResult, setBatchResult] = useState<ImportRunResult | null>(null)
   const [done, setDone] = useState(false)
   const [created, setCreated] = useState<Workout | null>(null)
   // Set when the server recognised the file as already imported and returned
@@ -77,22 +96,96 @@ export default function ImportModal({ onClose, onViewWorkout, initialFile }: Imp
     duration: '', distance: '', hr: '', elevation: '', notes: '',
   })
 
-  function handleFile(f: File) {
-    setFile(f)
+  /**
+   * Takes whatever the user handed over — one file, fifty, or an export archive
+   * — and decides which of the two modes to be in.
+   *
+   * A single workout file stays on the original single-file path: it is the
+   * common case, and a list of one would be a worse view of it than the preview
+   * panel. Anything else becomes a batch, including one file plus something
+   * unusable, so the modal can account for every file that was selected.
+   */
+  const handleFiles = useCallback(async (selected: File[]) => {
+    if (selected.length === 0) return
     setError(null)
     setPreview(null)
-  }
+    setFile(null)
+    setItems([])
+    setSkipped([])
+    setPhase('expanding')
+
+    let expanded
+    try {
+      expanded = await expand(selected)
+    } catch {
+      setItems(null)
+      setPhase('review')
+      setError('Could not read those files')
+      return
+    }
+
+    if (expanded.files.length === 1 && expanded.skipped.length === 0) {
+      setItems(null)
+      setPhase('review')
+      setFile(expanded.files[0])
+      return
+    }
+    if (expanded.files.length === 0) {
+      setItems([])
+      setSkipped(expanded.skipped)
+      setPhase('review')
+      setError('None of those files could be imported')
+      return
+    }
+
+    setSkipped(expanded.skipped)
+    setPhase('preflight')
+    setProgress({ done: 0, total: expanded.files.length })
+    try {
+      const checked = await preflight(expanded.files, {
+        onProgress: (done, total) => setProgress({ done, total }),
+      })
+      setItems(checked)
+    } catch {
+      setError('Could not read those files')
+    } finally {
+      setPhase('review')
+    }
+  }, [])
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault()
     setDragging(false)
-    const f = e.dataTransfer.files[0]
-    if (f) handleFile(f)
+    void handleFiles(Array.from(e.dataTransfer.files))
   }
 
   function handleFileInput(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0]
-    if (f) handleFile(f)
+    void handleFiles(Array.from(e.target.files ?? []))
+  }
+
+  // Files that arrived from outside the app (share sheet, "Open with") go
+  // through exactly the same intake as a manual pick, so an archive shared in
+  // from a phone unpacks the same way it would on the desktop.
+  useEffect(() => {
+    if (initialFiles?.length) void handleFiles(initialFiles)
+    // Deliberately once per mount: the modal is remounted per share.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  /** Runs the batch the user reviewed. */
+  async function handleBatchImport() {
+    if (!items) return
+    setError(null)
+    setPhase('importing')
+    setProgress({ done: 0, total: items.filter(i => i.status === 'ready').length })
+    const result = await runImport(items, {
+      equipmentIds: selectedEquipment,
+      onItemChange: () => setItems(prev => (prev ? [...prev] : prev)),
+      onProgress: (done, total) => setProgress({ done, total }),
+    })
+    await refresh()
+    setBatchResult(result)
+    setPhase('done')
   }
 
   async function handleImport() {
@@ -136,7 +229,16 @@ export default function ImportModal({ onClose, onViewWorkout, initialFile }: Imp
   // On the file tab, wait for the preview to finish so the user cannot submit
   // before knowing what the file actually parses to (and before the derived
   // calorie estimate is folded in).
-  const notReady = tab === 'file' ? (!file || !fileSupported || previewBusy) : !form.name.trim()
+  // Batch-mode derived state. Null in single-file mode, which leaves every
+  // expression below reading exactly as it did before.
+  const batchCounts = items !== null ? summarize(items, skipped) : null
+  const batchBusy = phase === 'expanding' || phase === 'preflight' || phase === 'importing'
+
+  const notReady = tab === 'file'
+    ? batchCounts
+      ? batchBusy || batchCounts.ready === 0
+      : (!file || !fileSupported || previewBusy)
+    : !form.name.trim()
   const submitDisabled = busy || notReady
 
   // Fetch a non-persisted preview of the derived numbers once a supported file
@@ -170,7 +272,28 @@ export default function ImportModal({ onClose, onViewWorkout, initialFile }: Imp
             <button className="btn-icon" onClick={onClose}><X size={16} /></button>
           </div>
 
-          {done ? (
+          {phase === 'done' && batchResult ? (
+            <div style={{ textAlign: 'center', padding: '32px 0' }}>
+              <CheckCircle size={48} color="var(--primary)" style={{ margin: '0 auto 16px' }} />
+              <p style={{ fontWeight: 700, fontSize: 16 }}>
+                {batchResult.imported > 0
+                  ? `${batchResult.imported} workout${batchResult.imported === 1 ? '' : 's'} added`
+                  : 'Nothing new to add'}
+              </p>
+              {/* Every file the user selected is accounted for, so a count that
+                  is lower than expected has a visible reason. */}
+              <p style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 6 }}>
+                {[
+                  batchResult.duplicates > 0 && `${batchResult.duplicates} already in your library`,
+                  batchResult.failed > 0 && `${batchResult.failed} could not be imported`,
+                  skipped.length > 0 && `${skipped.length} skipped`,
+                ].filter(Boolean).join(' · ') || 'All files imported cleanly.'}
+              </p>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 20 }}>
+                <button className="btn btn-primary" onClick={onClose}>Done</button>
+              </div>
+            </div>
+          ) : done ? (
             <div style={{ textAlign: 'center', padding: '40px 0' }}>
               {duplicate ? (
                 <Info size={48} color="var(--text-3)" style={{ margin: '0 auto 16px' }} />
@@ -215,8 +338,23 @@ export default function ImportModal({ onClose, onViewWorkout, initialFile }: Imp
 
               {tab === 'file' ? (
                 <>
-                  {/* Drop zone */}
-                  {!file ? (
+                  {/* A batch replaces the single-file preview entirely: nobody
+                      reviews fifty stat panels, so the useful view is which
+                      files will import and which will not. */}
+                  {items !== null ? (
+                    <BatchImportList
+                      items={items}
+                      skipped={skipped}
+                      busyLabel={
+                        phase === 'expanding' ? 'Unpacking…'
+                          : phase === 'preflight' ? 'Reading files…'
+                            : phase === 'importing' ? 'Importing…'
+                              : undefined
+                      }
+                      progress={phase === 'preflight' || phase === 'importing' ? progress : undefined}
+                      onRemove={phase === 'review' ? id => setItems(prev => prev?.filter(i => i.id !== id) ?? prev) : undefined}
+                    />
+                  ) : !file ? (
                     <div
                       onDragOver={e => { e.preventDefault(); setDragging(true) }}
                       onDragLeave={() => setDragging(false)}
@@ -230,10 +368,13 @@ export default function ImportModal({ onClose, onViewWorkout, initialFile }: Imp
                       }}
                     >
                       <Upload size={32} color={dragging ? 'var(--primary)' : 'var(--text-3)'} style={{ margin: '0 auto 12px' }} />
-                      <p style={{ fontWeight: 600, fontSize: 14 }}>Drop your file here</p>
-                      <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>or click to browse</p>
-                      <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8, fontFamily: 'var(--font-mono)' }}>.gpx · .tcx</p>
-                      <input ref={fileRef} type="file" accept=".gpx,.tcx" onChange={handleFileInput} style={{ display: 'none' }} />
+                      <p style={{ fontWeight: 600, fontSize: 14 }}>Drop your files here</p>
+                      <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>or click to browse — several at once is fine</p>
+                      <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8, fontFamily: 'var(--font-mono)' }}>.gpx · .tcx · .zip</p>
+                      <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 6 }}>
+                        A Strava or Garmin export .zip can be dropped in whole.
+                      </p>
+                      <input ref={fileRef} type="file" multiple accept={ACCEPT_ATTR} onChange={handleFileInput} style={{ display: 'none' }} />
                     </div>
                   ) : (
                     <div style={{ border: '1px solid var(--border)', borderRadius: 12, padding: 16, background: 'var(--bg-3)' }}>
@@ -395,7 +536,11 @@ export default function ImportModal({ onClose, onViewWorkout, initialFile }: Imp
                   when the account has no equipment yet, so the modal's height
                   never jumps once it's open. */}
               <div style={{ marginTop: 18 }}>
-                <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 8 }}>Equipment (optional)</label>
+                <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 8 }}>
+                  {batchCounts && batchCounts.ready > 1
+                    ? `Equipment (optional) — applied to all ${batchCounts.ready}`
+                    : 'Equipment (optional)'}
+                </label>
                 {selectedEquipment.length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
                     {selectedEquipment.map(id => {
@@ -446,15 +591,30 @@ export default function ImportModal({ onClose, onViewWorkout, initialFile }: Imp
                 </div>
               )}
 
-              <div style={{ display: 'flex', gap: 8, marginTop: 20, justifyContent: 'flex-end' }}>
-                <button className="btn btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
+              <div style={{ display: 'flex', gap: 8, marginTop: 20, justifyContent: 'flex-end', alignItems: 'center' }}>
+                {/* The breakdown lives beside the button rather than inside it:
+                    the count of what will import is the decision, and why the
+                    rest will not is the explanation. */}
+                {batchCounts && (batchCounts.duplicates > 0 || batchCounts.errors > 0) && (
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 11, color: 'var(--text-3)' }}>
+                    {[
+                      batchCounts.duplicates > 0 && `${batchCounts.duplicates} already imported`,
+                      batchCounts.errors > 0 && `${batchCounts.errors} unreadable`,
+                    ].filter(Boolean).join(' · ')}
+                  </span>
+                )}
+                <button className="btn btn-ghost" onClick={onClose} disabled={busy || batchBusy}>Cancel</button>
                 <button
                   className="btn btn-primary"
-                  onClick={handleImport}
+                  onClick={batchCounts ? handleBatchImport : handleImport}
                   disabled={submitDisabled}
                   style={{ opacity: submitDisabled ? 0.4 : 1 }}
                 >
-                  {busy ? 'Saving…' : 'Add Workout'}
+                  {batchCounts
+                    ? batchBusy
+                      ? 'Importing…'
+                      : `Import ${batchCounts.ready} of ${batchCounts.total}`
+                    : busy ? 'Saving…' : 'Add Workout'}
                 </button>
               </div>
             </>

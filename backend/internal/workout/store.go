@@ -71,6 +71,9 @@ type Repository interface {
 	// SetRawFilename records the name of the file a workout was imported from,
 	// once its original has been archived to disk.
 	SetRawFilename(ctx context.Context, workoutID, filename string) error
+	// KnownContentHashes returns the subset of hashes the user has already
+	// imported, so a client can skip uploading files that would only dedupe.
+	KnownContentHashes(ctx context.Context, userID int64, hashes []string) ([]string, error)
 }
 
 // SQLiteRepository implements Repository on top of *sql.DB (SQLite dialect).
@@ -225,6 +228,49 @@ func (r *SQLiteRepository) SetRawFilename(ctx context.Context, workoutID, filena
 		return fmt.Errorf("set raw filename: %w", err)
 	}
 	return nil
+}
+
+// KnownContentHashes returns which of the given content hashes this user has
+// already imported.
+//
+// Imports are content-addressed, so re-uploading a file the user already has
+// only resolves to the stored workout — correct, but it still costs a full
+// upload and parse per file. Asking about a whole batch of hashes up front
+// turns that into one small query, which is what makes re-scanning a folder or
+// re-importing an export archive cheap rather than a wholesale re-upload.
+//
+// Owner-scoped like every other query here: two users with the same file each
+// get their own workout, and neither learns anything about the other's library.
+func (r *SQLiteRepository) KnownContentHashes(ctx context.Context, userID int64, hashes []string) ([]string, error) {
+	if len(hashes) == 0 {
+		return []string{}, nil
+	}
+	// Placeholders are built from the slice length, never from its contents, so
+	// the hashes stay bound parameters.
+	args := make([]any, 0, len(hashes)+1)
+	args = append(args, userID)
+	placeholders := make([]string, len(hashes))
+	for i, h := range hashes {
+		placeholders[i] = "?"
+		args = append(args, h)
+	}
+	query := `SELECT content_hash FROM workouts
+		WHERE user_id = ? AND content_hash IN (` + strings.Join(placeholders, ",") + `)`
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query known content hashes: %w", err)
+	}
+	defer rows.Close()
+	out := make([]string, 0, len(hashes))
+	for rows.Next() {
+		var h string
+		if err := rows.Scan(&h); err != nil {
+			return nil, err
+		}
+		out = append(out, h)
+	}
+	return out, rows.Err()
 }
 
 // DeleteAllForUser removes every workout a user owns, returning the ids that

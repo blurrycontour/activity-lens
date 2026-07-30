@@ -13,8 +13,14 @@ import siteConfiguration from './.figma/make/site.json'
 const WORKOUT_FILE_TYPES = [
   '.gpx',
   '.tcx',
+  // Export archives: Strava and Garmin both hand you a zip, and the files
+  // inside are often individually gzipped. The app unpacks them client-side.
+  '.zip',
+  '.gz',
   'application/gpx+xml',
   'application/vnd.garmin.tcx+xml',
+  'application/zip',
+  'application/gzip',
   'application/xml',
   'text/xml',
   'application/octet-stream',
@@ -89,6 +95,21 @@ export default defineConfig(({ mode }) => {
               files: [{ name: 'file', accept: WORKOUT_FILE_TYPES }],
             },
           },
+          // "Open with" for an installed PWA: double-clicking a .gpx offers
+          // Activity Lens, and the files arrive via window.launchQueue.
+          //
+          // Chrome and Edge on desktop only. Android has no file association
+          // for PWAs — sharing is that platform's route in, and share_target
+          // above already covers it — so this is simply inert there.
+          file_handlers: [
+            {
+              action: '/',
+              accept: {
+                'application/gpx+xml': ['.gpx'],
+                'application/vnd.garmin.tcx+xml': ['.tcx'],
+              },
+            },
+          ],
         },
       }),
     ],

@@ -396,12 +396,16 @@ export const api = {
   recalcWorkout: (id: string) =>
     request<import('../data/workouts').Workout>(`/api/workouts/${id}/recalculate`, { method: 'POST' }),
   deleteWorkout: (id: string) => request<unknown>(`/api/workouts/${id}`, { method: 'DELETE' }),
-  importWorkout: (file: File, type?: string, name?: string, equipmentIds?: string[]) => {
+  // `deferChecks` suppresses the post-import gear and goal evaluation, which
+  // re-reads the whole library each time. A batch sets it on every file and
+  // calls finalizeImport() once at the end.
+  importWorkout: (file: File, type?: string, name?: string, equipmentIds?: string[], deferChecks?: boolean) => {
     const form = new FormData()
     form.append('file', file)
     if (type) form.append('type', type)
     if (name) form.append('name', name)
     if (equipmentIds) equipmentIds.forEach(id => form.append('equipmentIds', id))
+    if (deferChecks) form.append('deferChecks', '1')
     // `duplicate` marks a file the server had already imported; the workout in
     // the response is the existing one, left untouched.
     return request<ImportedWorkout>('/api/workouts/import', { method: 'POST', raw: form })
@@ -411,8 +415,17 @@ export const api = {
     form.append('file', file)
     if (type) form.append('type', type)
     if (name) form.append('name', name)
-    return request<import('../data/workouts').Workout>('/api/workouts/preview', { method: 'POST', raw: form })
+    return request<ImportedWorkout>('/api/workouts/preview', { method: 'POST', raw: form })
   },
+  /** Runs the gear/goal checks a batch import deferred. Safe to call twice. */
+  finalizeImport: () => request<unknown>('/api/workouts/import/finalize', { method: 'POST' }),
+  /**
+   * Asks which of these file hashes are already imported, so a batch can skip
+   * uploading them. One request for a whole batch — the reason re-importing an
+   * archive, or re-scanning a folder, is cheap. Max 500 hashes per call.
+   */
+  knownImports: (hashes: string[]) =>
+    request<{ known: string[] }>('/api/workouts/import/known', { method: 'POST', body: { hashes } }),
   stats: () => request<Stats>('/api/stats'),
 
   // --- Sharing ---
