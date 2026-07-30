@@ -2,6 +2,7 @@
 // (double-submit cookie echoed in a header), and error normalization.
 
 import { reportReachability, respondedFromBackend } from './network'
+import { apiBase, authToken } from './serverConfig'
 
 export interface ApiUser {
   id: number
@@ -191,6 +192,23 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Resolves an API path against the configured server.
+ *
+ * On web apiBase() is empty and this returns the path unchanged, so requests
+ * stay same-origin exactly as before. On native it points at whatever server
+ * the user configured at first run.
+ */
+export function apiURL(path: string): string {
+  return apiBase() + path
+}
+
+/** Bearer header for the native app; nothing on web, where the cookie rules. */
+function authHeaders(): Record<string, string> {
+  const token = authToken()
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
 function readCookie(name: string): string | null {
   const match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'))
   return match ? decodeURIComponent(match[1]) : null
@@ -205,10 +223,13 @@ interface RequestOptions {
 
 async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const method = opts.method ?? 'GET'
-  const headers: Record<string, string> = { ...opts.headers }
+  const headers: Record<string, string> = { ...opts.headers, ...authHeaders() }
 
+  // CSRF is a cookie-client concern. A bearer token is never attached by the
+  // browser on its own, so there is nothing to double-submit and the server
+  // does not ask for one.
   const unsafe = !['GET', 'HEAD', 'OPTIONS'].includes(method)
-  if (unsafe) {
+  if (unsafe && !authToken()) {
     const csrf = readCookie(CSRF_COOKIE)
     if (csrf) headers[CSRF_HEADER] = csrf
   }
@@ -223,7 +244,7 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
 
   let res: Response
   try {
-    res = await fetch(path, { method, headers, body, credentials: 'same-origin' })
+    res = await fetch(apiURL(path), { method, headers, body, credentials: 'same-origin' })
   } catch (err) {
     // fetch only rejects on a transport failure, which is the clearest possible
     // signal that the backend is unreachable.
@@ -264,7 +285,7 @@ export interface DownloadedFile {
 async function fetchFile(path: string): Promise<DownloadedFile> {
   let res: Response
   try {
-    res = await fetch(path, { credentials: 'same-origin' })
+    res = await fetch(apiURL(path), { credentials: 'same-origin', headers: authHeaders() })
   } catch (err) {
     reportReachability(false)
     throw err
@@ -337,6 +358,15 @@ export const api = {
     }),
   register: (payload: { username: string; email: string; displayName: string; password: string }) =>
     request<{ user: ApiUser; csrfToken: string }>('/api/auth/register', { method: 'POST', body: payload }),
+  // Same sign-in, but the token comes back in the body instead of a cookie.
+  // Used only by the native app, which has no usable cookie jar; the web keeps
+  // login() above so its session token stays httpOnly and out of reach of
+  // script.
+  tokenLogin: (identifier: string, password: string) =>
+    request<{ token: string; expiresAt: string; user: ApiUser }>('/api/auth/token', {
+      method: 'POST',
+      body: { identifier, password },
+    }),
   logout: () => request<unknown>('/api/auth/logout', { method: 'POST' }),
   updateProfile: (displayName: string, email: string) =>
     request<{ user: ApiUser }>('/api/auth/profile', { method: 'PATCH', body: { displayName, email } }),

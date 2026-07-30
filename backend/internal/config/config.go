@@ -15,6 +15,10 @@ import (
 type Config struct {
 	Addr    string // listen address, e.g. ":8080"
 	DataDir string // directory for the database and uploaded files
+	// CORSOrigins are extra origins allowed to call the API cross-origin, on
+	// top of the built-in native app origins. Only needed when the web app is
+	// served from a different host than the API.
+	CORSOrigins []string
 
 	// Database
 	DatabaseURL string // when set, overrides the default sqlite path (kept for future Postgres support)
@@ -69,6 +73,7 @@ func Load() (Config, error) {
 	c := Config{
 		Addr:        env("AL_ADDR", ":8080"),
 		DataDir:     env("AL_DATA_DIR", "./.data"),
+		CORSOrigins: parseList(os.Getenv("AL_CORS_ORIGINS")),
 		DatabaseURL: os.Getenv("AL_DATABASE_URL"),
 		AdminUser:   os.Getenv("AL_ADMIN_USER"),
 		AdminEmail:  os.Getenv("AL_ADMIN_EMAIL"),
@@ -116,6 +121,19 @@ func env(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// parseList splits a comma-separated environment value, dropping blanks and
+// any trailing slash — an Origin header never carries one, so a configured
+// "https://app.example.com/" would otherwise silently never match.
+func parseList(raw string) []string {
+	out := []string{}
+	for _, part := range strings.Split(raw, ",") {
+		if v := strings.TrimRight(strings.TrimSpace(part), "/"); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 func intEnv(key string, def int) int {

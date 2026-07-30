@@ -66,7 +66,9 @@ func (s *Server) Handler() (http.Handler, error) {
 	}
 
 	root := http.NewServeMux()
-	root.Handle("/api/", withAccessLog(api))
+	// CORS wraps the API only. The SPA is same-origin by definition, and the
+	// native app never loads it over the network — it ships its own copy.
+	root.Handle("/api/", s.withCORS(withAccessLog(api)))
 	root.Handle("/", spa)
 	return root, nil
 }
@@ -77,6 +79,8 @@ func (s *Server) apiRoutes() http.Handler {
 
 	// --- Auth (public) ---
 	mux.HandleFunc("POST /api/auth/login", s.handleLogin)
+	// Same sign-in, token in the body instead of a cookie, for the native app.
+	mux.HandleFunc("POST /api/auth/token", s.handleIssueToken)
 	mux.HandleFunc("GET /api/auth/config", s.handleAuthConfig)
 	// Public: an OS-level push notification fetches the sender's avatar from
 	// outside any session, so this cannot require a cookie. Filenames are
@@ -172,24 +176,28 @@ func (s *Server) apiRoutes() http.Handler {
 	return mux
 }
 
+// Every authenticated route is wrapped in withBearerSession, so the native
+// app's Authorization header is understood everywhere a cookie is, and CSRF is
+// applied to cookie clients only. See bearer.go for why.
+
 // authed wraps a handler with RequireAuth.
 func (s *Server) authed(h http.HandlerFunc) http.Handler {
-	return s.mw.RequireAuth(h)
+	return s.withBearerSession(s.mw.RequireAuth(h))
 }
 
-// authedCSRF wraps a handler with RequireAuth + RequireCSRF.
+// authedCSRF wraps a handler with RequireAuth + CSRF (cookie clients only).
 func (s *Server) authedCSRF(h http.HandlerFunc) http.Handler {
-	return s.mw.RequireAuth(s.mw.RequireCSRF(h))
+	return s.withBearerSession(s.mw.RequireAuth(s.csrfUnlessBearer(h)))
 }
 
 // authedAdmin wraps a handler with RequireAuth + RequireAdmin.
 func (s *Server) authedAdmin(h http.HandlerFunc) http.Handler {
-	return s.mw.RequireAuth(s.mw.RequireAdmin(h))
+	return s.withBearerSession(s.mw.RequireAuth(s.mw.RequireAdmin(h)))
 }
 
-// authedAdminCSRF wraps a handler with RequireAuth + RequireAdmin + RequireCSRF.
+// authedAdminCSRF wraps a handler with RequireAuth + RequireAdmin + CSRF.
 func (s *Server) authedAdminCSRF(h http.HandlerFunc) http.Handler {
-	return s.mw.RequireAuth(s.mw.RequireAdmin(s.mw.RequireCSRF(h)))
+	return s.withBearerSession(s.mw.RequireAuth(s.mw.RequireAdmin(s.csrfUnlessBearer(h))))
 }
 
 // secure reports whether cookies should carry the Secure flag for this request.

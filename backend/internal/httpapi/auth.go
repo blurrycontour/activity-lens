@@ -57,6 +57,44 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	s.startSession(w, r, user, sid, exp)
 }
 
+// handleIssueToken signs in and returns the session token in the body instead
+// of setting a cookie, for the Android app.
+//
+// A separate endpoint rather than a flag on /login so the web path is unchanged
+// and its token stays httpOnly: a session token in a JSON body is readable by
+// script, which is exactly what the cookie flag exists to prevent. Only a client
+// that has somewhere safer to put it should ask for it this way, and the native
+// app does — Android keystore-backed storage, not localStorage.
+//
+// What comes back is an ordinary session. It appears in Settings -> Sessions
+// with the device's user agent, revoking it there signs the phone out, and it
+// expires on the same schedule as any other (AL_SESSION_TTL).
+func (s *Server) handleIssueToken(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Identifier string `json:"identifier"`
+		Password   string `json:"password"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	user, sid, exp, err := s.auth.Login(r.Context(), req.Identifier, req.Password, r.UserAgent(), clientIP(r))
+	if err != nil {
+		slog.Warn("token login failed", "identifier", req.Identifier, "ip", clientIP(r), "error", err)
+		s.writeLoginError(w, err)
+		return
+	}
+	if err := s.settings.RecordLogin(r.Context(), user.ID, time.Now()); err != nil {
+		slog.Warn("record last login", "error", err, "user", user.ID)
+	}
+	slog.Info("login (token)", "user", user.Username, "user_id", user.ID, "ip", clientIP(r))
+	writeJSON(w, http.StatusOK, map[string]any{
+		"token":     sid,
+		"expiresAt": exp.UTC().Format(time.RFC3339),
+		"user":      user,
+	})
+}
+
 func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Username    string `json:"username"`

@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { AlertCircle, Loader2, LogIn, UserPlus, WifiOff } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { ApiError } from '../lib/api'
+import { ApiError, apiURL } from '../lib/api'
 import { isGatewayError, useOnlineStatus } from '../lib/network'
 import Logo from '../components/Logo'
 import PasswordInput from '../components/PasswordInput'
@@ -182,7 +182,7 @@ export default function Login() {
         {oidc && (
           <>
             <div className="auth-divider"><span>or continue with</span></div>
-            <a className="auth-sso" href="/api/auth/oidc/login">
+            <a className="auth-sso" href={apiURL('/api/auth/oidc/login')}>
               <SsoLogo light={features?.oidcLogoUrl} dark={features?.oidcLogoUrlDark} />
               Continue with {features?.oidcProviderName || 'SSO'}
             </a>

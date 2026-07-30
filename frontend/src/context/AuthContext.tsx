@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { api, ApiError, type ApiUser, type AuthFeatures } from '../lib/api'
 import { clearApiCache } from '../lib/swCache'
 import { isGatewayError } from '../lib/network'
+import { isNative, setAuthToken } from '../lib/serverConfig'
 
 interface AuthState {
   user: ApiUser | null
@@ -100,6 +101,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refresh])
 
   const login = useCallback(async (identifier: string, password: string) => {
+    // The native app cannot use cookies across origins, so it asks for the
+    // session token in the body and holds it itself. Everything after this
+    // point is identical: api.ts attaches the token the same way the browser
+    // attaches the cookie, and no other caller knows which happened.
+    if (isNative()) {
+      const { token, user } = await api.tokenLogin(identifier, password)
+      await setAuthToken(token)
+      setUserState(user)
+      writeCachedUser(user)
+      return
+    }
     const { user } = await api.login(identifier, password)
     setUserState(user)
     writeCachedUser(user)
@@ -117,6 +129,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await api.logout()
     } finally {
+      // Dropped even if the request failed: the point of signing out is that
+      // this device stops holding a credential, and a server that could not be
+      // reached is the case where that matters most. The session stays alive
+      // server-side until it expires or is revoked from another device.
+      await setAuthToken(null)
       setUserState(null)
       // The cached identity is this user's too, so it goes with the rest.
       writeCachedUser(null)
