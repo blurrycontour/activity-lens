@@ -3,7 +3,10 @@
   <head>
     <!-- figma:head-start -->
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover: the Android app draws edge to edge, behind the status
+         and navigation bars, so the page background is what tints them. It is
+         also what makes env(safe-area-inset-*) report real values instead of 0. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title><!-- figma:title --></title>
     <!-- figma:head-end -->
     <!-- The manifest link is injected by vite-plugin-pwa, which owns the

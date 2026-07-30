@@ -1,11 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { AlertCircle, Loader2, LogIn, Server, Smartphone, UserPlus, WifiOff } from 'lucide-react'
-import { useAuth } from '../context/AuthContext'
+import { clearCachedUser, useAuth } from '../context/AuthContext'
 import { api, ApiError, apiURL, type AndroidApp } from '../lib/api'
 import { apiBase, forgetServer, isNative } from '../lib/serverConfig'
 import { isGatewayError, useOnlineStatus } from '../lib/network'
 import Logo from '../components/Logo'
 import PasswordInput from '../components/PasswordInput'
+import ConfirmDialog from '../components/ConfirmDialog'
 
 export default function Login() {
   const { login, register, features } = useAuth()
@@ -61,10 +62,17 @@ export default function Login() {
    * or a server you have no account on, leaves you at this screen with no other
    * way out. Settings has the same action for the signed-in case.
    */
+  const [confirmChange, setConfirmChange] = useState(false)
+
   async function changeServer() {
-    if (!window.confirm('Connect to a different server?')) return
+    setConfirmChange(false)
+    // The cached identity belongs to the server being left; leaving it would
+    // show the next server a name it never issued.
+    clearCachedUser()
+    // Returns to the setup screen in place. A reload would re-run the whole
+    // boot and, in the Android WebView, briefly show the window background
+    // through a blank page; see forgetServer.
     await forgetServer()
-    window.location.reload()
   }
 
   const online = useOnlineStatus()
@@ -79,6 +87,15 @@ export default function Login() {
 
   return (
     <div className="auth-shell">
+      {confirmChange && (
+        <ConfirmDialog
+          title="Connect to a different server?"
+          message={`This app will forget ${apiBase().replace(/^https?:\/\//, '')} and return to the setup screen. Nothing on the server is changed.`}
+          confirmLabel="Change server"
+          onConfirm={() => void changeServer()}
+          onCancel={() => setConfirmChange(false)}
+        />
+      )}
       <div className="auth-ambient" aria-hidden="true">
         <div className="auth-blob auth-blob-1" />
         <div className="auth-blob auth-blob-2" />
@@ -235,7 +252,7 @@ export default function Login() {
           <div className="auth-server">
             <Server size={12} />
             <span className="auth-server-url">{apiBase().replace(/^https?:\/\//, '')}</span>
-            <button type="button" className="auth-server-change" onClick={() => void changeServer()}>
+            <button type="button" className="auth-server-change" onClick={() => setConfirmChange(true)}>
               Change
             </button>
           </div>

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { X, ExternalLink, Copy, Check } from 'lucide-react'
 import { api, type BuildInfo } from '../lib/api'
+import { installedApp } from '../lib/native/appUpdate'
+import { isNative } from '../lib/serverConfig'
 import Logo from './Logo'
 
 /** Fallback link when the build carries no source URL of its own. */
@@ -20,7 +22,18 @@ function fmtBuildDate(iso: string): string {
  */
 export default function AboutDialog({ onClose }: { onClose: () => void }) {
   const [build, setBuild] = useState<BuildInfo | null>(null)
+  const [appVersion, setAppVersion] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+
+  // In the Android app the installed APK has a version of its own, which can
+  // legitimately differ from the server's — that gap is exactly what the in-app
+  // updater closes, so it is worth being able to see it.
+  useEffect(() => {
+    if (!isNative()) return
+    let cancelled = false
+    installedApp().then(info => { if (!cancelled) setAppVersion(info.version) }).catch(() => {})
+    return () => { cancelled = true }
+  }, [])
 
   // The frontend knows its own version at compile time, but everything else —
   // commit, build date, licence — is baked into the server binary, so it has
@@ -37,6 +50,7 @@ export default function AboutDialog({ onClose }: { onClose: () => void }) {
   async function copyBuild() {
     const lines = [
       `Activity Lens ${build?.version ?? __APP_VERSION__}`,
+      appVersion && `app ${appVersion}`,
       build?.revision && `commit ${build.revision}`,
       build?.created && `built ${build.created}`,
       build && `${build.platform} · ${build.goVersion}`,
@@ -68,8 +82,8 @@ export default function AboutDialog({ onClose }: { onClose: () => void }) {
             <Logo size={48} />
             <div style={{ minWidth: 0 }}>
               <h3 style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em' }}>Activity Lens</h3>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)' }}>
-                v{build?.version ?? __APP_VERSION__}
+              <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                Self-hosted training log
               </span>
             </div>
           </div>
@@ -89,6 +103,9 @@ export default function AboutDialog({ onClose }: { onClose: () => void }) {
             {build && (<><dt>Server</dt><dd>{build.goVersion} · {build.platform}</dd></>)}
             <dt>Interface</dt><dd>React &amp; Vite</dd>
             <dt>Version</dt><dd>{__APP_VERSION__}</dd>
+            {/* Android only: the APK's own version, which the web app has no
+                equivalent of — there, the page and the server are one build. */}
+            {appVersion && (<><dt>App version</dt><dd>{appVersion}</dd></>)}
             {build?.licenses && (<><dt>Licence</dt><dd>{build.licenses}</dd></>)}
           </dl>
 

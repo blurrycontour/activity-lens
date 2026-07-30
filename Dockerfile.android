@@ -70,6 +70,20 @@ RUN yes | sdkmanager --licenses > /dev/null \
 # Gradle, npm and pnpm all refuse to run without one.
 ENV HOME=/home/builder
 RUN mkdir -p ${HOME} && chmod 0777 ${HOME}
+# Where the Android tools keep per-user state, most importantly the generated
+# debug signing key.
+#
+# This has to be said explicitly. The build runs as the invoking uid, which in
+# this base image collides with `ubuntu` — so the JVM resolves user.home from
+# /etc/passwd to /home/ubuntu, a path nothing mounts, and the debug keystore was
+# being written there, destroyed with the container, and regenerated on the next
+# build. Every APK therefore had a different signing identity, and Android
+# refuses to replace an app with one signed by a different key: "signatures do
+# not match" on every update. $HOME alone does not fix it, because the Android
+# tools read these variables rather than $HOME. Both names are set: the first is
+# current, the second is what older tooling looks for.
+ENV ANDROID_USER_HOME=${HOME}/.android
+ENV ANDROID_PREFS_ROOT=${HOME}
 ENV GRADLE_USER_HOME=${HOME}/.gradle
 ENV npm_config_cache=${HOME}/.npm
 ENV PNPM_HOME=${HOME}/.pnpm

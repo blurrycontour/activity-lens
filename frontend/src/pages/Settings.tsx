@@ -8,6 +8,8 @@ import { api, ApiError, type NotificationKind, type NotifyPrefs } from '../lib/a
 import { useLocalStorage } from '../lib/useLocalStorage'
 import { useAuth } from '../context/AuthContext'
 import { apiBase, forgetServer, isNative } from '../lib/serverConfig'
+import { installedApp, requestUpdateCheck } from '../lib/native/appUpdate'
+import ConfirmDialog from '../components/ConfirmDialog'
 import {
   DASHBOARD_CFG_KEY, DEFAULT_DASHBOARD_CONFIG, STAT_CARDS, WINDOW_OPTIONS,
   DEFAULT_HR_ZONE_CHART, HR_ZONE_CHART_KEY,
@@ -41,17 +43,26 @@ export default function Settings({ accent, onAccentChange }: SettingsProps) {
    *
    * The session is revoked first, while the address that owns it is still
    * known — afterwards there is nothing left to revoke it against, and it would
-   * stay valid until it expired. A reload is what returns to the setup screen:
-   * everything downstream reads the server config once at boot, so restarting
-   * is both the simplest way to re-run that and the only one with no stale
-   * state left behind.
+   * stay valid until it expired.
    */
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false)
+  const [disconnecting, setDisconnecting] = useState(false)
+
   async function disconnectServer() {
-    if (!window.confirm('Disconnect from this server? You will need to sign in again.')) return
+    setDisconnecting(true)
     await logout()
+    // Returns to the setup screen by unmounting the providers, which takes all
+    // the old server's state with them. No page reload; see forgetServer.
     await forgetServer()
-    window.location.reload()
   }
+
+  // The installed app's own version, so the Server card can say what is running
+  // and whether checking for an update is worth offering.
+  const [appVersion, setAppVersion] = useState<string | null>(null)
+  useEffect(() => {
+    if (!isNative()) return
+    installedApp().then(info => setAppVersion(info.version)).catch(() => {})
+  }, [])
 
   function handleAccent(value: string) {
     onAccentChange(value)
@@ -657,8 +668,32 @@ export default function Settings({ accent, onAccentChange }: SettingsProps) {
               background: 'var(--bg-3)', border: '1px solid var(--border)',
               borderRadius: 'var(--radius)', padding: '8px 10px', overflowWrap: 'anywhere',
             }}>{apiBase()}</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 16 }}>
-              <button className="btn" onClick={() => void disconnectServer()}>Disconnect</button>
+            {appVersion && (
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                gap: 12, marginTop: 12, fontSize: 12, color: 'var(--text-3)',
+              }}>
+                <span>App version <span style={{ fontFamily: 'var(--font-mono)' }}>{appVersion}</span></span>
+              </div>
+            )}
+            {confirmDisconnect && (
+              <ConfirmDialog
+                title="Disconnect from this server?"
+                message="You will be signed out on this device and returned to the setup screen. Nothing on the server is changed."
+                confirmLabel="Disconnect"
+                busyLabel="Disconnecting…"
+                busy={disconnecting}
+                danger
+                onConfirm={() => void disconnectServer()}
+                onCancel={() => setConfirmDisconnect(false)}
+              />
+            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
+              {/* The app checks on its own at launch and on resume; this is for
+                  someone who has just upgraded their server and wants the new
+                  app now rather than at the next check. */}
+              <button className="btn" onClick={requestUpdateCheck}>Check for updates</button>
+              <button className="btn" onClick={() => setConfirmDisconnect(true)}>Disconnect</button>
             </div>
           </section>
         )}

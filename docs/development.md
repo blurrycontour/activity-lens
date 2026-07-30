@@ -103,6 +103,8 @@ Rules, because every file runs on every start:
 |---|---|
 | `Dockerfile` | Multi-stage: frontend build → backend build with the frontend embedded → distroless runtime |
 | `docker-compose.yml` | Local and self-hosted deployment |
+| `.env.example` | Runtime settings, read by the server |
+| `.env.build.example` | Build-time settings: version stamp and Android signing. Loaded by the build scripts, never by the server |
 | `.github/workflows/ci.yml` | vet, gofmt, Go tests, typecheck, Vitest, build |
 | `.github/workflows/docker.yml` | Builds and publishes the image to GHCR |
 | `.github/workflows/android.yml` | Builds the APK once; called by `docker.yml` so the image and the release carry identical bytes |

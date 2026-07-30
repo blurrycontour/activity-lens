@@ -31,7 +31,6 @@ import { adjacentPage, DESKTOP_PAGES, LEGACY_ROUTES, type Page } from './lib/nav
 import { useSwipeNav } from './lib/useSwipeNav'
 import { consumeShareParam, takeSharedFiles } from './lib/shareTarget'
 import { applySystemBars } from './lib/native/systemBars'
-import UpdatePrompt from './components/UpdatePrompt'
 import { api } from './lib/api'
 
 const SIDEBAR_KEY = 'al_sidebar_w'
@@ -369,9 +368,6 @@ export default function App() {
       )}
 
       <UpdateToast />
-
-      {/* Native only: offers the app build this server publishes. */}
-      <UpdatePrompt />
 
       <OfflineBar />
 

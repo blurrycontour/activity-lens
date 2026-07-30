@@ -47,6 +47,9 @@ go.work.sum
 # Capacitor project (the android/ project itself is committed)
 /mobile/node_modules/
 
+# Build-time settings, including the Android signing password.
+.env.build
+
 .vscode/chats
 
 AGENTS.md

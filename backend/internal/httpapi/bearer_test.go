@@ -51,7 +51,9 @@ func TestAllowedOrigin(t *testing.T) {
 	s := newCORSServer("https://app.example.com")
 
 	allowed := []string{
-		"https://localhost",       // Capacitor, recommended scheme
+		// What the shipped app presents; see mobile/capacitor.config.ts.
+		"https://activity-lens.localhost",
+		"https://localhost",       // Capacitor default
 		"capacitor://localhost",   // Capacitor, legacy scheme
 		"http://localhost",        // local development
 		"https://app.example.com", // configured
@@ -67,9 +69,11 @@ func TestAllowedOrigin(t *testing.T) {
 		"https://evil.example.com",
 		"https://app.example.com.evil.com", // suffix trick
 		"https://evilapp.example.com",      // prefix trick
-		"http://app.example.com",           // scheme must match
-		"https://localhost:8443",           // port is part of an origin
-		"null",                             // sandboxed iframes send this
+		"https://activity-lens.localhost.evil.com", // suffix trick on the app origin
+		"http://activity-lens.localhost",           // scheme must match here too
+		"http://app.example.com",                   // scheme must match
+		"https://localhost:8443",                   // port is part of an origin
+		"null",                                     // sandboxed iframes send this
 	}
 	for _, o := range denied {
 		if s.allowedOrigin(o) {

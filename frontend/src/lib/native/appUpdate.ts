@@ -63,3 +63,17 @@ export function updateAvailable(installed: string, offered: string): boolean {
 export function canSelfUpdate(): boolean {
   return isNative()
 }
+
+/**
+ * Asks the update prompt to check now and show itself even if this version was
+ * dismissed earlier.
+ *
+ * A window event rather than shared state: Settings and the prompt live in
+ * different parts of the tree, and this is the same pattern the notification
+ * bell already uses to hear about a push.
+ */
+export const UPDATE_CHECK_EVENT = 'al-check-update'
+
+export function requestUpdateCheck(): void {
+  window.dispatchEvent(new Event(UPDATE_CHECK_EVENT))
+}

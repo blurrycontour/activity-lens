@@ -127,6 +127,7 @@ public class AppUpdatePlugin extends Plugin {
     private void run(PluginCall call, String url) {
         PackageInstaller installer = getContext().getPackageManager().getPackageInstaller();
         int sessionId = -1;
+        boolean committed = false;
         try {
             HttpURLConnection connection = open(url);
             long total = connection.getContentLengthLong();
@@ -142,39 +143,51 @@ public class AppUpdatePlugin extends Plugin {
             }
             sessionId = installer.createSession(params);
 
-            try (
-                PackageInstaller.Session session = installer.openSession(sessionId);
-                InputStream in = connection.getInputStream();
-                OutputStream out = session.openWrite("app.apk", 0, total > 0 ? total : -1)
-            ) {
-                byte[] buffer = new byte[64 * 1024];
-                long written = 0;
-                // Progress is reported on a change of whole percent. Emitting per
-                // buffer would put ~1500 messages a second across the bridge and
-                // make the UI thread the bottleneck rather than the network.
-                int lastPercent = -1;
-                int read;
-                while ((read = in.read(buffer)) != -1) {
-                    out.write(buffer, 0, read);
-                    written += read;
-                    int percent = total > 0 ? (int) (written * 100 / total) : -1;
-                    if (percent != lastPercent) {
-                        lastPercent = percent;
-                        emitProgress("download", written, total);
+            // The session stays open across two scopes on purpose. The streams
+            // are closed by the inner block, and commit happens after that:
+            // committing while the write stream is still open is not valid, and
+            // closing the session before committing throws the transfer away.
+            try (PackageInstaller.Session session = installer.openSession(sessionId)) {
+                try (
+                    InputStream in = connection.getInputStream();
+                    OutputStream out = session.openWrite("app.apk", 0, total > 0 ? total : -1)
+                ) {
+                    byte[] buffer = new byte[64 * 1024];
+                    long written = 0;
+                    // Progress is reported on a change of whole percent. Emitting
+                    // per buffer would put ~1500 messages a second across the
+                    // bridge and make the UI thread the bottleneck, not the
+                    // network.
+                    int lastPercent = -1;
+                    int read;
+                    while ((read = in.read(buffer)) != -1) {
+                        out.write(buffer, 0, read);
+                        written += read;
+                        int percent = total > 0 ? (int) (written * 100 / total) : -1;
+                        if (percent != lastPercent) {
+                            lastPercent = percent;
+                            emitProgress("download", written, total);
+                        }
                     }
+                    // Flush to disk while the stream is still open. Nothing is
+                    // closed by hand here: try-with-resources closes both, and
+                    // closing the session's stream twice is what produced
+                    // "write failed: EBADF" — the second close flushes onto a
+                    // file descriptor the first one already released.
+                    session.fsync(out);
+                } finally {
+                    connection.disconnect();
                 }
-                session.fsync(out);
-                out.close();
-                in.close();
-                connection.disconnect();
 
                 emitProgress("install", total, total);
+                // Past this point the session belongs to the system: it prompts
+                // the user, then broadcasts the outcome to installReceiver.
+                // Abandoning it on the way out would cancel a live install.
+                committed = true;
                 session.commit(resultIntent().getIntentSender());
             }
-            // From here the system takes over: it prompts the user, then
-            // broadcasts to installReceiver, which resolves the call.
         } catch (IOException | SecurityException | IllegalArgumentException e) {
-            if (sessionId != -1) {
+            if (sessionId != -1 && !committed) {
                 try {
                     installer.abandonSession(sessionId);
                 } catch (Exception ignored) {
@@ -191,6 +204,11 @@ public class AppUpdatePlugin extends Plugin {
         connection.setReadTimeout(60_000);
         // Release assets are served as redirects to a CDN.
         connection.setInstanceFollowRedirects(true);
+        // No transparent gzip. HttpURLConnection would otherwise add its own
+        // Accept-Encoding, and when a server honours it getContentLength reports
+        // the compressed size while the stream yields decompressed bytes — a
+        // mismatch against the length the install session was told to expect.
+        connection.setRequestProperty("Accept-Encoding", "identity");
         connection.connect();
         int status = connection.getResponseCode();
         if (status < 200 || status >= 300) {

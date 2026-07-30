@@ -24,9 +24,24 @@
     <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar">
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
+        <!--
+          Clears the launch theme's android:background, which is @drawable/splash
+          — the app mark on ink. That attribute is a *view* background, inherited
+          by the activity's whole hierarchy, so it sits behind the WebView for
+          the entire session rather than only during launch. Any moment the page
+          is not painting over it, it shows through: a second logo behind the
+          page, and a slice of one in Android's text-selection magnifier.
+
+          Capacitor's generated theme carries this exact line for this exact
+          reason. Do not remove it again.
+        -->
+        <item name="android:background">@null</item>
         <item name="android:windowBackground">@color/app_background</item>
-        <item name="android:statusBarColor">@color/app_background</item>
-        <item name="android:navigationBarColor">@color/app_background</item>
+        <!-- Transparent, because the page is drawn behind them and is what
+             tints them. Opaque bars here are what left them stuck on the dark
+             theme's colour while the page went light. -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
         <!-- The app opens dark, so bar icons must be light to be visible. -->
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
@@ -34,7 +49,7 @@
 
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="android:background">@drawable/splash</item>
-        <item name="android:statusBarColor">@color/app_background</item>
-        <item name="android:navigationBarColor">@color/app_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
 </resources>

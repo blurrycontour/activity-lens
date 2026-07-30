@@ -4,7 +4,8 @@ import ServerSetup from './pages/ServerSetup'
 import { AuthProvider } from './context/AuthContext'
 import { RefreshProvider } from './context/RefreshContext'
 import { startNetworkMonitor } from './lib/network'
-import { needsServerConfig } from './lib/serverConfig'
+import { needsServerConfig, onServerForgotten } from './lib/serverConfig'
+import UpdatePrompt from './components/UpdatePrompt'
 
 /**
  * Decides whether the app can start yet.
@@ -28,6 +29,12 @@ export default function Root() {
     if (!needsServer) startNetworkMonitor()
   }, [needsServer])
 
+  // "Change server", from the login screen or from Settings. Unmounting the
+  // providers is what makes this clean: the auth context, the cached user and
+  // every page's state go with them, so nothing from the old server survives
+  // into the new one.
+  useEffect(() => onServerForgotten(() => setNeedsServer(true)), [])
+
   if (needsServer) {
     return <ServerSetup onConfigured={() => setNeedsServer(false)} />
   }
@@ -35,6 +42,10 @@ export default function Root() {
   return (
     <AuthProvider>
       <RefreshProvider>
+        {/* Above the auth boundary on purpose: an update is about the app, not
+            about who is signed in, and the login screen is exactly where
+            someone stuck on an old build is most likely to be sitting. */}
+        <UpdatePrompt />
         <App />
       </RefreshProvider>
     </AuthProvider>

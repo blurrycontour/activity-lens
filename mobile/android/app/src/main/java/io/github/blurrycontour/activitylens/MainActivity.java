@@ -18,5 +18,20 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(SystemBarsPlugin.class);
         registerPlugin(AppUpdatePlugin.class);
         super.onCreate(savedInstanceState);
+
+        // Replace the launch theme's window background with a flat colour.
+        //
+        // That background is @drawable/splash — the app mark centred on ink —
+        // and it stays behind the WebView for the whole session unless it is
+        // cleared. Any moment the WebView is not painting over it, it shows
+        // through: a second logo behind the page during a reload, and a slice of
+        // one inside Android's text-selection magnifier, which samples the
+        // window surface rather than the view.
+        //
+        // Set here rather than in the theme because the window was created with
+        // the launch theme; restyling afterwards does not repaint what the
+        // window already holds. SystemBarsPlugin then keeps it in step with the
+        // light/dark toggle.
+        getWindow().setBackgroundDrawableResource(R.color.app_background);
     }
 }

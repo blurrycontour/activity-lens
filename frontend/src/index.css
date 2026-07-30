@@ -72,6 +72,19 @@
   --radius: 0.5rem;
   --sidebar-w: 240px;
   --bottombar-h: 0px;
+
+  /* Space the system reserves for the status bar, notch and gesture handle.
+     Zero everywhere except the Android app and an installed iOS PWA, which are
+     the only places the page is drawn behind system chrome.
+
+     env() is the fallback, not the answer: an Android WebView resolves it from
+     the display cutout alone and reports zero for the status and navigation
+     bars. lib/native/systemBars.ts measures the real insets natively and
+     overrides these on :root. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
 }
 
 :root.light {
@@ -124,8 +137,11 @@ body {
 .app-layout {
   display: grid;
   grid-template-columns: var(--sidebar-w) 1fr;
-  /* Rows: top bar, offline bar (0px unless shown), content. */
-  grid-template-rows: 48px auto 1fr;
+  /* Rows: top bar, offline bar (0px unless shown), content.
+     The first row carries the status-bar inset on top of its own 48px: the app
+     draws edge to edge, so the bar has to be taller by exactly that much or its
+     contents end up underneath the clock. */
+  grid-template-rows: calc(48px + var(--safe-top)) auto 1fr;
   height: 100vh;
   width: 100vw;
   overflow: hidden;
@@ -148,6 +164,14 @@ body {
   position: sticky;
   top: 0;
   z-index: 50;
+  /* Reaches up behind the status bar and pushes its contents clear of it, so
+     the bar's own colour sits behind the clock and battery — and follows the
+     theme for free, which a natively-painted bar cannot do. The grid row above
+     is sized to match; border-box keeps the two in agreement. */
+  box-sizing: border-box;
+  padding-top: var(--safe-top);
+  padding-left: calc(16px + var(--safe-left));
+  padding-right: calc(16px + var(--safe-right));
 }
 
 .sidebar {
@@ -275,6 +299,9 @@ body {
    every other page it owns its own scrolling (html/body are overflow:hidden)
    and has to clear the fixed .offline-bar.floating above it. */
 .auth-shell {
+  /* The login and server-setup screens have no top bar to absorb the inset. */
+  padding-top: var(--safe-top);
+  padding-bottom: var(--safe-bottom);
   position: relative;
   /* A fixed height, not min-height: html/body are overflow:hidden, so the
      shell has to be viewport-bounded for its own overflow-y to do anything.
@@ -1728,7 +1755,9 @@ body {
 
 /* ── Responsive ── */
 @media (max-width: 768px) {
-  :root { --bottombar-h: 64px; }
+  /* Includes the gesture-handle inset, so main-content's bottom padding and
+     the FAB's offset both clear the real bar rather than its visible part. */
+  :root { --bottombar-h: calc(64px + var(--safe-bottom)); }
 
   .card-export-btn { display: none; }
 
@@ -1827,7 +1856,13 @@ body {
     bottom: 0;
     left: 0;
     right: 0;
-    height: 64px;
+    /* 64px of buttons plus the gesture-handle inset beneath them. In landscape
+       the navigation bar moves to a side, hence the horizontal pair. */
+    height: calc(64px + var(--safe-bottom));
+    box-sizing: border-box;
+    padding-bottom: var(--safe-bottom);
+    padding-left: var(--safe-left);
+    padding-right: var(--safe-right);
     background: var(--bg-2);
     border-top: 1px solid var(--border);
     z-index: 50;

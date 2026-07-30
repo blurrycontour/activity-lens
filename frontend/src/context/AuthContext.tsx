@@ -37,6 +37,14 @@ function readCachedUser(): ApiUser | null {
   }
 }
 
+/**
+ * Drops the remembered identity. Used when leaving a server entirely, where the
+ * cached user belongs to the instance being left rather than to this device.
+ */
+export function clearCachedUser(): void {
+  writeCachedUser(null)
+}
+
 function writeCachedUser(u: ApiUser | null): void {
   try {
     if (u) localStorage.setItem(CACHED_USER_KEY, JSON.stringify(u))

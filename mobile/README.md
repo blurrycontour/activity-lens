@@ -36,11 +36,22 @@ locally and fail there for reasons of its own.
 ### Installing it
 
 ```sh
-adb install -r mobile/dist/activity-lens-*-debug.apk
+adb install -r mobile/dist/activity-lens-*.apk
 ```
 
-A debug APK installs on any phone with developer options enabled and needs no
-signing material. It is the right thing for your own use.
+or download it from the login page of a server built with it.
+
+> [!TIP]
+> **Build a release APK, not a debug one, for a phone you actually use.**
+>
+> A debug APK is signed with a generated key and marked `android:debuggable`, and
+> Play Protect blocks that combination outright — "unsafe app blocked", with
+> "install anyway" hidden behind a More details link, on every install and every
+> update. A release APK signed with your own key gets the ordinary sideloading
+> prompt and nothing further.
+>
+> Set `AL_KEYSTORE` in `.env.build` and `scripts/deploy.sh` builds release
+> automatically. Debug builds remain useful for a quick check on a spare device.
 
 ### Signing a release
 
@@ -48,20 +59,29 @@ Create a keystore once, and keep it somewhere safe — losing it means no future
 build can upgrade an installed app, only replace it:
 
 ```sh
-keytool -genkey -v -keystore release.jks -keyalg RSA -keysize 2048 \
+keytool -genkeypair -v \
+        -keystore release.p12 -storetype PKCS12 \
+        -keyalg RSA -keysize 4096 -sigalg SHA256withRSA \
         -validity 10000 -alias activity-lens
 ```
+
+PKCS#12 rather than JKS: it is the standard, interoperable format and what
+`keytool` has defaulted to since JDK 9 — JKS is the proprietary predecessor and
+is deprecated. 4096-bit RSA because this key has to outlive the app: the validity
+above is 27 years, and it cannot be rotated without every user reinstalling.
+
+A `.jks` is still accepted; the build picks the store type from the extension.
 
 Then:
 
 ```sh
-AL_KEYSTORE=/path/to/release.jks \
+AL_KEYSTORE=/path/to/release.p12 \
 AL_KEYSTORE_PASSWORD=… AL_KEY_ALIAS=activity-lens AL_KEY_PASSWORD=… \
 scripts/build-apk.sh release
 ```
 
 In CI the same four values come from the repository secrets
-`ANDROID_KEYSTORE_BASE64` (`base64 -w0 release.jks`),
+`ANDROID_KEYSTORE_BASE64` (`base64 -w0 release.p12`),
 `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`.
 Without them a release build still succeeds and produces an unsigned APK.
 
@@ -142,15 +162,22 @@ SHA-256 against what the build job recorded. The bytes in the image and the byte
 on the releases page are identical by construction, and verified besides.
 
 > [!IMPORTANT]
-> Android refuses to replace an app with one signed by a different key. Tagged CI
-> builds produce a signed release APK; everything else produces a debug APK, and
-> the two cannot update to one another. An image built from `main` or locally
-> bundles a debug APK, so a phone running it can only update to other such
-> builds. Whichever APK you install first commits you to its signing key.
+> **Android refuses to replace an app with one signed by a different key** — the
+> install fails with "signatures do not match", and the only way out is to
+> uninstall first.
+>
+> The default debug key is generated per machine, and inside the build container
+> that means per volume, so two debug APKs are not reliably interchangeable
+> either. To test the in-app updater, put a keystore in `.env.build`: both build
+> types are then signed with it, every APK from this repository shares one
+> identity, and updates work end to end. See "Signing a release" above.
+>
+> Tagged CI builds produce a signed release APK; everything else produces a debug
+> APK. Whichever you install first commits you to its signing key.
 
 ## What the native app does differently
 
-Only two things, both isolated in `frontend/src/lib/serverConfig.ts`:
+Two things, both isolated in `frontend/src/lib/serverConfig.ts`:
 
 - **The API lives somewhere else.** Every request is prefixed with the configured
   server. On web that prefix is empty and requests stay same-origin.
@@ -158,6 +185,42 @@ Only two things, both isolated in `frontend/src/lib/serverConfig.ts`:
   origin, so a session cookie could not be sent. `POST /api/auth/token` returns
   the same session token a cookie would have carried — it is one session, listed
   and revocable in Settings → Sessions like any other device.
+
+### The WebView's origin
+
+The app serves itself from `https://activity-lens.localhost`, not Capacitor's
+default `https://localhost`.
+
+Password managers key saved credentials on the origin, and on plain `localhost`
+the app shares one with every other localhost thing the user has ever signed in
+to — so the picker offers all of them, and saving a new password adds to that
+pile. A host of its own gives the app a normal, private entry.
+
+It stays on `https` rather than a custom `activity-lens://` scheme, which would
+be the obvious way to get a distinct origin. A non-standard scheme is not a
+secure context, and `crypto.subtle` — which does the content hashing that import
+dedupe is built on — does not exist outside one. The app would install and then
+fail to import a file. `.localhost` is reserved by RFC 6761, never resolves, and
+is treated as a secure context, so it gets the distinct origin with none of that.
+
+The backend's CORS allowlist (`backend/internal/httpapi/cors.go`) has to name the
+same host. A mismatch shows up as every request from the app failing CORS.
+
+### System bars
+
+The app draws edge to edge. The WebView fills the screen including the space
+behind the status and navigation bars; the bars themselves are transparent, and
+the page pads its own chrome clear of them with `env(safe-area-inset-*)` — which
+needs `viewport-fit=cover` on the viewport meta tag to report anything but zero.
+
+This is not a style choice. From Android 15 an app targeting API 35+ is
+edge-to-edge whether it asks or not, and `setStatusBarColor` is ignored, so
+painting the bars natively cannot work. Letting the page paint that area is also
+what makes the bars follow the in-app light/dark toggle for free.
+
+`SystemBarsPlugin` is left with the two things the page cannot say: whether the
+bar icons should be light or dark, and what colour the window behind the WebView
+is for the moment before the page paints.
 
 The server needs `AL_CORS_ORIGINS` set only if you also use the web app from a
 different origin; the WebView's own origin is allowed out of the box. See

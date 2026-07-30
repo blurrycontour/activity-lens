@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { registerSW } from 'virtual:pwa-register'
 import Root from './Root'
 import { isNative, loadServerConfig } from './lib/serverConfig'
+import { trackSafeAreaInsets } from './lib/native/systemBars'
 import { markUpdateReady, setApplyUpdate } from './lib/appUpdate'
 import './index.css'
 
@@ -38,6 +39,10 @@ function registerServiceWorker() {
 // is what keeps that read synchronous everywhere else.
 void loadServerConfig().then(() => {
   registerServiceWorker()
+
+  // The Android app draws behind the system bars, so the page has to know how
+  // much room they take before it lays anything out. A no-op on web.
+  void trackSafeAreaInsets()
 
   ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>

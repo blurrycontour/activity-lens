@@ -14,7 +14,8 @@
 # Environment:
 #   AL_VERSION         version name, e.g. 1.4.0   (default: git describe)
 #   AL_VERSION_CODE    integer, must increase     (default: commit count)
-#   AL_KEYSTORE        path to a keystore; release builds are signed with it
+#   AL_KEYSTORE        path to a PKCS#12 keystore (.p12); release builds are
+#                      signed with it. A legacy .jks is detected by extension.
 #   AL_KEYSTORE_PASSWORD, AL_KEY_ALIAS, AL_KEY_PASSWORD
 #
 # Without a keystore, a release build still succeeds and produces an unsigned
@@ -31,6 +32,44 @@ esac
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
+
+# Build-time settings (version stamp, Android signing) live in .env.build, which
+# is separate from the runtime .env the server reads. Loaded here rather than
+# required on the command line so a keystore password never has to be typed into
+# a shell — and never lands in shell history.
+#
+# The file fills in blanks; it never overrides. `AL_VERSION=x scripts/apk.sh`
+# has to mean what it says, and sourcing the file wholesale made it silently not
+# — the file won, and the argument was discarded.
+load_build_env() {
+  local file="$REPO_ROOT/.env.build" line key value
+  [ -f "$file" ] || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in ''|'#'*) continue ;; esac
+    case "$line" in *=*) ;; *) continue ;; esac
+    key=${line%%=*}
+    value=${line#*=}
+    # Trim whitespace around the name, and one layer of quotes off the value.
+    key=$(printf '%s' "$key" | tr -d '[:space:]')
+    case "$value" in
+      \"*\") value=${value#\"}; value=${value%\"} ;;
+      "'"*"'") value=${value#"'"}; value=${value%"'"} ;;
+    esac
+    # A leading ~ is expanded, because a path is the most likely thing in here
+    # and "~/keys/app.p12" is how a person writes one. Sourcing the file used to
+    # do this for free; reading it line by line does not.
+    case "$value" in
+      "~") value="$HOME" ;;
+      "~/"*) value="$HOME/${value#\~/}" ;;
+    esac
+    [ -n "$key" ] || continue
+    # Only when the caller has not already said otherwise.
+    if [ -z "${!key:-}" ]; then
+      export "$key=$value"
+    fi
+  done < "$file"
+}
+load_build_env
 
 # Version defaults come from git so a local build is labelled with what it was
 # built from instead of a placeholder. versionCode must be a monotonically
@@ -79,12 +118,18 @@ npx cap sync android
 echo "==> Gradle assemble$BUILD_TYPE"
 export ORG_GRADLE_PROJECT_alVersionName="$AL_VERSION"
 export ORG_GRADLE_PROJECT_alVersionCode="$AL_VERSION_CODE"
+SIGNED=0
 if [ -n "${AL_KEYSTORE:-}" ]; then
   # Absolute, because Gradle resolves relative paths against the module dir.
   export ORG_GRADLE_PROJECT_alKeystore="$(cd "$(dirname "$AL_KEYSTORE")" && pwd)/$(basename "$AL_KEYSTORE")"
   export ORG_GRADLE_PROJECT_alKeystorePassword="${AL_KEYSTORE_PASSWORD:-}"
   export ORG_GRADLE_PROJECT_alKeyAlias="${AL_KEY_ALIAS:-}"
-  export ORG_GRADLE_PROJECT_alKeyPassword="${AL_KEY_PASSWORD:-}"
+  # A PKCS#12 keystore keeps one password for the store and the key, and keytool
+  # sets them together. Left empty, the Android plugin treats the signing config
+  # as incomplete and quietly produces an *unsigned* release APK, so defaulting
+  # it is what makes the common setup work rather than half-work.
+  export ORG_GRADLE_PROJECT_alKeyPassword="${AL_KEY_PASSWORD:-${AL_KEYSTORE_PASSWORD:-}}"
+  SIGNED=1
   echo "    signing with $ORG_GRADLE_PROJECT_alKeystore"
 fi
 
@@ -123,6 +168,35 @@ cat > "$OUT_DIR/apk.json" <<JSON
   "sha256": "${SHA}"
 }
 JSON
+
+# A signing config the Android plugin considers incomplete does not fail the
+# build — it drops the signature and carries on. An unsigned release APK looks
+# entirely normal until a phone refuses to install it, so the claim is checked
+# rather than assumed.
+if [ "$SIGNED" = 1 ]; then
+  APKSIGNER="$(command -v apksigner || ls "${ANDROID_HOME:-/opt/android-sdk}"/build-tools/*/apksigner 2>/dev/null | tail -1)"
+  if [ -n "$APKSIGNER" ]; then
+    if "$APKSIGNER" verify "$OUT_DIR/$NAME" >/dev/null 2>&1; then
+      echo "    signature: verified"
+    else
+      echo "A keystore was configured but the APK is not signed." >&2
+      echo "Check AL_KEYSTORE_PASSWORD, AL_KEY_ALIAS and AL_KEY_PASSWORD." >&2
+      "$APKSIGNER" verify "$OUT_DIR/$NAME" >&2 2>&1 || true
+      exit 1
+    fi
+  fi
+fi
+
+# Said once, at the end, where it will actually be read. A debug APK is fine for
+# a quick check but is not what you want on a phone you use: it is signed with a
+# generated key and marked debuggable, which is the combination Play Protect
+# blocks with "unsafe app blocked".
+if [ "$BUILD_TYPE" = "debug" ]; then
+  echo
+  echo "    Note: this is a debug build. Android will warn on install and make"
+  echo "    you choose \"install anyway\". Configure AL_KEYSTORE in .env.build"
+  echo "    and build a release APK to avoid that; see mobile/README.md."
+fi
 
 echo
 echo "==> $OUT_DIR/$NAME"

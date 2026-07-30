@@ -27,10 +27,27 @@ const config: CapacitorConfig = {
   },
 
   server: {
-    // https rather than the legacy capacitor:// scheme. It keeps the WebView in
-    // a secure context, which is what crypto.subtle needs — import hashing uses
-    // it, so this is load-bearing, not cosmetic.
+    // https rather than a custom activity-lens:// scheme, even though a custom
+    // scheme is the obvious way to get a distinct origin. A non-standard scheme
+    // is not a secure context, and this app needs one: crypto.subtle does the
+    // content hashing that import dedupe is built on, and it does not exist
+    // outside a secure context. The app would install and then fail to import a
+    // file, which is worse than the problem being solved.
     androidScheme: 'https',
+
+    // A hostname of our own instead of the default `localhost`.
+    //
+    // Password managers key saved credentials on the origin. On
+    // https://localhost the app shares an origin with every other localhost
+    // thing the user has ever signed in to, so the picker offers all of them and
+    // saving a new one adds to that pile. A distinct host gives the app its own
+    // entry that fills and saves like any normal site.
+    //
+    // .localhost is reserved by RFC 6761 and never resolves, so this can never
+    // collide with a real site someone registers later, and browsers treat it as
+    // a secure context exactly like localhost itself. Anything under a real TLD
+    // would be a name we do not own.
+    hostname: 'activity-lens.localhost',
   },
 }
 

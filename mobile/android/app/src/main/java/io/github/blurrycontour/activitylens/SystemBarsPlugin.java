@@ -1,36 +1,127 @@
 package io.github.blurrycontour.activitylens;
 
 import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
+import android.os.Build;
 import android.view.View;
 import android.view.Window;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
+import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 /**
- * Paints the status and navigation bars to match the app's current theme.
+ * Keeps the system bars in step with the app's theme, and tells the page how
+ * much room they take.
  *
- * The web app already keeps the PWA's theme-color meta tag in step with its
- * light/dark toggle, which is what makes the installed PWA's system bars match.
- * A WebView has no such mechanism — the bars belong to the Activity's window —
- * so this is the native equivalent of that same one line, and exists so the two
- * builds look identical.
+ * The app draws edge to edge: the WebView fills the whole screen including the
+ * space behind the status and navigation bars, the bars themselves are
+ * transparent, and the page's own background is what shows behind the clock and
+ * the gesture handle. That is not a style choice — from Android 15 an app
+ * targeting API 35+ is edge-to-edge whether it asks or not, and
+ * Window.setStatusBarColor is ignored, so painting the bars natively no longer
+ * works at all.
  *
- * Written here rather than pulled in as a dependency. It is one API call plus
- * the icon-contrast flag, and the alternative would be another package to keep
- * version-locked across two package.json files for no benefit.
+ * Drawing under the bars means the page has to keep its own chrome clear of
+ * them, and CSS alone cannot do it here. env(safe-area-inset-*) in an Android
+ * WebView reports the *display cutout* — the camera notch — and nothing else. On
+ * a phone without a cutout it is zero in every direction, which is exactly how
+ * the top bar ended up under the status bar and the bottom bar under the gesture
+ * handle. The real bar heights are only knowable natively, so they are measured
+ * here and handed to the page as CSS variables.
  */
 @CapacitorPlugin(name = "SystemBars")
 public class SystemBarsPlugin extends Plugin {
 
+    /** Emitted whenever the insets change: rotation, gesture-mode, foldables. */
+    private static final String INSETS_EVENT = "insets";
+
+    /** The last measurement, so a JS listener attaching late is not left blank. */
+    private JSObject lastInsets = new JSObject();
+
+    @Override
+    public void load() {
+        getActivity()
+            .runOnUiThread(() -> {
+                Window window = getActivity().getWindow();
+
+                // Draw behind the bars. A no-op on API 35+, where it is already
+                // the only behaviour, and the whole point on everything older.
+                WindowCompat.setDecorFitsSystemWindows(window, false);
+
+                // Transparent bars, so the page shows through. Deprecated and
+                // ignored on API 35+; still required below it, which is why the
+                // calls stay.
+                if (Build.VERSION.SDK_INT < 35) {
+                    window.setStatusBarColor(Color.TRANSPARENT);
+                    window.setNavigationBarColor(Color.TRANSPARENT);
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    // Android would otherwise paint its own translucent scrim
+                    // behind the bars to guarantee contrast, which shows up as
+                    // exactly the grey band this is all meant to remove.
+                    window.setStatusBarContrastEnforced(false);
+                    window.setNavigationBarContrastEnforced(false);
+                }
+
+                View decor = window.getDecorView();
+                ViewCompat.setOnApplyWindowInsetsListener(
+                    decor,
+                    (v, windowInsets) -> {
+                        publishInsets(windowInsets);
+                        // Passed on rather than consumed: consuming here would
+                        // stop anything else in the hierarchy from ever seeing
+                        // them.
+                        return windowInsets;
+                    }
+                );
+                ViewCompat.requestApplyInsets(decor);
+            });
+    }
+
+    /** Converts the system bar insets to CSS pixels and sends them to the page. */
+    private void publishInsets(WindowInsetsCompat windowInsets) {
+        // systemBars() covers the status bar, the navigation bar and the gesture
+        // handle. displayCutout() is deliberately included too: on a phone with
+        // a notch in landscape, the cutout intrudes further than the bars do.
+        Insets bars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
+
+        // CSS pixels, not device pixels: the page reasons in the former and the
+        // ratio between them is exactly the display density.
+        float density = getContext().getResources().getDisplayMetrics().density;
+        JSObject insets = new JSObject();
+        insets.put("top", bars.top / density);
+        insets.put("bottom", bars.bottom / density);
+        insets.put("left", bars.left / density);
+        insets.put("right", bars.right / density);
+
+        lastInsets = insets;
+        notifyListeners(INSETS_EVENT, insets);
+    }
+
     /**
-     * Sets both system bars to one colour and picks the icon contrast to match.
+     * The current insets.
      *
-     * @param call background - "#rrggbb"; dark - true when that colour is dark,
-     *             so the bar icons should be light.
+     * Polled once at startup because the listener above may well have fired
+     * before any JavaScript was running, and a page that never hears the first
+     * measurement lays itself out under the status bar.
+     */
+    @PluginMethod
+    public void getInsets(PluginCall call) {
+        call.resolve(lastInsets);
+    }
+
+    /**
+     * Tells the window which way the app's theme has gone.
+     *
+     * @param call background - "#rrggbb", the page background behind the bars;
+     *             dark - true when that colour is dark, so bar icons go light.
      */
     @PluginMethod
     public void setColors(PluginCall call) {
@@ -51,13 +142,15 @@ public class SystemBarsPlugin extends Plugin {
         getActivity()
             .runOnUiThread(() -> {
                 Window window = getActivity().getWindow();
-                window.setStatusBarColor(color);
-                window.setNavigationBarColor(color);
 
-                View decor = window.getDecorView();
-                WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(window, decor);
-                // "Light bars" means dark icons on a light background, so this is
-                // the inverse of whether the background itself is dark.
+                // What is visible while the WebView has not painted — during a
+                // reload, or behind a transparent page. Following the theme is
+                // what stops a light-theme reload flashing black.
+                window.setBackgroundDrawable(new ColorDrawable(color));
+
+                WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(window, window.getDecorView());
+                // "Light bars" means dark icons for a light background, so this
+                // is the inverse of whether the background itself is dark.
                 controller.setAppearanceLightStatusBars(!dark);
                 controller.setAppearanceLightNavigationBars(!dark);
 

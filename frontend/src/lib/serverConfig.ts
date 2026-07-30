@@ -117,6 +117,25 @@ export async function setAuthToken(value: string | null): Promise<void> {
 }
 
 /**
+ * Notified when the app stops being pointed at a server, so the UI can return
+ * to the setup screen.
+ *
+ * An event rather than a page reload. Reloading a Capacitor WebView is a bigger
+ * hammer than it looks: it re-runs the whole boot, briefly leaves the WebView
+ * blank with the window background showing through, and reloads whatever path
+ * the SPA happens to have pushed rather than the app root. Re-rendering from
+ * React is a single state change with none of that.
+ */
+type ForgetListener = () => void
+const forgetListeners = new Set<ForgetListener>()
+
+/** Subscribes to "the server was forgotten". Returns an unsubscribe function. */
+export function onServerForgotten(fn: ForgetListener): () => void {
+  forgetListeners.add(fn)
+  return () => forgetListeners.delete(fn)
+}
+
+/**
  * Forgets the server, for "sign in to a different server".
  *
  * Clears the token first: a URL with no token strands the app at the login
@@ -127,6 +146,7 @@ export async function forgetServer(): Promise<void> {
   await setAuthToken(null)
   baseURL = ''
   await Preferences.remove({ key: SERVER_URL_KEY })
+  forgetListeners.forEach(fn => fn())
 }
 
 /**

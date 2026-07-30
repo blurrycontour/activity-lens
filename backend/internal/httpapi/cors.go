@@ -25,11 +25,19 @@ import (
 // already do by calling the server directly from its own backend.
 
 // nativeOrigins are the origins an installed Capacitor build can present.
-// Fixed by the platform rather than by configuration: Android WebViews serve
-// from https://localhost under the recommended scheme, and older or
-// differently-configured builds use the capacitor:// scheme. Listing both means
-// the app works without the user having to configure anything on the server.
+// Fixed by the build rather than by configuration, so the app works without the
+// user having to configure anything on the server.
+//
+// The first entry is the one current builds actually use: mobile/capacitor.config.ts
+// sets a hostname of its own so the app does not share an origin — and therefore
+// a password manager's saved credentials — with every other localhost thing on
+// the device. The rest are what a default or older Capacitor build serves from,
+// kept so an APK built without that config still works.
+//
+// Changing the hostname in capacitor.config.ts means changing it here too; a
+// mismatch shows up as every request from the app failing CORS.
 var nativeOrigins = []string{
+	"https://activity-lens.localhost",
 	"https://localhost",
 	"capacitor://localhost",
 	"http://localhost",
