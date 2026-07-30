@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 
 import { FROM_CACHE_HEADER } from './swCache'
+// Imported from serverConfig rather than api.ts, which imports this module.
+import { apiBase } from './serverConfig'
 
 // Whether the app can actually reach its backend.
 //
@@ -100,7 +102,7 @@ export async function probeReachability(): Promise<boolean> {
   const controller = new AbortController()
   const timeout = window.setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS)
   try {
-    const res = await fetch(PROBE_PATH, {
+    const res = await fetch(apiBase() + PROBE_PATH, {
       credentials: 'same-origin',
       // Bypass the HTTP cache; the service worker still intercepts, and its
       // from-cache marker is what actually distinguishes the two cases.

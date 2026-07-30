@@ -44,6 +44,9 @@ go.work.sum
 /frontend/dist/
 /frontend/.vite/
 
+# Capacitor project (the android/ project itself is committed)
+/mobile/node_modules/
+
 .vscode/chats
 
 AGENTS.md

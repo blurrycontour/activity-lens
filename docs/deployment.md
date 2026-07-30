@@ -11,6 +11,23 @@ mkdir -p .data
 AL_ADMIN_PASS='pick-something-better' docker compose up -d
 ```
 
+### Building it yourself
+
+The server image bundles the Android APK, which is built separately — putting the
+Android SDK inside the server image build would make every backend change cost
+minutes. One script does both steps:
+
+```bash
+scripts/deploy.sh              # build the APK, then build and start the image
+scripts/deploy.sh --release    # a release-signed APK (needs AL_KEYSTORE)
+scripts/deploy.sh --no-apk     # reuse whatever is already in mobile/dist/
+```
+
+`docker compose up -d --build` still works on its own. It bundles whatever APK is
+in `mobile/dist/` at the time, or none — in which case the server reports no app
+available, which is a perfectly valid way to run it. See
+[mobile/README.md](../mobile/README.md).
+
 `docker-compose.yml` bind-mounts `./.data` to `/data` and runs as `1000:1000`,
 so that directory must be writable by uid 1000 on the host. If your user has a
 different uid, change the `user:` line to match `id -u`:`id -g`.

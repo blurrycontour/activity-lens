@@ -37,6 +37,17 @@ type Config struct {
 	// Self-service registration via password
 	AllowRegistration bool
 
+	// AndroidApp enables the "Get the Android app" download on the login page
+	// and the in-app update check. Turn it off for a deployment that cannot
+	// reach GitHub, or that would rather not disclose its version to anonymous
+	// callers.
+	AndroidApp bool
+
+	// AndroidAPKDir is where the bundled APK and its apk.json live. Set by the
+	// Dockerfile; empty for a plain `go build`, which simply has no app to
+	// offer.
+	AndroidAPKDir string
+
 	// OIDC
 	OIDC OIDCConfig
 
@@ -84,6 +95,8 @@ func Load() (Config, error) {
 		CookieName:        env("AL_COOKIE_NAME", "al_session"),
 		SecureCookies:     boolEnv("AL_SECURE_COOKIES", false),
 		AllowRegistration: boolEnv("AL_ALLOW_REGISTRATION", false),
+		AndroidApp:        boolEnv("AL_ANDROID_APP", true),
+		AndroidAPKDir:     os.Getenv("AL_ANDROID_APK_DIR"),
 		OIDC: OIDCConfig{
 			Enabled:           boolEnv("AL_OIDC_ENABLED", false),
 			IssuerURL:         os.Getenv("AL_OIDC_ISSUER_URL"),

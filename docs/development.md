@@ -105,3 +105,8 @@ Rules, because every file runs on every start:
 | `docker-compose.yml` | Local and self-hosted deployment |
 | `.github/workflows/ci.yml` | vet, gofmt, Go tests, typecheck, Vitest, build |
 | `.github/workflows/docker.yml` | Builds and publishes the image to GHCR |
+| `.github/workflows/android.yml` | Builds the APK once; called by `docker.yml` so the image and the release carry identical bytes |
+| `Dockerfile.android` | Pinned JDK + Android SDK + Node, so an APK can be built without installing any of them |
+| `scripts/apk.sh` | The APK build itself; used by the container, CI, and a local SDK alike. Writes `mobile/dist/` |
+| `scripts/deploy.sh` | Build the APK, then build and start the server image that bundles it |
+| `mobile/` | Capacitor Android shell — see [mobile/README.md](../mobile/README.md) |

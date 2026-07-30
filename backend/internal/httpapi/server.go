@@ -28,11 +28,15 @@ type Server struct {
 	rawUploads *workout.RawUploadStore
 	notify     *notify.Service
 	build      BuildInfo
+	// apk is the Android app bundled into this image, or nil when there is
+	// none. Resolved once at startup; see androidapp.go.
+	apk *bundledAPK
 }
 
 // New constructs a Server and its auth middleware/OIDC handler.
 func New(cfg config.Config, authSvc *auth.Service, workoutSvc *workout.Service, equipmentSvc *equipment.Service, settingsStore *settings.Store, rawUploads *workout.RawUploadStore, notifySvc *notify.Service, build BuildInfo) *Server {
 	s := &Server{cfg: cfg, auth: authSvc, workout: workoutSvc, equipment: equipmentSvc, settings: settingsStore, rawUploads: rawUploads, notify: notifySvc, build: build}
+	s.apk = loadBundledAPK(cfg.AndroidAPKDir)
 	s.mw = &httpmw.Middleware{
 		Auth:   authSvc,
 		Secure: s.secure,
@@ -99,6 +103,10 @@ func (s *Server) apiRoutes() http.Handler {
 	// --- Auth (authenticated) ---
 	mux.Handle("GET /api/auth/me", s.authed(s.handleMe))
 	mux.Handle("GET /api/build", s.authed(s.handleBuildInfo))
+	// Public: the download button is on the login page, and the Android app
+	// checks for updates before anyone signs in.
+	mux.HandleFunc("GET /api/app/android", s.handleAndroidApp)
+	mux.HandleFunc("GET /api/app/android/download", s.handleAndroidDownload)
 	mux.Handle("POST /api/auth/logout", s.authedCSRF(s.handleLogout))
 	mux.Handle("PATCH /api/auth/profile", s.authedCSRF(s.handleUpdateProfile))
 	mux.Handle("POST /api/auth/password", s.authedCSRF(s.handleChangePassword))

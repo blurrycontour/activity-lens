@@ -62,6 +62,25 @@ export interface NotifyPrefs {
   push: boolean
 }
 
+/**
+ * The Android app this server carries, if any.
+ *
+ * The APK is built from the same commit as the server and bundled into its
+ * image, so the version is whatever was built alongside it — never the newest
+ * release that exists elsewhere. A client therefore cannot run ahead of the
+ * instance it talks to, and nothing outside the server is needed to install it.
+ */
+export interface AndroidApp {
+  available: boolean
+  version?: string
+  /** Bytes, so a download can show a total before it starts. */
+  size?: number
+  /** Checksum of the APK, for verifying what was installed. */
+  sha256?: string
+  /** Path on this server that serves the APK. */
+  downloadPath?: string
+}
+
 export interface AuthFeatures {
   allowRegistration: boolean
   oidcEnabled: boolean
@@ -337,6 +356,13 @@ export const api = {
   authConfig: () => request<AuthFeatures>('/api/auth/config'),
   me: () => request<{ user: ApiUser; csrfToken: string }>('/api/auth/me'),
   buildInfo: () => request<BuildInfo>('/api/build'),
+
+  /**
+   * The Android build that goes with this server. Public, because the download
+   * button is on the login page and the app checks for updates before anyone
+   * signs in.
+   */
+  androidApp: () => request<AndroidApp>('/api/app/android'),
 
   // --- Notifications ---
   notifications: () => request<NotificationsResponse>('/api/notifications'),

@@ -1,0 +1,22 @@
+{
+  "name": "activity-lens-mobile",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Capacitor Android shell for Activity Lens. The web app lives in ../frontend.",
+  "type": "module",
+  "scripts": {
+    "check-versions": "node scripts/check-versions.mjs",
+    "sync": "npm run check-versions && cap sync android",
+    "apk:debug": "npm run sync && cd android && ./gradlew --no-daemon assembleDebug",
+    "apk:release": "npm run sync && cd android && ./gradlew --no-daemon assembleRelease"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.4.2",
+    "@capacitor/core": "8.4.2",
+    "@capacitor/preferences": "8.0.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.4.2",
+    "typescript": "^5.9.3"
+  }
+}

@@ -1,0 +1,4 @@
+# Keeps this directory present in the git checkout and the Docker build
+# context. scripts/apk.sh writes the built APK and apk.json here; the server
+# image copies whatever it finds. An empty directory is a valid state - the
+# image then simply does not offer the app.

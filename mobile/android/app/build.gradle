@@ -1,0 +1,87 @@
+apply plugin: 'com.android.application'
+
+// HAND-EDITED. See mobile/README.md for the full list of changes to the
+// generated Android project.
+//
+// Version and signing come from outside the file so nothing has to be edited to
+// cut a release, and no secret is ever committed:
+//
+//   ./gradlew assembleRelease -PalVersionName=1.4.0 -PalVersionCode=14
+//
+// Both have defaults, so a plain `assembleDebug` works with no arguments.
+def alVersionName = project.findProperty('alVersionName') ?: '0.0.0-dev'
+def alVersionCode = (project.findProperty('alVersionCode') ?: '1') as Integer
+
+// Release signing is configured only when a keystore is actually supplied.
+// Without one, `assembleRelease` still produces an unsigned APK rather than
+// failing — that is the useful behaviour for anyone building their own copy,
+// and CI supplies the keystore through these same properties.
+def keystorePath = project.findProperty('alKeystore')
+def hasKeystore = keystorePath != null && file(keystorePath).exists()
+
+android {
+    namespace = "io.github.blurrycontour.activitylens"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "io.github.blurrycontour.activitylens"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode alVersionCode
+        versionName alVersionName
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    signingConfigs {
+        if (hasKeystore) {
+            release {
+                storeFile file(keystorePath)
+                storePassword project.findProperty('alKeystorePassword')
+                keyAlias project.findProperty('alKeyAlias')
+                keyPassword project.findProperty('alKeyPassword')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (hasKeystore) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

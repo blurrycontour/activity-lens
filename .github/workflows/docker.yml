@@ -19,8 +19,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The APK the image will carry. Built once, here, and consumed by both the
+  # image below and the release job — so "the same signed APK is in the image and
+  # in the release" is true by construction, and checked besides.
+  apk:
+    uses: ./.github/workflows/android.yml
+    secrets: inherit
+
   build:
     name: Build and push image
+    needs: apk
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -35,6 +43,27 @@ jobs:
       - name: Compute app version
         id: version
         run: echo "version=$(git describe --tags --always --dirty)" >> "$GITHUB_OUTPUT"
+
+      # Dropped into the build context, where the Dockerfile's androidapp stage
+      # copies it into the image.
+      - name: Fetch the APK
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.apk.outputs.artifact }}
+          path: mobile/dist
+
+      # The image must not be built around a different APK than the one the
+      # release publishes. Comparing the checksum the build job recorded is what
+      # turns that from an assumption into a fact.
+      - name: Verify the APK is the one that was built
+        run: |
+          actual="$(sha256sum mobile/dist/*.apk | cut -d' ' -f1)"
+          expected="${{ needs.apk.outputs.sha256 }}"
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::APK checksum mismatch: got $actual, expected $expected"
+            exit 1
+          fi
+          echo "Bundling $(jq -r .file mobile/dist/apk.json) ($expected)"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -82,3 +111,43 @@ jobs:
             SOURCE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.source'] }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # Attaches the very same APK to the GitHub release. It is the artifact the apk
+  # job produced, checksum-verified again here, so what someone downloads from
+  # the releases page is byte-identical to what the image serves.
+  release:
+    name: Attach APK to release
+    needs: [apk, build]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.apk.outputs.artifact }}
+          path: apk
+
+      - name: Verify the APK is the one that was built
+        run: |
+          actual="$(sha256sum apk/*.apk | cut -d' ' -f1)"
+          expected="${{ needs.apk.outputs.sha256 }}"
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::APK checksum mismatch: got $actual, expected $expected"
+            exit 1
+          fi
+
+      # Only attaches to a release that already exists. Creating one here would
+      # publish a release as a side effect of pushing a tag, which is a decision
+      # that belongs to whoever is cutting it.
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            gh release upload "$TAG" apk/*.apk --clobber --repo "$REPO"
+          else
+            echo "::notice::No release exists for $TAG; the APK is available as a workflow artifact."
+          fi

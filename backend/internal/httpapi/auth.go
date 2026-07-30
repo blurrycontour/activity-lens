@@ -63,8 +63,12 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 // A separate endpoint rather than a flag on /login so the web path is unchanged
 // and its token stays httpOnly: a session token in a JSON body is readable by
 // script, which is exactly what the cookie flag exists to prevent. Only a client
-// that has somewhere safer to put it should ask for it this way, and the native
-// app does — Android keystore-backed storage, not localStorage.
+// that has somewhere safer to put it should ask for it this way. The Android app
+// keeps it in app-private storage (SharedPreferences, via @capacitor/preferences)
+// with Android's own backup excluded, so it is readable only by this app on an
+// unrooted device — better than localStorage in a browser, and short of hardware
+// encryption. It is a session like any other, so the recovery for a lost device
+// is the one that already exists: revoke it from Settings -> Sessions.
 //
 // What comes back is an ordinary session. It appears in Settings -> Sessions
 // with the device's user agent, revoking it there signs the phone out, and it

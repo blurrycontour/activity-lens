@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/app_background</item>
+        <item name="colorPrimaryDark">@color/app_background</item>
+        <item name="colorAccent">@color/app_accent</item>
+    </style>
+
+    <!--
+      The theme the app actually runs under: Capacitor's BridgeActivity calls
+      setTheme(AppTheme_NoActionBar) in onCreate, overriding whatever the
+      manifest asked for.
+
+      This override is why the app no longer shows grey bars above and below the
+      WebView. Capacitor's own copy of this style inherits AppCompat's defaults,
+      which paint the status bar a stock colour and the window behind the WebView
+      light grey — visible as bands wherever the WebView does not reach.
+
+      The colours are set statically so the first frame is already right;
+      SystemBarsPlugin then follows the in-app theme at runtime, which a static
+      resource cannot do.
+    -->
+    <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+        <item name="android:windowBackground">@color/app_background</item>
+        <item name="android:statusBarColor">@color/app_background</item>
+        <item name="android:navigationBarColor">@color/app_background</item>
+        <!-- The app opens dark, so bar icons must be light to be visible. -->
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+
+    <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+        <item name="android:background">@drawable/splash</item>
+        <item name="android:statusBarColor">@color/app_background</item>
+        <item name="android:navigationBarColor">@color/app_background</item>
+    </style>
+</resources>

@@ -1,7 +1,8 @@
-import { useState, type FormEvent } from 'react'
-import { AlertCircle, Loader2, LogIn, UserPlus, WifiOff } from 'lucide-react'
+import { useEffect, useState, type FormEvent } from 'react'
+import { AlertCircle, Loader2, LogIn, Server, Smartphone, UserPlus, WifiOff } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { ApiError, apiURL } from '../lib/api'
+import { api, ApiError, apiURL, type AndroidApp } from '../lib/api'
+import { apiBase, forgetServer, isNative } from '../lib/serverConfig'
 import { isGatewayError, useOnlineStatus } from '../lib/network'
 import Logo from '../components/Logo'
 import PasswordInput from '../components/PasswordInput'
@@ -38,6 +39,32 @@ export default function Login() {
     } finally {
       setBusy(false)
     }
+  }
+
+  // What Android build this server publishes. Only asked for in a browser: in
+  // the app itself the answer is an update prompt, not a download button.
+  const [androidApp, setAndroidApp] = useState<AndroidApp | null>(null)
+  useEffect(() => {
+    if (isNative()) return
+    let cancelled = false
+    api.androidApp()
+      .then(app => { if (!cancelled) setAndroidApp(app) })
+      // An older server has no such endpoint; the button simply stays hidden.
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
+
+  /**
+   * Returns to the server picker.
+   *
+   * Reachable without signing in on purpose: a mistyped-but-reachable address,
+   * or a server you have no account on, leaves you at this screen with no other
+   * way out. Settings has the same action for the signed-in case.
+   */
+  async function changeServer() {
+    if (!window.confirm('Connect to a different server?')) return
+    await forgetServer()
+    window.location.reload()
   }
 
   const online = useOnlineStatus()
@@ -187,6 +214,31 @@ export default function Login() {
               Continue with {features?.oidcProviderName || 'SSO'}
             </a>
           </>
+        )}
+
+        {/* Web only: hand the visitor the app that goes with this server. The
+            version is the server's own, so what they install matches what they
+            are signing in to. */}
+        {androidApp?.available && (
+          <a
+            className="auth-app-link"
+            href={apiURL(androidApp.downloadPath ?? '/api/app/android/download')}
+          >
+            <Smartphone size={14} />
+            <span>Get the Android app</span>
+            <span className="auth-app-version">{androidApp.version}</span>
+          </a>
+        )}
+
+        {/* Native only: which server this app is pointed at, and a way out. */}
+        {isNative() && (
+          <div className="auth-server">
+            <Server size={12} />
+            <span className="auth-server-url">{apiBase().replace(/^https?:\/\//, '')}</span>
+            <button type="button" className="auth-server-change" onClick={() => void changeServer()}>
+              Change
+            </button>
+          </div>
         )}
       </div>
     </div>

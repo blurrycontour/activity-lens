@@ -30,6 +30,8 @@ import { WorkoutsProvider } from './context/WorkoutsContext'
 import { adjacentPage, DESKTOP_PAGES, LEGACY_ROUTES, type Page } from './lib/nav'
 import { useSwipeNav } from './lib/useSwipeNav'
 import { consumeShareParam, takeSharedFiles } from './lib/shareTarget'
+import { applySystemBars } from './lib/native/systemBars'
+import UpdatePrompt from './components/UpdatePrompt'
 import { api } from './lib/api'
 
 const SIDEBAR_KEY = 'al_sidebar_w'
@@ -64,13 +66,19 @@ function resolveTheme(mode: ThemeMode): 'dark' | 'light' {
   return mode
 }
 
+/** --bg in each theme, mirrored in mobile/android/.../values/colors.xml. */
+const THEME_BACKGROUND = { light: '#f4f6f9', dark: '#0a0b0e' } as const
+
 function applyTheme(mode: ThemeMode) {
   const resolved = resolveTheme(mode)
   document.documentElement.className = resolved === 'light' ? 'light' : ''
+  const background = THEME_BACKGROUND[resolved]
   // Keep the phone's status bar matching the page background instead of the
-  // accent colour, in both themes.
-  document.querySelector('meta[name="theme-color"]')
-    ?.setAttribute('content', resolved === 'light' ? '#f4f6f9' : '#0a0b0e')
+  // accent colour, in both themes. The meta tag does this for the installed
+  // PWA; the Android app needs the same thing said to the Activity, because
+  // there the bars are the window's rather than the page's.
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', background)
+  applySystemBars(background, resolved === 'dark')
 }
 
 export default function App() {
@@ -361,6 +369,9 @@ export default function App() {
       )}
 
       <UpdateToast />
+
+      {/* Native only: offers the app build this server publishes. */}
+      <UpdatePrompt />
 
       <OfflineBar />
 

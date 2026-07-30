@@ -1,0 +1,79 @@
+# Toolchain for building the Android APK, so nobody has to install the Android
+# SDK to build one.
+#
+# This image contains a toolchain and no source: the repository is mounted at
+# build time by scripts/build-apk.sh. That is deliberate — the APK is built from
+# the working tree you are looking at, and changing a line of TypeScript does not
+# invalidate a 2 GB image layer.
+#
+# Everything is pinned. An Android build that silently picks up a different JDK,
+# a different SDK, or a different Gradle produces a different APK, and the whole
+# point of building in a container is that it does not.
+
+FROM eclipse-temurin:21-jdk-noble
+
+# Node comes from the official image rather than a distribution package or an
+# install script piped into a shell: pinned, already built for this libc, and
+# with nothing fetched at build time that could change underneath us.
+COPY --from=node:22.21.1-bookworm-slim /usr/local/bin/node /usr/local/bin/node
+COPY --from=node:22.21.1-bookworm-slim /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+ && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
+ && ln -s ../lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack \
+ && node --version && npm --version
+
+# pnpm, pinned to frontend/package.json's packageManager field. Installed here
+# rather than left to corepack: corepack would download it on first use, which
+# means writing to a read-only location as the unprivileged build user, and a
+# network fetch inside a build that should not need one.
+RUN npm install -g pnpm@11.17.0 && pnpm --version
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends unzip git ca-certificates curl \
+ && rm -rf /var/lib/apt/lists/*
+
+ENV ANDROID_HOME=/opt/android-sdk
+ENV ANDROID_SDK_ROOT=${ANDROID_HOME}
+ENV PATH=${PATH}:${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools
+
+# Pinned by version *and* checksum. The "_latest" in the filename is Google's
+# naming, not a moving target — 13114758 is the build number, and the hash is
+# what guarantees it.
+ARG CMDLINE_TOOLS_VERSION=13114758
+ARG CMDLINE_TOOLS_SHA256=7ec965280a073311c339e571cd5de778b9975026cfcbe79f2b1cdcb1e15317ee
+RUN curl -fsSL -o /tmp/tools.zip \
+      "https://dl.google.com/android/repository/commandlinetools-linux-${CMDLINE_TOOLS_VERSION}_latest.zip" \
+ && echo "${CMDLINE_TOOLS_SHA256}  /tmp/tools.zip" | sha256sum -c - \
+ && mkdir -p ${ANDROID_HOME}/cmdline-tools \
+ && unzip -q /tmp/tools.zip -d ${ANDROID_HOME}/cmdline-tools \
+ && mv ${ANDROID_HOME}/cmdline-tools/cmdline-tools ${ANDROID_HOME}/cmdline-tools/latest \
+ && rm /tmp/tools.zip
+
+# ANDROID_PLATFORM tracks compileSdkVersion in mobile/android/variables.gradle.
+# ANDROID_BUILD_TOOLS is not free to choose: it must be the version the Android
+# Gradle Plugin in mobile/android/build.gradle asks for (AGP 8.13 -> 35.0.0).
+# Both are baked in so the build never downloads an SDK component mid-run — the
+# SDK directory is read-only for the build user precisely so that a mismatch
+# fails loudly here instead of silently pulling something new.
+ARG ANDROID_PLATFORM=36
+ARG ANDROID_BUILD_TOOLS=35.0.0
+RUN yes | sdkmanager --licenses > /dev/null \
+ && sdkmanager --install \
+      "platform-tools" \
+      "platforms;android-${ANDROID_PLATFORM}" \
+      "build-tools;${ANDROID_BUILD_TOOLS}" > /dev/null \
+ && chmod -R a+rX ${ANDROID_HOME}
+
+# The build runs as the invoking user (scripts/build-apk.sh passes --user) so the
+# APK and any node_modules it writes are owned by them, not by root. That user
+# has no entry in /etc/passwd, so give the tools a HOME they can actually write:
+# Gradle, npm and pnpm all refuse to run without one.
+ENV HOME=/home/builder
+RUN mkdir -p ${HOME} && chmod 0777 ${HOME}
+ENV GRADLE_USER_HOME=${HOME}/.gradle
+ENV npm_config_cache=${HOME}/.npm
+ENV PNPM_HOME=${HOME}/.pnpm
+ENV COREPACK_HOME=${HOME}/.corepack
+
+WORKDIR /repo
+ENTRYPOINT ["/bin/bash"]

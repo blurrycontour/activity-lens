@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The app's own colours, so the native chrome matches the web app instead of
+  falling back to the AppCompat defaults, which is what produced grey bars above
+  and below the WebView.
+
+  These mirror the design tokens in frontend/src/index.css. Only the background
+  values are needed here; everything else the user sees is drawn by the web app.
+-->
+<resources>
+    <!-- Dark theme background. The window and both system bars. -->
+    <color name="app_background">#0a0b0e</color>
+    <!-- Light theme background, applied at runtime when the user picks it. -->
+    <color name="app_background_light">#f4f6f9</color>
+    <!-- The default accent. -->
+    <color name="app_accent">#00e87a</color>
+    <!-- Behind the launcher icon's foreground layer. -->
+    <color name="ic_launcher_background">#0a0b0e</color>
+</resources>

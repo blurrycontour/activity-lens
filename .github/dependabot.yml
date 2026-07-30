@@ -57,6 +57,23 @@ updates:
         patterns: ["*"]
         update-types: ["minor", "patch"]
 
+  # --- Capacitor / Android shell --------------------------------------------
+  # Deliberately grouped into one PR including majors: @capacitor/core and
+  # @capacitor/preferences are pinned to exact versions here *and* in
+  # /frontend, and mobile/scripts/check-versions.mjs fails the build if the two
+  # disagree. Splitting these updates would open PRs that cannot pass CI on
+  # their own, so they move together or not at all.
+  - package-ecosystem: npm
+    directory: /mobile
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(mobile)"
+    groups:
+      capacitor:
+        patterns: ["*"]
+
   # --- GitHub Actions -------------------------------------------------------
   # The one ecosystem where staying current is a supply-chain concern rather
   # than housekeeping: a compromised action runs with GITHUB_TOKEN and can push

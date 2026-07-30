@@ -81,6 +81,26 @@ RUN CGO_ENABLED=0 go build \
     -o /out/activity-lens ./cmd/server
 
 
+# --- Stage 3b: stage the Android APK, if one was built ----------------------
+#
+# The APK is *not* built here. Doing so would put the Android SDK — a couple of
+# gigabytes, and a Gradle run — inside every server image build, so a one-line
+# backend change would cost minutes. It is built separately by scripts/apk.sh
+# and copied in from mobile/dist/, which is what scripts/deploy.sh automates.
+#
+# An empty mobile/dist/ is a normal, supported state: the image simply carries no
+# app, and /api/app/android reports it as unavailable. mobile/dist/.gitkeep is
+# committed so this COPY always has a directory to read.
+FROM busybox:1.37 AS androidapp
+COPY mobile/dist/ /in/
+RUN mkdir -p /out \
+ && if [ -f /in/apk.json ]; then \
+      cp /in/apk.json /in/*.apk /out/ && echo "bundling $(ls /out/*.apk)"; \
+    else \
+      echo "no APK in mobile/dist/; this image will not offer the Android app"; \
+    fi
+
+
 # --- Stage 4: minimal runtime image ----------------------------------------
 FROM gcr.io/distroless/static-debian12:nonroot AS runtime
 
@@ -92,8 +112,13 @@ COPY --from=backend-final /out/activity-lens /usr/local/bin/activity-lens
 # or anonymous volume inherits this ownership on first mount.
 COPY --from=backend --chown=65532:65532 /data /data
 
+# The Android app this build carries, served from /api/app/android/download.
+# Read-only to the app, and empty when no APK was built.
+COPY --from=androidapp /out/ /app/android/
+
 ENV AL_ADDR=:8080 \
-    AL_DATA_DIR=/data
+    AL_DATA_DIR=/data \
+    AL_ANDROID_APK_DIR=/app/android
 
 VOLUME ["/data"]
 EXPOSE 8080

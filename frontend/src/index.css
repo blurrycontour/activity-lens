@@ -430,6 +430,65 @@ body {
   color: var(--text-3);
 }
 
+/* The Android app download, offered under the sign-in form. A quiet row rather
+   than a button: it is a useful thing to find, but it is not what the visitor
+   came to this page to do. */
+.auth-app-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 18px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-2);
+  font-size: 12px;
+  text-decoration: none;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.auth-app-link:hover {
+  background: var(--bg-3);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.auth-app-version {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+/* Which server the Android app is pointed at, and the way back to the picker.
+   Only rendered in the app; on the web the answer is "the one serving this
+   page" and cannot be changed. */
+.auth-server {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-3);
+}
+.auth-server-url {
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.auth-server-change {
+  margin-left: auto;
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  color: var(--primary);
+  font-size: 11px;
+  cursor: pointer;
+}
+.auth-server-change:hover { text-decoration: underline; }
+
 /* Tinted rather than solid: enough presence to be an obvious second route in,
    without putting a second filled accent button next to the primary one. */
 .auth-sso {

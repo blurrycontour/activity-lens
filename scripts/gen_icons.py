@@ -69,6 +69,12 @@ JOBS = [
 ]
 
 
+# The Android launcher icon and splash are vector drawables written by hand in
+# mobile/android/app/src/main/res/, not rasterised here. They are the same two
+# shapes as logo.svg — change the mark and they need the same edit, exactly as
+# Logo.tsx does. See mobile/README.md.
+
+
 def main() -> None:
     """Rasterise every icon variant into frontend/public."""
     for name, svg, px in JOBS:

@@ -6,6 +6,8 @@ import { describeGoal, newGoal, type Goal } from '../lib/insights'
 import { enablePush, disablePush, pushState as pushState_, type PushState } from '../lib/push'
 import { api, ApiError, type NotificationKind, type NotifyPrefs } from '../lib/api'
 import { useLocalStorage } from '../lib/useLocalStorage'
+import { useAuth } from '../context/AuthContext'
+import { apiBase, forgetServer, isNative } from '../lib/serverConfig'
 import {
   DASHBOARD_CFG_KEY, DEFAULT_DASHBOARD_CONFIG, STAT_CARDS, WINDOW_OPTIONS,
   DEFAULT_HR_ZONE_CHART, HR_ZONE_CHART_KEY,
@@ -32,6 +34,25 @@ const DEFAULT_NOTIFY: NotifyPrefs = {
 }
 
 export default function Settings({ accent, onAccentChange }: SettingsProps) {
+  const { logout } = useAuth()
+
+  /**
+   * Points the app at a different server.
+   *
+   * The session is revoked first, while the address that owns it is still
+   * known — afterwards there is nothing left to revoke it against, and it would
+   * stay valid until it expired. A reload is what returns to the setup screen:
+   * everything downstream reads the server config once at boot, so restarting
+   * is both the simplest way to re-run that and the only one with no stale
+   * state left behind.
+   */
+  async function disconnectServer() {
+    if (!window.confirm('Disconnect from this server? You will need to sign in again.')) return
+    await logout()
+    await forgetServer()
+    window.location.reload()
+  }
+
   function handleAccent(value: string) {
     onAccentChange(value)
     applyAccent(value)
@@ -621,6 +642,26 @@ export default function Settings({ accent, onAccentChange }: SettingsProps) {
             {perfMsg && <span style={{ fontSize: 12, color: perfMsg.ok ? 'var(--primary)' : 'var(--red, #dc2626)' }}>{perfMsg.text}</span>}
           </div>
         </section>
+
+        {/* Which server this app talks to. Native only: in a browser the answer
+            is "the one that served this page" and cannot be changed. */}
+        {isNative() && (
+          <section className="card">
+            <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Server</h3>
+            <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 16 }}>
+              This app is connected to the server below. Disconnecting signs you out on this
+              device and returns to the setup screen; nothing on the server is changed.
+            </p>
+            <div style={{
+              fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-2)',
+              background: 'var(--bg-3)', border: '1px solid var(--border)',
+              borderRadius: 'var(--radius)', padding: '8px 10px', overflowWrap: 'anywhere',
+            }}>{apiBase()}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 16 }}>
+              <button className="btn" onClick={() => void disconnectServer()}>Disconnect</button>
+            </div>
+          </section>
+        )}
       </div>
     </>
   )

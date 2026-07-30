@@ -26,6 +26,13 @@ frontend/.vite
 # Backend embedded assets (regenerated during the build)
 backend/internal/web/dist
 
+# Capacitor project. Only mobile/dist (the built APK, bundled into the image) is
+# needed here — the Android project and its Gradle output are megabytes that the
+# server image build never reads.
+mobile/android
+mobile/node_modules
+mobile/scripts
+
 # Runtime data and databases
 .data
 data

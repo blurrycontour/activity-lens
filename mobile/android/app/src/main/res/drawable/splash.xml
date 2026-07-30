@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  What fills the window between the launcher icon being tapped and the WebView
+  painting its first frame.
+
+  A layer-list rather than the eleven density- and orientation-specific PNGs
+  Capacitor generates: the mark is a vector, so one file covers every screen. The
+  background matches the app's own so the handoff to the loaded app is invisible
+  rather than a flash of a different colour.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/app_background" />
+    <item
+        android:width="160dp"
+        android:height="160dp"
+        android:gravity="center"
+        android:drawable="@drawable/ic_launcher_foreground" />
+</layer-list>

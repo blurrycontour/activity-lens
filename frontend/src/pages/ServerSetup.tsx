@@ -45,11 +45,11 @@ export default function ServerSetup({ onConfigured }: { onConfigured: () => void
           <Logo size={52} />
           <h1 style={{ fontSize: 19, fontWeight: 700, letterSpacing: '-0.02em', marginTop: 14 }}>Activity Lens</h1>
           <p style={{ fontSize: 13, color: 'var(--text-2)', marginTop: 6, textAlign: 'center', lineHeight: 1.5 }}>
-            Connect to your server to get started.
+            Connect to a server to get started
           </p>
         </div>
 
-        <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 6 }}>
+        <label style={{ fontSize: 12, color: 'var(--text-3)', display: 'block', marginBottom: 3 }}>
           Server address
         </label>
         <div style={{ position: 'relative' }}>
@@ -75,7 +75,8 @@ export default function ServerSetup({ onConfigured }: { onConfigured: () => void
           />
         </div>
         <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8, lineHeight: 1.5 }}>
-          The same address you use in a browser. <code>https://</code> is assumed if you leave it out.
+          The same address you use in a browser.<br />
+          <code>https://</code> is the default scheme.
         </p>
 
         {error && (
