@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Upload, X, CheckCircle, FileText, AlertCircle, ArrowRight, Info, Loader2 } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
+import { isNative } from '../lib/serverConfig'
 import { api, ApiError, type Equipment } from '../lib/api'
 import { type Workout, fmtDist, fmtDuration, fmtPace } from '../data/workouts'
 import BatchImportList from './BatchImportList'
@@ -21,8 +22,19 @@ type Tab = 'file' | 'manual'
 
 const SUPPORTED = ['gpx', 'tcx']
 
-/** What the file picker offers. Archives are unpacked in the browser. */
-const ACCEPT_ATTR = '.gpx,.tcx,.zip,.gz'
+/**
+ * What the file picker offers. Archives are unpacked in the browser.
+ *
+ * Empty in the Android app, which is not laziness. Android's document picker
+ * resolves an `accept` list to MIME types, and `.gpx`, `.tcx` and `.fit` have no
+ * registered type — so every workout file renders greyed out and unselectable,
+ * which looks exactly like a picker that has stopped responding to taps. An
+ * unfiltered picker is the only one that can actually select these files, and
+ * nothing is lost by it: what was chosen is validated by extension immediately
+ * afterwards, the same as a dropped or shared file, which never passed through
+ * `accept` in the first place.
+ */
+const ACCEPT_ATTR = isNative() ? '' : '.gpx,.tcx,.zip,.gz'
 
 /** Where a batch is in its lifecycle. `null` items means single-file mode. */
 type BatchPhase = 'expanding' | 'preflight' | 'review' | 'importing' | 'done'
@@ -374,7 +386,7 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
                       <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 6 }}>
                         A Strava or Garmin export .zip can be dropped in whole.
                       </p>
-                      <input ref={fileRef} type="file" multiple accept={ACCEPT_ATTR} onChange={handleFileInput} style={{ display: 'none' }} />
+                      <input ref={fileRef} type="file" multiple accept={ACCEPT_ATTR || undefined} onChange={handleFileInput} style={{ display: 'none' }} />
                     </div>
                   ) : (
                     <div style={{ border: '1px solid var(--border)', borderRadius: 12, padding: 16, background: 'var(--bg-3)' }}>

@@ -102,9 +102,13 @@ export default function AboutDialog({ onClose }: { onClose: () => void }) {
             )}
             {build && (<><dt>Server</dt><dd>{build.goVersion} · {build.platform}</dd></>)}
             <dt>Interface</dt><dd>React &amp; Vite</dd>
-            <dt>Version</dt><dd>{__APP_VERSION__}</dd>
-            {/* Android only: the APK's own version, which the web app has no
-                equivalent of — there, the page and the server are one build. */}
+            {/* The server's version, not the bundle's. On web the two are the
+                same build so it makes no difference, but in the Android app the
+                bundle version is the APK's — which is the row below, and showing
+                it twice under two labels said nothing. */}
+            <dt>Version</dt><dd>{build?.version ?? __APP_VERSION__}</dd>
+            {/* Android only: the installed APK, which can legitimately lag the
+                server. Closing that gap is what the in-app updater is for. */}
             {appVersion && (<><dt>App version</dt><dd>{appVersion}</dd></>)}
             {build?.licenses && (<><dt>Licence</dt><dd>{build.licenses}</dd></>)}
           </dl>
