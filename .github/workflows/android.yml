@@ -47,7 +47,7 @@ jobs:
       version: ${{ steps.built.outputs.version }}
       sha256: ${{ steps.built.outputs.sha256 }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # scripts/apk.sh derives the version name from `git describe` and the
           # version code from the commit count; both need full history.
@@ -56,17 +56,17 @@ jobs:
       # The toolchain is pinned to the same versions as Dockerfile.android, which
       # is what makes a local build and this one produce the same APK. Change one
       # and change the other.
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
           cache: gradle
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 11
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
@@ -121,7 +121,7 @@ jobs:
 
       # apk.json travels with the APK: it is what the server reads to report the
       # bundled version, and what consumers check the download against.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: activity-lens-apk
           path: |
