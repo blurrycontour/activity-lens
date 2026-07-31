@@ -93,7 +93,7 @@ export default function ShareDialog({ workout, onClose, onChange }: ShareDialogP
           </div>
 
           {error && (
-            <p style={{ fontSize: 12, color: '#ef4444', marginBottom: 12 }}>{error}</p>
+            <p style={{ fontSize: 12, color: 'var(--danger)', marginBottom: 12 }}>{error}</p>
           )}
 
           {state === null ? (

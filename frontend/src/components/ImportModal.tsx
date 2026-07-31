@@ -410,7 +410,7 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
                           <CheckCircle size={14} /> Format supported — ready to add
                         </div>
                       ) : (
-                        <div style={{ display: 'flex', gap: 6, marginTop: 12, alignItems: 'center', color: '#ef4444', fontSize: 12 }}>
+                        <div style={{ display: 'flex', gap: 6, marginTop: 12, alignItems: 'center', color: 'var(--danger)', fontSize: 12 }}>
                           <AlertCircle size={14} /> Unsupported format. Use .gpx or .tcx
                         </div>
                       )}
@@ -418,7 +418,7 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
                         <div style={{ marginTop: 14, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-3)', marginBottom: 8 }}>
                             {previewBusy && (
-                              <Loader2 size={12} style={{ animation: 'spin 0.9s linear infinite', flexShrink: 0 }} />
+                              <Loader2 size={12} className="spin" style={{ flexShrink: 0 }} />
                             )}
                             <span>{previewBusy ? 'Reading file — calculating stats…' : 'Preview'}</span>
                           </div>
@@ -598,7 +598,7 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
               </div>
 
               {error && (
-                <div style={{ display: 'flex', gap: 6, marginTop: 16, alignItems: 'center', color: '#ef4444', fontSize: 12 }}>
+                <div style={{ display: 'flex', gap: 6, marginTop: 16, alignItems: 'center', color: 'var(--danger)', fontSize: 12 }}>
                   <AlertCircle size={14} /> {error}
                 </div>
               )}

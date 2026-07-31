@@ -30,7 +30,7 @@ type Metric = 'pace' | 'hr' | 'maxHr' | 'distance' | 'duration' | 'elevation' | 
 
 const METRICS: { id: Metric; label: string; color: string; unit: string; format?: (v: number) => string }[] = [
   { id: 'pace', label: 'Avg Pace', color: 'var(--primary)', unit: '/km', format: fmtPace },
-  { id: 'hr', label: 'Avg HR', color: '#ef4444', unit: 'bpm' },
+  { id: 'hr', label: 'Avg HR', color: 'var(--danger)', unit: 'bpm' },
   { id: 'maxHr', label: 'Max HR', color: '#f97316', unit: 'bpm' },
   { id: 'distance', label: 'Distance', color: 'var(--blue)', unit: 'km', format: v => (v / 1000).toFixed(1) },
   { id: 'duration', label: 'Duration', color: 'var(--purple)', unit: 'min', format: v => Math.round(v / 60).toString() },
@@ -438,7 +438,7 @@ export default function Analysis() {
                     <div style={{ display: 'flex', gap: 12, marginTop: 8, fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-3)' }}>
                       <span>↓ {formatValue(s.id, s.min)}</span>
                       <span>↑ {formatValue(s.id, s.max)}</span>
-                      <span style={{ color: s.trend > 0 ? '#22c55e' : s.trend < 0 ? '#ef4444' : 'var(--text-3)', marginLeft: 'auto' }}>
+                      <span style={{ color: s.trend > 0 ? 'var(--success)' : s.trend < 0 ? 'var(--danger)' : 'var(--text-3)', marginLeft: 'auto' }}>
                         {s.trend > 0 ? '▲' : s.trend < 0 ? '▼' : '—'} {Math.abs(s.trend).toFixed(1)}%
                       </span>
                     </div>
@@ -545,7 +545,7 @@ export default function Analysis() {
             <div className="grid-2" style={{ marginBottom: 16 }}>
               <ChartCard
                 title="Efficiency Factor"
-                icon={<Gauge size={14} color="#ef4444" />}
+                icon={<Gauge size={14} color="var(--danger)" />}
                 description="Heartbeats spent per km/h of speed. Falling is improving."
                 info="Average heart rate divided by average speed for each activity. Because it normalises effort against output, it stays comparable across easy and hard days — unlike raw pace. A downward trend over weeks means your aerobic engine is getting stronger. Heat, altitude, fatigue and hills all push it up temporarily, so read the slope over a month rather than any single point."
               >
@@ -565,13 +565,13 @@ export default function Analysis() {
                             <div className="custom-tooltip">
                               <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.name}</div>
                               <div style={{ color: 'var(--text-3)' }}>{d.dateLabel}</div>
-                              <div style={{ color: '#ef4444' }}>{d.hrPerSpeed} bpm per km/h</div>
+                              <div style={{ color: 'var(--danger)' }}>{d.hrPerSpeed} bpm per km/h</div>
                               <div style={{ color: 'var(--text-3)' }}>{d.hr} bpm · {d.speed.toFixed(1)} km/h</div>
                             </div>
                           )
                         }}
                       />
-                      <Line type="monotone" dataKey="hrPerSpeed" stroke="#ef4444" strokeWidth={2} dot={{ r: 2.5, strokeWidth: 0 }} isAnimationActive={false} />
+                      <Line type="monotone" dataKey="hrPerSpeed" stroke="var(--danger)" strokeWidth={2} dot={{ r: 2.5, strokeWidth: 0 }} isAnimationActive={false} />
                     </LineChart>
                   </ResponsiveContainer>
                 )}
@@ -732,7 +732,7 @@ export default function Analysis() {
               actions={latestRatio != null && (
                 <span style={{
                   fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700,
-                  color: latestRatio > 1.5 ? '#ef4444' : latestRatio < 0.8 ? 'var(--text-3)' : '#22c55e',
+                  color: latestRatio > 1.5 ? 'var(--danger)' : latestRatio < 0.8 ? 'var(--text-3)' : 'var(--success)',
                 }}>
                   {latestRatio.toFixed(2)} today
                 </span>
@@ -743,8 +743,8 @@ export default function Analysis() {
                   <CartesianGrid {...GRID_PROPS} />
                   <XAxis dataKey="date" tick={<EdgeTick fontSize={9} />} axisLine={false} tickLine={false} interval={tickInterval(acwr.length)} label={xLabel('Date')} />
                   <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={48} domain={[0, (max: number) => Math.max(2, Math.ceil(max * 10) / 10)]} label={yLabel('Acute : chronic ratio')} />
-                  <ReferenceArea y1={0.8} y2={1.3} fill="#22c55e" fillOpacity={0.1} />
-                  <ReferenceLine y={1.5} stroke="#ef4444" strokeDasharray="4 4" strokeOpacity={0.6} />
+                  <ReferenceArea y1={0.8} y2={1.3} fill="var(--success)" fillOpacity={0.1} />
+                  <ReferenceLine y={1.5} stroke="var(--danger)" strokeDasharray="4 4" strokeOpacity={0.6} />
                   <Tooltip
                     content={({ active, payload }) => {
                       if (!active || !payload?.length) return null

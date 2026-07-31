@@ -337,7 +337,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
             </span>
             <button
               className="btn btn-ghost"
-              style={{ marginLeft: 'auto', color: '#ef4444' }}
+              style={{ marginLeft: 'auto', color: 'var(--danger)' }}
               disabled={(selected?.size ?? 0) === 0}
               onClick={() => setConfirmDelete(true)}
             >

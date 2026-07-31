@@ -107,7 +107,7 @@ export default function AutoImportCard() {
           </div>
 
           {status && !status.readable && (
-            <p style={{ fontSize: 11, color: '#ef4444', marginBottom: 12, lineHeight: 1.5 }}>
+            <p style={{ fontSize: 11, color: 'var(--danger)', marginBottom: 12, lineHeight: 1.5 }}>
               This folder can no longer be read. If it was on an SD card or in a cloud app,
               choose it again.
             </p>
@@ -174,7 +174,7 @@ export default function AutoImportCard() {
       )}
 
       {msg && (
-        <p style={{ fontSize: 12, marginTop: 10, color: msg.ok ? 'var(--primary)' : '#ef4444' }}>{msg.text}</p>
+        <p style={{ fontSize: 12, marginTop: 10, color: msg.ok ? 'var(--primary)' : 'var(--danger)' }}>{msg.text}</p>
       )}
 
       <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 14, lineHeight: 1.5 }}>

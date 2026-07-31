@@ -69,6 +69,15 @@
   --hike: #f59e0b;
   --swim: #06b6d4;
   --strength: #a855f7;
+  /* Status colours. Separate from the activity-type palette above even where
+     the hex matches (--hike is also amber): those track a sport, these track
+     an outcome, and they are free to diverge. Never the accent — the accent is
+     the user's choice and carries no meaning. */
+  --danger: #ef4444;
+  --danger-dim: rgba(239, 68, 68, 0.12);
+  --danger-border: rgba(239, 68, 68, 0.35);
+  --success: #22c55e;
+  --warning: #f59e0b;
   --radius: 0.5rem;
   --sidebar-w: 240px;
   --bottombar-h: 0px;
@@ -96,6 +105,11 @@
   --text: #0f1117;
   --text-2: #374151;
   --text-3: #9ca3af;
+  /* Darker on a white ground, where the dark-theme values are too light to
+     read as text. The dim/border variants keep their alpha and need no change. */
+  --danger: #dc2626;
+  --success: #16a34a;
+  --warning: #d97706;
 }
 
 * {
@@ -292,6 +306,222 @@ body {
   border: 1px solid var(--border);
   border-radius: calc(var(--radius) * 1.5);
   padding: 16px;
+}
+
+/* ── Settings & admin ───────────────────────────────────────────────────
+   A hub of categories, each opening its own page. Shared by /settings and
+   /admin so the two read as one system. */
+
+/* Constrains long forms to a comfortable measure on wide screens. */
+.settings-page {
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.settings-groups { display: flex; flex-direction: column; gap: 26px; }
+.settings-group { display: flex; flex-direction: column; gap: 8px; }
+.settings-group-title {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-3);
+  padding-left: 2px;
+}
+/* Rows sit flush in a single bordered block rather than as separate cards:
+   they are one list, and 8 floating cards read as 8 unrelated things. */
+.settings-list {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) * 1.5);
+  overflow: hidden;
+}
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  width: 100%;
+  padding: 13px 14px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-sans);
+  color: var(--text);
+  transition: background 0.15s;
+}
+.settings-row:last-child { border-bottom: none; }
+.settings-row:hover { background: var(--bg-3); }
+.settings-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.settings-row-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: var(--radius);
+  background: var(--primary-dim);
+  color: var(--primary);
+}
+.settings-row-body { min-width: 0; flex: 1; }
+.settings-row-label { font-size: 13.5px; font-weight: 600; letter-spacing: -0.01em; }
+.settings-row-sub {
+  font-size: 11.5px;
+  color: var(--text-3);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.settings-row-chevron { color: var(--text-3); flex-shrink: 0; }
+
+/* A card inside a category page. */
+.settings-card {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) * 1.5);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.settings-card.danger { border-color: var(--danger-border); }
+.settings-card-head { display: flex; flex-direction: column; gap: 4px; }
+.settings-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.settings-card.danger .settings-card-title { color: var(--danger); }
+.settings-card-desc { font-size: 12px; color: var(--text-3); line-height: 1.5; }
+.settings-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+/* Form field: mono micro-label above a control, matching the login page. */
+.field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.field-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-3);
+}
+.field-hint { font-size: 11px; color: var(--text-3); line-height: 1.45; }
+/* Marks a value the environment has taken over, so the disabled input has a
+   reason next to it rather than looking broken. */
+.field-badge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 14%, transparent);
+  border-radius: 99px;
+  padding: 1px 6px;
+}
+/* Auto-fitting grid for side-by-side fields; collapses to one column early. */
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+/* Input with a unit suffix welded on (bpm, /km, W). */
+.input-unit { display: flex; min-width: 0; }
+.input-unit .input {
+  border-radius: var(--radius) 0 0 var(--radius);
+  flex: 1;
+  min-width: 0;
+}
+.input-unit span {
+  display: flex;
+  align-items: center;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-left: none;
+  border-radius: 0 var(--radius) var(--radius) 0;
+  padding: 0 9px;
+  font-size: 12px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* A plain bordered row: sessions, server address, user list entries. */
+.tile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+}
+.tile-mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+
+/* Inline save/error feedback next to a button. */
+.status-msg { font-size: 12px; }
+.status-msg.ok { color: var(--primary); }
+.status-msg.err { color: var(--danger); }
+
+/* Notice block — the SSO-managed-password explainer and similar. */
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  background: var(--blue-dim);
+  color: var(--blue);
+}
+
+/* One user in the admin list. A grid rather than a table so the same markup
+   can lay out in columns on a desktop and stack on a phone — the table it
+   replaced could only scroll sideways. */
+.user-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto minmax(0, auto) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+}
+.user-row-who { min-width: 0; }
+.user-row-actions { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+.user-row-seen { white-space: nowrap; }
+
+.badge-ok { background: color-mix(in srgb, var(--success) 16%, transparent); color: var(--success); }
+.badge-off { background: var(--bg-2); color: var(--text-3); }
+
+@media (max-width: 768px) {
+  .settings-page { gap: 16px; }
+  .settings-row { padding: 14px 13px; }
+  .user-row {
+    grid-template-columns: 1fr auto;
+    row-gap: 8px;
+  }
+  .user-row-who { grid-column: 1 / -1; }
+  .user-row-seen { grid-column: 1; }
+  .user-row-actions { grid-column: 2; grid-row: 2 / span 2; }
 }
 
 /* ── Login ──────────────────────────────────────────────────────────────

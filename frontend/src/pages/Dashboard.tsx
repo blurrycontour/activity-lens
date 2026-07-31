@@ -33,7 +33,7 @@ function DeltaBadge({ pct, invert }: { pct: number | null; invert?: boolean }) {
   return (
     <span style={{
       fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600,
-      color: good ? '#22c55e' : '#ef4444',
+      color: good ? 'var(--success)' : 'var(--danger)',
     }}>
       {pct > 0 ? '▲' : '▼'} {Math.abs(pct)}%
     </span>
@@ -375,13 +375,13 @@ export default function Dashboard() {
               {form && (
                 <div className="card">
                   <div className="chart-card-head">
-                    <Flame size={14} style={{ color: form.verdict === 'ramping' ? '#ef4444' : 'var(--primary)' }} />
+                    <Flame size={14} style={{ color: form.verdict === 'ramping' ? 'var(--danger)' : 'var(--primary)' }} />
                     <h3 className="chart-card-title">Training Load</h3>
                     <InfoTip
                       label="Training Load"
                       text="Compares your average daily effort over the last 7 days with the last 28. Around 1.0 means this week matches what your body is used to; higher means you're building, lower means you're easing off. It only appears once you have six weeks of history and a dozen heart-rate activities, because below that a single session swings it wildly. Treat it as a description of your load, not a medical verdict — the injury-risk thresholds this metric is known for are debated in the research."
                     />
-                    <span className="chart-card-actions" style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: form.verdict === 'ramping' ? '#ef4444' : form.verdict === 'detraining' ? 'var(--text-3)' : 'var(--primary)' }}>
+                    <span className="chart-card-actions" style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: form.verdict === 'ramping' ? 'var(--danger)' : form.verdict === 'detraining' ? 'var(--text-3)' : 'var(--primary)' }}>
                       {form.ratio.toFixed(2)}
                     </span>
                   </div>
@@ -395,7 +395,7 @@ export default function Dashboard() {
             {/* Gear nudge */}
             {nudges.length > 0 && (
               <div className="card" style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-                <Footprints size={18} style={{ color: nudges[0].overdue ? '#f59e0b' : 'var(--text-3)', flexShrink: 0 }} />
+                <Footprints size={18} style={{ color: nudges[0].overdue ? 'var(--warning)' : 'var(--text-3)', flexShrink: 0 }} />
                 <div style={{ flex: 1, minWidth: 200 }}>
                   <div style={{ fontSize: 13, fontWeight: 600 }}>
                     {nudges[0].name} · {nudges[0].km.toLocaleString()} km

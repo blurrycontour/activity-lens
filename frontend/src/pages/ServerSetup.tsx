@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { Server, ArrowRight, AlertCircle, Loader2 } from 'lucide-react'
+import { AlertCircle, ArrowRight, Loader2, Server } from 'lucide-react'
 import Logo from '../components/Logo'
+import AuthBackdrop from '../components/AuthBackdrop'
 import { normalizeServerURL, probeServer, setServerURL } from '../lib/serverConfig'
 
 /**
@@ -40,64 +41,63 @@ export default function ServerSetup({ onConfigured }: { onConfigured: () => void
 
   return (
     <div className="auth-shell">
+      <AuthBackdrop />
+
       <div className="auth-card">
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 22 }}>
-          <Logo size={52} />
-          <h1 style={{ fontSize: 19, fontWeight: 700, letterSpacing: '-0.02em', marginTop: 14 }}>Activity Lens</h1>
-          <p style={{ fontSize: 13, color: 'var(--text-2)', marginTop: 6, textAlign: 'center', lineHeight: 1.5 }}>
-            Connect to a server to get started
-          </p>
-        </div>
-
-        <label style={{ fontSize: 12, color: 'var(--text-3)', display: 'block', marginBottom: 3 }}>
-          Server address
-        </label>
-        <div style={{ position: 'relative' }}>
-          <Server
-            size={15}
-            style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)' }}
-          />
-          <input
-            className="input"
-            style={{ width: '100%', paddingLeft: 34 }}
-            placeholder="activity.example.com"
-            value={value}
-            onChange={e => { setValue(e.target.value); setError(null) }}
-            onKeyDown={e => { if (e.key === 'Enter' && !busy) void connect() }}
-            autoCapitalize="none"
-            autoCorrect="off"
-            spellCheck={false}
-            // A URL keyboard, and never a capitalised first letter — both are
-            // small things that make this materially less annoying to type on
-            // a phone, which is the only place this screen is ever shown.
-            inputMode="url"
-            autoFocus
-          />
-        </div>
-        <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8, lineHeight: 1.5 }}>
-          The same address you use in a browser.<br />
-          <code>https://</code> is the default scheme.
-        </p>
-
-        {error && (
-          <div style={{ display: 'flex', gap: 6, marginTop: 14, alignItems: 'flex-start', color: '#ef4444', fontSize: 12 }}>
-            <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
-            <span>{error}</span>
+        <div className="auth-head">
+          <div className="auth-brand">
+            <Logo size={40} />
+            <span className="auth-brand-name">Activity Lens</span>
           </div>
-        )}
+          <span className="auth-sub">Connect to your server to get started.</span>
+        </div>
 
-        <button
-          className="btn btn-primary"
-          onClick={() => void connect()}
-          disabled={busy || value.trim() === ''}
-          style={{ width: '100%', justifyContent: 'center', marginTop: 18, opacity: busy || !value.trim() ? 0.5 : 1 }}
-        >
-          {busy ? (
-            <><Loader2 size={15} style={{ animation: 'spin 0.9s linear infinite' }} /> Checking…</>
-          ) : (
-            <>Connect <ArrowRight size={15} /></>
+        <div className="auth-form">
+          <div className="auth-field">
+            <label className="auth-label" htmlFor="server-url">Server address</label>
+            <div style={{ position: 'relative', display: 'flex' }}>
+              <Server
+                size={15}
+                aria-hidden="true"
+                style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)' }}
+              />
+              <input
+                id="server-url"
+                className="input"
+                style={{ width: '100%', paddingLeft: 34 }}
+                placeholder="activity.example.com"
+                value={value}
+                onChange={e => { setValue(e.target.value); setError(null) }}
+                onKeyDown={e => { if (e.key === 'Enter' && !busy) void connect() }}
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                // A URL keyboard, and never a capitalised first letter — both are
+                // small things that make this materially less annoying to type on
+                // a phone, which is the only place this screen is ever shown.
+                inputMode="url"
+                autoFocus
+              />
+            </div>
+          </div>
+
+          {error && (
+            <div className="auth-error" role="alert" aria-live="polite">
+              <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+              <span>{error}</span>
+            </div>
           )}
-        </button>
+
+          <button
+            className="btn btn-primary auth-submit"
+            onClick={() => void connect()}
+            disabled={busy || value.trim() === ''}
+          >
+            {busy
+              ? <><Loader2 size={15} className="spin" /> Checking…</>
+              : <>Connect <ArrowRight size={15} /></>}
+          </button>
+        </div>
       </div>
     </div>
   )

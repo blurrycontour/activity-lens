@@ -1,0 +1,135 @@
+import { useEffect, useState } from 'react'
+import { Lock, LogOut, Monitor, ShieldCheck } from 'lucide-react'
+import { useAuth } from '../../context/AuthContext'
+import { api, ApiError, type SessionInfo } from '../../lib/api'
+import PasswordInput from '../../components/PasswordInput'
+import SettingsCard from '../../components/SettingsCard'
+import Field from '../../components/Field'
+import StatusMsg, { type Msg } from '../../components/StatusMsg'
+
+function formatDate(iso: string) {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return iso
+  return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+}
+
+/** Password and the devices currently signed in. */
+export default function SecuritySettings() {
+  const { user } = useAuth()
+
+  const [currentPw, setCurrentPw] = useState('')
+  const [newPw, setNewPw] = useState('')
+  const [pwMsg, setPwMsg] = useState<Msg | null>(null)
+  const [pwBusy, setPwBusy] = useState(false)
+
+  const [sessions, setSessions] = useState<SessionInfo[]>([])
+  const [busy, setBusy] = useState(false)
+  const [revokingId, setRevokingId] = useState<string | null>(null)
+
+  const userId = user?.id
+  useEffect(() => {
+    if (userId == null) return
+    let alive = true
+    api.listSessions()
+      .then(r => { if (alive) setSessions(r.sessions) })
+      .catch(() => { if (alive) setSessions([]) })
+    return () => { alive = false }
+  }, [userId])
+
+  if (!user) return null
+
+  async function changePassword() {
+    setPwBusy(true); setPwMsg(null)
+    try {
+      await api.changePassword(currentPw, newPw)
+      setCurrentPw(''); setNewPw('')
+      setPwMsg({ ok: true, text: 'Password changed' })
+    } catch (err) {
+      setPwMsg({ ok: false, text: err instanceof ApiError ? err.message : 'Change failed' })
+    } finally { setPwBusy(false) }
+  }
+
+  async function refresh() {
+    try { setSessions((await api.listSessions()).sessions) } catch { /* keep the old list */ }
+  }
+
+  async function signOutOthers() {
+    setBusy(true)
+    try { await api.revokeOtherSessions(); await refresh() } catch { /* ignore */ } finally { setBusy(false) }
+  }
+
+  async function signOutOne(id: string) {
+    setRevokingId(id)
+    try { await api.revokeSession(id); await refresh() } catch { /* ignore */ } finally { setRevokingId(null) }
+  }
+
+  const others = sessions.filter(s => !s.current).length
+
+  return (
+    <>
+      <SettingsCard title="Password" icon={<Lock size={15} />}>
+        {user.hasPassword ? (
+          <>
+            <div className="field-grid">
+              <Field label="Current password">
+                <PasswordInput autoComplete="current-password" capsLockWarning value={currentPw} onChange={e => setCurrentPw(e.target.value)} />
+              </Field>
+              <Field label="New password">
+                <PasswordInput autoComplete="new-password" capsLockWarning value={newPw} onChange={e => setNewPw(e.target.value)} />
+              </Field>
+            </div>
+            <div className="settings-actions">
+              <button className="btn btn-ghost" onClick={changePassword} disabled={pwBusy || !currentPw || !newPw}>
+                {pwBusy ? 'Updating…' : 'Update password'}
+              </button>
+              <StatusMsg msg={pwMsg} />
+            </div>
+          </>
+        ) : (
+          <div className="notice">
+            <ShieldCheck size={16} />
+            You sign in through your identity provider, which manages your password.
+          </div>
+        )}
+      </SettingsCard>
+
+      <SettingsCard
+        title="Signed-in devices"
+        icon={<Monitor size={15} />}
+        actions={
+          <button className="btn btn-ghost" onClick={signOutOthers} disabled={busy || others === 0}>
+            <LogOut size={14} /> Sign out others
+          </button>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {sessions.length === 0 && <span className="field-hint">No active sessions found.</span>}
+          {sessions.map(sess => (
+            <div key={sess.id} className="tile">
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {sess.userAgent || 'Unknown device'}
+                </div>
+                <div className="field-hint" style={{ marginTop: 2 }}>
+                  {sess.ip || 'unknown IP'} · started {formatDate(sess.createdAt)}
+                </div>
+              </div>
+              {sess.current ? (
+                <span className="badge" style={{ background: 'var(--primary-dim)', color: 'var(--primary)' }}>This device</span>
+              ) : (
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => signOutOne(sess.id)}
+                  disabled={revokingId === sess.id}
+                  style={{ flexShrink: 0 }}
+                >
+                  <LogOut size={14} /> {revokingId === sess.id ? 'Signing out…' : 'Sign out'}
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </SettingsCard>
+    </>
+  )
+}

@@ -19,12 +19,12 @@ function chipFor(item: ImportItem): { label: string; color: string; icon: React.
       return { label: 'Already imported', color: 'var(--text-3)', icon: <Info size={13} /> }
     case 'error':
     case 'failed':
-      return { label: item.error || 'Failed', color: '#ef4444', icon: <AlertCircle size={13} /> }
+      return { label: item.error || 'Failed', color: 'var(--danger)', icon: <AlertCircle size={13} /> }
     case 'importing':
       return {
         label: 'Importing…',
         color: 'var(--text-3)',
-        icon: <Loader2 size={13} style={{ animation: 'spin 0.9s linear infinite' }} />,
+        icon: <Loader2 size={13} className="spin" />,
       }
     case 'imported':
       return { label: 'Imported', color: 'var(--primary)', icon: <CheckCircle size={13} /> }
@@ -71,7 +71,7 @@ export default function BatchImportList({
       {busyLabel && (
         <div style={{ marginBottom: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-3)', marginBottom: 6 }}>
-            <Loader2 size={13} style={{ animation: 'spin 0.9s linear infinite', flexShrink: 0 }} />
+            <Loader2 size={13} className="spin" style={{ flexShrink: 0 }} />
             <span style={{ flex: 1 }}>{busyLabel}</span>
             {progress && progress.total > 0 && (
               <span style={{ fontFamily: 'var(--font-mono)' }}>{progress.done}/{progress.total}</span>

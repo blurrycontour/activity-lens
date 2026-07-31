@@ -42,7 +42,7 @@ export default function ConfirmDialog({
       <div className="modal" role="dialog" aria-modal="true" aria-label={title}>
         <div className="modal-box" style={{ maxWidth: 420 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-            <AlertTriangle size={20} style={{ color: danger ? '#ef4444' : '#f59e0b' }} />
+            <AlertTriangle size={20} style={{ color: danger ? 'var(--danger)' : 'var(--warning)' }} />
             <h3 style={{ fontSize: 16, fontWeight: 700 }}>{title}</h3>
           </div>
           <p style={{ fontSize: 14, color: 'var(--text-2)', marginBottom: 20, lineHeight: 1.5 }}>
@@ -52,7 +52,7 @@ export default function ConfirmDialog({
             <button className="btn btn-ghost" onClick={onCancel} disabled={busy}>{cancelLabel}</button>
             <button
               className="btn btn-primary"
-              style={danger ? { background: '#ef4444', borderColor: '#ef4444' } : undefined}
+              style={danger ? { background: 'var(--danger)', borderColor: 'var(--danger)' } : undefined}
               onClick={onConfirm}
               disabled={busy}
             >

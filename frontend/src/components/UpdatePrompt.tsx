@@ -204,7 +204,7 @@ export default function UpdatePrompt() {
         )}
 
         {stage === 'failed' && error && (
-          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12, color: '#ef4444', lineHeight: 1.5, marginBottom: 14 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12, color: 'var(--danger)', lineHeight: 1.5, marginBottom: 14 }}>
             <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 2 }} />
             <span>{error}</span>
           </div>

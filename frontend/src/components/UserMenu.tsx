@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { User, Settings, Shield, LogOut, X, Info, ArrowUpCircle } from 'lucide-react'
+import { Settings, Shield, LogOut, X, Info, ArrowUpCircle } from 'lucide-react'
 import AboutDialog from './AboutDialog'
 import { applyPendingUpdate, useUpdatePending } from '../lib/appUpdate'
 import { avatarUrl } from './UserAvatar'
@@ -7,14 +7,13 @@ import type { ApiUser } from '../lib/api'
 
 interface UserMenuProps {
   onClose: () => void
-  onAccount: () => void
   onSettings: () => void
   onAdmin: () => void
   onLogout: () => void | Promise<void>
   user: ApiUser
 }
 
-export default function UserMenu({ onClose, onAccount, onSettings, onAdmin, onLogout, user }: UserMenuProps) {
+export default function UserMenu({ onClose, onSettings, onAdmin, onLogout, user }: UserMenuProps) {
   const ref = useRef<HTMLDivElement>(null)
   const [showAbout, setShowAbout] = useState(false)
   // Dismissing the update toast should not lose the update; this is where it
@@ -32,9 +31,10 @@ export default function UserMenu({ onClose, onAccount, onSettings, onAdmin, onLo
 
 
   const items = [
-    { icon: <User size={15} />, label: 'Account', sub: 'Profile, password, sessions', action: () => { onClose(); onAccount() } },
-    { icon: <Settings size={15} />, label: 'Settings', sub: 'Appearance & preferences', action: () => { onClose(); onSettings() } },
-    ...(user.isAdmin ? [{ icon: <Shield size={15} />, label: 'Admin Panel', sub: 'Users, email, SSO', action: () => { onClose(); onAdmin() } }] : []),
+    // Account used to be a peer of Settings; it is a group inside it now, so
+    // there is one door into everything configurable rather than two.
+    { icon: <Settings size={15} />, label: 'Settings', sub: 'Profile, security and preferences', action: () => { onClose(); onSettings() } },
+    ...(user.isAdmin ? [{ icon: <Shield size={15} />, label: 'Admin', sub: 'Users, email, SSO, storage', action: () => { onClose(); onAdmin() } }] : []),
     { icon: <Info size={15} />, label: 'About', sub: 'Version & app info', action: () => setShowAbout(true) },
     ...(updatePending
       // Closed first: on web this reloads and the menu goes with the page, but
@@ -109,7 +109,7 @@ export default function UserMenu({ onClose, onAccount, onSettings, onAdmin, onLo
               width: '100%', display: 'flex', alignItems: 'center', gap: 12,
               padding: '10px 12px', borderRadius: 8, background: 'transparent',
               border: 'none', cursor: 'pointer', textAlign: 'left',
-              color: '#ef4444', transition: 'background 0.12s',
+              color: 'var(--danger)', transition: 'background 0.12s',
             }}
             onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.08)'}
             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}

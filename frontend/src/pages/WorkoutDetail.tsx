@@ -162,7 +162,7 @@ function NotesCard({ workout: w, onSaved }: { workout: Workout; onSaved: (w: Wor
         )}
       </div>
 
-      {error && <p style={{ fontSize: 12, color: '#ef4444', marginBottom: 8 }}>{error}</p>}
+      {error && <p style={{ fontSize: 12, color: 'var(--danger)', marginBottom: 8 }}>{error}</p>}
 
       {editing ? (
         <>
@@ -179,7 +179,7 @@ function NotesCard({ workout: w, onSaved }: { workout: Workout; onSaved: (w: Wor
             {hasNotes && (
               <button
                 className="btn btn-ghost"
-                style={{ fontSize: 12, marginRight: 'auto', color: '#ef4444' }}
+                style={{ fontSize: 12, marginRight: 'auto', color: 'var(--danger)' }}
                 onClick={() => void save('')}
                 disabled={saving}
               >
@@ -210,7 +210,7 @@ function cadenceUnit(type: WorkoutType): string {
   return type === 'Ride' ? 'rpm' : 'spm'
 }
 
-const HR_ZONE_COLORS = ['#60a5fa', '#34d399', '#fbbf24', '#ef4444', '#a855f7']
+const HR_ZONE_COLORS = ['#60a5fa', '#34d399', '#fbbf24', 'var(--danger)', '#a855f7']
 const HR_ZONE_LABELS = ['Zone 1 (<60%)', 'Zone 2 (60-70%)', 'Zone 3 (70-80%)', 'Zone 4 (80-90%)', 'Zone 5 (90-100%)']
 const HR_ZONE_SHORT = ['Z1', 'Z2', 'Z3', 'Z4', 'Z5']
 
@@ -313,13 +313,13 @@ type MapLayerId = 'street' | 'topo' | 'satellite'
 const MAP_LAYER_KEY = 'al_map_layer'
 const START_MARKER = divIcon({
   className: 'route-pin',
-  html: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-label="Start"><circle cx="12" cy="12" r="7" fill="#22c55e" stroke="#fff" stroke-width="2.5"/></svg>',
+  html: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-label="Start"><circle cx="12" cy="12" r="7" fill="var(--success)" stroke="#fff" stroke-width="2.5"/></svg>',
   iconSize: [26, 26],
   iconAnchor: [13, 13],
 })
 const FINISH_MARKER = divIcon({
   className: 'route-pin',
-  html: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-label="Finish"><path d="M6 21V4" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><path d="M6 5h11l-2.2 3.3L17 12H6z" fill="#ef4444" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>',
+  html: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-label="Finish"><path d="M6 21V4" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><path d="M6 5h11l-2.2 3.3L17 12H6z" fill="var(--danger)" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>',
   iconSize: [28, 28],
   iconAnchor: [7, 25],
 })
@@ -943,7 +943,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
   }
 
   function hrChart(height: number) {
-    return areaChart({ data: w.hrTimeline as any, dataKey: 'hr', stroke: '#ef4444', gradId: 'hrGrad', unit: 'bpm', height, hrZoneStroke: true, maxHRForZones: effectiveMaxHR })
+    return areaChart({ data: w.hrTimeline as any, dataKey: 'hr', stroke: 'var(--danger)', gradId: 'hrGrad', unit: 'bpm', height, hrZoneStroke: true, maxHRForZones: effectiveMaxHR })
   }
   function paceChart(height: number) {
     return areaChart({ data: smoothPaceTimeline as any, dataKey: 'pace', stroke: color, gradId: 'paceGrad', unit: '/km', valueFormatter: fmtPace, reversed: true, yTickFormatter: v => fmtPace(v), height })
@@ -1093,7 +1093,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
               </div>
 
               {saveErr && (
-                <div style={{ display: 'flex', gap: 6, marginTop: 16, alignItems: 'center', color: '#ef4444', fontSize: 12 }}>
+                <div style={{ display: 'flex', gap: 6, marginTop: 16, alignItems: 'center', color: 'var(--danger)', fontSize: 12 }}>
                   {saveErr}
                 </div>
               )}
@@ -1114,7 +1114,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
           <div className="modal">
             <div className="modal-box" style={{ maxWidth: 420 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                <AlertTriangle size={20} style={{ color: '#f59e0b' }} />
+                <AlertTriangle size={20} style={{ color: 'var(--warning)' }} />
                 <h3 style={{ fontSize: 16, fontWeight: 700 }}>Delete workout?</h3>
               </div>
               <p style={{ fontSize: 14, color: 'var(--text-2)', marginBottom: 20, lineHeight: 1.5 }}>
@@ -1122,7 +1122,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
               </p>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
                 <button className="btn btn-ghost" onClick={() => setConfirmDelete(false)} disabled={deleting}>Cancel</button>
-                <button className="btn btn-primary" style={{ background: '#ef4444', borderColor: '#ef4444' }} onClick={handleDelete} disabled={deleting}>
+                <button className="btn btn-primary" style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={handleDelete} disabled={deleting}>
                   {deleting ? 'Deleting…' : 'Delete'}
                 </button>
               </div>
@@ -1175,7 +1175,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
 
       <div className="page-content">
         {originalErr && (
-          <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', marginBottom: 16, color: '#ef4444', fontSize: 13 }}>
+          <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', marginBottom: 16, color: 'var(--danger)', fontSize: 13 }}>
             <AlertTriangle size={15} style={{ flexShrink: 0 }} />
             <span style={{ flex: 1, minWidth: 0 }}>{originalErr}</span>
             <button className="btn-icon" aria-label="Dismiss" onClick={() => setOriginalErr(null)}>
@@ -1221,9 +1221,9 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
 
             {(w.hrTimeline.length > 0 || w.avgHR > 0) && (
               <div className="stat-grid-3">
-                <StatChip icon={<Heart size={12} color="#ef4444" />} label="Min HR" value={derived.hrMin != null ? `${derived.hrMin} bpm` : '—'} />
-                <StatChip icon={<Heart size={12} color="#ef4444" />} label="Avg HR" value={derived.hrAvg != null ? `${derived.hrAvg} bpm` : '—'} />
-                <StatChip icon={<Heart size={12} color="#ef4444" />} label="Max HR" value={derived.hrMax != null ? `${derived.hrMax} bpm` : '—'} />
+                <StatChip icon={<Heart size={12} color="var(--danger)" />} label="Min HR" value={derived.hrMin != null ? `${derived.hrMin} bpm` : '—'} />
+                <StatChip icon={<Heart size={12} color="var(--danger)" />} label="Avg HR" value={derived.hrAvg != null ? `${derived.hrAvg} bpm` : '—'} />
+                <StatChip icon={<Heart size={12} color="var(--danger)" />} label="Max HR" value={derived.hrMax != null ? `${derived.hrMax} bpm` : '—'} />
               </div>
             )}
 
@@ -1275,7 +1275,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
         {/* Metric toggle row */}
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
           {([
-            { id: 'hr' as Metric, label: 'Heart Rate', color: '#ef4444', available: w.hrTimeline.length > 0 },
+            { id: 'hr' as Metric, label: 'Heart Rate', color: 'var(--danger)', available: w.hrTimeline.length > 0 },
             { id: 'pace' as Metric, label: 'Pace', color: color, available: w.paceTimeline.length > 0 },
             { id: 'speed' as Metric, label: 'Speed', color: 'var(--blue)', available: speedTimeline.length > 0 },
             { id: 'elevation' as Metric, label: 'Elevation', color: 'var(--hike)', available: w.elevTimeline.length > 0 },
@@ -1309,7 +1309,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
           {selectedMetrics.includes('hr') && w.hrTimeline.length > 0 && (
             <div className="card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><Heart size={14} color="#ef4444" /> Heart Rate<InfoTip label="Heart Rate" text="Every heart-rate sample the file recorded, plotted against elapsed time. The line is coloured by training zone using your max HR — from Settings when the activity doesn't report its own. Click anywhere on the chart to move the playback cursor and the map marker to that moment." /></h3>
+                <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><Heart size={14} color="var(--danger)" /> Heart Rate<InfoTip label="Heart Rate" text="Every heart-rate sample the file recorded, plotted against elapsed time. The line is coloured by training zone using your max HR — from Settings when the activity doesn't report its own. Click anywhere on the chart to move the playback cursor and the map marker to that moment." /></h3>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)' }}>Min {derived.hrMin ?? '—'} · Avg {w.avgHR} · Max {w.maxHR}</span>
                   <button className="btn-icon" onClick={() => setExpanded('hr')} title="Expand"><Maximize2 size={13} /></button>
@@ -1324,7 +1324,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
             <div className="card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                 <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Heart size={14} color="#ef4444" /> Heart Rate Zones
+                  <Heart size={14} color="var(--danger)" /> Heart Rate Zones
                   <InfoTip label="Heart Rate Zones" text="How the activity's time split across the five effort zones, as a share of recorded samples. Zones are percentages of your max HR: under 60% is recovery, 60-70% endurance, 70-80% tempo, 80-90% threshold, and above 90% is maximal. Switch between the histogram and donut under Settings → Charts." />
                 </h3>
                 <button className="btn-icon" onClick={() => setExpanded('hrzones')} title="Expand"><Maximize2 size={13} /></button>

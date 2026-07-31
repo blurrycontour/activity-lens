@@ -20,15 +20,17 @@ import Consistency from './pages/Consistency'
 import Analysis from './pages/Analysis'
 import Equipment from './pages/Equipment'
 import Help from './pages/Help'
-import Settings from './pages/Settings'
-import Account from './pages/Account'
-import Admin from './pages/Admin'
+import Settings from './pages/settings'
+import Admin from './pages/admin'
 import Login from './pages/Login'
 import { type Workout } from './data/workouts'
 import { useAuth } from './context/AuthContext'
 import { useRefresh } from './context/RefreshContext'
 import { WorkoutsProvider } from './context/WorkoutsContext'
-import { adjacentPage, DESKTOP_PAGES, LEGACY_ROUTES, type Page } from './lib/nav'
+import {
+  adjacentPage, parseLocation, pathForPage,
+  type AdminSection, type Page, type SettingsSection,
+} from './lib/nav'
 import { useSwipeNav } from './lib/useSwipeNav'
 import { consumeShareParam, takeSharedFiles } from './lib/shareTarget'
 import { applySystemBars } from './lib/native/systemBars'
@@ -41,27 +43,6 @@ export const LOCATION_EVENT = 'al:location'
 const SIDEBAR_KEY = 'al_sidebar_w'
 const THEME_KEY = 'al_theme'
 const ACCENT_KEY = 'al_accent'
-const PAGES: Page[] = [...DESKTOP_PAGES, 'settings', 'account', 'admin']
-
-// URL <-> app state helpers. Routes are path-based (e.g. /workouts,
-// /workouts/:id, /settings) so a full page reload lands back on the same
-// page/workout instead of always resetting to the dashboard.
-function pathForPage(p: Page): string {
-  return p === 'dashboard' ? '/' : `/${p}`
-}
-
-function parseLocation(pathname = window.location.pathname): { page: Page; workoutId: string | null; redirect?: boolean } {
-  const segs = pathname.split('/').filter(Boolean)
-  if (segs.length === 0) return { page: 'dashboard', workoutId: null }
-  if (segs[0] === 'workouts' && segs[1]) return { page: 'workouts', workoutId: segs[1] }
-  const candidate = segs[0] as Page
-  if (PAGES.includes(candidate)) return { page: candidate, workoutId: null }
-  // Timeline was folded into Analysis and Heatmap became Consistency; keep old
-  // links and open tabs working instead of dumping them on the dashboard.
-  const legacy = LEGACY_ROUTES[segs[0]]
-  if (legacy) return { page: legacy, workoutId: null, redirect: true }
-  return { page: 'dashboard', workoutId: null }
-}
 
 function resolveTheme(mode: ThemeMode): 'dark' | 'light' {
   if (mode === 'system') {
@@ -89,6 +70,8 @@ export default function App() {
   const { user, loading, logout } = useAuth()
   const initialLocation = useRef(parseLocation()).current
   const [page, setPage] = useState<Page>(initialLocation.page)
+  // The open category within a hub page (settings, admin), or null for the hub.
+  const [section, setSection] = useState<string | null>(initialLocation.section)
   const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null)
   // A push that arrived while the app was on screen, shown as a banner.
   const [banner, setBanner] = useState<BannerNotification | null>(null)
@@ -136,11 +119,11 @@ export default function App() {
     document.documentElement.style.setProperty('--sidebar-w', `${sidebarWidth}px`)
   }, [sidebarWidth])
 
-  // Rewrite retired routes (/timeline, /heatmap) to where they moved, so the
-  // address bar matches the page and a reload doesn't redirect a second time.
+  // Rewrite retired routes (/timeline, /heatmap, /account) to where they moved,
+  // so the address bar matches the page and a reload doesn't redirect twice.
   useEffect(() => {
     if (initialLocation.redirect) {
-      window.history.replaceState(null, '', pathForPage(initialLocation.page))
+      window.history.replaceState(null, '', pathForPage(initialLocation.page, initialLocation.section))
     }
   }, [initialLocation])
 
@@ -211,6 +194,7 @@ export default function App() {
     function onPopState() {
       const loc = parseLocation()
       setPage(loc.page)
+      setSection(loc.section)
       if (loc.workoutId) {
         api.getWorkout(loc.workoutId).then(setSelectedWorkout).catch(() => setSelectedWorkout(null))
       } else {
@@ -223,8 +207,21 @@ export default function App() {
 
   const navigate = useCallback((p: Page) => {
     setPage(p)
+    setSection(null)
     setSelectedWorkout(null)
     window.history.pushState(null, '', pathForPage(p))
+  }, [])
+
+  /**
+   * Drills into a category of the current hub page, or back out of one.
+   *
+   * Pushed rather than replaced so the phone's back gesture and the browser's
+   * back button leave the category the same way the on-screen arrow does.
+   */
+  const openSection = useCallback((p: Page, s: string | null) => {
+    setPage(p)
+    setSection(s)
+    window.history.pushState(null, '', pathForPage(p, s))
   }, [])
 
   /**
@@ -245,17 +242,19 @@ export default function App() {
         .catch(() => {
           setSelectedWorkout(null)
           setPage('workouts')
+          setSection(null)
           window.history.pushState(null, '', pathForPage('workouts'))
         })
       return
     }
     setSelectedWorkout(null)
     setPage(loc.page)
+    setSection(loc.section)
     // The query string is kept, not dropped: a notification links to a filtered
     // list ("/workouts?source=autoimport"), and pathForPage alone would land on
     // the unfiltered page and leave the user hunting.
     const url = new URL(link, window.location.origin)
-    window.history.pushState(null, '', pathForPage(loc.page) + url.search)
+    window.history.pushState(null, '', pathForPage(loc.page, loc.section) + url.search)
     // The destination page may already be mounted, in which case nothing about
     // it re-renders and a filter in the query string would be ignored. This says
     // "the URL changed" to whoever cares.
@@ -455,11 +454,19 @@ export default function App() {
         ) : page === 'equipment' ? (
           <Equipment onSelectWorkout={id => { api.getWorkout(id).then(selectWorkout).catch(() => {}) }} />
         ) : page === 'settings' ? (
-          <Settings accent={accent} onAccentChange={setAccent} />
-        ) : page === 'account' ? (
-          <Account />
+          <Settings
+            section={section as SettingsSection | null}
+            onOpen={s => openSection('settings', s)}
+            onBack={() => openSection('settings', null)}
+            accent={accent}
+            onAccentChange={setAccent}
+          />
         ) : page === 'admin' ? (
-          <Admin />
+          <Admin
+            section={section as AdminSection | null}
+            onOpen={s => openSection('admin', s)}
+            onBack={() => openSection('admin', null)}
+          />
         ) : (
           <Help />
         )}
@@ -475,7 +482,6 @@ export default function App() {
       {showUserMenu && (
         <UserMenu
           onClose={() => setShowUserMenu(false)}
-          onAccount={() => navigate('account')}
           onSettings={() => navigate('settings')}
           onAdmin={() => navigate('admin')}
           onLogout={logout}

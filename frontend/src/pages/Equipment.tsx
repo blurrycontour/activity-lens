@@ -175,7 +175,7 @@ export default function EquipmentPage({ onSelectWorkout }: EquipmentPageProps) {
                       <div style={{ background: 'var(--bg-3)', borderRadius: 99, height: 4 }}>
                         <div style={{
                           width: `${Math.min(wear.pct, 1) * 100}%`, height: '100%', borderRadius: 99,
-                          background: wear.pct >= 1 ? '#ef4444' : wear.pct >= 0.8 ? '#f59e0b' : 'var(--primary)',
+                          background: wear.pct >= 1 ? 'var(--danger)' : wear.pct >= 0.8 ? 'var(--warning)' : 'var(--primary)',
                         }} />
                       </div>
                       <div style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)', marginTop: 4 }}>
@@ -250,7 +250,7 @@ function EquipmentDetail({ id, onBack, onSelectWorkout, onEdit, onDeleted }: {
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="btn btn-ghost" onClick={() => onEdit(data)}><Pencil size={15} /> Edit</button>
-            <button className="btn btn-ghost" style={{ color: '#ef4444' }} onClick={() => setConfirmDelete(true)}><Trash2 size={15} /> Delete</button>
+            <button className="btn btn-ghost" style={{ color: 'var(--danger)' }} onClick={() => setConfirmDelete(true)}><Trash2 size={15} /> Delete</button>
           </div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 12, marginTop: 16 }}>
@@ -269,7 +269,7 @@ function EquipmentDetail({ id, onBack, onSelectWorkout, onEdit, onDeleted }: {
           {wearOf(data).limitKm > 0 && (
             <div className="stat-chip">
               <span className="label">Wear</span>
-              <span className="value" style={{ fontSize: 14, color: wearOf(data).pct >= 1 ? '#ef4444' : wearOf(data).pct >= 0.8 ? '#f59e0b' : undefined }}>
+              <span className="value" style={{ fontSize: 14, color: wearOf(data).pct >= 1 ? 'var(--danger)' : wearOf(data).pct >= 0.8 ? 'var(--warning)' : undefined }}>
                 {Math.round(wearOf(data).pct * 100)}%
               </span>
             </div>
@@ -309,7 +309,7 @@ function EquipmentDetail({ id, onBack, onSelectWorkout, onEdit, onDeleted }: {
           <div className="modal">
             <div className="modal-box" style={{ maxWidth: 420 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                <AlertTriangle size={20} style={{ color: '#f59e0b' }} />
+                <AlertTriangle size={20} style={{ color: 'var(--warning)' }} />
                 <h3 style={{ fontSize: 16, fontWeight: 700 }}>Delete equipment?</h3>
               </div>
               <p style={{ fontSize: 14, color: 'var(--text-2)', marginBottom: 20, lineHeight: 1.5 }}>
@@ -319,7 +319,7 @@ function EquipmentDetail({ id, onBack, onSelectWorkout, onEdit, onDeleted }: {
               </p>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
                 <button className="btn btn-ghost" onClick={() => setConfirmDelete(false)}>Cancel</button>
-                <button className="btn btn-primary" style={{ background: '#ef4444', borderColor: '#ef4444' }} onClick={() => void doDelete()}>Delete</button>
+                <button className="btn btn-primary" style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={() => void doDelete()}>Delete</button>
               </div>
             </div>
           </div>
@@ -406,7 +406,7 @@ function EquipmentForm({ initial, onClose, onSaved }: {
           </div>
 
           {error && (
-            <div style={{ marginTop: 16, color: '#ef4444', fontSize: 12 }}>{error}</div>
+            <div style={{ marginTop: 16, color: 'var(--danger)', fontSize: 12 }}>{error}</div>
           )}
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>

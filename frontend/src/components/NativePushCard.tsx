@@ -132,7 +132,7 @@ export default function NativePushCard({ pushPref, onPushPrefChange }: NativePus
       </p>
 
       {msg && (
-        <p style={{ fontSize: 12, marginTop: 10, color: msg.ok ? 'var(--primary)' : '#ef4444' }}>{msg.text}</p>
+        <p style={{ fontSize: 12, marginTop: 10, color: msg.ok ? 'var(--primary)' : 'var(--danger)' }}>{msg.text}</p>
       )}
     </div>
   )
