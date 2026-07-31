@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { AlertCircle, Loader2, LogIn, Server, Smartphone, UserPlus, WifiOff } from 'lucide-react'
 import { clearCachedUser, useAuth } from '../context/AuthContext'
 import { api, ApiError, apiURL, type AndroidApp } from '../lib/api'
@@ -9,7 +9,7 @@ import PasswordInput from '../components/PasswordInput'
 import ConfirmDialog from '../components/ConfirmDialog'
 
 export default function Login() {
-  const { login, register, features } = useAuth()
+  const { login, loginWithSSO, register, features } = useAuth()
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [identifier, setIdentifier] = useState('')
   const [username, setUsername] = useState('')
@@ -18,6 +18,32 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+
+  // The native SSO round trip: the user leaves for a browser and comes back,
+  // which can take as long as their provider takes. The abort controller is how
+  // leaving this page stops the wait rather than resolving into a page that is
+  // no longer mounted.
+  const [ssoBusy, setSsoBusy] = useState(false)
+  const ssoAbort = useRef<AbortController | null>(null)
+  useEffect(() => () => ssoAbort.current?.abort(), [])
+
+  async function ssoSignIn() {
+    setError(null)
+    setSsoBusy(true)
+    ssoAbort.current?.abort()
+    const controller = new AbortController()
+    ssoAbort.current = controller
+    try {
+      await loginWithSSO(controller.signal)
+    } catch (err) {
+      // A cancelled wait is this component unmounting, not a failure to report.
+      if (!controller.signal.aborted) {
+        setError(err instanceof ApiError ? err.message : 'Sign-in failed. Please try again.')
+      }
+    } finally {
+      if (!controller.signal.aborted) setSsoBusy(false)
+    }
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -226,10 +252,26 @@ export default function Login() {
         {oidc && (
           <>
             <div className="auth-divider"><span>or continue with</span></div>
-            <a className="auth-sso" href={apiURL('/api/auth/oidc/login')}>
-              <SsoLogo light={features?.oidcLogoUrl} dark={features?.oidcLogoUrlDark} />
-              Continue with {features?.oidcProviderName || 'SSO'}
-            </a>
+            {/* A link in a browser, a button in the app.
+
+                Following the link natively is what the old bug was: the WebView
+                sends an off-origin navigation to the system browser, which then
+                shows the server's own web app — signing the *browser* in and
+                leaving the app exactly as it was. Natively the flow has to be
+                driven, not followed; see lib/native/nativeAuth.ts. */}
+            {isNative() ? (
+              <button type="button" className="auth-sso" onClick={ssoSignIn} disabled={ssoBusy}>
+                {ssoBusy
+                  ? <Loader2 className="spin" size={16} />
+                  : <SsoLogo light={features?.oidcLogoUrl} dark={features?.oidcLogoUrlDark} />}
+                {ssoBusy ? 'Waiting for sign-in…' : `Continue with ${features?.oidcProviderName || 'SSO'}`}
+              </button>
+            ) : (
+              <a className="auth-sso" href={apiURL('/api/auth/oidc/login')}>
+                <SsoLogo light={features?.oidcLogoUrl} dark={features?.oidcLogoUrlDark} />
+                Continue with {features?.oidcProviderName || 'SSO'}
+              </a>
+            )}
           </>
         )}
 

@@ -53,6 +53,8 @@ func TestAllowedOrigin(t *testing.T) {
 	allowed := []string{
 		// What the shipped app presents; see mobile/capacitor.config.ts.
 		"https://activity-lens.localhost",
+		// What a local build presents, so it saves passwords separately.
+		"https://activity-lens-dev.localhost",
 		"https://localhost",       // Capacitor default
 		"capacitor://localhost",   // Capacitor, legacy scheme
 		"http://localhost",        // local development

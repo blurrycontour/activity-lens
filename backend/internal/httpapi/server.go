@@ -31,12 +31,16 @@ type Server struct {
 	// apk is the Android app bundled into this image, or nil when there is
 	// none. Resolved once at startup; see androidapp.go.
 	apk *bundledAPK
+	// nativeCodes holds one-time SSO codes between the browser redirect and the
+	// Android app collecting them; see oidc_native.go.
+	nativeCodes *nativeAuthCodes
 }
 
 // New constructs a Server and its auth middleware/OIDC handler.
 func New(cfg config.Config, authSvc *auth.Service, workoutSvc *workout.Service, equipmentSvc *equipment.Service, settingsStore *settings.Store, rawUploads *workout.RawUploadStore, notifySvc *notify.Service, build BuildInfo) *Server {
 	s := &Server{cfg: cfg, auth: authSvc, workout: workoutSvc, equipment: equipmentSvc, settings: settingsStore, rawUploads: rawUploads, notify: notifySvc, build: build}
 	s.apk = loadBundledAPK(cfg.AndroidAPKDir)
+	s.nativeCodes = newNativeAuthCodes()
 	s.mw = &httpmw.Middleware{
 		Auth:   authSvc,
 		Secure: s.secure,
@@ -96,8 +100,13 @@ func (s *Server) apiRoutes() http.Handler {
 		mux.HandleFunc("POST /api/auth/register", s.handleRegister)
 	}
 	if s.oidc != nil {
-		mux.HandleFunc("GET /api/auth/oidc/login", s.oidc.Login)
+		// Wrapped rather than registered directly: the native app passes two
+		// extra parameters that have to be carried through the flow. See
+		// oidc_native.go.
+		mux.HandleFunc("GET /api/auth/oidc/login", s.handleOIDCLogin)
 		mux.HandleFunc("GET /api/auth/oidc/callback", s.oidc.Callback)
+		// Where the app redeems the code the deep link brought it.
+		mux.HandleFunc("POST /api/auth/oidc/exchange", s.handleOIDCExchange)
 	}
 
 	// --- Auth (authenticated) ---

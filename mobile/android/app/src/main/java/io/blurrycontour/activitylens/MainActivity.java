@@ -32,6 +32,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(UnifiedPushPlugin.class);
         registerPlugin(ShellPlugin.class);
         registerPlugin(FolderSyncPlugin.class);
+        registerPlugin(NativeAuthPlugin.class);
         super.onCreate(savedInstanceState);
 
         // Replace the launch theme's window background with a flat colour.
@@ -55,6 +56,9 @@ public class MainActivity extends BridgeActivity {
         // asked is what makes a cold start work — by the time any JavaScript
         // runs, the intent may have been superseded.
         UnifiedPush.stashTap(this, getIntent());
+        // Same reasoning for a sign-in returning from the browser: the deep link
+        // may be what launched us, in which case nothing is listening yet.
+        NativeAuthPlugin.stashDeepLink(this, getIntent());
 
         getOnBackPressedDispatcher().addCallback(this, backCallback);
         askForNotifications();
@@ -73,6 +77,9 @@ public class MainActivity extends BridgeActivity {
         super.onNewIntent(intent);
         setIntent(intent);
         UnifiedPush.stashTap(this, intent);
+        // The plugin also stashes on its own handleOnNewIntent, which is what
+        // fires the event. This covers the case where the bridge is not up yet.
+        NativeAuthPlugin.stashDeepLink(this, intent);
     }
 
     /**

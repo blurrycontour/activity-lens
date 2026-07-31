@@ -28,6 +28,25 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- Where the browser returns a finished SSO sign-in.
+
+                 The scheme is ${applicationId}, so a local build (which carries
+                 an id suffix so it installs alongside the published app) gets a
+                 distinct one automatically. Without that, both copies would
+                 claim the same link and Android would ask the user which app it
+                 meant every time.
+
+                 What arrives here is a single-use code, not a session: any app
+                 may register a custom scheme, so the deep link is assumed to be
+                 readable by others and carries nothing usable on its own. See
+                 backend/internal/httpapi/oidc_native.go. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="${applicationId}" android:host="auth" />
+            </intent-filter>
+
         </activity>
 
         <!-- Receives push from a UnifiedPush distributor (ntfy and friends).

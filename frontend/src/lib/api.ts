@@ -409,6 +409,13 @@ export const api = {
       method: 'POST',
       body: { identifier, password },
     }),
+  // Redeems the one-time code an SSO deep link brought back. The verifier is
+  // what proves this app started that flow; see lib/native/nativeAuth.ts.
+  ssoExchange: (code: string, verifier: string) =>
+    request<{ token: string; expiresAt: string; user: ApiUser }>('/api/auth/oidc/exchange', {
+      method: 'POST',
+      body: { code, verifier },
+    }),
   logout: () => request<unknown>('/api/auth/logout', { method: 'POST' }),
   updateProfile: (displayName: string, email: string) =>
     request<{ user: ApiUser }>('/api/auth/profile', { method: 'PATCH', body: { displayName, email } }),

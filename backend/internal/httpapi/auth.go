@@ -241,6 +241,13 @@ func (s *Server) oidcOnSuccess(w http.ResponseWriter, r *http.Request, user *aut
 			slog.Warn("record last login", "error", err, "user", user.ID)
 		}
 	}
+	// The Android app started this flow in a browser it does not control and
+	// cannot read cookies from, so it gets a one-time code deep-linked back
+	// instead. See oidc_native.go.
+	if scheme, challenge, ok := s.takeNativeFlow(w, r); ok {
+		s.finishNativeOIDC(w, r, scheme, challenge, sid, exp, user)
+		return
+	}
 	secure := s.secure(r)
 	http.SetCookie(w, s.auth.SessionCookie(sid, exp, secure))
 	if csrf, err := s.mw.IssueCSRFCookie(r); err == nil {

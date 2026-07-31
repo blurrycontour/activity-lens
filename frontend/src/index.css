@@ -540,6 +540,12 @@ body {
   transform: translateY(-1px);
 }
 .auth-sso:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+/* The native app renders this as a <button> — the SSO flow there is driven
+   rather than followed — so it has to look identical to the anchor. A button
+   does not inherit the page font on its own. */
+.auth-sso { font-family: inherit; }
+.auth-sso:disabled { opacity: 0.7; cursor: default; }
+.auth-sso:disabled:hover { transform: none; background: var(--primary-dim); }
 
 /* Per-theme provider logos. Both <img> tags are rendered and CSS chooses, so
    the login page never needs to know which theme is active. Dark is the app's

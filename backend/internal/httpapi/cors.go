@@ -28,16 +28,20 @@ import (
 // Fixed by the build rather than by configuration, so the app works without the
 // user having to configure anything on the server.
 //
-// The first entry is the one current builds actually use: mobile/capacitor.config.ts
+// The first two are what current builds actually use: mobile/capacitor.config.ts
 // sets a hostname of its own so the app does not share an origin — and therefore
 // a password manager's saved credentials — with every other localhost thing on
-// the device. The rest are what a default or older Capacitor build serves from,
-// kept so an APK built without that config still works.
+// the device. A local build (AL_APP_ID_SUFFIX) gets the -dev host, for the same
+// reason it gets its own package name: two apps installed at once should be two
+// entries in the password manager, not one they fight over. The rest are what a
+// default or older Capacitor build serves from, kept so an APK built without
+// that config still works.
 //
 // Changing the hostname in capacitor.config.ts means changing it here too; a
 // mismatch shows up as every request from the app failing CORS.
 var nativeOrigins = []string{
 	"https://activity-lens.localhost",
+	"https://activity-lens-dev.localhost",
 	"https://localhost",
 	"capacitor://localhost",
 	"http://localhost",

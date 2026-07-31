@@ -11,6 +11,18 @@ import type { CapacitorConfig } from '@capacitor/cli'
  * No server URL appears anywhere in this file, on purpose. One APK works against
  * anyone's instance, and the address is asked for at first launch.
  */
+/**
+ * True when this build installs alongside the published app rather than
+ * replacing it — `AL_APP_ID_SUFFIX` in .env.build, which scripts/apk.sh turns
+ * into an application id suffix. Read here as well as in Gradle because the two
+ * apps need to differ in more than their package name: see `hostname` below.
+ *
+ * Any suffix means "a local build". The value itself is not used, so the origin
+ * stays one of exactly two known strings — the server has to allow it by name,
+ * and an allowlist that has to guess is not one.
+ */
+const isLocalBuild = Boolean(process.env.AL_APP_ID_SUFFIX)
+
 const config: CapacitorConfig = {
   appId: 'io.blurrycontour.activitylens',
   appName: 'Activity Lens',
@@ -47,7 +59,13 @@ const config: CapacitorConfig = {
     // collide with a real site someone registers later, and browsers treat it as
     // a secure context exactly like localhost itself. Anything under a real TLD
     // would be a name we do not own.
-    hostname: 'activity-lens.localhost',
+    //
+    // A local build gets its own host for the same reason it gets its own
+    // package name. Sharing one means the password manager sees a single site:
+    // it offers the production credentials when signing in to the dev app, and
+    // saving a different account there overwrites — or clutters — the entry for
+    // the app actually in use. Different origins are two separate entries.
+    hostname: isLocalBuild ? 'activity-lens-dev.localhost' : 'activity-lens.localhost',
   },
 }
 

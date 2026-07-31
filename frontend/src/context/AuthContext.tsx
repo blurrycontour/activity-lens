@@ -3,12 +3,15 @@ import { api, ApiError, type ApiUser, type AuthFeatures } from '../lib/api'
 import { clearApiCache } from '../lib/swCache'
 import { isGatewayError } from '../lib/network'
 import { isNative, setAuthToken } from '../lib/serverConfig'
+import { startNativeSSO } from '../lib/native/nativeAuth'
 
 interface AuthState {
   user: ApiUser | null
   features: AuthFeatures | null
   loading: boolean
   login: (identifier: string, password: string) => Promise<void>
+  /** Native-only: runs the browser SSO flow and signs in with what comes back. */
+  loginWithSSO: (signal: AbortSignal) => Promise<void>
   register: (payload: { username: string; email: string; displayName: string; password: string }) => Promise<void>
   logout: () => Promise<void>
   refresh: () => Promise<void>
@@ -125,6 +128,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     writeCachedUser(user)
   }, [])
 
+  // The same landing as login(), from a different starting point: the browser
+  // brought back a code instead of the user typing a password, and everything
+  // after the token arrives is identical.
+  const loginWithSSO = useCallback(async (signal: AbortSignal) => {
+    const result = await startNativeSSO(signal)
+    if (!result) return
+    const { token, user } = await api.ssoExchange(result.code, result.verifier)
+    await setAuthToken(token)
+    setUserState(user)
+    writeCachedUser(user)
+  }, [])
+
   const register = useCallback(
     async (payload: { username: string; email: string; displayName: string; password: string }) => {
       const { user } = await api.register(payload)
@@ -155,7 +170,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const setUser = useCallback((u: ApiUser) => { setUserState(u); writeCachedUser(u) }, [])
 
   return (
-    <AuthContext.Provider value={{ user, features, loading, login, register, logout, refresh, setUser }}>
+    <AuthContext.Provider value={{ user, features, loading, login, loginWithSSO, register, logout, refresh, setUser }}>
       {children}
     </AuthContext.Provider>
   )

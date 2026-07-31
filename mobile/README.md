@@ -159,6 +159,8 @@ regenerated.
 | `java/.../AppUpdatePlugin.java` | new | In-app update: streams the APK into a `PackageInstaller` session with progress. |
 | `java/.../MainActivity.java` | registers both plugins | Plugins in this module are not auto-discovered the way npm ones are. |
 | `AndroidManifest.xml` | `REQUEST_INSTALL_PACKAGES` | Needed to install an update. The user must still grant "install unknown apps" and confirm each install. |
+| `AndroidManifest.xml` | `VIEW` intent filter on `${applicationId}://auth` | Where the browser returns a finished SSO sign-in. `${applicationId}` so a local build claims a different scheme than the published app. |
+| `java/.../NativeAuthPlugin.java` | new | Opens SSO in a Custom Tab and collects the code the deep link brings back. |
 
 ## Distribution and updating
 
@@ -244,8 +246,57 @@ dedupe is built on — does not exist outside one. The app would install and the
 fail to import a file. `.localhost` is reserved by RFC 6761, never resolves, and
 is treated as a secure context, so it gets the distinct origin with none of that.
 
-The backend's CORS allowlist (`backend/internal/httpapi/cors.go`) has to name the
-same host. A mismatch shows up as every request from the app failing CORS.
+A local build (`AL_APP_ID_SUFFIX`) serves itself from
+`https://activity-lens-dev.localhost` instead, for the same reason it gets its
+own package name: with one host, the password manager sees a single site, offers
+the production account when signing in to the dev app, and saving a different one
+there competes with the entry for the app actually in use. Any suffix maps to
+that one host, so the origin is always one of exactly two known strings — the
+server has to allow it by name, and an allowlist that has to guess is not one.
+
+The backend's CORS allowlist (`backend/internal/httpapi/cors.go`) has to name
+both hosts. A mismatch shows up as every request from the app failing CORS.
+
+### SSO
+
+The web app signs in with SSO by following a link: the server sets a session
+cookie and redirects back. None of that reaches the app. Its WebView is on its
+own origin, cookies cannot cross that boundary, and CORS here never sends
+`Allow-Credentials` — so following the link natively just handed the user to the
+system browser looking at the *server's* copy of the app, signing the browser in
+and leaving the app exactly as it was.
+
+So the native flow is the one RFC 8252 prescribes, and it runs like this:
+
+1. the app generates a random **verifier** and sends only its SHA-256 digest, as
+   `/api/auth/oidc/login?native=<challenge>&scheme=<application id>`;
+2. `NativeAuthPlugin` opens that in a **Custom Tab** — the real browser, which is
+   where a provider is willing to render and where the user's existing session
+   with it already lives;
+3. the server carries the challenge through the flow in a short-lived cookie
+   (both hops happen in that same browser, so go-authkit needs no changes) and,
+   on success, redirects to `<application id>://auth?code=…`;
+4. the app redeems the code **and its verifier** at `/api/auth/oidc/exchange` for
+   an ordinary bearer token.
+
+The verifier is the whole point of the last step. Android grants no exclusivity
+over a custom scheme, so any installed app can register the same one and receive
+whatever the browser sends — the deep link is assumed to be readable by others,
+and carries nothing usable without a secret that never left the device. Sending
+the token directly would have been half the code and a live session handed to
+whoever else was listening.
+
+Two smaller consequences worth knowing:
+
+- **The identity provider needs no reconfiguration.** Its redirect URI still
+  points at this server's `/api/auth/oidc/callback`; only the last hop changes.
+- **The browser is not left signed in.** No session cookie is set on the native
+  path, so the flow leaves no second copy of the credential behind.
+
+The `scheme` parameter is a redirect target supplied by the client, which is why
+the server matches it against an allowlist (`appSchemePattern` in
+`backend/internal/httpapi/oidc_native.go`) rather than using it — otherwise it
+would be an open redirect with a working sign-in attached.
 
 ### System bars
 
