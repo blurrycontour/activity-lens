@@ -4,6 +4,8 @@ import {
   disableNativePush, enableNativePush, listDistributors, nativePushStatus,
   NOTIFICATIONS_DENIED, type Distributor, type NativePushStatus,
 } from '../lib/native/unifiedPush'
+import Field from './Field'
+import Dropdown from './Dropdown'
 
 interface NativePushCardProps {
   /** The account's master push preference, shared with the web toggle. */
@@ -105,23 +107,23 @@ export default function NativePushCard({ pushPref, onPushPrefChange }: NativePus
       </label>
 
       {distributors.length > 1 && (
-        <label style={{ display: 'block', marginTop: 12 }}>
-          <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-3)' }}>
-            Distributor
-          </span>
-          <select
-            className="select"
-            style={{ width: '100%', maxWidth: 220, marginTop: 6 }}
-            value={chosen}
-            /* Locked while enrolled: switching means giving the endpoint back and
-               asking the other distributor for a new one, so it is a deliberate
-               off-then-on rather than something a stray tap can do. */
-            disabled={busy || on}
-            onChange={e => setChosen(e.target.value)}
-          >
-            {distributors.map(d => <option key={d.packageName} value={d.packageName}>{d.label}</option>)}
-          </select>
-        </label>
+        <div style={{ marginTop: 12 }}>
+          <Field label="Distributor">
+            <div style={{ maxWidth: 220 }}>
+              <Dropdown
+                block
+                value={chosen}
+                options={distributors.map(d => ({ value: d.packageName, label: d.label }))}
+                /* Locked while enrolled: switching means giving the endpoint back
+                   and asking the other distributor for a new one, so it is a
+                   deliberate off-then-on rather than something a stray tap can do. */
+                disabled={busy || on}
+                onChange={setChosen}
+                ariaLabel="Push distributor"
+              />
+            </div>
+          </Field>
+        </div>
       )}
 
       <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8, lineHeight: 1.5 }}>

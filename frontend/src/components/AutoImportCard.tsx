@@ -5,6 +5,7 @@ import {
   setFolderSyncInterval, type FolderSyncStatus,
 } from '../lib/native/folderSync'
 import Field from './Field'
+import Dropdown, { type DropdownOption } from './Dropdown'
 
 /**
  * How often to look. Fifteen minutes is WorkManager's floor — anything shorter is
@@ -18,6 +19,9 @@ const INTERVALS = [
   { minutes: 360, label: 'Every 6 hours' },
   { minutes: 1440, label: 'Daily' },
 ]
+
+const INTERVAL_OPTIONS: DropdownOption<number>[] =
+  INTERVALS.map(i => ({ value: i.minutes, label: i.label }))
 
 /** "3m ago", or nothing at all when it has never run. */
 function ago(millis: number): string | null {
@@ -139,15 +143,16 @@ export default function AutoImportCard() {
               label="How often"
               hint="This phone only — it is not shared with your other devices."
             >
-              <select
-                className="select"
-                style={{ width: '100%', maxWidth: 220 }}
-                value={status?.intervalMinutes ?? 15}
-                disabled={busy || !status?.enabled}
-                onChange={e => void run('settings', () => setFolderSyncInterval(Number(e.target.value)))}
-              >
-                {INTERVALS.map(i => <option key={i.minutes} value={i.minutes}>{i.label}</option>)}
-              </select>
+              <div style={{ maxWidth: 220 }}>
+                <Dropdown
+                  block
+                  value={status?.intervalMinutes ?? 15}
+                  options={INTERVAL_OPTIONS}
+                  disabled={busy || !status?.enabled}
+                  onChange={v => void run('settings', () => setFolderSyncInterval(v))}
+                  ariaLabel="How often to check"
+                />
+              </div>
             </Field>
           </div>
 

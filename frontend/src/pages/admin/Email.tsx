@@ -5,8 +5,13 @@ import PasswordInput from '../../components/PasswordInput'
 import SettingsCard from '../../components/SettingsCard'
 import Field from '../../components/Field'
 import StatusMsg, { type Msg } from '../../components/StatusMsg'
+import Dropdown, { type DropdownOption } from '../../components/Dropdown'
 
-const ENCRYPTIONS = ['starttls', 'tls', 'none']
+const ENCRYPTION_OPTIONS: DropdownOption<string>[] = [
+  { value: 'starttls', label: 'STARTTLS' },
+  { value: 'tls', label: 'TLS' },
+  { value: 'none', label: 'None' },
+]
 
 interface Props {
   settings: AdminSettings
@@ -76,9 +81,14 @@ export default function EmailAdmin({ settings, onSaved }: Props) {
             <input className="input" style={{ width: '100%' }} value={fromName} disabled={ov.fromName} onChange={e => setFromName(e.target.value)} />
           </Field>
           <Field label="Encryption" overridden={ov.encryption}>
-            <select className="select" style={{ width: '100%' }} value={encryption} disabled={ov.encryption} onChange={e => setEncryption(e.target.value)}>
-              {ENCRYPTIONS.map(x => <option key={x} value={x}>{x}</option>)}
-            </select>
+            <Dropdown
+              block
+              value={encryption}
+              options={ENCRYPTION_OPTIONS}
+              disabled={ov.encryption}
+              onChange={setEncryption}
+              ariaLabel="Encryption"
+            />
           </Field>
         </div>
         <div className="settings-actions">

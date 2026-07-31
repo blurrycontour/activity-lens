@@ -7,8 +7,19 @@ import { describeGoal, newGoal, type Goal } from '../../lib/insights'
 import SettingsCard from '../../components/SettingsCard'
 import Field from '../../components/Field'
 import StatusMsg, { type Msg } from '../../components/StatusMsg'
+import Dropdown, { type DropdownOption } from '../../components/Dropdown'
 
 const MAX_GOALS = 12
+
+const SPORT_OPTIONS: DropdownOption<string>[] = [
+  { value: '', label: 'Any activity' },
+  ...WORKOUT_TYPES.map(t => ({ value: t, label: t, glyph: TYPE_ICON[t] })),
+]
+
+const PERIOD_OPTIONS: DropdownOption<Goal['period']>[] = [
+  { value: 'week', label: 'Week' },
+  { value: 'month', label: 'Month' },
+]
 
 /** Targets the dashboard tracks a streak against. */
 export default function GoalsSettings() {
@@ -67,16 +78,22 @@ export default function GoalsSettings() {
               />
             </Field>
             <Field label="Sport">
-              <select className="select" style={{ width: '100%' }} value={g.type} onChange={e => update(i, { type: e.target.value as Goal['type'] })}>
-                <option value="">Any activity</option>
-                {WORKOUT_TYPES.map(t => <option key={t} value={t}>{TYPE_ICON[t]} {t}</option>)}
-              </select>
+              <Dropdown
+                block
+                value={g.type ?? ''}
+                options={SPORT_OPTIONS}
+                onChange={v => update(i, { type: v as Goal['type'] })}
+                ariaLabel="Sport"
+              />
             </Field>
             <Field label="Per">
-              <select className="select" style={{ width: '100%' }} value={g.period} onChange={e => update(i, { period: e.target.value as Goal['period'] })}>
-                <option value="week">Week</option>
-                <option value="month">Month</option>
-              </select>
+              <Dropdown
+                block
+                value={g.period}
+                options={PERIOD_OPTIONS}
+                onChange={v => update(i, { period: v })}
+                ariaLabel="Period"
+              />
             </Field>
             <Field label="Min km">
               <input

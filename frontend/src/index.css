@@ -497,7 +497,11 @@ body {
    replaced could only scroll sideways. */
 .user-row {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto minmax(0, auto) auto;
+  /* Fixed tracks, not `auto`. Every row is its own grid container, so an `auto`
+     column is sized by that row's content alone — and the row for your own
+     account has "This is you" where the others have two icon buttons, which was
+     enough to knock every column out of line with the row above it. */
+  grid-template-columns: minmax(0, 1fr) 128px 96px 96px 80px;
   align-items: center;
   gap: 12px;
   padding: 10px 12px;
@@ -506,7 +510,16 @@ body {
   border: 1px solid var(--border);
 }
 .user-row-who { min-width: 0; }
-.user-row-actions { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+.user-row-role { min-width: 0; }
+.user-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: flex-end;
+  min-width: 0;
+}
+/* "This is you" stands in for the buttons; it has to fit the same track. */
+.user-row-actions .field-hint { text-align: right; line-height: 1.3; }
 .user-row-seen { white-space: nowrap; }
 
 .badge-ok { background: color-mix(in srgb, var(--success) 16%, transparent); color: var(--success); }
@@ -1125,6 +1138,20 @@ body {
   position: relative;
   display: inline-block;
 }
+/* Fills its column, for forms where a control should match the inputs beside
+   it rather than sit at its natural width. */
+.al-dropdown.block { display: block; width: 100%; }
+.al-dropdown.block .al-dropdown-trigger { width: 100%; min-width: 0; }
+.al-dropdown.block .al-dropdown-menu { left: 0; right: 0; min-width: 0; }
+
+.al-dropdown-trigger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.al-dropdown-trigger:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
 .al-dropdown-trigger {
   display: flex;
   align-items: center;
@@ -1220,9 +1247,10 @@ body {
   .stat-card-value { font-size: 21px; }
   .stat-card-unit { font-size: 11px; }
   .stat-card-label { font-size: 10px; }
-  /* The period is already stated once in the page header, and a 110px
-     sparkline says nothing at this size. */
-  .stat-card-sub, .stat-card-spark { display: none; }
+  /* The period is already stated once in the page header. The sparkline stays —
+     it is the only thing on the card that shows shape rather than a number —
+     but at a narrower size; StatCard passes the smaller dimensions. */
+  .stat-card-sub { display: none; }
 }
 
 .stat-grid {

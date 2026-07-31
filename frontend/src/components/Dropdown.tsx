@@ -18,6 +18,9 @@ interface DropdownProps<T extends string | number> {
   onChange: (v: T) => void
   /** Icon at the far left of the trigger. Omit when options carry colour dots. */
   icon?: React.ReactNode
+  /** Fill the available width, for use inside a form field. */
+  block?: boolean
+  disabled?: boolean
   ariaLabel?: string
 }
 
@@ -31,10 +34,14 @@ interface DropdownProps<T extends string | number> {
  * look alike.
  */
 export default function Dropdown<T extends string | number>({
-  value, options, onChange, icon, ariaLabel,
+  value, options, onChange, icon, block, disabled, ariaLabel,
 }: DropdownProps<T>) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+
+  // A control that becomes disabled while its menu is open would leave the menu
+  // stranded with no way to dismiss it.
+  useEffect(() => { if (disabled) setOpen(false) }, [disabled])
 
   useEffect(() => {
     function handle(e: MouseEvent) {
@@ -63,11 +70,12 @@ export default function Dropdown<T extends string | number>({
   )
 
   return (
-    <div className="al-dropdown" ref={ref}>
+    <div className={`al-dropdown${block ? ' block' : ''}`} ref={ref}>
       <button
         className="al-dropdown-trigger"
         onClick={() => setOpen(o => !o)}
         type="button"
+        disabled={disabled}
         aria-expanded={open}
         aria-label={ariaLabel}
       >

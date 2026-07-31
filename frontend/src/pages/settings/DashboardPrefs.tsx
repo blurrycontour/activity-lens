@@ -5,6 +5,7 @@ import {
 } from '../../lib/dashboardConfig'
 import SettingsCard from '../../components/SettingsCard'
 import Field from '../../components/Field'
+import Dropdown from '../../components/Dropdown'
 
 /** Which dashboard cards show, and over what period. */
 export default function DashboardSettings() {
@@ -47,14 +48,15 @@ export default function DashboardSettings() {
           label="Time window"
           info="Totals and the activity mix are calculated over this window."
         >
-          <select
-            className="select"
-            style={{ width: '100%', maxWidth: 240 }}
-            value={cfg.windowDays}
-            onChange={e => setCfg(prev => ({ ...prev, windowDays: Number(e.target.value) }))}
-          >
-            {WINDOW_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
+          <div style={{ maxWidth: 240 }}>
+            <Dropdown
+              block
+              value={cfg.windowDays}
+              options={WINDOW_OPTIONS}
+              onChange={v => setCfg(prev => ({ ...prev, windowDays: v }))}
+              ariaLabel="Time window"
+            />
+          </div>
         </Field>
 
         <label className="switch">

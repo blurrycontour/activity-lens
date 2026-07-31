@@ -7,6 +7,7 @@ import {
 } from 'recharts'
 import { TrendingUp, Zap, Flame, Clock, Mountain, Heart, Trophy, Target, Activity, Footprints } from 'lucide-react'
 import { useLocalStorage } from '../lib/useLocalStorage'
+import { useIsMobile } from '../lib/useIsMobile'
 import InfoTip from '../components/InfoTip'
 import Sparkline from '../components/Sparkline'
 import { api, type Equipment } from '../lib/api'
@@ -50,6 +51,10 @@ function StatCard({ icon, label, value, unit, sub, delta, spark, color }: {
   spark?: number[]
   color?: string
 }) {
+  // The sparkline is a fixed-size SVG, so the size has to be chosen here rather
+  // than by CSS — hence the hook in a presentational component.
+  const isMobile = useIsMobile()
+
   return (
     <div className="card stat-card">
       <div className="stat-card-head">
@@ -63,7 +68,12 @@ function StatCard({ icon, label, value, unit, sub, delta, spark, color }: {
       </div>
       {spark && spark.length > 1 && (
         <span className="stat-card-spark">
-          <Sparkline values={spark} color={color ?? 'var(--primary)'} width={110} height={22} />
+          <Sparkline
+            values={spark}
+            color={color ?? 'var(--primary)'}
+            width={isMobile ? 68 : 110}
+            height={isMobile ? 16 : 22}
+          />
         </span>
       )}
       {sub && <span className="stat-card-sub">{sub}</span>}

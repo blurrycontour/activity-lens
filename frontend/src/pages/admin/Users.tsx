@@ -7,8 +7,14 @@ import ConfirmDialog from '../../components/ConfirmDialog'
 import SettingsCard from '../../components/SettingsCard'
 import Field from '../../components/Field'
 import StatusMsg, { type Msg } from '../../components/StatusMsg'
+import Dropdown, { type DropdownOption } from '../../components/Dropdown'
 
 const ROLES = ['administrator', 'editor', 'reader']
+
+const ROLE_OPTIONS: DropdownOption<string>[] = ROLES.map(r => ({
+  value: r,
+  label: r.charAt(0).toUpperCase() + r.slice(1),
+}))
 
 function fmtDate(iso: string) {
   if (!iso) return 'Never'
@@ -120,9 +126,13 @@ export default function UsersAdmin({ users, onChanged }: Props) {
 
                 <div className="user-row-role">
                   {editing ? (
-                    <select className="select" style={{ width: '100%' }} value={draftRole} onChange={e => setDraftRole(e.target.value)}>
-                      {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-                    </select>
+                    <Dropdown
+                      block
+                      value={draftRole}
+                      options={ROLE_OPTIONS}
+                      onChange={setDraftRole}
+                      ariaLabel="Role"
+                    />
                   ) : (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, textTransform: 'capitalize' }}>
                       {u.role}
@@ -246,9 +256,7 @@ function CreateUser({ onDone, onCancel }: { onDone: () => void; onCancel: () => 
           <PasswordInput autoComplete="new-password" value={password} onChange={e => setPassword(e.target.value)} />
         </Field>
         <Field label="Role">
-          <select className="select" style={{ width: '100%' }} value={role} onChange={e => setRole(e.target.value)}>
-            {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-          </select>
+          <Dropdown block value={role} options={ROLE_OPTIONS} onChange={setRole} ariaLabel="Role" />
         </Field>
       </div>
       <div className="settings-actions">

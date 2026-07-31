@@ -4,6 +4,21 @@ import { ApiError } from '../../lib/api'
 import SettingsCard from '../../components/SettingsCard'
 import Field from '../../components/Field'
 import StatusMsg, { type Msg } from '../../components/StatusMsg'
+import Dropdown, { type DropdownOption } from '../../components/Dropdown'
+
+type Sex = 'male' | 'female' | ''
+type CalorieMethod = 'heart-rate' | 'distance'
+
+const SEX_OPTIONS: DropdownOption<Sex>[] = [
+  { value: '', label: 'Prefer not to say' },
+  { value: 'male', label: 'Male' },
+  { value: 'female', label: 'Female' },
+]
+
+const CALORIE_OPTIONS: DropdownOption<CalorieMethod>[] = [
+  { value: 'heart-rate', label: 'Heart rate, then distance' },
+  { value: 'distance', label: 'Distance only' },
+]
 
 /**
  * Body metrics and performance thresholds.
@@ -15,12 +30,12 @@ import StatusMsg, { type Msg } from '../../components/StatusMsg'
 export default function BodySettings() {
   const { prefs, save } = usePreferences()
 
-  const [sex, setSex] = useState<'male' | 'female' | ''>('')
+  const [sex, setSex] = useState<Sex>('')
   const [birthYear, setBirthYear] = useState('')
   const [heightCm, setHeightCm] = useState('')
   const [stepLengthCm, setStepLengthCm] = useState('')
   const [bodyWeightKg, setBodyWeightKg] = useState('70')
-  const [calorieMethod, setCalorieMethod] = useState<'heart-rate' | 'distance'>('heart-rate')
+  const [calorieMethod, setCalorieMethod] = useState<CalorieMethod>('heart-rate')
   const [maxHr, setMaxHr] = useState('')
   const [restingHr, setRestingHr] = useState('')
   const [thresholdPace, setThresholdPace] = useState('')
@@ -80,11 +95,13 @@ export default function BodySettings() {
       <SettingsCard title="About you" description="Private to your account. Used to personalise estimates.">
         <div className="field-grid">
           <Field label="Sex">
-            <select className="select" style={{ width: '100%' }} value={sex} onChange={e => setSex(e.target.value as typeof sex)}>
-              <option value="">Prefer not to say</option>
-              <option value="male">Male</option>
-              <option value="female">Female</option>
-            </select>
+            <Dropdown
+              block
+              value={sex}
+              options={SEX_OPTIONS}
+              onChange={setSex}
+              ariaLabel="Sex"
+            />
           </Field>
           <Field label="Birth year">
             <input className="input" type="number" min="1900" max={new Date().getFullYear()} placeholder="1990" style={{ width: '100%' }} value={birthYear} onChange={e => setBirthYear(e.target.value)} />
@@ -115,10 +132,15 @@ export default function BodySettings() {
           label="Method"
           info="Only used when an imported workout does not already report calories. The heart-rate method draws on your sex, age and weight above."
         >
-          <select className="select" style={{ width: '100%', maxWidth: 260 }} value={calorieMethod} onChange={e => setCalorieMethod(e.target.value as typeof calorieMethod)}>
-            <option value="heart-rate">Heart rate, then distance</option>
-            <option value="distance">Distance only</option>
-          </select>
+          <div style={{ maxWidth: 260 }}>
+            <Dropdown
+              block
+              value={calorieMethod}
+              options={CALORIE_OPTIONS}
+              onChange={setCalorieMethod}
+              ariaLabel="Calorie method"
+            />
+          </div>
         </Field>
       </SettingsCard>
 
