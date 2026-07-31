@@ -34,6 +34,9 @@ import { applySystemBars } from './lib/native/systemBars'
 import { onPushMessage } from './lib/native/unifiedPush'
 import { api } from './lib/api'
 
+/** Fired when openLink changes the URL without unmounting the page it lands on. */
+export const LOCATION_EVENT = 'al:location'
+
 const SIDEBAR_KEY = 'al_sidebar_w'
 const THEME_KEY = 'al_theme'
 const ACCENT_KEY = 'al_accent'
@@ -231,7 +234,15 @@ export default function App() {
     }
     setSelectedWorkout(null)
     setPage(loc.page)
-    window.history.pushState(null, '', pathForPage(loc.page))
+    // The query string is kept, not dropped: a notification links to a filtered
+    // list ("/workouts?source=autoimport"), and pathForPage alone would land on
+    // the unfiltered page and leave the user hunting.
+    const url = new URL(link, window.location.origin)
+    window.history.pushState(null, '', pathForPage(loc.page) + url.search)
+    // The destination page may already be mounted, in which case nothing about
+    // it re-renders and a filter in the query string would be ignored. This says
+    // "the URL changed" to whoever cares.
+    window.dispatchEvent(new Event(LOCATION_EVENT))
   }, [])
 
   // Two things arrive from the service worker: a tapped OS notification asking

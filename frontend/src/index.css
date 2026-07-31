@@ -1701,8 +1701,50 @@ body {
   justify-content: center;
   font-size: 22px;
   background: color-mix(in srgb, var(--row-accent) 12%, transparent);
+  /* Anchors .origin-mark, which sits on the icon's corner. */
+  position: relative;
 }
 .workout-row-body { min-width: 0; }
+
+/* The selection tick, on the type icon's top-left — the opposite corner to
+   .origin-mark, which shares this icon. Drawing them in the same place meant a
+   row stopped telling you it was auto-imported the moment you selected it. */
+.selection-mark {
+  position: absolute;
+  left: -3px;
+  top: -3px;
+  width: 15px;
+  height: 15px;
+  border-radius: 99px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-3);
+  color: var(--bg);
+  border: 1.5px solid var(--bg-2);
+}
+.selection-mark.on {
+  background: var(--primary);
+}
+
+/* The "arrived on its own" mark on a workout's type icon. Sits on the corner
+   rather than beside it: the row is already dense, and this has to read as a
+   property of the workout rather than as another badge competing for the line.
+   The ring in --bg-2 is what keeps it legible over the tinted icon behind it. */
+.origin-mark {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 15px;
+  height: 15px;
+  border-radius: 99px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-3);
+  color: var(--text-2);
+  border: 1.5px solid var(--bg-2);
+}
 .workout-row-title { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .workout-row-name {
   font-weight: 600;

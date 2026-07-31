@@ -77,6 +77,20 @@ final class FolderScanner {
     }
 
     static Result scan(Context context) {
+        return scan(context, false);
+    }
+
+    /**
+     * @param force re-reads files this device has already dealt with.
+     *
+     * The normal scan skips anything it has seen, which is what keeps a
+     * fifteen-minute job cheap — but it also means a workout deleted from the
+     * library never comes back, because the file that produced it is still
+     * marked as handled here. Forcing forgets that and offers everything again;
+     * the server's content-hash check still keeps what is genuinely still there
+     * from being imported twice.
+     */
+    static Result scan(Context context, boolean force) {
         Uri tree = FolderSync.tree(context);
         if (tree == null) {
             return new Result(false, 0, 0, "No folder chosen");
@@ -94,7 +108,7 @@ final class FolderScanner {
         }
 
         // Candidates: files we have never opened, in a format the server takes.
-        Set<String> seen = FolderSync.seen(context);
+        Set<String> seen = force ? new HashSet<>() : FolderSync.seen(context);
         List<DocumentFile> candidates = new ArrayList<>();
         int skipped = 0;
         for (DocumentFile file : dir.listFiles()) {
@@ -288,6 +302,10 @@ final class FolderScanner {
             out.writeBytes("--" + boundary + "\r\n");
             out.writeBytes("Content-Disposition: form-data; name=\"deferChecks\"\r\n\r\n1\r\n");
             out.writeBytes("--" + boundary + "\r\n");
+            // How it got here, which nothing else can tell: the request is
+            // otherwise identical to a file the user picked by hand.
+            out.writeBytes("Content-Disposition: form-data; name=\"source\"\r\n\r\nautoimport\r\n");
+            out.writeBytes("--" + boundary + "\r\n");
             out.write(("Content-Disposition: form-data; name=\"file\"; filename=\"" + sanitize(filename) + "\"\r\n").getBytes(StandardCharsets.UTF_8));
             out.writeBytes("Content-Type: application/octet-stream\r\n\r\n");
             out.write(data);
@@ -317,6 +335,8 @@ final class FolderScanner {
         long overhead = ("--" + boundary + "\r\n").length()
             + "Content-Disposition: form-data; name=\"deferChecks\"\r\n\r\n1\r\n".length()
             + ("--" + boundary + "\r\n").length()
+            + "Content-Disposition: form-data; name=\"source\"\r\n\r\nautoimport\r\n".length()
+            + ("--" + boundary + "\r\n").length()
             + ("Content-Disposition: form-data; name=\"file\"; filename=\"" + sanitize(filename) + "\"\r\n").getBytes(StandardCharsets.UTF_8).length
             + "Content-Type: application/octet-stream\r\n\r\n".length()
             + ("\r\n--" + boundary + "--\r\n").length();
@@ -333,6 +353,10 @@ final class FolderScanner {
         HttpURLConnection connection = null;
         try {
             JSONObject body = new JSONObject();
+            // Only the count and the folder. Which workouts the batch brought in
+            // is the server's own question to answer — see ImportWindowStart —
+            // because a timestamp from this phone depends on its clock agreeing
+            // with the server's, and on every installed version sending it.
             body.put("imported", imported);
             String label = FolderSync.label(context);
             if (label != null) {

@@ -38,6 +38,7 @@ public class FolderSyncPlugin extends Plugin {
         result.put("enabled", FolderSync.enabled(getContext()));
         result.put("lastScan", FolderSync.lastScan(getContext()));
         result.put("lastResult", FolderSync.lastResult(getContext()));
+        result.put("intervalMinutes", FolderSync.intervalMinutes(getContext()));
         // A folder can stop being readable without anyone touching this app: an
         // SD card removed, or a cloud provider that revoked the grant. Reported
         // so Settings can say so instead of showing a watch that quietly does
@@ -112,9 +113,10 @@ public class FolderSyncPlugin extends Plugin {
      */
     @PluginMethod
     public void scanNow(PluginCall call) {
+        boolean force = Boolean.TRUE.equals(call.getBoolean("force", false));
         // Off the main thread: this reads files and talks to the server.
         new Thread(() -> {
-            FolderScanner.Result result = FolderScanner.scan(getContext());
+            FolderScanner.Result result = FolderScanner.scan(getContext(), force);
             JSObject response = new JSObject();
             response.put("ok", result.ok);
             response.put("imported", result.imported);
@@ -122,6 +124,29 @@ public class FolderSyncPlugin extends Plugin {
             response.put("message", result.message);
             call.resolve(response);
         }).start();
+    }
+
+    /**
+     * Changes how often the periodic scan runs.
+     *
+     * A per-device setting, deliberately kept out of the database: it describes
+     * this phone's battery and this phone's folder, and syncing it would mean a
+     * tablet that never sees the folder dictating how often the phone looks.
+     */
+    @PluginMethod
+    public void setInterval(PluginCall call) {
+        Integer minutes = call.getInt("minutes");
+        if (minutes == null) {
+            call.reject("minutes is required");
+            return;
+        }
+        FolderSync.setIntervalMinutes(getContext(), minutes);
+        // Rescheduled immediately, or the new interval would not take effect
+        // until something else happened to restart the job.
+        if (FolderSync.enabled(getContext())) {
+            FolderSyncWorker.schedule(getContext());
+        }
+        call.resolve();
     }
 
     /** Forgets the folder and stops watching. */

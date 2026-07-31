@@ -20,7 +20,7 @@ interface UnifiedPushPlugin {
 interface PluginEvents {
   endpoint: { endpoint?: string | null }
   registrationFailed: { reason?: string }
-  notificationTap: NotificationTap
+  notificationTap: Record<string, never>
   message: PushMessage
 }
 
@@ -178,6 +178,44 @@ export async function syncNativePush(): Promise<void> {
   await api.pushSubscribeUnifiedPush(endpoint).catch(() => {})
 }
 
+/** Remembers that the automatic enrolment below has had its one attempt. */
+const AUTO_ENROL_KEY = 'push.autoEnrolled'
+
+/**
+ * Turns push on by itself, once, when everything needed is already in place.
+ *
+ * The permission prompt happens at first launch, so a user who granted it has
+ * said yes to notifications — and then had to find a switch in Settings to
+ * actually receive any. That second step is the one nobody takes, and it made
+ * the whole feature look broken. The web app has always behaved this way
+ * (maybePromptForPush enrols as soon as permission is granted); this is the same
+ * rule for the app.
+ *
+ * Every condition here is a reason not to act:
+ *
+ *   permission not granted   the user said no, and enrolling would be silent
+ *   no distributor           nothing to enrol with
+ *   already registered       nothing to do
+ *   preference off           the user turned it off, and this must not undo that
+ *   already attempted        one try; a failure must not retry on every launch
+ */
+export async function maybeEnrolNativePush(pushPref: boolean): Promise<void> {
+  if (!isNative() || !pushPref) return
+  if (localStorage.getItem(AUTO_ENROL_KEY) === '1') return
+
+  const status = await nativePushStatus()
+  if (!status.permitted || !status.available || status.endpoint) return
+
+  const distributors = await listDistributors()
+  if (distributors.length === 0) return
+
+  localStorage.setItem(AUTO_ENROL_KEY, '1')
+  // The first distributor, not a chosen one: with several installed, picking for
+  // the user is worse than leaving it to Settings, but with the usual one
+  // installed this is the difference between push working and not.
+  await enableNativePush(distributors[0].packageName).catch(() => {})
+}
+
 /**
  * Removes a notification the user has since read in the app from the Android
  * tray. The counterpart of the service worker's DISMISS_NOTIFICATION on web,
@@ -205,12 +243,19 @@ export async function consumeNotificationTap(): Promise<NotificationTap | null> 
 }
 
 /**
- * Subscribes to taps that arrive while the app is running. Returns an
- * unsubscribe function, so a component that re-renders does not accumulate
- * listeners and navigate several times for one tap.
+ * Subscribes to taps that arrive while the app is running.
+ *
+ * The event itself is empty — it means "something is waiting", and the tap is
+ * then taken with consumeNotificationTap. One home for the tap and one way to
+ * take it, so however the orderings fall out it is handled exactly once.
+ *
+ * Returns an unsubscribe function, so a component that re-renders does not
+ * accumulate listeners and navigate several times for one tap.
  */
 export function onNotificationTap(fn: (tap: NotificationTap) => void): () => void {
-  return subscribe('notificationTap', fn)
+  return subscribe('notificationTap', () => {
+    void consumeNotificationTap().then(tap => { if (tap) fn(tap) })
+  })
 }
 
 /**

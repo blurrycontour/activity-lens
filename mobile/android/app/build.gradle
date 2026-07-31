@@ -16,6 +16,16 @@ def alVersionCode = (project.findProperty('alVersionCode') ?: '1') as Integer
 // Without one, `assembleRelease` still produces an unsigned APK rather than
 // failing — that is the useful behaviour for anyone building their own copy,
 // and CI supplies the keystore through these same properties.
+// An application id suffix makes the build a separate app to Android: its own
+// package name, icon, data and place in the launcher. It is set by whoever is
+// building rather than derived from the build type, because "is this the real
+// app" is a question about *where* it was built, not how — a locally signed
+// release is still a test build and must not replace the one in daily use.
+//
+// Empty in CI, which has no .env.build; scripts/apk.sh passes whatever
+// AL_APP_ID_SUFFIX says.
+def alAppIdSuffix = project.findProperty('alAppIdSuffix') ?: ''
+
 def keystorePath = project.findProperty('alKeystore')
 def hasKeystore = keystorePath != null && file(keystorePath).exists()
 // PKCS#12 is the standard, interoperable keystore format and what keytool has
@@ -29,7 +39,10 @@ android {
     namespace = "io.blurrycontour.activitylens"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "io.blurrycontour.activitylens"
+        applicationId "io.blurrycontour.activitylens" + alAppIdSuffix
+        // Two identical "Activity Lens" icons in the launcher would be worse
+        // than one, so a suffixed build says what it is.
+        resValue "string", "app_name", alAppIdSuffix ? "Activity Lens Dev" : "Activity Lens"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode alVersionCode
@@ -57,30 +70,11 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
-            // Declared in both build types rather than in strings.xml, because a
-            // resValue and a resource of the same name collide.
-            resValue "string", "app_name", "Activity Lens"
             if (hasKeystore) {
                 signingConfig signingConfigs.release
             }
         }
         debug {
-            // A debug build is a *different app* to Android: its own package
-            // name, its own icon, its own data.
-            //
-            // Without this a local build and the one the server hands out are the
-            // same installed app, so testing a change means replacing the copy
-            // you actually use — and the two cannot coexist to be compared. The
-            // suffix costs nothing and makes "install my build alongside the real
-            // one" the default.
-            //
-            // Everything derived from the application id follows automatically,
-            // including the FileProvider authority. The label is set here for the
-            // same reason: two identical "Activity Lens" icons in the launcher
-            // would be worse than one.
-            applicationIdSuffix '.dev'
-            resValue "string", "app_name", "Activity Lens Dev"
-
             // Debug builds use the supplied keystore too, when there is one.
             //
             // Android refuses to replace an app with one signed by a different

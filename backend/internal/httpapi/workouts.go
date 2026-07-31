@@ -417,6 +417,30 @@ func (s *Server) handleFinalizeImport(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// autoImportLink points at the workouts this batch brought in.
+//
+// Straight to those, not the whole library: being shown everything and told
+// three of them are new is not an answer to "which three". A timestamp rather
+// than a list of ids, so the link stays short however many files a scan found.
+//
+// Closed at both ends. A notification outlives the moment it describes: open it
+// a day later, after the folder watch has run twice more, and an open-ended
+// window would have grown to cover those imports too — so "3 workouts imported"
+// would land on a list of seven, still captioned as the batch.
+//
+// Zero times mean "no window", and the link falls back to every auto-import.
+// That is the honest answer when the batch cannot be located — imprecise, but a
+// filter that matches nothing would be worse.
+func autoImportLink(since, until time.Time) string {
+	link := "/workouts?source=autoimport"
+	if since.IsZero() || until.IsZero() {
+		return link
+	}
+	link += "&since=" + url.QueryEscape(since.UTC().Format(time.RFC3339))
+	link += "&until=" + url.QueryEscape(until.UTC().Format(time.RFC3339))
+	return link
+}
+
 // notifyAutoImported reports an unattended import.
 //
 // Not deduped: two folder scans that both find files are two separate events,
@@ -426,6 +450,13 @@ func (s *Server) handleFinalizeImport(w http.ResponseWriter, r *http.Request) {
 func (s *Server) notifyAutoImported(r *http.Request, userID int64, count int, folder string) {
 	if s.notify == nil {
 		return
+	}
+	// Where the batch begins, read from the library rather than reported by the
+	// device that imported it. See ImportWindow: asking the client means
+	// trusting its clock and its version, and both fail silently.
+	since, until, err := s.workout.ImportWindow(r.Context(), userID, workout.SourceAutoImport, count)
+	if err != nil {
+		slog.Warn("could not resolve the auto-import window", "user_id", userID, "error", err)
 	}
 	title := "1 workout imported"
 	if count > 1 {
@@ -440,7 +471,7 @@ func (s *Server) notifyAutoImported(r *http.Request, userID int64, count int, fo
 		Kind:   notify.KindWorkoutImported,
 		Title:  title,
 		Body:   body,
-		Link:   "/workouts",
+		Link:   autoImportLink(since, until),
 	})
 }
 
@@ -516,6 +547,12 @@ func (s *Server) parseWorkoutUpload(w http.ResponseWriter, r *http.Request, user
 	// the workout already stored rather than creating a second copy.
 	sum := sha256.Sum256(data)
 	in.Source = workout.SourceUpload
+	// The Android folder watch says so, because nothing else can tell: the
+	// request is otherwise identical to a file the user picked by hand, and how a
+	// workout arrived is worth keeping.
+	if claimed := workout.Source(r.FormValue("source")); workout.ValidSource(claimed) {
+		in.Source = claimed
+	}
 	in.ContentHash = hex.EncodeToString(sum[:])
 	in.ExternalID = in.ContentHash
 	if prefs, err := s.settings.UserPreferences(r.Context(), userID); err == nil {

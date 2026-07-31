@@ -49,8 +49,30 @@ public class MainActivity extends BridgeActivity {
         // light/dark toggle.
         getWindow().setBackgroundDrawableResource(R.color.app_background);
 
+        // A notification tapped while the app was closed: the extras are on the
+        // intent that started us, and are put somewhere the page can find them
+        // whenever it finishes booting. Doing this here rather than only when
+        // asked is what makes a cold start work — by the time any JavaScript
+        // runs, the intent may have been superseded.
+        UnifiedPush.stashTap(this, getIntent());
+
         getOnBackPressedDispatcher().addCallback(this, backCallback);
         askForNotifications();
+    }
+
+    /**
+     * Keeps getIntent() current.
+     *
+     * Android hands a new intent to a running activity here and does *not*
+     * update what getIntent() returns, so without this the activity reports the
+     * intent it was launched with forever — and a notification tapped while the
+     * app was already open is read as whatever started it minutes earlier.
+     */
+    @Override
+    protected void onNewIntent(android.content.Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        UnifiedPush.stashTap(this, intent);
     }
 
     /**

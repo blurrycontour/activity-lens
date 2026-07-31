@@ -3,6 +3,7 @@ package workout
 import (
 	"context"
 	"fmt"
+	"time"
 )
 
 // Sharing business rules. The service is where redaction happens, so every
@@ -105,6 +106,11 @@ func (s *Service) GetBySourceID(ctx context.Context, userID int64, source Source
 // staying well under it keeps the query valid without the caller having to know
 // the dialect. Clients chunk larger batches.
 const MaxHashBatch = 500
+
+// ImportWindow spans the user's last n imports from a source.
+func (s *Service) ImportWindow(ctx context.Context, userID int64, source Source, n int) (start, end time.Time, err error) {
+	return s.repo.ImportWindow(ctx, userID, source, n)
+}
 
 // KnownContentHashes reports which of these files the user has already
 // imported, so a bulk import can skip uploading them.

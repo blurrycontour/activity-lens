@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { Bell, Check, Share2, Footprints, Trophy, Clock, X, Trash2, FolderDown } from 'lucide-react'
 import { api, apiURL, type AppNotification, type NotificationKind } from '../lib/api'
 import { dismissOSNotification, enablePush, maybePromptForPush, pushState, syncPushSubscription, type PushState } from '../lib/push'
-import { consumeNotificationTap, onNotificationTap, syncNativePush, type NotificationTap } from '../lib/native/unifiedPush'
+import { consumeNotificationTap, maybeEnrolNativePush, onNotificationTap, syncNativePush, type NotificationTap } from '../lib/native/unifiedPush'
 import { markNotificationOpened, PUSH_EVENT } from '../lib/notifications'
 import { useIsMobile } from '../lib/useIsMobile'
 
@@ -87,6 +87,13 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
       // closed — see syncNativePush. Independent of the VAPID key below, which
       // is a Web Push concern the app has no use for.
       void syncNativePush()
+      // Push on by default in the app, once, when notification permission is
+      // already granted — the same thing maybePromptForPush does for the web
+      // below. Reads the saved preference rather than assuming: someone who
+      // turned push off must not have it turned back on for them.
+      void api.getPreferences()
+        .then(p => maybeEnrolNativePush(p.notify?.push ?? true))
+        .catch(() => {})
 
       const key = await load()
       if (!key) return

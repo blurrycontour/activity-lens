@@ -118,6 +118,11 @@ npx cap sync android
 echo "==> Gradle assemble$BUILD_TYPE"
 export ORG_GRADLE_PROJECT_alVersionName="$AL_VERSION"
 export ORG_GRADLE_PROJECT_alVersionCode="$AL_VERSION_CODE"
+# Installs alongside the real app rather than replacing it. Set in .env.build for
+# a workstation and absent in CI, so a build from your tree can never take over
+# the copy you actually use — including a locally signed release build, which is
+# otherwise indistinguishable from the published one.
+export ORG_GRADLE_PROJECT_alAppIdSuffix="${AL_APP_ID_SUFFIX:-}"
 SIGNED=0
 if [ -n "${AL_KEYSTORE:-}" ]; then
   # Absolute, because Gradle resolves relative paths against the module dir.

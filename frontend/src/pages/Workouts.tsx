@@ -1,31 +1,41 @@
-import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { fmtDuration, fmtDist, fmtPace, TYPE_COLOR, TYPE_ICON, WORKOUT_TYPES, type WorkoutType, type Workout } from '../data/workouts'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useRefreshHandler } from '../context/RefreshContext'
-import { Search, Clock, Mountain, Flame, Download, Plus, Grid2X2, List, Navigation, Library, Inbox, Globe, Users, Share2, SlidersHorizontal, X } from 'lucide-react'
+import { Search, Clock, Mountain, Flame, Download, Plus, Grid2X2, List, Navigation, Library, Inbox, Globe, Users, Share2, SlidersHorizontal, X, Trash2, Check } from 'lucide-react'
 import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
-import SortDropdown, { compareBySort, SORT_OPTIONS, type SortKey } from '../components/SortDropdown'
+import SortDropdown, { SORT_OPTIONS, type SortKey } from '../components/SortDropdown'
 import FilterSheet, { type FilterGroup } from '../components/FilterSheet'
 import ShareDialog from '../components/ShareDialog'
 import UserAvatar, { userLabel } from '../components/UserAvatar'
-import { filterByRange, RANGE_OPTIONS } from '../lib/range'
+import SourceMark from '../components/SourceMark'
+import ConfirmDialog from '../components/ConfirmDialog'
+import { useLongPress } from '../lib/useLongPress'
+import { RANGE_OPTIONS } from '../lib/range'
 import { api } from '../lib/api'
 import { downloadWorkoutGPX, reportSaveFailure } from '../lib/download'
 import { useIsMobile } from '../lib/useIsMobile'
+import { LOCATION_EVENT } from '../App'
+import { useSessionState } from '../lib/useSessionState'
+import {
+  applyWorkoutFilters, DEFAULT_FILTERS, describeImportWindow, parseAutoImportParams,
+  type Scope, type WorkoutFilters,
+} from '../lib/workoutFilters'
+
+const FILTERS_KEY = 'workouts.filters'
 
 interface WorkoutsProps {
   onSelect: (w: Workout) => void
   onImport: () => void
 }
 
-/**
- * Which library is on screen. "Mine" comes from WorkoutsContext, which is
- * shared with the dashboard and analytics and must stay owner-only; the other
- * two are fetched here and kept in local state so they never contaminate it.
+/*
+ * Scope — which library is on screen — is defined with the filters it belongs
+ * to. "Mine" comes from WorkoutsContext, which is shared with the dashboard and
+ * analytics and must stay owner-only; the other two are fetched here and kept in
+ * local state so they never contaminate it.
  */
-type Scope = 'mine' | 'shared' | 'public'
-
 const SCOPES: { id: Scope; label: string; icon: React.ReactNode }[] = [
   { id: 'mine', label: 'My workouts', icon: <Library size={15} /> },
   { id: 'shared', label: 'Shared with me', icon: <Inbox size={15} /> },
@@ -34,16 +44,46 @@ const SCOPES: { id: Scope; label: string; icon: React.ReactNode }[] = [
 
 export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
   const { workouts, loading, refresh } = useWorkouts()
-  const [scope, setScope] = useState<Scope>('mine')
-  const [search, setSearch] = useState('')
-  const [typeFilter, setTypeFilter] = useState<WorkoutType | 'All'>('All')
-  const [sortBy, setSortBy] = useState<SortKey>('date-desc')
-  const [rangeDays, setRangeDays] = useState(0)
-  const [sharedOnly, setSharedOnly] = useState(false)
+  // Opening a workout unmounts this page, so every filter lived exactly as long
+  // as it took to look at one result and come back. Kept in sessionStorage
+  // rather than component state: it survives the round trip and a reload, and
+  // still starts clean in a new session, which is what someone expects of a
+  // search box they typed into an hour ago.
+  const [filters, setFilters] = useSessionState<WorkoutFilters>(FILTERS_KEY, DEFAULT_FILTERS)
+  const { scope, search, typeFilter, sortBy, rangeDays, sharedOnly, originFilter, since } = filters
+  const patch = useCallback(
+    (next: Partial<WorkoutFilters>) => setFilters(prev => ({ ...prev, ...next })),
+    [setFilters],
+  )
+  const setScope = (v: Scope) => patch({ scope: v })
+  const setSearch = (v: string) => patch({ search: v })
+  const setTypeFilter = (v: WorkoutType | 'All') => patch({ typeFilter: v })
+  const setSortBy = (v: SortKey) => patch({ sortBy: v })
+  const setRangeDays = (v: number) => patch({ rangeDays: v })
+  const setSharedOnly = (v: boolean) => patch({ sharedOnly: v })
   const [sharing, setSharing] = useState<Workout | null>(null)
   const [feeds, setFeeds] = useState<Partial<Record<Scope, Workout[]>>>({})
   const [feedError, setFeedError] = useState<string | null>(null)
   const [showFilters, setShowFilters] = useState(false)
+  /**
+   * Bulk selection, entered by pressing and holding a workout.
+   *
+   * null rather than an empty set, so "not selecting" and "selecting nothing"
+   * stay distinct: the second is a real state the user can reach by deselecting
+   * their last row, and the toolbar has to stay up when they do.
+   *
+   * Your own library only. The other two tabs are other people's workouts, and
+   * there is nothing to bulk do to them.
+   */
+  const [selected, setSelected] = useState<Set<string> | null>(null)
+  // Whether a history entry is standing in for the selection, so Android's back
+  // gesture — and the browser's back button — cancel it rather than leaving the
+  // page. Tracked in a ref because the popstate listener would otherwise close
+  // over a stale copy.
+  const selectionEntry = useRef(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const selecting = selected !== null && scope === 'mine'
   const isMobile = useIsMobile()
   const [view, setView] = useState<'list' | 'grid'>(() => {
     const saved = localStorage.getItem('workouts.view')
@@ -65,6 +105,32 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
       setFeedError('Could not load these workouts.')
     }
   }, [])
+
+  // Claims a ?source= filter from the URL, on mount and whenever a link lands
+  // here while this page is already showing.
+  useEffect(() => {
+    const claim = () => {
+      const claimed = parseAutoImportParams(window.location.search)
+      if (!claimed) return
+      // Auto-imported workouts are always your own.
+      patch({ ...claimed, scope: 'mine' })
+      // The library was loaded before these existed — the app was closed when
+      // they arrived — so without this the filtered list is empty until the user
+      // thinks to pull down.
+      void refresh()
+      // Taken out of the URL once applied: it is a one-shot handoff, and leaving
+      // it would re-apply the filter on every reload after the user cleared it.
+      const params = new URLSearchParams(window.location.search)
+      params.delete('source')
+      params.delete('since')
+      params.delete('until')
+      const query = params.toString()
+      window.history.replaceState(null, '', window.location.pathname + (query ? `?${query}` : ''))
+    }
+    claim()
+    window.addEventListener(LOCATION_EVENT, claim)
+    return () => window.removeEventListener(LOCATION_EVENT, claim)
+  }, [patch, refresh])
 
   // Feeds load on first visit to their tab rather than on mount, so opening
   // Workouts costs the same as it always did.
@@ -117,29 +183,105 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
     sortBy !== 'date-desc' && { key: 'sort', label: SORT_OPTIONS.find(o => o.value === sortBy)?.label ?? '', clear: () => setSortBy('date-desc') },
     // Sharing only filters your own library, so it never counts elsewhere.
     scope === 'mine' && sharedOnly && { key: 'shared', label: 'Shared only', clear: () => setSharedOnly(false) },
+    originFilter === 'autoimport' && {
+      key: 'origin',
+      label: describeImportWindow(since),
+      clear: () => patch({ originFilter: null, since: null, until: null }),
+    },
   ].filter(Boolean) as { key: string; label: string; clear: () => void }[]
 
   function resetFilters() {
     setTypeFilter('All')
     setSortBy('date-desc')
     setRangeDays(0)
-    setSharedOnly(false)
+    setFilters({ ...DEFAULT_FILTERS, scope })
+  }
+
+  /**
+   * Enters selection mode, and puts a history entry in front of the page.
+   *
+   * Back is how you leave a mode on Android: the phone's gesture, the button,
+   * and the browser's own back should all mean "never mind" here rather than
+   * "leave the workouts page". A pushed entry is what turns one into the other,
+   * and it is the same trick a dialog uses.
+   */
+  const startSelecting = useCallback((id: string) => {
+    setSelected(prev => new Set(prev ?? []).add(id))
+    if (selectionEntry.current) return
+    selectionEntry.current = true
+    window.history.pushState({ selecting: true }, '', window.location.href)
+  }, [])
+
+  /**
+   * Leaves selection mode.
+   *
+   * @param popped true when back is what ended it, in which case the entry is
+   *               already gone and going back again would leave the page.
+   */
+  const stopSelecting = useCallback((popped = false) => {
+    setSelected(null)
+    const hadEntry = selectionEntry.current
+    selectionEntry.current = false
+    if (hadEntry && !popped) window.history.back()
+  }, [])
+
+  useEffect(() => {
+    const onPop = () => {
+      // The entry being popped is ours only while a selection is up; otherwise
+      // this is ordinary navigation and none of our business.
+      if (selectionEntry.current) stopSelecting(true)
+    }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [stopSelecting])
+
+  // A selection is a set of ids from one library; carrying it to another tab
+  // would leave the toolbar counting rows that are no longer on screen.
+  useEffect(() => { stopSelecting() }, [scope, stopSelecting])
+
+  function toggle(id: string) {
+    setSelected(prev => {
+      const next = new Set(prev ?? [])
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  /**
+   * Deletes everything selected.
+   *
+   * One request per workout: there is no bulk endpoint, and adding one to save a
+   * handful of round trips would mean a second delete path to keep in step with
+   * the first — which owns cascading shares, equipment links and the archived
+   * upload. Failures are counted rather than thrown, so one workout that will
+   * not delete does not strand the other nine.
+   */
+  async function deleteSelected() {
+    const ids = [...(selected ?? [])]
+    setDeleting(true)
+    let failed = 0
+    for (const id of ids) {
+      try {
+        await api.deleteWorkout(id)
+      } catch {
+        failed++
+      }
+    }
+    await refresh()
+    setDeleting(false)
+    setConfirmDelete(false)
+    stopSelecting()
+    if (failed > 0) setFeedError(`${failed} of ${ids.length} could not be deleted.`)
   }
 
   const source = scope === 'mine' ? workouts : feeds[scope]
   const busy = source === undefined || (scope === 'mine' && loading)
 
-  const filtered = useMemo(() => {
-    let result = [...(source ?? [])]
-    if (typeFilter !== 'All') result = result.filter(w => w.type === typeFilter)
-    if (search) result = result.filter(w => w.name.toLowerCase().includes(search.toLowerCase()))
-    if (scope === 'mine' && sharedOnly) {
-      result = result.filter(w => w.visibility === 'public' || (w.sharedWithCount ?? 0) > 0)
-    }
-    result = filterByRange(result, rangeDays)
-    result.sort(compareBySort(sortBy))
-    return result
-  }, [source, search, typeFilter, sortBy, rangeDays, scope, sharedOnly])
+  const filtered = useMemo(
+    () => applyWorkoutFilters(source ?? [], filters),
+    [source, filters],
+  )
 
   return (
     <div>
@@ -182,9 +324,27 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
           ))}
         </nav>
 
-        {/* One filter row governs whichever scope is showing. Three 150px
-            dropdowns wrap to three rows on a phone, so mobile collapses them
-            into a sheet behind a single button. */}
+        {/* While selecting, the toolbar takes the filter row's place rather than
+            adding a second bar: the two are never useful at once, and pushing the
+            list down a row on a phone would cost more than it gives. */}
+        {selecting ? (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button className="btn-icon" onClick={() => stopSelecting()} aria-label="Cancel selection">
+              <X size={16} />
+            </button>
+            <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-mono)' }}>
+              {selected?.size ?? 0} selected
+            </span>
+            <button
+              className="btn btn-ghost"
+              style={{ marginLeft: 'auto', color: '#ef4444' }}
+              disabled={(selected?.size ?? 0) === 0}
+              onClick={() => setConfirmDelete(true)}
+            >
+              <Trash2 size={15} /> Delete
+            </button>
+          </div>
+        ) : (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <div className="workout-search" style={{ position: 'relative', flex: 1, minWidth: 180 }}>
             <Search size={14} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', pointerEvents: 'none' }} />
@@ -221,9 +381,10 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
             </>
           )}
         </div>
+        )}
 
         {/* What is in effect stays visible without reopening the sheet. */}
-        {isMobile && activeFilters.length > 0 && (
+        {!selecting && isMobile && activeFilters.length > 0 && (
           <div className="active-filters">
             {activeFilters.map(f => (
               <span key={f.key} className="active-filter">
@@ -252,7 +413,11 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
                 key={w.id}
                 workout={w}
                 variant={view}
-                onClick={() => onSelect(w)}
+                selectable={scope === 'mine'}
+                selected={selected?.has(w.id) ?? false}
+                selecting={selecting}
+                onLongPress={() => startSelecting(w.id)}
+                onClick={() => (selecting ? toggle(w.id) : onSelect(w))}
                 badge={scope === 'mine' ? <ShareBadge workout={w} /> : undefined}
                 aside={scope === 'mine'
                   ? (
@@ -319,6 +484,19 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
         />
       )}
 
+      {confirmDelete && (
+        <ConfirmDialog
+          title={`Delete ${selected?.size ?? 0} workout${(selected?.size ?? 0) === 1 ? '' : 's'}?`}
+          message="This cannot be undone. Their shares and equipment links go with them."
+          confirmLabel="Delete"
+          danger
+          busy={deleting}
+          busyLabel="Deleting…"
+          onConfirm={() => void deleteSelected()}
+          onCancel={() => setConfirmDelete(false)}
+        />
+      )}
+
       {/* Importing only makes sense in your own library. */}
       {scope === 'mine' && (
         <button className="fab" onClick={onImport} title="Add Workout" aria-label="Add workout">
@@ -326,6 +504,24 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
         </button>
       )}
     </div>
+  )
+}
+
+/**
+ * The tick on a row while selecting.
+ *
+ * The opposite corner to the auto-import mark, which shares this icon: the two
+ * were drawn on top of each other, and hiding one to show the other meant a row
+ * silently changed what it was telling you the moment a selection began.
+ */
+function SelectionMark({ selected }: { selected: boolean }) {
+  return (
+    <span
+      className={`selection-mark${selected ? ' on' : ''}`}
+      aria-hidden
+    >
+      {selected ? <Check size={10} strokeWidth={3} /> : null}
+    </span>
   )
 }
 
@@ -368,6 +564,12 @@ interface WorkoutCardProps {
   workout: Workout
   variant: 'list' | 'grid'
   onClick: () => void
+  /** Whether press-and-hold does anything here. Your own library only. */
+  selectable?: boolean
+  /** Whether the page is in selection mode, which changes what a click means. */
+  selecting?: boolean
+  selected?: boolean
+  onLongPress?: () => void
   /** Sharing indicator shown beside the type tag on your own workouts. */
   badge?: React.ReactNode
   /** Trailing controls, shown beside the pace figure. */
@@ -376,15 +578,27 @@ interface WorkoutCardProps {
   footer?: React.ReactNode
 }
 
-function WorkoutCard({ workout: w, variant, onClick, badge, aside, footer }: WorkoutCardProps) {
+function WorkoutCard({
+  workout: w, variant, onClick, badge, aside, footer,
+  selectable = false, selecting = false, selected = false, onLongPress,
+}: WorkoutCardProps) {
   const color = TYPE_COLOR[w.type]
+  const press = useLongPress(() => onLongPress?.())
+  // The click that ends a long press must not also open the workout.
+  const handleClick = () => { if (!press.consumedClick()) onClick() }
+  const pressProps = selectable ? press.handlers : {}
+  const selectionStyle: React.CSSProperties = selected
+    ? { outline: '2px solid var(--primary)', outlineOffset: -2 }
+    : {}
   const dateLabel = new Date(w.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 
   if (variant === 'grid') {
     return (
       <div
-        onClick={onClick}
+        onClick={handleClick}
+        {...pressProps}
         style={{
+          ...selectionStyle,
           background: 'var(--bg-2)',
           border: '1px solid var(--border)',
           borderTop: `3px solid ${color}`,
@@ -406,8 +620,11 @@ function WorkoutCard({ workout: w, variant, onClick, badge, aside, footer }: Wor
             width: 40, height: 40, borderRadius: 10, flexShrink: 0,
             background: `${color}18`,
             display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20,
+            position: 'relative',
           }}>
             {TYPE_ICON[w.type]}
+            <SourceMark source={w.source} />
+            {selecting && <SelectionMark selected={selected} />}
           </div>
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.name}</div>
@@ -455,8 +672,17 @@ function WorkoutCard({ workout: w, variant, onClick, badge, aside, footer }: Wor
   }
 
   return (
-    <div className="workout-row" onClick={onClick} style={{ '--row-accent': color } as React.CSSProperties}>
-      <div className="workout-row-icon">{TYPE_ICON[w.type]}</div>
+    <div
+      className="workout-row"
+      onClick={handleClick}
+      {...pressProps}
+      style={{ '--row-accent': color, ...selectionStyle } as React.CSSProperties}
+    >
+      <div className="workout-row-icon">
+        {TYPE_ICON[w.type]}
+        <SourceMark source={w.source} />
+        {selecting && <SelectionMark selected={selected} />}
+      </div>
 
       <div className="workout-row-body">
         <div className="workout-row-title">

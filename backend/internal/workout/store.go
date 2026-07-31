@@ -71,6 +71,11 @@ type Repository interface {
 	// SetRawFilename records the name of the file a workout was imported from,
 	// once its original has been archived to disk.
 	SetRawFilename(ctx context.Context, workoutID, filename string) error
+	// ImportWindow returns when the newest and the nth newest workout from a
+	// given source entered the library, so a batch of n imports can be described
+	// as a closed interval rather than as everything since a moment.
+	ImportWindow(ctx context.Context, userID int64, source Source, n int) (start, end time.Time, err error)
+
 	// KnownContentHashes returns the subset of hashes the user has already
 	// imported, so a client can skip uploading files that would only dedupe.
 	KnownContentHashes(ctx context.Context, userID int64, hashes []string) ([]string, error)
@@ -100,8 +105,8 @@ const insertCols = workoutCols + `, external_id, content_hash`
 // deliberately absent from insertCols and from the UPDATE in Update: sharing
 // state has its own method, so no create or patch path can ever change it.
 const (
-	selectCols        = workoutCols + `, visibility, raw_filename`
-	selectSummaryCols = workoutSummaryCols + `, visibility`
+	selectCols        = workoutCols + `, visibility, raw_filename, created_at`
+	selectSummaryCols = workoutSummaryCols + `, visibility, created_at`
 )
 
 func (r *SQLiteRepository) Create(ctx context.Context, w *Workout) error {
@@ -228,6 +233,63 @@ func (r *SQLiteRepository) SetRawFilename(ctx context.Context, workoutID, filena
 		return fmt.Errorf("set raw filename: %w", err)
 	}
 	return nil
+}
+
+// ImportWindow answers "when did the last n imports from this source happen?"
+// by reading the created_at of the newest and of the nth newest.
+//
+// Both ends, not just the start. A notification is permanent and its link is
+// read at some arbitrary later time — by then the folder watch has usually run
+// again, and an open-ended window would quietly grow to include those newer
+// workouts too. "3 workouts imported" would open on five.
+//
+// Derived here rather than taken from the client, deliberately. The obvious
+// alternative — the importing device reporting when it started — depends on that
+// device's clock agreeing with this one, and on every installed version of it
+// sending the field at all. Both assumptions fail quietly: a phone a few minutes
+// ahead produces a window that matches nothing, and an older build produces no
+// window at all. The database already knows, so nobody has to be asked.
+//
+// Returns zero times when there are fewer than n, which callers treat as "no
+// window" rather than as an error.
+func (r *SQLiteRepository) ImportWindow(ctx context.Context, userID int64, source Source, n int) (start, end time.Time, err error) {
+	if n < 1 {
+		return time.Time{}, time.Time{}, nil
+	}
+	rows, err := r.db.QueryContext(ctx, `SELECT created_at FROM workouts
+		WHERE user_id = ? AND source = ?
+		ORDER BY created_at DESC LIMIT ?`, userID, string(source), n)
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	defer rows.Close()
+
+	var stamps []string
+	for rows.Next() {
+		var createdAt string
+		if err := rows.Scan(&createdAt); err != nil {
+			return time.Time{}, time.Time{}, err
+		}
+		stamps = append(stamps, createdAt)
+	}
+	if err := rows.Err(); err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	// Fewer rows than the batch claims means one of them has already been
+	// deleted, and the window can no longer be located.
+	if len(stamps) < n {
+		return time.Time{}, time.Time{}, nil
+	}
+
+	end, err = time.Parse(time.RFC3339, stamps[0])
+	if err != nil {
+		return time.Time{}, time.Time{}, nil
+	}
+	start, err = time.Parse(time.RFC3339, stamps[len(stamps)-1])
+	if err != nil {
+		return time.Time{}, time.Time{}, nil
+	}
+	return start, end, nil
 }
 
 // KnownContentHashes returns which of the given content hashes this user has
@@ -433,11 +495,12 @@ func scanWorkout(row interface{ Scan(...any) error }) (*Workout, error) {
 		stepManual  int
 		source      string
 		visibility  string
+		createdAt   string
 	)
 	if err := row.Scan(&w.ID, &w.UserID, &w.Name, &typ, &startTime, &w.Duration, &w.Distance,
 		&w.AvgHR, &w.MaxHR, &w.ElevationGain, &w.Calories, &w.Steps, &w.AvgPace, &w.AvgSpeed,
 		&s.route, &s.hr, &s.pace, &s.elev, &s.cadence, &w.Notes,
-		&calManual, &calReported, &stepManual, &source, &visibility, &w.RawFilename); err != nil {
+		&calManual, &calReported, &stepManual, &source, &visibility, &w.RawFilename, &createdAt); err != nil {
 		return nil, err
 	}
 	w.CaloriesManual = calManual != 0
@@ -445,6 +508,11 @@ func scanWorkout(row interface{ Scan(...any) error }) (*Workout, error) {
 	w.StepsManual = stepManual != 0
 	w.Source = Source(source)
 	w.Visibility = Visibility(visibility)
+	// Best effort: an unparseable timestamp is not a reason to fail a read, and
+	// the zero value serialises away.
+	if t, err := time.Parse(time.RFC3339, createdAt); err == nil {
+		w.CreatedAt = t
+	}
 	if err := applyScalarFields(&w, typ, startTime); err != nil {
 		return nil, err
 	}
@@ -473,10 +541,11 @@ func scanWorkoutSummary(row interface{ Scan(...any) error }) (*Workout, error) {
 		stepManual  int
 		source      string
 		visibility  string
+		createdAt   string
 	)
 	if err := row.Scan(&w.ID, &w.UserID, &w.Name, &typ, &startTime, &w.Duration, &w.Distance,
 		&w.AvgHR, &w.MaxHR, &w.ElevationGain, &w.Calories, &w.Steps, &w.AvgPace, &w.AvgSpeed, &w.Notes,
-		&calManual, &calReported, &stepManual, &source, &visibility); err != nil {
+		&calManual, &calReported, &stepManual, &source, &visibility, &createdAt); err != nil {
 		return nil, err
 	}
 	w.CaloriesManual = calManual != 0
@@ -484,6 +553,11 @@ func scanWorkoutSummary(row interface{ Scan(...any) error }) (*Workout, error) {
 	w.StepsManual = stepManual != 0
 	w.Source = Source(source)
 	w.Visibility = Visibility(visibility)
+	// Best effort: an unparseable timestamp is not a reason to fail a read, and
+	// the zero value serialises away.
+	if t, err := time.Parse(time.RFC3339, createdAt); err == nil {
+		w.CreatedAt = t
+	}
 	if err := applyScalarFields(&w, typ, startTime); err != nil {
 		return nil, err
 	}

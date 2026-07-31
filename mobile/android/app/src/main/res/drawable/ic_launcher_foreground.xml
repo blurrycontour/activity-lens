@@ -13,8 +13,12 @@
   invents, and it cannot drift out of sync with the web icons the way a folder of
   committed pixels does.
 
-  108dp with the mark at 0.55 is the adaptive-icon contract: only the central
-  72dp is guaranteed visible, and the launcher masks and animates the rest.
+  108dp is the adaptive-icon canvas; only the central 72dp is guaranteed visible,
+  and the launcher masks and animates the rest. The mark is sized to fill that
+  safe zone rather than to sit politely inside it — at 0.55 it came out visibly
+  smaller than the PWA's icon on the same home screen, which is the comparison
+  that actually matters here. The vertical nudge centres it: the ring's gap is at
+  the bottom, so its visual centre sits above the geometric one.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
@@ -25,8 +29,8 @@
     <group
         android:pivotX="256"
         android:pivotY="256"
-        android:scaleX="0.55"
-        android:scaleY="0.55">
+        android:scaleX="0.67"
+        android:scaleY="0.67">
 
         <!-- The open ring: 270 degrees, gap at the bottom. -->
         <path

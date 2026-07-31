@@ -18,6 +18,18 @@ export interface Workout {
   elevationGain: number // meters
   calories: number
   steps?: number
+  /**
+   * How this workout got here: 'upload' for a file the user picked, 'manual'
+   * for hand entry, 'autoimport' for the Android folder watch. Absent on older
+   * rows, which predate the field.
+   */
+  source?: 'upload' | 'manual' | 'healthconnect' | 'autoimport'
+  /**
+   * When this workout entered the library, RFC 3339 — not when it happened. An
+   * import can bring in a run from years ago, so this is the only field that
+   * answers "what just arrived".
+   */
+  createdAt?: string
   caloriesManual?: boolean
   /** Calories stated by the imported file itself rather than estimated by us. */
   caloriesReported?: boolean

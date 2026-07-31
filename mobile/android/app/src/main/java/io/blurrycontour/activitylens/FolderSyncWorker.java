@@ -57,7 +57,8 @@ public class FolderSyncWorker extends Worker {
             // job until there is one rather than running it and failing.
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build();
-        PeriodicWorkRequest request = new PeriodicWorkRequest.Builder(FolderSyncWorker.class, 15, TimeUnit.MINUTES)
+        PeriodicWorkRequest request = new PeriodicWorkRequest.Builder(
+            FolderSyncWorker.class, FolderSync.intervalMinutes(context), TimeUnit.MINUTES)
             .setConstraints(constraints)
             .build();
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.UPDATE, request);

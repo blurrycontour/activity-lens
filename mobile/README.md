@@ -53,21 +53,25 @@ or download it from the login page of a server built with it.
 > Set `AL_KEYSTORE` in `.env.build` and `scripts/deploy.sh` builds release
 > automatically. Debug builds remain useful for a quick check on a spare device.
 
-### Debug builds are a separate app
+### Local builds are a separate app
 
-A debug build carries an `applicationIdSuffix` of `.dev` and is labelled
-"Activity Lens Dev". Android treats it as a different application entirely — its
-own icon, its own data, its own place in the launcher — so a build from your
-working tree installs *alongside* the copy you actually use rather than replacing
-it, and the two can be compared side by side.
+Set `AL_APP_ID_SUFFIX=.dev` in `.env.build` and every APK from your machine
+becomes `io.blurrycontour.activitylens.dev`, labelled "Activity Lens Dev".
+Android treats it as a different application entirely — own icon, own data, own
+place in the launcher — so it installs *alongside* the copy you use every day
+rather than replacing it.
 
-The consequence to know: a debug build can never update to a release one, and the
-in-app updater in a `.dev` install is downloading an APK it cannot install over
-itself. That is the intended trade — test in `.dev`, use the real one.
+The suffix keys off **where** the build happened, not the build type. A release
+build signed locally with the real keystore is byte-for-byte the same kind of
+artifact as the published one and would silently take over the installed app;
+"is this the real thing" is a question about provenance, which only the person
+building knows. CI has no `.env.build`, so published APKs never carry it.
 
-CI always builds **release**, tagged or not. A debug APK from CI would install
-next to the real app instead of updating it, which is the opposite of what a
-build from `main` is for.
+The consequence to know: a `.dev` install can never update to the published app,
+and its in-app updater is downloading an APK it cannot install over itself. That
+is the trade — test in `.dev`, use the real one.
+
+CI always builds **release**, tagged or not.
 
 ### Signing a release
 
@@ -320,6 +324,18 @@ The accent tint is the default green from `colors.xml`, not the user's chosen
 accent: the notification is built with no WebView running, and the accent lives in
 the web app's local storage.
 
+**A tapped notification has exactly one home.** The extras are written to
+preferences the moment they arrive — from `MainActivity.onCreate` on a cold
+start, from `onNewIntent` otherwise — and `consumeTapLink` is the only way to
+take them. The event the plugin emits carries nothing; it just means "come and
+look".
+
+That indirection is the fix for a real bug. A tap that starts the app cold
+arrives long before there is any JavaScript to hand it to, so an event alone is
+delivered to nobody; and `getIntent()` keeps returning the *launch* intent
+forever unless `onNewIntent` calls `setIntent`, so polling alone reads a stale
+tap. Storing it makes every ordering end in the same place, handled once.
+
 **Reading in the app clears the banner.** `dismissOSNotification` cancels the
 tray notification by the id it was tagged with. On web the service worker does
 it; the app has no service worker, so `lib/push.ts` routes the same call to the
@@ -353,6 +369,7 @@ reading before adding anything that touches the platform.
 | Push | Web Push + VAPID | UnifiedPush distributor |
 | Clearing a notification | service worker | `UnifiedPush.dismiss` |
 | Push while app is open | in-app banner | in-app banner, via the `message` event |
+| Tapping a notification | worker posts the id to the page | intent extras, stashed until claimed |
 | Back button | browser chrome | an `OnBackPressedCallback` → `webView.goBack()` |
 | Soft keyboard | window resizes | WebView padded by the IME inset |
 | External links | new tab | Capacitor opens the system browser (nothing to do) |
@@ -448,6 +465,47 @@ importing one would fail per file, on every scan, forever.
 The notification is a real server-side kind (`workout_imported`), not a local
 one, so it appears in the in-app bell, syncs to your other devices, and obeys the
 per-kind switch in Settings like everything else.
+
+It links to **that scan's** imports, not to every workout the folder watch has
+ever brought in: the link carries `?source=autoimport&since=…&until=…`, and the
+client shows auto-imports created inside that closed interval.
+
+**Closed at both ends, and that matters.** A notification is permanent and gets
+opened whenever the user gets to it — by then the folder watch has usually run
+again. With only a lower bound the older notification's window kept growing, so
+"3 workouts imported" opened onto five, still captioned as the batch.
+
+**The window is derived server-side, from the count alone.** The scanner reports
+"3 imported"; `ImportWindow` reads back the `created_at` of the newest and the
+third-newest auto-import, and that is the window. The phone is never asked when
+the batch began.
+
+That was not the first design, and the two that came before it are worth knowing
+because both failed *silently*:
+
+- the phone sending its own clock — a device a few minutes ahead of the server
+  produces a window matching nothing, on someone else's phone, invisibly;
+- the phone sending the server's `Date` header — correct, but only from a build
+  that has the code. An older APK still installed alongside a new one keeps
+  sending nothing, and the notification quietly links to everything.
+
+The database already knows when those workouts arrived, so nobody has to be
+asked, and any version of the app — including one built before the feature
+existed — gets a correct link.
+
+The link is built server-side, so a change to it needs the **server** redeployed,
+not just a new APK.
+
+The **full rescan** button clears the seen-set before scanning. The ordinary scan
+skips files it has handled, which is what keeps a 15-minute job cheap, but it
+also means a workout deleted from the library never comes back — the file that
+produced it is still marked done. Forcing is the way back; the server's
+content-hash check still stops anything still present being imported twice.
+
+Scan frequency is a per-device setting in the app's own preferences, never in the
+database. It describes this phone's battery and this phone's folder, and syncing
+it would let a tablet that has never seen the folder dictate how often the phone
+looks.
 
 ### Permissions
 

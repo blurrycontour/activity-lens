@@ -19,6 +19,9 @@ type unimplementedSharing struct{}
 func (unimplementedSharing) GetViewable(context.Context, int64, string) (*Workout, error) {
 	panic("sharing is only exercised against the real schema; see sharing_test.go")
 }
+func (unimplementedSharing) ImportWindow(context.Context, int64, Source, int) (time.Time, time.Time, error) {
+	panic("the import window is a SQL ordering; see importwindow_test.go")
+}
 func (unimplementedSharing) ListPublicSummary(context.Context, int64) ([]Workout, error) {
 	panic("sharing is only exercised against the real schema; see sharing_test.go")
 }

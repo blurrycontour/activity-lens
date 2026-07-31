@@ -257,41 +257,31 @@ public class UnifiedPushPlugin extends Plugin {
      */
     @PluginMethod
     public void consumeTapLink(PluginCall call) {
-        call.resolve(takeTap(getActivity().getIntent()));
-    }
-
-    /** A tap that arrived while the app was already open. */
-    @Override
-    protected void handleOnNewIntent(Intent intent) {
-        super.handleOnNewIntent(intent);
-        JSObject tap = takeTap(intent);
-        if (tap.optString("link", null) == null && tap.optString("id", null) == null) {
-            return;
+        // The activity's own intent is checked too, for the ordering where the
+        // plugin loads before MainActivity has stashed it.
+        UnifiedPush.stashTap(getContext(), getActivity().getIntent());
+        String[] tap = UnifiedPush.consumeTap(getContext());
+        JSObject result = new JSObject();
+        if (tap != null) {
+            result.put("link", tap[0]);
+            result.put("id", tap[1]);
         }
-        notifyListeners(TAP_EVENT, tap);
+        call.resolve(result);
     }
 
     /**
-     * Reads a tap out of an intent and removes it.
+     * A tap that arrived while the app was already open.
      *
-     * Both halves are consumed together: the link says where to go and the id
-     * says which notification to mark read, and reporting one without the other
-     * would either navigate without clearing the badge or clear it without
-     * moving.
-     *
-     * Removed because the activity keeps its intent: without this, every later
-     * call would report the same tap again, and rotating the phone would reopen
-     * a page the user had navigated away from.
+     * The event carries nothing: it is a nudge to come and take whatever is
+     * waiting, and consumeTapLink is the only thing that reads it. Sending the
+     * tap in the event as well would give it two homes and two chances to be
+     * handled twice.
      */
-    private static JSObject takeTap(Intent intent) {
-        JSObject tap = new JSObject();
-        if (intent == null) {
-            return tap;
-        }
-        tap.put("link", intent.getStringExtra(UnifiedPushReceiver.EXTRA_LINK));
-        tap.put("id", intent.getStringExtra(UnifiedPushReceiver.EXTRA_ID));
-        intent.removeExtra(UnifiedPushReceiver.EXTRA_LINK);
-        intent.removeExtra(UnifiedPushReceiver.EXTRA_ID);
-        return tap;
+    @Override
+    protected void handleOnNewIntent(Intent intent) {
+        super.handleOnNewIntent(intent);
+        UnifiedPush.stashTap(getContext(), intent);
+        notifyListeners(TAP_EVENT, new JSObject());
     }
+
 }

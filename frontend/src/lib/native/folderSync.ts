@@ -6,7 +6,8 @@ interface FolderSyncPlugin {
   getStatus(): Promise<FolderSyncStatus>
   pickFolder(): Promise<{ folder?: string | null }>
   setEnabled(options: { enabled: boolean }): Promise<void>
-  scanNow(): Promise<ScanResult>
+  scanNow(options: { force: boolean }): Promise<ScanResult>
+  setInterval(options: { minutes: number }): Promise<void>
   disable(): Promise<void>
 }
 
@@ -21,6 +22,8 @@ export interface FolderSyncStatus {
   lastResult?: string | null
   /** False when the folder can no longer be read — an SD card pulled, a grant revoked. */
   readable: boolean
+  /** How often the periodic scan runs. Per device, never synced. */
+  intervalMinutes: number
 }
 
 export interface ScanResult {
@@ -33,7 +36,7 @@ export interface ScanResult {
 const FolderSync = registerPlugin<FolderSyncPlugin>('FolderSync')
 
 /** Nothing to watch: the folder was never chosen, or has been forgotten. */
-const NO_FOLDER: FolderSyncStatus = { folder: null, enabled: false, lastScan: 0, readable: false }
+const NO_FOLDER: FolderSyncStatus = { folder: null, enabled: false, lastScan: 0, readable: false, intervalMinutes: 15 }
 
 export async function folderSyncStatus(): Promise<FolderSyncStatus> {
   if (!isNative()) return NO_FOLDER
@@ -63,8 +66,22 @@ export async function setFolderSyncEnabled(enabled: boolean): Promise<void> {
   await FolderSync.setEnabled({ enabled })
 }
 
-export async function scanFolderNow(): Promise<ScanResult> {
-  return FolderSync.scanNow()
+/**
+ * Scans immediately.
+ *
+ * `force` re-offers files this device has already handled. The normal scan skips
+ * them, which is what keeps the periodic job cheap — but it also means a workout
+ * deleted from the library never comes back, because the file that produced it
+ * is still marked as done. Forcing is the way back from that; the server's
+ * content-hash check still stops anything still present being imported twice.
+ */
+export async function scanFolderNow(force = false): Promise<ScanResult> {
+  return FolderSync.scanNow({ force })
+}
+
+/** How often the periodic scan runs. WorkManager will not go below 15 minutes. */
+export async function setFolderSyncInterval(minutes: number): Promise<void> {
+  await FolderSync.setInterval({ minutes })
 }
 
 /** Forgets the folder, hands the grant back, and stops the schedule. */

@@ -55,6 +55,8 @@ final class UnifiedPush {
     private static final String KEY_TOKEN = "token";
     private static final String KEY_DISTRIBUTOR = "distributor";
     private static final String KEY_ENDPOINT = "endpoint";
+    private static final String KEY_TAP_LINK = "tap_link";
+    private static final String KEY_TAP_ID = "tap_id";
 
     static SharedPreferences prefs(Context context) {
         return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
@@ -103,6 +105,49 @@ final class UnifiedPush {
      */
     static void clear(Context context) {
         prefs(context).edit().remove(KEY_DISTRIBUTOR).remove(KEY_ENDPOINT).apply();
+    }
+
+    /**
+     * Records a notification the user tapped, so the page can act on it whenever
+     * it gets around to asking.
+     *
+     * Stored rather than passed along, because the two are not in step. A tap
+     * that starts the app cold arrives long before there is any JavaScript to
+     * hand it to, and a tap while the app is running arrives at a WebView that
+     * may or may not have a listener attached yet. Every ordering ends here, and
+     * consumeTap is the only way out, so a tap cannot be delivered twice or
+     * dropped.
+     *
+     * Persisted rather than held in memory because a cold start is exactly the
+     * case where nothing of ours is alive to hold it.
+     */
+    static void stashTap(Context context, Intent intent) {
+        if (intent == null) {
+            return;
+        }
+        String link = intent.getStringExtra(UnifiedPushReceiver.EXTRA_LINK);
+        String id = intent.getStringExtra(UnifiedPushReceiver.EXTRA_ID);
+        if (link == null && id == null) {
+            return;
+        }
+        prefs(context).edit().putString(KEY_TAP_LINK, link).putString(KEY_TAP_ID, id).apply();
+        // Removed from the intent as well: an activity keeps its intent, so
+        // leaving them would let a later read find the same tap again after a
+        // rotation and reopen a page the user had navigated away from.
+        intent.removeExtra(UnifiedPushReceiver.EXTRA_LINK);
+        intent.removeExtra(UnifiedPushReceiver.EXTRA_ID);
+    }
+
+    /** Takes the pending tap, if there is one, and forgets it. */
+    static String[] consumeTap(Context context) {
+        SharedPreferences p = prefs(context);
+        String link = p.getString(KEY_TAP_LINK, null);
+        String id = p.getString(KEY_TAP_ID, null);
+        if (link == null && id == null) {
+            return null;
+        }
+        p.edit().remove(KEY_TAP_LINK).remove(KEY_TAP_ID).apply();
+        return new String[] { link, id };
     }
 
     /** A distributor app installed on this phone. */

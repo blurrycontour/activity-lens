@@ -8,8 +8,12 @@
   blob. This is the same mark as ic_launcher_foreground.xml drawn as flat white
   strokes at 24dp, which is what the platform actually displays.
 
-  The mark is drawn at the same 0.55 scale as the launcher's, leaving the
-  breathing room Android expects around a status bar icon.
+  Drawn nearly edge to edge, which is what a status bar icon wants: the system
+  renders it at 24dp against everything else in the bar, so anything that leaves
+  the launcher icon's generous padding in place reads as a speck. The mark's own
+  extent is roughly 380 of the 512 viewport, so it is scaled up and nudged down —
+  the ring's gap is at the bottom, which puts its visual centre above the
+  geometric one.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
@@ -21,8 +25,9 @@
     <group
         android:pivotX="256"
         android:pivotY="256"
-        android:scaleX="0.75"
-        android:scaleY="0.75">
+        android:scaleX="1.15"
+        android:scaleY="1.15"
+        android:translateY="30">
 
         <path
             android:pathData="M 121.65,390.35 A 190,190 0 1 1 390.35,390.35"

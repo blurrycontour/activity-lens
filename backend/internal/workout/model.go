@@ -37,7 +37,17 @@ const (
 	SourceUpload        Source = "upload"        // a .gpx/.tcx file the user uploaded
 	SourceManual        Source = "manual"        // hand-entered in the import modal
 	SourceHealthConnect Source = "healthconnect" // synced from Android Health Connect
+	SourceAutoImport    Source = "autoimport"    // found by the Android app's folder watch
 )
+
+// ValidSource reports whether s is a source a client may claim.
+//
+// Only the folder watch names itself: everything else is decided server-side by
+// which endpoint was called, and letting a request pick freely would let it
+// claim an origin it does not have.
+func ValidSource(s Source) bool {
+	return s == SourceAutoImport
+}
 
 // Visibility controls who, beyond the owner, may read a workout. Direct shares
 // are tracked separately in workout_shares and are orthogonal to this: making a
@@ -128,6 +138,10 @@ type Workout struct {
 	ElevTimeline     []ElevPoint    `json:"elevTimeline"`
 	CadenceTimeline  []CadencePoint `json:"cadenceTimeline"`
 	Notes            string         `json:"notes"`
+	// CreatedAt is when this workout entered the library, which is not the same
+	// as when it happened: an import can bring in a run from years ago. It is
+	// what "the ones that just arrived" means.
+	CreatedAt time.Time `json:"createdAt,omitempty"`
 	// Source records where this workout came from so the UI can badge it.
 	Source Source `json:"source,omitempty"`
 	// ExternalID is this workout's identity within Source (the file's SHA-256

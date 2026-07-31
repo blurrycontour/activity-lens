@@ -23,6 +23,11 @@ final class FolderSync {
     private static final String KEY_SEEN = "seen";
     private static final String KEY_LAST_SCAN = "last_scan";
     private static final String KEY_LAST_RESULT = "last_result";
+    private static final String KEY_INTERVAL = "interval_minutes";
+
+    /** WorkManager's own floor for a periodic job. Asking for less is ignored. */
+    static final int MIN_INTERVAL_MINUTES = 15;
+    static final int DEFAULT_INTERVAL_MINUTES = 15;
 
     /**
      * How many file fingerprints to remember.
@@ -94,6 +99,17 @@ final class FolderSync {
      */
     static Set<String> seen(Context context) {
         return new HashSet<>(prefs(context).getStringSet(KEY_SEEN, new HashSet<>()));
+    }
+
+    /** How often the periodic scan runs, in minutes. */
+    static int intervalMinutes(Context context) {
+        return prefs(context).getInt(KEY_INTERVAL, DEFAULT_INTERVAL_MINUTES);
+    }
+
+    static void setIntervalMinutes(Context context, int minutes) {
+        // WorkManager refuses anything under fifteen and silently clamps it,
+        // which would leave the setting saying something untrue.
+        prefs(context).edit().putInt(KEY_INTERVAL, Math.max(MIN_INTERVAL_MINUTES, minutes)).apply();
     }
 
     static void addSeen(Context context, Set<String> keys) {

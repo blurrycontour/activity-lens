@@ -1,9 +1,22 @@
 import { useEffect, useState } from 'react'
-import { FolderDown, FolderSearch, RefreshCw } from 'lucide-react'
+import { FolderDown, FolderSearch, RefreshCw, RotateCcw } from 'lucide-react'
 import {
   disableFolderSync, folderSyncStatus, pickSyncFolder, scanFolderNow, setFolderSyncEnabled,
-  type FolderSyncStatus,
+  setFolderSyncInterval, type FolderSyncStatus,
 } from '../lib/native/folderSync'
+
+/**
+ * How often to look. Fifteen minutes is WorkManager's floor — anything shorter is
+ * silently ignored by the OS — and the rest trade timeliness for battery.
+ */
+const INTERVALS = [
+  { minutes: 15, label: 'Every 15 minutes' },
+  { minutes: 30, label: 'Every 30 minutes' },
+  { minutes: 60, label: 'Hourly' },
+  { minutes: 180, label: 'Every 3 hours' },
+  { minutes: 360, label: 'Every 6 hours' },
+  { minutes: 1440, label: 'Daily' },
+]
 
 /** "3m ago", or nothing at all when it has never run. */
 function ago(millis: number): string | null {
@@ -58,8 +71,8 @@ export default function AutoImportCard() {
     if (folder) await setFolderSyncEnabled(true)
   })
 
-  const scan = () => run(async () => {
-    const result = await scanFolderNow()
+  const scan = (force = false) => run(async () => {
+    const result = await scanFolderNow(force)
     setMsg({
       ok: result.ok,
       text: result.imported > 0
@@ -111,14 +124,40 @@ export default function AutoImportCard() {
             Check for new files automatically
           </label>
           <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8, lineHeight: 1.5 }}>
-            About every 15 minutes, when the phone has a network. Android decides exactly when,
-            so a file may take a little longer to appear — it will not be missed. You get a
-            notification when something is imported.
+            Only when the phone has a network, and Android decides exactly when — a file may
+            take a little longer to appear, but it will not be missed. You get a notification
+            when something is imported.
+          </p>
+
+          <label style={{ display: 'block', marginTop: 14 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-3)' }}>
+              How often
+            </span>
+            <select
+              className="select"
+              style={{ width: '100%', maxWidth: 220, marginTop: 6 }}
+              value={status?.intervalMinutes ?? 15}
+              disabled={busy || !status?.enabled}
+              onChange={e => void run(() => setFolderSyncInterval(Number(e.target.value)))}
+            >
+              {INTERVALS.map(i => <option key={i.minutes} value={i.minutes}>{i.label}</option>)}
+            </select>
+          </label>
+          <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 6, lineHeight: 1.5 }}>
+            This phone only — it is not shared with your other devices.
           </p>
 
           <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
-            <button className="btn btn-ghost" disabled={busy} onClick={scan}>
+            <button className="btn btn-ghost" disabled={busy} onClick={() => scan()}>
               <RefreshCw size={15} /> Scan now
+            </button>
+            <button
+              className="btn btn-ghost"
+              disabled={busy}
+              onClick={() => scan(true)}
+              title="Re-check every file, including ones already imported before"
+            >
+              <RotateCcw size={15} /> Full rescan
             </button>
             <button className="btn btn-ghost" disabled={busy} onClick={() => run(disableFolderSync)}>
               Stop watching
@@ -141,7 +180,8 @@ export default function AutoImportCard() {
       <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 14, lineHeight: 1.5 }}>
         Imports <code>.gpx</code> and <code>.tcx</code> files, including <code>.gz</code>
         {' '}compressed ones. Anything else in the folder is left alone, and a file already in
-        your library is never imported twice.
+        your library is never imported twice. A <strong>full rescan</strong> offers every file
+        again, which is how a workout you deleted comes back.
       </p>
     </section>
   )
