@@ -1417,12 +1417,24 @@ body {
   gap: 16px;
 }
 
-/* Activity Mix: compact legend on the left, chart on the right (desktop). */
+/* Activity Mix: compact legend on the left, chart on the right. Stays
+   side-by-side at every width so the donut never ends up stacked full-width
+   under the legend; the legend column just narrows on small screens. */
 .activity-mix-body {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: minmax(96px, 150px) minmax(0, 1fr);
   gap: 16px;
   align-items: center;
+}
+.activity-mix-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  justify-content: center;
+  min-width: 0;
+}
+.activity-mix-chart {
+  height: 150px;
 }
 
 /* Leaflet popups/tooltips: use theme surfaces so they read correctly in dark
@@ -2239,7 +2251,11 @@ body {
     grid-template-columns: 1fr;
   }
   .activity-mix-body {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(80px, 120px) minmax(0, 1fr);
+    gap: 10px;
+  }
+  .activity-mix-chart {
+    height: 130px;
   }
 
   .stat-grid {
