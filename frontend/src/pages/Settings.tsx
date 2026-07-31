@@ -11,6 +11,7 @@ import { apiBase, forgetServer, isNative } from '../lib/serverConfig'
 import { installedApp, requestUpdateCheck } from '../lib/native/appUpdate'
 import ConfirmDialog from '../components/ConfirmDialog'
 import NativePushCard from '../components/NativePushCard'
+import AutoImportCard from '../components/AutoImportCard'
 import {
   DASHBOARD_CFG_KEY, DEFAULT_DASHBOARD_CONFIG, STAT_CARDS, WINDOW_OPTIONS,
   DEFAULT_HR_ZONE_CHART, HR_ZONE_CHART_KEY,
@@ -28,6 +29,7 @@ const NOTIFY_KINDS: { id: NotificationKind; label: string }[] = [
   { id: 'gear_worn', label: 'Gear reaches its replacement distance' },
   { id: 'goal_met', label: 'I complete a training goal' },
   { id: 'goal_at_risk', label: "A goal's period is nearly over and I'm short" },
+  { id: 'workout_imported', label: 'Auto import brings in new workouts' },
 ]
 
 /** Everything on, matching the server's default for a user who never saved. */
@@ -444,6 +446,9 @@ export default function Settings({ accent, onAccentChange }: SettingsProps) {
             </div>
           </div>
         </section>
+
+        {/* Auto import. Android only: nothing else can watch a folder. */}
+        {isNative() && <AutoImportCard />}
 
         {/* Training goals */}
         <section className="card">

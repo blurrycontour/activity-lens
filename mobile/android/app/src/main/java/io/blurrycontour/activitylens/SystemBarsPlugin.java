@@ -1,4 +1,4 @@
-package io.github.blurrycontour.activitylens;
+package io.blurrycontour.activitylens;
 
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;

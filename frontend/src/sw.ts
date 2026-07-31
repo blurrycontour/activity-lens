@@ -241,6 +241,11 @@ self.addEventListener('notificationclick', event => {
   event.notification.close()
   const link = (event.notification.data as { link?: string } | undefined)?.link || '/'
   const url = new URL(link, self.location.origin).href
+  // The notification's own id, so the app can mark it read: tapping one is
+  // reading it, and without this it stayed unread and bold in the list the tap
+  // just opened. Marking it here instead is not an option — the API requires the
+  // CSRF cookie for a write, and a worker cannot read cookies.
+  const id = event.notification.tag
 
   // Prefer focusing an open tab and navigating it: opening a second copy of an
   // installed PWA is disorienting, and the SPA can route without a reload.
@@ -249,19 +254,18 @@ self.addEventListener('notificationclick', event => {
     for (const client of clients) {
       if (new URL(client.url).origin === self.location.origin) {
         await client.focus()
-        // navigate() is not implemented everywhere; fall back to a message the
-        // app handles with its own history push.
-        if ('navigate' in client) {
-          try {
-            await client.navigate(url)
-            return
-          } catch { /* fall through to postMessage */ }
-        }
-        client.postMessage({ type: 'NAVIGATE', url: link })
+        // Always a message, never client.navigate(). Navigating a same-origin
+        // URL reloads the SPA — losing whatever was on screen and, now, the
+        // message carrying the id — while a postMessage routes through the app's
+        // own history push with nothing thrown away.
+        client.postMessage({ type: 'NAVIGATE', url: link, id })
         return
       }
     }
-    await self.clients.openWindow(url)
+    // No window to talk to, so the id travels in the URL instead and the app
+    // claims it on load. Cold start is exactly when a tapped notification is
+    // most likely to be the reason the app is opening at all.
+    await self.clients.openWindow(id ? `${url}${url.includes('?') ? '&' : '?'}n=${encodeURIComponent(id)}` : url)
   })())
 })
 

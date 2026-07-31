@@ -1,4 +1,4 @@
-package io.github.blurrycontour.activitylens;
+package io.blurrycontour.activitylens;
 
 import android.Manifest;
 import android.content.SharedPreferences;
@@ -31,6 +31,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(AppUpdatePlugin.class);
         registerPlugin(UnifiedPushPlugin.class);
         registerPlugin(ShellPlugin.class);
+        registerPlugin(FolderSyncPlugin.class);
         super.onCreate(savedInstanceState);
 
         // Replace the launch theme's window background with a flat colour.

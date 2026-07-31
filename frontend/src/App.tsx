@@ -1,6 +1,6 @@
 import { useIsMobile } from './lib/useIsMobile'
 import NotificationBanner, { type BannerNotification } from './components/NotificationBanner'
-import { PUSH_EVENT } from './components/NotificationBell'
+import { consumeOpenedParam, markNotificationOpened, PUSH_EVENT } from './lib/notifications'
 import UpdateToast from './components/UpdateToast'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import TopBar, { type ThemeMode } from './components/TopBar'
@@ -240,8 +240,14 @@ export default function App() {
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return
     function onMessage(e: MessageEvent) {
-      const data = e.data as { type?: string; url?: string; payload?: BannerNotification } | undefined
-      if (data?.type === 'NAVIGATE' && data.url) openLink(data.url)
+      const data = e.data as { type?: string; url?: string; id?: string; payload?: BannerNotification } | undefined
+      if (data?.type === 'NAVIGATE' && data.url) {
+        // Tapping a system notification is reading it. The worker cannot mark it
+        // read itself — the API wants the CSRF cookie, which a worker cannot get
+        // at — so it forwards the id and the page does it.
+        void markNotificationOpened(data.id)
+        openLink(data.url)
+      }
       if (data?.type === 'IN_APP_NOTIFICATION' && data.payload) {
         setBanner(data.payload)
         // Tell the bell to refresh its count now rather than on its next poll.
@@ -251,6 +257,14 @@ export default function App() {
     navigator.serviceWorker.addEventListener('message', onMessage)
     return () => navigator.serviceWorker.removeEventListener('message', onMessage)
   }, [openLink])
+
+  // A cold start from a tapped notification, where the worker had no window to
+  // message and put the id in the URL instead. Waits for auth: marking one read
+  // needs a session.
+  useEffect(() => {
+    if (!user) return
+    void markNotificationOpened(consumeOpenedParam())
+  }, [user])
 
   // The same thing in the Android app, which has no service worker to route it.
   // The native receiver only hands a push over while this listener is attached;
@@ -371,7 +385,13 @@ export default function App() {
       {banner && (
         <NotificationBanner
           notification={banner}
-          onOpen={link => { setBanner(null); openLink(link) }}
+          onOpen={link => {
+            setBanner(null)
+            // Opening the banner is reading the notification, exactly as opening
+            // it from the bell's list is.
+            void markNotificationOpened(banner.id)
+            openLink(link)
+          }}
           onDismiss={() => setBanner(null)}
         />
       )}

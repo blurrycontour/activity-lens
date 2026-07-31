@@ -1,4 +1,4 @@
-package io.github.blurrycontour.activitylens;
+package io.blurrycontour.activitylens;
 
 import android.Manifest;
 import android.content.ContentResolver;

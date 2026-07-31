@@ -395,10 +395,53 @@ func (s *Server) handleKnownImports(w http.ResponseWriter, r *http.Request) {
 //
 // Safe to call with no preceding import, and safe to call twice — the checks
 // are pure reads plus deduped notifications, so this needs no batch identity.
+// It also carries the one notification a batch can produce about itself. An
+// auto-import from the Android app's watched folder happens with nobody looking,
+// so it says what it did; a manual import sends no count and stays silent,
+// because the user is already watching the progress bar.
 func (s *Server) handleFinalizeImport(w http.ResponseWriter, r *http.Request) {
 	user := httpmw.UserFrom(r)
 	s.afterWorkoutRecorded(r, user.ID)
+
+	// The body is optional: this endpoint predates it, and a client that sends
+	// nothing must keep working.
+	var req struct {
+		// Imported is how many workouts an unattended batch actually created.
+		Imported int `json:"imported"`
+		// Folder names where they came from, for the notification text.
+		Folder string `json:"folder"`
+	}
+	if err := decodeJSON(r, &req); err == nil && req.Imported > 0 {
+		s.notifyAutoImported(r, user.ID, req.Imported, req.Folder)
+	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// notifyAutoImported reports an unattended import.
+//
+// Not deduped: two folder scans that both find files are two separate events,
+// and collapsing them would silently drop the second. The dedupe keys elsewhere
+// exist for *standing conditions* — a worn-out shoe is still worn out tomorrow —
+// which this is not.
+func (s *Server) notifyAutoImported(r *http.Request, userID int64, count int, folder string) {
+	if s.notify == nil {
+		return
+	}
+	title := "1 workout imported"
+	if count > 1 {
+		title = fmt.Sprintf("%d workouts imported", count)
+	}
+	body := "Found in your watched folder"
+	if folder != "" {
+		body = "Found in " + folder
+	}
+	s.notify.Notify(r.Context(), notify.Event{
+		UserID: userID,
+		Kind:   notify.KindWorkoutImported,
+		Title:  title,
+		Body:   body,
+		Link:   "/workouts",
+	})
 }
 
 // handlePreviewWorkout parses an uploaded file and returns the derived metrics

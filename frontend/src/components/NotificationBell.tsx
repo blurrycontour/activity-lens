@@ -1,16 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Bell, Check, Share2, Footprints, Trophy, Clock, X, Trash2 } from 'lucide-react'
+import { Bell, Check, Share2, Footprints, Trophy, Clock, X, Trash2, FolderDown } from 'lucide-react'
 import { api, apiURL, type AppNotification, type NotificationKind } from '../lib/api'
 import { dismissOSNotification, enablePush, maybePromptForPush, pushState, syncPushSubscription, type PushState } from '../lib/push'
-import { consumeNotificationTap, onNotificationTap, syncNativePush } from '../lib/native/unifiedPush'
+import { consumeNotificationTap, onNotificationTap, syncNativePush, type NotificationTap } from '../lib/native/unifiedPush'
+import { markNotificationOpened, PUSH_EVENT } from '../lib/notifications'
 import { useIsMobile } from '../lib/useIsMobile'
-
-/**
- * Dispatched by App when the service worker forwards a push that arrived while
- * the app was visible, so the bell updates instantly instead of on the poll.
- */
-export const PUSH_EVENT = 'al:push'
 
 /** How often to re-check the unread count while the app is open. */
 const POLL_MS = 60_000
@@ -22,6 +17,7 @@ const KIND_ICON: Record<NotificationKind, React.ReactNode> = {
   gear_worn: <Footprints size={14} />,
   goal_met: <Trophy size={14} />,
   goal_at_risk: <Clock size={14} />,
+  workout_imported: <FolderDown size={14} />,
 }
 
 /** Relative time, at the granularity a notification list actually needs. */
@@ -106,11 +102,14 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
   // and subscribed to: a cold start delivers the intent before this component
   // exists, and a tap while the app is open delivers it after.
   useEffect(() => {
-    const go = (link: string) => {
-      void load()
-      onNavigate(link)
+    const go = (tap: NotificationTap) => {
+      // Marked read before navigating, not after: the user has dealt with this
+      // one, and leaving it bold in the list they are about to see is the bug
+      // this fixes. load() then picks up the new state.
+      void markNotificationOpened(tap.id).then(() => load())
+      if (tap.link) onNavigate(tap.link)
     }
-    void consumeNotificationTap().then(link => { if (link) go(link) })
+    void consumeNotificationTap().then(tap => { if (tap) go(tap) })
     return onNotificationTap(go)
   }, [load, onNavigate])
 

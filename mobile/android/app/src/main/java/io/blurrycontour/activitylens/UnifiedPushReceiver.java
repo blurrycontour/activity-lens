@@ -1,4 +1,4 @@
-package io.github.blurrycontour.activitylens;
+package io.blurrycontour.activitylens;
 
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -45,6 +45,13 @@ public class UnifiedPushReceiver extends BroadcastReceiver {
 
     /** Passed through a tapped notification so the app can open the right page. */
     static final String EXTRA_LINK = "al_notification_link";
+
+    /**
+     * The notification's own id, carried alongside the link so the app can mark
+     * it read. Tapping one is reading it, and without this the app had no way to
+     * know which of them the user had just dealt with.
+     */
+    static final String EXTRA_ID = "al_notification_id";
 
     /**
      * The numeric half of every notification's identity. Constant because the
@@ -196,6 +203,9 @@ public class UnifiedPushReceiver extends BroadcastReceiver {
         open.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         if (link != null && !link.isEmpty()) {
             open.putExtra(EXTRA_LINK, link);
+        }
+        if (id != null && !id.isEmpty()) {
+            open.putExtra(EXTRA_ID, id);
         }
         // FLAG_UPDATE_CURRENT with a per-notification request code: two pending
         // intents that differ only in their extras are otherwise considered the

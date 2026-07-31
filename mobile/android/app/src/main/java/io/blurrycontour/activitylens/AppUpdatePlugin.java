@@ -1,4 +1,4 @@
-package io.github.blurrycontour.activitylens;
+package io.blurrycontour.activitylens;
 
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
@@ -53,7 +53,7 @@ public class AppUpdatePlugin extends Plugin {
     private static final String PROGRESS_EVENT = "updateProgress";
 
     /** Broadcast action for install results. Package-scoped, never exported. */
-    private static final String INSTALL_ACTION = "io.github.blurrycontour.activitylens.INSTALL_RESULT";
+    private static final String INSTALL_ACTION = "io.blurrycontour.activitylens.INSTALL_RESULT";
 
     /** One thread: two concurrent installs of the same app make no sense. */
     private final ExecutorService executor = Executors.newSingleThreadExecutor();

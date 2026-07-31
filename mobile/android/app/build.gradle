@@ -26,10 +26,10 @@ def keystoreType = project.findProperty('alKeystoreType')
     ?: (keystorePath?.toString()?.toLowerCase()?.endsWith('.jks') ? 'JKS' : 'PKCS12')
 
 android {
-    namespace = "io.github.blurrycontour.activitylens"
+    namespace = "io.blurrycontour.activitylens"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "io.github.blurrycontour.activitylens"
+        applicationId "io.blurrycontour.activitylens"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode alVersionCode
@@ -57,11 +57,30 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            // Declared in both build types rather than in strings.xml, because a
+            // resValue and a resource of the same name collide.
+            resValue "string", "app_name", "Activity Lens"
             if (hasKeystore) {
                 signingConfig signingConfigs.release
             }
         }
         debug {
+            // A debug build is a *different app* to Android: its own package
+            // name, its own icon, its own data.
+            //
+            // Without this a local build and the one the server hands out are the
+            // same installed app, so testing a change means replacing the copy
+            // you actually use — and the two cannot coexist to be compared. The
+            // suffix costs nothing and makes "install my build alongside the real
+            // one" the default.
+            //
+            // Everything derived from the application id follows automatically,
+            // including the FileProvider authority. The label is set here for the
+            // same reason: two identical "Activity Lens" icons in the launcher
+            // would be worse than one.
+            applicationIdSuffix '.dev'
+            resValue "string", "app_name", "Activity Lens Dev"
+
             // Debug builds use the supplied keystore too, when there is one.
             //
             // Android refuses to replace an app with one signed by a different
@@ -90,6 +109,10 @@ dependencies {
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    // Auto-import: WorkManager runs the folder scan on a schedule with the app
+    // closed, and DocumentFile is how a Storage Access Framework tree is read.
+    implementation "androidx.work:work-runtime:$androidxWorkVersion"
+    implementation "androidx.documentfile:documentfile:$androidxDocumentFileVersion"
     implementation project(':capacitor-android')
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"

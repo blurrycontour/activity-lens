@@ -23,10 +23,14 @@ const (
 	KindGoalMet Kind = "goal_met"
 	// KindGoalAtRisk: a goal's period is nearly over and it is still short.
 	KindGoalAtRisk Kind = "goal_at_risk"
+	// KindWorkoutImported: the Android app's folder watch found new files and
+	// imported them. The one kind that reports something the user did not do
+	// from this device, which is exactly why it is worth telling them about.
+	KindWorkoutImported Kind = "workout_imported"
 )
 
 // AllKinds is every kind, in the order Settings lists them.
-var AllKinds = []Kind{KindWorkoutShared, KindGearWorn, KindGoalMet, KindGoalAtRisk}
+var AllKinds = []Kind{KindWorkoutShared, KindGearWorn, KindGoalMet, KindGoalAtRisk, KindWorkoutImported}
 
 // ValidKind reports whether k is a known kind.
 func ValidKind(k Kind) bool {

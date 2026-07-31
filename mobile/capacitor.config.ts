@@ -12,7 +12,7 @@ import type { CapacitorConfig } from '@capacitor/cli'
  * anyone's instance, and the address is asked for at first launch.
  */
 const config: CapacitorConfig = {
-  appId: 'io.github.blurrycontour.activitylens',
+  appId: 'io.blurrycontour.activitylens',
   appName: 'Activity Lens',
   webDir: '../frontend/dist',
 

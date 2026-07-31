@@ -1,9 +1,10 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Activity Lens</string>
+    <!-- app_name is not here: build.gradle sets it per build type, so a local
+         debug build is "Activity Lens Dev" and can sit beside the real one. -->
     <string name="title_activity_main">Activity Lens</string>
-    <string name="package_name">io.github.blurrycontour.activitylens</string>
-    <string name="custom_url_scheme">io.github.blurrycontour.activitylens</string>
+    <string name="package_name">io.blurrycontour.activitylens</string>
+    <string name="custom_url_scheme">io.blurrycontour.activitylens</string>
     <!-- Shown in Android's per-app notification settings. -->
     <string name="notification_channel_name">Activity Lens</string>
     <string name="notification_channel_description">Shared workouts, gear wear and training goals.</string>

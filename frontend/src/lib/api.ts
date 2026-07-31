@@ -35,7 +35,7 @@ export interface BuildInfo {
 }
 
 /** What happened, driving the icon the notification panel renders. */
-export type NotificationKind = 'workout_shared' | 'gear_worn' | 'goal_met' | 'goal_at_risk'
+export type NotificationKind = 'workout_shared' | 'gear_worn' | 'goal_met' | 'goal_at_risk' | 'workout_imported'
 
 export interface AppNotification {
   id: string

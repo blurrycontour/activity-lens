@@ -9,7 +9,7 @@ interface UnifiedPushPlugin {
   register(options: { distributor: string }): Promise<void>
   unregister(): Promise<void>
   dismiss(options: { tag: string }): Promise<void>
-  consumeTapLink(): Promise<{ link?: string | null }>
+  consumeTapLink(): Promise<NotificationTap>
   addListener<E extends keyof PluginEvents>(
     event: E,
     fn: (e: PluginEvents[E]) => void,
@@ -20,7 +20,7 @@ interface UnifiedPushPlugin {
 interface PluginEvents {
   endpoint: { endpoint?: string | null }
   registrationFailed: { reason?: string }
-  notificationTap: { link?: string }
+  notificationTap: NotificationTap
   message: PushMessage
 }
 
@@ -33,6 +33,18 @@ export interface NativePushStatus {
   endpoint?: string | null
   /** Whether Android is currently allowing this app to post notifications. */
   permitted: boolean
+}
+
+/**
+ * A tapped notification: where it points, and which notification it was.
+ *
+ * The id matters as much as the link — tapping a notification is reading it, and
+ * without the id the app cannot mark it read, so it stays bold in the list and
+ * in the unread count after the user has already dealt with it.
+ */
+export interface NotificationTap {
+  link?: string | null
+  id?: string | null
 }
 
 /** A push the receiver handed to the app instead of drawing it. */
@@ -182,10 +194,11 @@ export async function dismissNativeNotification(tag: string): Promise<void> {
  * Both polled and subscribed to, because a cold start delivers the intent before
  * any of this code exists and a tap while the app is open delivers it after.
  */
-export async function consumeNotificationTap(): Promise<string | null> {
+export async function consumeNotificationTap(): Promise<NotificationTap | null> {
   if (!isNative()) return null
   try {
-    return (await UnifiedPush.consumeTapLink()).link ?? null
+    const tap = await UnifiedPush.consumeTapLink()
+    return tap.link || tap.id ? tap : null
   } catch {
     return null
   }
@@ -196,10 +209,8 @@ export async function consumeNotificationTap(): Promise<string | null> {
  * unsubscribe function, so a component that re-renders does not accumulate
  * listeners and navigate several times for one tap.
  */
-export function onNotificationTap(fn: (link: string) => void): () => void {
-  return subscribe('notificationTap', e => {
-    if (e.link) fn(e.link)
-  })
+export function onNotificationTap(fn: (tap: NotificationTap) => void): () => void {
+  return subscribe('notificationTap', fn)
 }
 
 /**

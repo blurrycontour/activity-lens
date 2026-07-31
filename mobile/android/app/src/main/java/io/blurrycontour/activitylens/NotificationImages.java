@@ -1,7 +1,6 @@
-package io.github.blurrycontour.activitylens;
+package io.blurrycontour.activitylens;
 
 import android.content.Context;
-import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.BitmapShader;
@@ -33,15 +32,6 @@ final class NotificationImages {
     private NotificationImages() {}
 
     private static final String TAG = "UnifiedPush";
-
-    /**
-     * Where @capacitor/preferences keeps its values, and the key
-     * frontend/src/lib/serverConfig.ts writes the server address under. Both are
-     * that library's and that file's to change; a mismatch costs the avatar and
-     * nothing else, which is why this is read defensively rather than asserted.
-     */
-    private static final String CAPACITOR_PREFS = "CapacitorStorage";
-    private static final String SERVER_URL_KEY = "al_server_url";
 
     /**
      * Notification large icons are displayed at around 64dp. Anything larger is
@@ -87,15 +77,7 @@ final class NotificationImages {
         if (iconPath.startsWith("http://") || iconPath.startsWith("https://")) {
             return iconPath;
         }
-        SharedPreferences prefs = context.getSharedPreferences(CAPACITOR_PREFS, Context.MODE_PRIVATE);
-        String base = prefs.getString(SERVER_URL_KEY, null);
-        if (base == null || base.isEmpty()) {
-            return null;
-        }
-        if (base.endsWith("/")) {
-            base = base.substring(0, base.length() - 1);
-        }
-        return iconPath.startsWith("/") ? base + iconPath : base + "/" + iconPath;
+        return ServerConfig.url(context, iconPath);
     }
 
     private static Bitmap download(String url) {

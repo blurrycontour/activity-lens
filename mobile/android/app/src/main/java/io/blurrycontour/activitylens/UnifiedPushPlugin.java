@@ -1,4 +1,4 @@
-package io.github.blurrycontour.activitylens;
+package io.blurrycontour.activitylens;
 
 import android.Manifest;
 import android.content.Intent;
@@ -257,39 +257,41 @@ public class UnifiedPushPlugin extends Plugin {
      */
     @PluginMethod
     public void consumeTapLink(PluginCall call) {
-        JSObject result = new JSObject();
-        result.put("link", takeLink(getActivity().getIntent()));
-        call.resolve(result);
+        call.resolve(takeTap(getActivity().getIntent()));
     }
 
     /** A tap that arrived while the app was already open. */
     @Override
     protected void handleOnNewIntent(Intent intent) {
         super.handleOnNewIntent(intent);
-        String link = takeLink(intent);
-        if (link == null) {
+        JSObject tap = takeTap(intent);
+        if (tap.optString("link", null) == null && tap.optString("id", null) == null) {
             return;
         }
-        JSObject data = new JSObject();
-        data.put("link", link);
-        notifyListeners(TAP_EVENT, data);
+        notifyListeners(TAP_EVENT, tap);
     }
 
     /**
-     * Reads the link out of an intent and removes it.
+     * Reads a tap out of an intent and removes it.
+     *
+     * Both halves are consumed together: the link says where to go and the id
+     * says which notification to mark read, and reporting one without the other
+     * would either navigate without clearing the badge or clear it without
+     * moving.
      *
      * Removed because the activity keeps its intent: without this, every later
      * call would report the same tap again, and rotating the phone would reopen
      * a page the user had navigated away from.
      */
-    private static String takeLink(Intent intent) {
+    private static JSObject takeTap(Intent intent) {
+        JSObject tap = new JSObject();
         if (intent == null) {
-            return null;
+            return tap;
         }
-        String link = intent.getStringExtra(UnifiedPushReceiver.EXTRA_LINK);
-        if (link != null) {
-            intent.removeExtra(UnifiedPushReceiver.EXTRA_LINK);
-        }
-        return link;
+        tap.put("link", intent.getStringExtra(UnifiedPushReceiver.EXTRA_LINK));
+        tap.put("id", intent.getStringExtra(UnifiedPushReceiver.EXTRA_ID));
+        intent.removeExtra(UnifiedPushReceiver.EXTRA_LINK);
+        intent.removeExtra(UnifiedPushReceiver.EXTRA_ID);
+        return tap;
     }
 }

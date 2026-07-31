@@ -91,25 +91,26 @@ jobs:
           echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.p12"
           echo "path=$RUNNER_TEMP/release.p12" >> "$GITHUB_OUTPUT"
 
-      # Tagged commits are releases and get a signed release build; everything
-      # else gets a debug APK, which installs on a phone without any signing
-      # material at all.
+      # Always a release build, tagged or not.
       #
-      # Worth knowing: a debug APK and a release APK are signed with different
-      # keys, so Android will not update one to the other. An image built from
-      # main bundles a debug APK and can only ever update to other main builds.
+      # A debug APK is a different application to Android — since the debug build
+      # type carries an application id suffix, it installs alongside rather than
+      # updating, and Play Protect blocks it on install besides. Building one here
+      # meant every untagged commit produced an APK that could not update the app
+      # a user already had, which is the opposite of what a build from main is
+      # for. There is no reason to want that: signing is identical either way, so
+      # the only thing the debug build changed was making the artifact unusable.
+      #
+      # Without the keystore secrets — a fork, or a PR from one — this produces an
+      # unsigned APK. That still proves the build works, which is all CI needs
+      # there, but it cannot be installed; only a signed build can.
       - name: Build
         env:
           AL_KEYSTORE: ${{ steps.keystore.outputs.path }}
           AL_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           AL_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           AL_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: |
-          if [ "${{ startsWith(github.ref, 'refs/tags/') }}" = "true" ]; then
-            scripts/apk.sh release
-          else
-            scripts/apk.sh debug
-          fi
+        run: scripts/apk.sh release
 
       # Published as job outputs so every consumer can prove it received these
       # exact bytes rather than trusting that it did.

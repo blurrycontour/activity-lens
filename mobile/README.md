@@ -53,6 +53,22 @@ or download it from the login page of a server built with it.
 > Set `AL_KEYSTORE` in `.env.build` and `scripts/deploy.sh` builds release
 > automatically. Debug builds remain useful for a quick check on a spare device.
 
+### Debug builds are a separate app
+
+A debug build carries an `applicationIdSuffix` of `.dev` and is labelled
+"Activity Lens Dev". Android treats it as a different application entirely — its
+own icon, its own data, its own place in the launcher — so a build from your
+working tree installs *alongside* the copy you actually use rather than replacing
+it, and the two can be compared side by side.
+
+The consequence to know: a debug build can never update to a release one, and the
+in-app updater in a `.dev` install is downloading an APK it cannot install over
+itself. That is the intended trade — test in `.dev`, use the real one.
+
+CI always builds **release**, tagged or not. A debug APK from CI would install
+next to the real app instead of updating it, which is the opposite of what a
+build from `main` is for.
+
 ### Signing a release
 
 Create a keystore once, and keep it somewhere safe — losing it means no future
@@ -371,6 +387,67 @@ androidx forwards it to the `OnBackPressedDispatcher`, and anything not
 registered there is skipped while the activity is finished. An override compiles
 without a warning and is simply never called, which is how the first attempt at
 this shipped looking correct and quitting to the launcher.
+
+### Auto import (folder watching)
+
+Settings → Auto import watches one folder on the phone and imports any new
+workout files into the library, so a watch or a recording app that saves there
+needs no manual step.
+
+Four classes, split by lifetime like the push code:
+
+| File | What |
+|---|---|
+| `FolderSyncPlugin` | the bridge: pick a folder, enable, scan now, stop |
+| `FolderSync` | what survives process death — the tree URI, the seen set |
+| `FolderScanner` | the scan itself, with no WebView anywhere |
+| `FolderSyncWorker` | runs the scan on a schedule with the app closed |
+
+**The folder picker is the permission.** Access comes from
+`ACTION_OPEN_DOCUMENT_TREE`: the user picks a directory and the app can read that
+directory and nothing else. No storage permission is requested and none is
+declared, which is the entire reason to do it this way rather than asking for
+`READ_EXTERNAL_STORAGE` and getting the whole phone.
+
+`takePersistableUriPermission` is what makes it survive. Without it the grant
+lasts until the process dies and then silently stops working — a background job
+that quietly does nothing forever, which is the worst shape this bug could take.
+`disable()` hands the grant back, because the system caps how many an app may
+hold.
+
+**"Watching" means polling, honestly.** Android cannot wake an app when a file
+appears in a folder it does not own. The alternative is a foreground service with
+a permanent notification, which is not a fair trade for importing a workout a few
+minutes sooner. So `FolderSyncWorker` is a 15-minute periodic job — a floor, not
+a promise, since Doze and OS batching push it later — plus a "Scan now" button,
+which exists mostly so the feature can be verified without waiting a quarter of
+an hour.
+
+**Each scan does as little as possible**, because it runs forever on a folder
+that mostly does not change:
+
+1. files fingerprinted by URI, size and modified time are skipped unopened
+2. what remains is hashed and offered to `/api/workouts/import/known` in **one**
+   request
+3. only genuinely new files are uploaded, with `deferChecks` set
+4. `/import/finalize` then runs the gear and goal checks once and asks for the
+   notification
+
+Step 2 is the one that matters. Without it every scan would re-upload the whole
+folder; the server would deduplicate by content hash and nothing would break, but
+it would move the entire library over the network every fifteen minutes.
+
+The seen-set is an optimisation and nothing more — the server's content hash is
+what actually prevents duplicate imports, so losing the set costs one scan's work
+and never correctness. That is why it can be capped and thrown away when full.
+
+Only `.gpx` and `.tcx` are imported, including `.gz` of either. `.fit` is
+deliberately skipped rather than attempted: the backend has no parser for it, so
+importing one would fail per file, on every scan, forever.
+
+The notification is a real server-side kind (`workout_imported`), not a local
+one, so it appears in the in-app bell, syncs to your other devices, and obeys the
+per-kind switch in Settings like everything else.
 
 ### Permissions
 
