@@ -1,7 +1,13 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Plus, Watch, Bike, Shirt, Package, Footprints, Pencil, Trash2, X, ChevronRight, ArrowLeft, AlertTriangle, Search } from 'lucide-react'
+import {
+  Plus, Watch, Bike, Shirt, Package, Footprints, Pencil, Trash2, X, ChevronRight,
+  ArrowLeft, AlertTriangle, Search, SlidersHorizontal, ArrowDownWideNarrow,
+} from 'lucide-react'
 import { api, type Equipment, type EquipmentInput, type LinkedWorkout } from '../lib/api'
 import { useRefreshHandler } from '../context/RefreshContext'
+import { useIsMobile } from '../lib/useIsMobile'
+import Dropdown, { type DropdownOption } from '../components/Dropdown'
+import FilterSheet from '../components/FilterSheet'
 import { fmtDuration, fmtDist } from '../data/workouts'
 
 interface EquipmentPageProps {
@@ -14,6 +20,22 @@ const TYPES = [
   { id: 'bike', label: 'Bike' },
   { id: 'apparel', label: 'Apparel' },
   { id: 'other', label: 'Other' },
+]
+
+type SortField = 'name' | 'workouts' | 'distance' | 'wear' | 'type'
+
+/** Filter and sort choices, shared by the desktop dropdowns and mobile sheet. */
+const TYPE_OPTIONS: DropdownOption<string>[] = [
+  { value: 'all', label: 'All types' },
+  ...TYPES.map(t => ({ value: t.id, label: t.label })),
+]
+
+const SORT_OPTIONS: DropdownOption<SortField>[] = [
+  { value: 'name', label: 'By name', short: 'A→Z' },
+  { value: 'workouts', label: 'Most used', short: '↓' },
+  { value: 'distance', label: 'Longest distance', short: '↓' },
+  { value: 'wear', label: 'Most worn', short: '↓' },
+  { value: 'type', label: 'By type', short: '·' },
 ]
 
 function typeIcon(type: string, size = 18) {
@@ -47,7 +69,29 @@ export default function EquipmentPage({ onSelectWorkout }: EquipmentPageProps) {
   const [detail, setDetail] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState<string>('all')
-  const [sortBy, setSortBy] = useState<'name' | 'workouts' | 'distance' | 'wear' | 'type'>('name')
+  const [sortBy, setSortBy] = useState<SortField>('name')
+  const [showFilters, setShowFilters] = useState(false)
+  const isMobile = useIsMobile()
+
+  /** What is currently narrowing the list, as dismissible chips on mobile. */
+  const activeFilters = useMemo(() => {
+    const out: { key: string; label: string; clear: () => void }[] = []
+    if (typeFilter !== 'all') {
+      out.push({
+        key: 'type',
+        label: TYPE_OPTIONS.find(o => o.value === typeFilter)?.label ?? typeFilter,
+        clear: () => setTypeFilter('all'),
+      })
+    }
+    if (sortBy !== 'name') {
+      out.push({
+        key: 'sort',
+        label: SORT_OPTIONS.find(o => o.value === sortBy)?.label ?? sortBy,
+        clear: () => setSortBy('name'),
+      })
+    }
+    return out
+  }, [typeFilter, sortBy])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -100,6 +144,11 @@ export default function EquipmentPage({ onSelectWorkout }: EquipmentPageProps) {
           )}
         </div>
 
+        {/* Mirrors the Workouts header: search plus dropdowns on a desktop, and
+            on a phone a single filter button opening a sheet, with whatever is
+            applied shown as dismissible chips underneath. Three controls
+            side by side wrap to three rows on a phone and push the list itself
+            below the fold. */}
         {!detail && (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
             <div style={{ position: 'relative', flex: 1, minWidth: 180 }}>
@@ -112,20 +161,66 @@ export default function EquipmentPage({ onSelectWorkout }: EquipmentPageProps) {
                 style={{ paddingLeft: 30, width: '100%' }}
               />
             </div>
-            <select className="select" value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
-              <option value="all">All types</option>
-              {TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
-            </select>
-            <select className="select" value={sortBy} onChange={e => setSortBy(e.target.value as typeof sortBy)}>
-              <option value="name">By Name</option>
-              <option value="workouts">By Workouts</option>
-              <option value="distance">By Distance</option>
-              <option value="wear">By Wear</option>
-              <option value="type">By Type</option>
-            </select>
+
+            {isMobile ? (
+              <button
+                className="btn btn-ghost filter-btn"
+                onClick={() => setShowFilters(true)}
+                aria-label={`Filters${activeFilters.length ? `, ${activeFilters.length} applied` : ''}`}
+              >
+                <SlidersHorizontal size={15} />
+                {activeFilters.length > 0 && <span className="filter-count">{activeFilters.length}</span>}
+              </button>
+            ) : (
+              <>
+                <Dropdown
+                  value={typeFilter}
+                  options={TYPE_OPTIONS}
+                  onChange={setTypeFilter}
+                  ariaLabel="Equipment type"
+                />
+                <Dropdown
+                  value={sortBy}
+                  options={SORT_OPTIONS}
+                  onChange={setSortBy}
+                  ariaLabel="Sort order"
+                  icon={<ArrowDownWideNarrow size={13} color="var(--text-3)" style={{ flexShrink: 0 }} />}
+                />
+              </>
+            )}
+          </div>
+        )}
+
+        {!detail && isMobile && activeFilters.length > 0 && (
+          <div className="active-filters">
+            {activeFilters.map(f => (
+              <span key={f.key} className="active-filter">
+                {f.label}
+                <button onClick={f.clear} aria-label={`Clear ${f.label}`}><X size={11} /></button>
+              </span>
+            ))}
           </div>
         )}
       </div>
+
+      {showFilters && (
+        <FilterSheet
+          groups={[
+            {
+              key: 'type', label: 'Type', value: typeFilter,
+              onChange: v => setTypeFilter(v as string),
+              options: TYPE_OPTIONS.map(o => ({ value: o.value, label: o.label })),
+            },
+            {
+              key: 'sort', label: 'Sort by', value: sortBy,
+              onChange: v => setSortBy(v as SortField),
+              options: SORT_OPTIONS.map(o => ({ value: o.value, label: o.label })),
+            },
+          ]}
+          onReset={() => { setTypeFilter('all'); setSortBy('name') }}
+          onClose={() => setShowFilters(false)}
+        />
+      )}
 
       <div className="page-content tight">
         {detail ? (

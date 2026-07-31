@@ -4,6 +4,7 @@ import {
   disableFolderSync, folderSyncStatus, pickSyncFolder, scanFolderNow, setFolderSyncEnabled,
   setFolderSyncInterval, type FolderSyncStatus,
 } from '../lib/native/folderSync'
+import Field from './Field'
 
 /**
  * How often to look. Fifteen minutes is WorkManager's floor — anything shorter is
@@ -40,10 +41,14 @@ function ago(millis: number): string | null {
  * one directory. There is no permission prompt because there is no permission:
  * the app can read the folder you picked and nothing else on the phone.
  */
+/** Which action is running, so only that button shows a spinner. */
+type Pending = 'choose' | 'scan' | 'rescan' | 'stop' | 'settings' | null
+
 export default function AutoImportCard() {
   const [status, setStatus] = useState<FolderSyncStatus | null>(null)
-  const [busy, setBusy] = useState(false)
+  const [pending, setPending] = useState<Pending>(null)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const busy = pending !== null
 
   useEffect(() => {
     let active = true
@@ -51,8 +56,8 @@ export default function AutoImportCard() {
     return () => { active = false }
   }, [])
 
-  async function run(action: () => Promise<void>) {
-    setBusy(true)
+  async function run(what: Exclude<Pending, null>, action: () => Promise<void>) {
+    setPending(what)
     setMsg(null)
     try {
       await action()
@@ -60,18 +65,18 @@ export default function AutoImportCard() {
       setMsg({ ok: false, text: e instanceof Error ? e.message : 'Something went wrong' })
     } finally {
       setStatus(await folderSyncStatus())
-      setBusy(false)
+      setPending(null)
     }
   }
 
-  const choose = () => run(async () => {
+  const choose = () => run('choose', async () => {
     const folder = await pickSyncFolder()
     // Choosing a folder is the whole point of the interaction, so it turns the
     // watch on rather than leaving a second switch to find.
     if (folder) await setFolderSyncEnabled(true)
   })
 
-  const scan = (force = false) => run(async () => {
+  const scan = (force = false) => run(force ? 'rescan' : 'scan', async () => {
     const result = await scanFolderNow(force)
     setMsg({
       ok: result.ok,
@@ -118,7 +123,7 @@ export default function AutoImportCard() {
               type="checkbox"
               checked={status?.enabled ?? false}
               disabled={busy}
-              onChange={e => void run(() => setFolderSyncEnabled(e.target.checked))}
+              onChange={e => void run('settings', () => setFolderSyncEnabled(e.target.checked))}
             />
             <span className="switch-track" />
             Check for new files automatically
@@ -129,27 +134,27 @@ export default function AutoImportCard() {
             when something is imported.
           </p>
 
-          <label style={{ display: 'block', marginTop: 14 }}>
-            <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-3)' }}>
-              How often
-            </span>
-            <select
-              className="select"
-              style={{ width: '100%', maxWidth: 220, marginTop: 6 }}
-              value={status?.intervalMinutes ?? 15}
-              disabled={busy || !status?.enabled}
-              onChange={e => void run(() => setFolderSyncInterval(Number(e.target.value)))}
+          <div style={{ marginTop: 14 }}>
+            <Field
+              label="How often"
+              hint="This phone only — it is not shared with your other devices."
             >
-              {INTERVALS.map(i => <option key={i.minutes} value={i.minutes}>{i.label}</option>)}
-            </select>
-          </label>
-          <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 6, lineHeight: 1.5 }}>
-            This phone only — it is not shared with your other devices.
-          </p>
+              <select
+                className="select"
+                style={{ width: '100%', maxWidth: 220 }}
+                value={status?.intervalMinutes ?? 15}
+                disabled={busy || !status?.enabled}
+                onChange={e => void run('settings', () => setFolderSyncInterval(Number(e.target.value)))}
+              >
+                {INTERVALS.map(i => <option key={i.minutes} value={i.minutes}>{i.label}</option>)}
+              </select>
+            </Field>
+          </div>
 
           <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
             <button className="btn btn-ghost" disabled={busy} onClick={() => scan()}>
-              <RefreshCw size={15} /> Scan now
+              <RefreshCw size={15} className={pending === 'scan' ? 'spin' : undefined} />
+              {pending === 'scan' ? 'Scanning…' : 'Scan now'}
             </button>
             <button
               className="btn btn-ghost"
@@ -157,9 +162,11 @@ export default function AutoImportCard() {
               onClick={() => scan(true)}
               title="Re-check every file, including ones already imported before"
             >
-              <RotateCcw size={15} /> Full rescan
+              {/* Counter-clockwise glyph, so it spins the way it points. */}
+              <RotateCcw size={15} className={pending === 'rescan' ? 'spin-reverse' : undefined} />
+              {pending === 'rescan' ? 'Rescanning…' : 'Full rescan'}
             </button>
-            <button className="btn btn-ghost" disabled={busy} onClick={() => run(disableFolderSync)}>
+            <button className="btn btn-ghost" disabled={busy} onClick={() => run('stop', disableFolderSync)}>
               Stop watching
             </button>
           </div>

@@ -48,7 +48,7 @@ export default function DashboardSettings() {
           info="Totals and the activity mix are calculated over this window."
         >
           <select
-            className="input"
+            className="select"
             style={{ width: '100%', maxWidth: 240 }}
             value={cfg.windowDays}
             onChange={e => setCfg(prev => ({ ...prev, windowDays: Number(e.target.value) }))}

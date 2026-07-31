@@ -402,7 +402,6 @@ export default function App() {
         themeMode={themeMode}
         onCycleTheme={cycleTheme}
         onUserMenu={() => setShowUserMenu(v => !v)}
-        onHelp={() => navigate('help')}
         onHome={() => navigate('dashboard')}
         onNavigate={openLink}
         isMobile={isMobile}
@@ -484,7 +483,9 @@ export default function App() {
           onClose={() => setShowUserMenu(false)}
           onSettings={() => navigate('settings')}
           onAdmin={() => navigate('admin')}
+          onHelp={() => navigate('help')}
           onLogout={logout}
+          isMobile={isMobile}
           user={user}
         />
       )}

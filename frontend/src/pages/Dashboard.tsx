@@ -51,18 +51,22 @@ function StatCard({ icon, label, value, unit, sub, delta, spark, color }: {
   color?: string
 }) {
   return (
-    <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ color: 'var(--text-3)' }}>{icon}</span>
-        <span style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</span>
+    <div className="card stat-card">
+      <div className="stat-card-head">
+        {icon}
+        <span className="stat-card-label">{label}</span>
       </div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 28, fontWeight: 700, fontFamily: 'var(--font-mono)', letterSpacing: '-0.04em', color: 'var(--text)' }}>{value}</span>
-        {unit && <span style={{ fontSize: 13, color: 'var(--text-3)' }}>{unit}</span>}
-        {delta !== undefined && <span style={{ marginLeft: 'auto' }}><DeltaBadge pct={delta} /></span>}
+      <div className="stat-card-value-row">
+        <span className="stat-card-value">{value}</span>
+        {unit && <span className="stat-card-unit">{unit}</span>}
+        {delta !== undefined && <span className="stat-card-delta"><DeltaBadge pct={delta} /></span>}
       </div>
-      {spark && spark.length > 1 && <Sparkline values={spark} color={color ?? 'var(--primary)'} width={110} height={22} />}
-      {sub && <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{sub}</span>}
+      {spark && spark.length > 1 && (
+        <span className="stat-card-spark">
+          <Sparkline values={spark} color={color ?? 'var(--primary)'} width={110} height={22} />
+        </span>
+      )}
+      {sub && <span className="stat-card-sub">{sub}</span>}
     </div>
   )
 }
@@ -327,7 +331,7 @@ export default function Dashboard() {
 
             {/* Stats grid (configurable) */}
             {cfg.cards.length > 0 && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 12, marginBottom: 16 }}>
+              <div className="stat-cards">
                 {cfg.cards.map(id => allCards[id])}
               </div>
             )}

@@ -76,7 +76,7 @@ export default function EmailAdmin({ settings, onSaved }: Props) {
             <input className="input" style={{ width: '100%' }} value={fromName} disabled={ov.fromName} onChange={e => setFromName(e.target.value)} />
           </Field>
           <Field label="Encryption" overridden={ov.encryption}>
-            <select className="input" style={{ width: '100%' }} value={encryption} disabled={ov.encryption} onChange={e => setEncryption(e.target.value)}>
+            <select className="select" style={{ width: '100%' }} value={encryption} disabled={ov.encryption} onChange={e => setEncryption(e.target.value)}>
               {ENCRYPTIONS.map(x => <option key={x} value={x}>{x}</option>)}
             </select>
           </Field>

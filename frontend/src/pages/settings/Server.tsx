@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { apiBase, forgetServer } from '../../lib/serverConfig'
-import { installedApp, requestUpdateCheck } from '../../lib/native/appUpdate'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import SettingsCard from '../../components/SettingsCard'
 import Field from '../../components/Field'
@@ -9,16 +8,14 @@ import Field from '../../components/Field'
 /**
  * Which server the installed app talks to. Native only: in a browser the answer
  * is "the one that served this page" and cannot be changed.
+ *
+ * The app's own version and update check live under App — they are facts about
+ * this install, not about the server it happens to point at.
  */
 export default function ServerSettings() {
   const { logout } = useAuth()
   const [confirm, setConfirm] = useState(false)
   const [disconnecting, setDisconnecting] = useState(false)
-  const [appVersion, setAppVersion] = useState<string | null>(null)
-
-  useEffect(() => {
-    installedApp().then(info => setAppVersion(info.version)).catch(() => {})
-  }, [])
 
   /**
    * Points the app at a different server.
@@ -41,17 +38,7 @@ export default function ServerSettings() {
         <div className="tile tile-mono">{apiBase()}</div>
       </Field>
 
-      {appVersion && (
-        <Field label="App version">
-          <span className="tile-mono">{appVersion}</span>
-        </Field>
-      )}
-
       <div className="settings-actions">
-        {/* The app checks on its own at launch and on resume; this is for
-            someone who has just upgraded their server and wants the new app
-            now rather than at the next check. */}
-        <button className="btn btn-ghost" onClick={requestUpdateCheck}>Check for updates</button>
         <button className="btn btn-ghost" onClick={() => setConfirm(true)}>Disconnect</button>
       </div>
       <span className="field-hint">

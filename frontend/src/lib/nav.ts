@@ -30,7 +30,7 @@ export const PAGES: Page[] = [...DESKTOP_PAGES, 'settings', 'admin']
 export const SETTINGS_SECTIONS = [
   'profile', 'security', 'body',
   'appearance', 'dashboard', 'goals', 'notifications',
-  'autoimport', 'server',
+  'autoimport', 'app', 'server',
 ] as const
 export type SettingsSection = typeof SETTINGS_SECTIONS[number]
 

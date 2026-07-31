@@ -67,13 +67,13 @@ export default function GoalsSettings() {
               />
             </Field>
             <Field label="Sport">
-              <select className="input" style={{ width: '100%' }} value={g.type} onChange={e => update(i, { type: e.target.value as Goal['type'] })}>
+              <select className="select" style={{ width: '100%' }} value={g.type} onChange={e => update(i, { type: e.target.value as Goal['type'] })}>
                 <option value="">Any activity</option>
                 {WORKOUT_TYPES.map(t => <option key={t} value={t}>{TYPE_ICON[t]} {t}</option>)}
               </select>
             </Field>
             <Field label="Per">
-              <select className="input" style={{ width: '100%' }} value={g.period} onChange={e => update(i, { period: e.target.value as Goal['period'] })}>
+              <select className="select" style={{ width: '100%' }} value={g.period} onChange={e => update(i, { period: e.target.value as Goal['period'] })}>
                 <option value="week">Week</option>
                 <option value="month">Month</option>
               </select>

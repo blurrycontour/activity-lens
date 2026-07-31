@@ -1,7 +1,7 @@
 import NotificationBell from './NotificationBell'
 import { avatarUrl } from './UserAvatar'
 import { useUpdatePending } from '../lib/appUpdate'
-import { Menu, Sun, Moon, Monitor, HelpCircle } from 'lucide-react'
+import { Menu, Sun, Moon, Monitor } from 'lucide-react'
 import type { ApiUser } from '../lib/api'
 import Logo from './Logo'
 
@@ -12,7 +12,6 @@ interface TopBarProps {
   themeMode: ThemeMode
   onCycleTheme: () => void
   onUserMenu: () => void
-  onHelp: () => void
   /** Clicking the brand returns to the dashboard, like any site logo. */
   onHome: () => void
   /** Opens an in-app path, e.g. from a notification's deep link. */
@@ -33,7 +32,7 @@ const THEME_LABELS: Record<ThemeMode, string> = {
   system: 'System theme',
 }
 
-export default function TopBar({ onToggleSidebar, themeMode, onCycleTheme, onUserMenu, onHelp, onHome, onNavigate, isMobile, user }: TopBarProps) {
+export default function TopBar({ onToggleSidebar, themeMode, onCycleTheme, onUserMenu, onHome, onNavigate, isMobile, user }: TopBarProps) {
   const updatePending = useUpdatePending()
 
   return (
@@ -59,13 +58,6 @@ export default function TopBar({ onToggleSidebar, themeMode, onCycleTheme, onUse
       </button>
 
       <div style={{ flex: 1 }} />
-
-      {/* Help — always visible, moves to topbar on mobile since bottom bar has no Help slot */}
-      {isMobile && (
-        <button className="btn-icon" onClick={onHelp} title="Help">
-          <HelpCircle size={18} />
-        </button>
-      )}
 
       {/* Theme cycle: dark → light → system → dark */}
       <button

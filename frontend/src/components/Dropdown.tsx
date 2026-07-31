@@ -1,0 +1,112 @@
+import { useEffect, useRef, useState } from 'react'
+import { ChevronDown } from 'lucide-react'
+
+export interface DropdownOption<T> {
+  value: T
+  label: string
+  /** Short mono prefix in the menu, e.g. an arrow or "7d". */
+  short?: string
+  /** Colour dot before the label, and the colour of the label when selected. */
+  color?: string
+  /** Emoji or glyph shown before the label, in both trigger and menu. */
+  glyph?: string
+}
+
+interface DropdownProps<T extends string | number> {
+  value: T
+  options: DropdownOption<T>[]
+  onChange: (v: T) => void
+  /** Icon at the far left of the trigger. Omit when options carry colour dots. */
+  icon?: React.ReactNode
+  ariaLabel?: string
+}
+
+/**
+ * The app's filter/sort picker.
+ *
+ * A native `<select>` cannot carry a colour dot or a mono prefix, which is why
+ * this exists. It replaces three components (type, sort, range) that were the
+ * same eighty lines of open/close/outside-click with different options in the
+ * middle — the sort of divergence that ends with three dropdowns that no longer
+ * look alike.
+ */
+export default function Dropdown<T extends string | number>({
+  value, options, onChange, icon, ariaLabel,
+}: DropdownProps<T>) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handle(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [])
+
+  // Escape closes it, like every other dismissible surface in the app.
+  useEffect(() => {
+    if (!open) return
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [open])
+
+  const selected = options.find(o => o.value === value) ?? options[0]
+  if (!selected) return null
+
+  const dot = (o: DropdownOption<T>, size: number, glow: boolean) => (
+    <span style={{
+      width: size, height: size, borderRadius: '50%', background: o.color,
+      flexShrink: 0, boxShadow: glow ? `0 0 6px ${o.color}` : 'none',
+    }} />
+  )
+
+  return (
+    <div className="al-dropdown" ref={ref}>
+      <button
+        className="al-dropdown-trigger"
+        onClick={() => setOpen(o => !o)}
+        type="button"
+        aria-expanded={open}
+        aria-label={ariaLabel}
+      >
+        {icon}
+        {selected.color && dot(selected, 10, Boolean(selected.color))}
+        <span style={{ flex: 1, textAlign: 'left' }}>
+          {selected.glyph ? `${selected.glyph} ${selected.label}` : selected.label}
+        </span>
+        <ChevronDown
+          size={14}
+          color="var(--text-3)"
+          style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}
+        />
+      </button>
+
+      {open && (
+        <div className="al-dropdown-menu" style={{ animation: 'fadeIn 0.12s ease' }}>
+          {options.map(o => (
+            <button
+              key={String(o.value)}
+              className={`al-dropdown-item ${value === o.value ? 'active' : ''}`}
+              onClick={() => { onChange(o.value); setOpen(false) }}
+            >
+              {o.short !== undefined && (
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-3)', width: 28, flexShrink: 0 }}>
+                  {o.short}
+                </span>
+              )}
+              {o.color && dot(o, 10, false)}
+              <span style={{ color: value === o.value ? o.color : undefined }}>
+                {o.glyph ? `${o.glyph} ${o.label}` : o.label}
+              </span>
+              {value === o.value && (
+                <span style={{ marginLeft: 'auto', fontSize: 11, color: o.color ?? 'var(--primary)' }}>✓</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}

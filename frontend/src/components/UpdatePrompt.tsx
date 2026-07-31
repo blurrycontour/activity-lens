@@ -4,8 +4,8 @@ import { api } from '../lib/api'
 import { clearUpdatePending, markUpdateReady } from '../lib/appUpdate'
 import {
   canInstallOver, canSelfUpdate, downloadAndInstall, installedApp, INSTALL_NOT_PERMITTED,
-  onUpdateProgress, openInstallSettings, updateAvailable, UPDATE_CHECK_EVENT,
-  type UpdateProgress,
+  onUpdateProgress, openInstallSettings, reportUpdateCheckDone, updateAvailable,
+  UPDATE_CHECK_EVENT, type UpdateProgress,
 } from '../lib/native/appUpdate'
 
 /**
@@ -74,10 +74,16 @@ export default function UpdatePrompt() {
         const last = Number(localStorage.getItem(LAST_CHECK_KEY) ?? 0)
         if (Date.now() - last < RESUME_INTERVAL_MS) return
       }
+      // Only a manual check has someone waiting on an answer. Reported on every
+      // exit path below, including the failure one, so the button that asked
+      // always stops spinning.
+      const announce = (found: boolean) => {
+        if (reason === 'manual') reportUpdateCheckDone(found)
+      }
       try {
         const [app, current] = await Promise.all([api.androidApp(), installedApp()])
         localStorage.setItem(LAST_CHECK_KEY, String(Date.now()))
-        if (cancelled) return
+        if (cancelled) { announce(false); return }
         // The id check comes first and is not a version question: a build with
         // a different application id installs alongside this one rather than
         // over it, so there is nothing here to offer however the versions
@@ -89,6 +95,7 @@ export default function UpdatePrompt() {
           // the version already installed. Withdrawn rather than left standing,
           // so the avatar dot cannot outlive the update it points at.
           clearUpdatePending()
+          announce(false)
           return
         }
         // Recorded before the snooze check, so dismissing the dialog leaves the
@@ -98,9 +105,11 @@ export default function UpdatePrompt() {
         if (reason !== 'manual' && snoozedVersion === app.version) return
         setStage('offer')
         setOffered(app.version)
+        announce(true)
       } catch {
         // An unreachable server, or one too old to have the endpoint. Checking
         // for updates is never worth interrupting the app over.
+        announce(false)
       }
     }
 

@@ -1,6 +1,6 @@
 import {
   User as UserIcon, ShieldCheck, HeartPulse, Palette, LayoutDashboard,
-  Target, Bell, FolderSync, Server,
+  Target, Bell, FolderSync, Server, Smartphone,
 } from 'lucide-react'
 import type { SettingsSection } from '../../lib/nav'
 
@@ -63,6 +63,12 @@ export const SETTINGS_META: SectionMeta[] = [
     sub: 'Watch a folder for new activity files',
     icon: <FolderSync size={16} />, nativeOnly: true,
   },
+  {
+    id: 'app', label: 'App', group: 'This device',
+    sub: 'Version and updates',
+    icon: <Smartphone size={16} />, nativeOnly: true,
+  },
+  // Last on purpose: disconnecting is the one action here that signs you out.
   {
     id: 'server', label: 'Server', group: 'This device',
     sub: 'Which instance this app is connected to',

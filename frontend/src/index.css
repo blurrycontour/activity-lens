@@ -669,6 +669,10 @@ body {
   padding: 10px 14px;
   font-size: 13.5px;
   font-weight: 600;
+  /* Sits slightly apart from the last field. The form's own gap is the spacing
+     *between* fields; the button is a different kind of thing and reads as
+     cramped without it, most visibly on the one-field server setup screen. */
+  margin-top: 6px;
 }
 
 .auth-divider { display: flex; align-items: center; gap: 10px; }
@@ -851,18 +855,30 @@ body {
 }
 .input:focus { border-color: var(--primary); }
 
+/* The one style for every <select>. `appearance: none` is what makes the
+   padding above actually apply — a native select lays out its own box and
+   ignores it — but it also removes the caret, so we draw one. The colour is a
+   mid grey that reads on both themes; a data URI cannot use currentColor. */
 .select {
-  background: var(--bg-3);
+  background-color: var(--bg-3);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238b93a1' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  background-size: 14px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text);
   font-size: 13px;
-  padding: 7px 10px;
+  /* Room on the right for the caret we just drew. */
+  padding: 7px 30px 7px 10px;
   outline: none;
   cursor: pointer;
   appearance: none;
   font-family: var(--font-sans);
+  transition: border-color 0.15s;
 }
+.select:focus { border-color: var(--primary); }
+.select:disabled { opacity: 0.55; cursor: not-allowed; }
 .select:focus { border-color: var(--primary); }
 
 /* ── Overlay / Modal ── */
@@ -1156,6 +1172,59 @@ body {
 
 /* Workout detail summary stat grid: readable multi-column layout that
  * collapses to 3-per-row on mobile. */
+/* ── Dashboard stat cards ───────────────────────────────────────────────
+   Six of these open the dashboard. At full size on a phone they are two
+   columns of ~135px tall cards, so three rows of them fill the screen before
+   any actual content — the summary pushes away the thing it summarises. The
+   mobile rules below drop the parts that repeat information already in the
+   header (the period caption) or that are too small to read anything from
+   (the sparkline), which roughly halves each card. */
+.stat-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.stat-card { display: flex; flex-direction: column; gap: 8px; }
+.stat-card-head { display: flex; align-items: center; gap: 8px; }
+.stat-card-head svg { color: var(--text-3); flex-shrink: 0; }
+.stat-card-label {
+  font-size: 11px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stat-card-value-row { display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; }
+.stat-card-value {
+  font-size: 28px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  letter-spacing: -0.04em;
+  color: var(--text);
+}
+.stat-card-unit { font-size: 13px; color: var(--text-3); }
+.stat-card-delta { margin-left: auto; }
+.stat-card-sub { font-size: 11px; color: var(--text-3); }
+
+@media (max-width: 768px) {
+  .stat-cards {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .stat-card { gap: 4px; padding: 11px 12px; }
+  .stat-card-value { font-size: 21px; }
+  .stat-card-unit { font-size: 11px; }
+  .stat-card-label { font-size: 10px; }
+  /* The period is already stated once in the page header, and a 110px
+     sparkline says nothing at this size. */
+  .stat-card-sub, .stat-card-spark { display: none; }
+}
+
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
@@ -1360,6 +1429,11 @@ body {
 .workout-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
 
 .spin { animation: spin 0.8s linear infinite; }
+/* For glyphs that point anticlockwise, so the motion agrees with the arrow. */
+.spin-reverse { animation: spin 0.8s linear infinite reverse; }
+@media (prefers-reduced-motion: reduce) {
+  .spin, .spin-reverse { animation: none; }
+}
 
 /* ── Share dialog ── */
 .share-section {

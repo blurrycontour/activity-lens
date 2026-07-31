@@ -80,7 +80,7 @@ export default function BodySettings() {
       <SettingsCard title="About you" description="Private to your account. Used to personalise estimates.">
         <div className="field-grid">
           <Field label="Sex">
-            <select className="input" style={{ width: '100%' }} value={sex} onChange={e => setSex(e.target.value as typeof sex)}>
+            <select className="select" style={{ width: '100%' }} value={sex} onChange={e => setSex(e.target.value as typeof sex)}>
               <option value="">Prefer not to say</option>
               <option value="male">Male</option>
               <option value="female">Female</option>
@@ -115,7 +115,7 @@ export default function BodySettings() {
           label="Method"
           info="Only used when an imported workout does not already report calories. The heart-rate method draws on your sex, age and weight above."
         >
-          <select className="input" style={{ width: '100%', maxWidth: 260 }} value={calorieMethod} onChange={e => setCalorieMethod(e.target.value as typeof calorieMethod)}>
+          <select className="select" style={{ width: '100%', maxWidth: 260 }} value={calorieMethod} onChange={e => setCalorieMethod(e.target.value as typeof calorieMethod)}>
             <option value="heart-rate">Heart rate, then distance</option>
             <option value="distance">Distance only</option>
           </select>

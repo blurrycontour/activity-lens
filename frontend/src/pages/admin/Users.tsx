@@ -120,7 +120,7 @@ export default function UsersAdmin({ users, onChanged }: Props) {
 
                 <div className="user-row-role">
                   {editing ? (
-                    <select className="input" style={{ width: '100%' }} value={draftRole} onChange={e => setDraftRole(e.target.value)}>
+                    <select className="select" style={{ width: '100%' }} value={draftRole} onChange={e => setDraftRole(e.target.value)}>
                       {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
                     </select>
                   ) : (
@@ -246,7 +246,7 @@ function CreateUser({ onDone, onCancel }: { onDone: () => void; onCancel: () => 
           <PasswordInput autoComplete="new-password" value={password} onChange={e => setPassword(e.target.value)} />
         </Field>
         <Field label="Role">
-          <select className="input" style={{ width: '100%' }} value={role} onChange={e => setRole(e.target.value)}>
+          <select className="select" style={{ width: '100%' }} value={role} onChange={e => setRole(e.target.value)}>
             {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
           </select>
         </Field>

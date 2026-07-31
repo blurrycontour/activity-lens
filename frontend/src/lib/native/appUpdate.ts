@@ -97,3 +97,23 @@ export const UPDATE_CHECK_EVENT = 'al-check-update'
 export function requestUpdateCheck(): void {
   window.dispatchEvent(new Event(UPDATE_CHECK_EVENT))
 }
+
+/**
+ * Reports the outcome of a *manual* check back to whoever asked for it.
+ *
+ * The request above is fire-and-forget, which is fine for the dialog — it shows
+ * itself. It is not fine for a "Check for updates" button, which otherwise has
+ * no idea when to stop spinning, and can never say "you are up to date" because
+ * nothing on that path ever reports the boring answer. UpdatePrompt owns the
+ * decision, so it is what announces the result rather than the button
+ * re-deriving it and drifting.
+ */
+export const UPDATE_CHECK_DONE_EVENT = 'al-check-update-done'
+
+export interface UpdateCheckResult { found: boolean }
+
+export function reportUpdateCheckDone(found: boolean): void {
+  window.dispatchEvent(
+    new CustomEvent<UpdateCheckResult>(UPDATE_CHECK_DONE_EVENT, { detail: { found } }),
+  )
+}

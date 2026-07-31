@@ -11,6 +11,7 @@ import AppearanceSettings from './Appearance'
 import DashboardSettings from './DashboardPrefs'
 import GoalsSettings from './Goals'
 import NotificationSettings from './Notifications'
+import AppInfoSettings from './AppInfo'
 import ServerSettings from './Server'
 
 interface SettingsProps {
@@ -47,6 +48,7 @@ export default function Settings({ section, onOpen, onBack, accent, onAccentChan
       {section === 'goals' && <GoalsSettings />}
       {section === 'notifications' && <NotificationSettings />}
       {section === 'autoimport' && <AutoImportCard />}
+      {section === 'app' && <AppInfoSettings />}
       {section === 'server' && <ServerSettings />}
     </>
   )
