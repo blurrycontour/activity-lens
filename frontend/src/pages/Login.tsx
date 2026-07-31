@@ -3,6 +3,7 @@ import { AlertCircle, Loader2, LogIn, Server, Smartphone, UserPlus, WifiOff } fr
 import { clearCachedUser, useAuth } from '../context/AuthContext'
 import { api, ApiError, apiURL, type AndroidApp } from '../lib/api'
 import { apiBase, forgetServer, isNative } from '../lib/serverConfig'
+import { SSO_CANCELLED } from '../lib/native/nativeAuth'
 import { isGatewayError, useOnlineStatus } from '../lib/network'
 import Logo from '../components/Logo'
 import PasswordInput from '../components/PasswordInput'
@@ -37,8 +38,12 @@ export default function Login() {
     try {
       await loginWithSSO(controller.signal)
     } catch (err) {
-      // A cancelled wait is this component unmounting, not a failure to report.
-      if (!controller.signal.aborted) {
+      // Two silent cases: this component unmounting, and the user backing out
+      // of the browser. Neither is a failure, and "Sign-in failed" in front of
+      // someone who just changed their mind reads as the app being broken.
+      const cancelled = controller.signal.aborted
+        || (err instanceof Error && err.message === SSO_CANCELLED)
+      if (!cancelled) {
         setError(err instanceof ApiError ? err.message : 'Sign-in failed. Please try again.')
       }
     } finally {

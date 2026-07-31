@@ -98,8 +98,29 @@ public class NativeAuthPlugin extends Plugin {
         Uri target = Uri.parse(url).buildUpon().appendQueryParameter("scheme", getContext().getPackageName()).build();
         try {
             CustomTabsIntent tab = new CustomTabsIntent.Builder().setShowTitle(true).build();
-            tab.intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            tab.launchUrl(getContext(), target);
+            // Launched into *this* task, from the activity, and deliberately
+            // without FLAG_ACTIVITY_NEW_TASK.
+            //
+            // That flag is what left the browser sitting there after a
+            // successful sign-in: in a task of its own, nothing about returning
+            // to the app disturbs it, so the user lands back here and finds the
+            // tab still open behind them — showing a completed OAuth redirect
+            // they have no reason to look at again.
+            //
+            // Stacked on top of MainActivity instead, the platform clears it
+            // for us. MainActivity is singleTask, so when the browser fires the
+            // deep link the system routes it through onNewIntent and destroys
+            // everything above it in the task — the tab included. The same
+            // mechanism that delivers the code closes the window it came from.
+            if (getActivity() != null) {
+                tab.launchUrl(getActivity(), target);
+            } else {
+                // No activity to stack on, which should not happen while the
+                // user is looking at a button. A new task is better than not
+                // opening at all; the tab is then theirs to close.
+                tab.intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                tab.launchUrl(getContext(), target);
+            }
             call.resolve();
         } catch (Exception e) {
             // No browser at all, or none that supports tabs. Nothing useful can

@@ -54,13 +54,29 @@ async function makePKCEPair(): Promise<{ verifier: string; challenge: string }> 
 }
 
 /**
+ * Raised when the user came back without finishing. Not an error to report.
+ */
+export const SSO_CANCELLED = 'sso-cancelled'
+
+/**
  * Waits for the deep link to bring a code back.
  *
- * Both a listener and a poll on resume, because neither alone is enough: the
- * event is missed if the WebView was destroyed while the browser was in front,
- * and the resume check is what covers that. They race, and the plugin hands the
- * code out exactly once, so whichever arrives first wins and the other finds
- * nothing.
+ * Both a plugin event and a check on becoming visible, because neither alone is
+ * enough: the event is missed if the WebView was destroyed while the browser was
+ * in front, and the visibility check is what covers that. They race, and the
+ * plugin hands the code out exactly once, so whichever arrives first wins and
+ * the other finds nothing.
+ *
+ * Becoming visible with no code waiting also means something: the user backed
+ * out of the browser. Android delivers the deep link through onNewIntent, which
+ * runs before the activity resumes, so by the time the page is visible again a
+ * successful sign-in has already been stashed. No code at that point is an
+ * abandoned one — which is worth detecting, because otherwise backing out
+ * leaves a spinner running for the full timeout with nothing coming.
+ *
+ * That conclusion is only drawn after the app has actually been away. Without
+ * that guard, any momentary loss of focus while the browser is still opening
+ * would cancel a sign-in the user had not even started.
  */
 async function awaitAuthCode(signal: AbortSignal): Promise<string> {
   const existing = await NativeAuth.consumeAuthCode()
@@ -68,26 +84,38 @@ async function awaitAuthCode(signal: AbortSignal): Promise<string> {
 
   return new Promise<string>((resolve, reject) => {
     let done = false
+    let wasHidden = false
     const finish = (fn: () => void) => {
       if (done) return
       done = true
       cleanup().then(fn, fn)
     }
 
-    const collect = async () => {
-      if (done) return
+    const collect = async (): Promise<boolean> => {
+      if (done) return false
       const { code } = await NativeAuth.consumeAuthCode()
-      if (code) finish(() => resolve(code))
+      if (!code) return false
+      finish(() => resolve(code))
+      return true
     }
 
-    const onResume = () => { void collect() }
-    document.addEventListener('resume', onResume)
-    window.addEventListener('focus', onResume)
-    const handle = NativeAuth.addListener('authCode', onResume)
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        wasHidden = true
+        return
+      }
+      void collect().then(got => {
+        if (!got && wasHidden) finish(() => reject(new Error(SSO_CANCELLED)))
+      })
+    }
+
+    const onEvent = () => { void collect() }
+
+    document.addEventListener('visibilitychange', onVisibility)
+    const handle = NativeAuth.addListener('authCode', onEvent)
 
     const cleanup = async () => {
-      document.removeEventListener('resume', onResume)
-      window.removeEventListener('focus', onResume)
+      document.removeEventListener('visibilitychange', onVisibility)
       signal.removeEventListener('abort', onAbort)
       clearTimeout(timer)
       try {
@@ -98,7 +126,7 @@ async function awaitAuthCode(signal: AbortSignal): Promise<string> {
     }
 
     function onAbort() {
-      finish(() => reject(new Error('cancelled')))
+      finish(() => reject(new Error(SSO_CANCELLED)))
     }
     signal.addEventListener('abort', onAbort)
     const timer = setTimeout(

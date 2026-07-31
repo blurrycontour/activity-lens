@@ -299,6 +299,22 @@ and carries nothing usable without a secret that never left the device. Sending
 the token directly would have been half the code and a live session handed to
 whoever else was listening.
 
+**The tab closes itself.** The Custom Tab is launched from the activity and into
+the *same* task — deliberately not with `FLAG_ACTIVITY_NEW_TASK`, which is what
+originally left the browser sitting there after a successful sign-in, showing a
+spent OAuth redirect. Stacked on top of `MainActivity`, which is `singleTask`,
+the deep link routes through `onNewIntent` and the platform destroys everything
+above it in the task. The same mechanism that delivers the code closes the
+window it arrived from.
+
+That makes backing out of the tab reachable, so it is handled: the page treats
+"became visible with no code waiting" as an abandoned sign-in and stops waiting,
+rather than spinning until the five-minute timeout. The deep link is stashed in
+`onNewIntent`, which runs before the activity resumes, so a real sign-in is
+always already there by then. The conclusion is only drawn after the app has
+actually been away — otherwise a momentary loss of focus while the browser is
+still opening would cancel a sign-in nobody had started.
+
 Two smaller consequences worth knowing:
 
 - **The identity provider needs no reconfiguration.** Its redirect URI still
