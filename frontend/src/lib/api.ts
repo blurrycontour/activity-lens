@@ -78,6 +78,11 @@ export interface AndroidApp {
   size?: number
   /** Checksum of the APK, for verifying what was installed. */
   sha256?: string
+  /**
+   * The Android application this APK installs as. Absent from servers whose
+   * bundled metadata predates the field; see canInstallOver.
+   */
+  applicationId?: string
   /** Path on this server that serves the APK. */
   downloadPath?: string
 }

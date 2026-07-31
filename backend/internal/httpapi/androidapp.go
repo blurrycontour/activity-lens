@@ -35,8 +35,11 @@ type apkMetadata struct {
 	Version     string `json:"version"`
 	VersionCode int64  `json:"versionCode"`
 	BuildType   string `json:"buildType"`
-	File        string `json:"file"`
-	SHA256      string `json:"sha256"`
+	// ApplicationID is the Android application this APK installs as. Empty in
+	// metadata written by an older build of scripts/apk.sh.
+	ApplicationID string `json:"applicationId"`
+	File          string `json:"file"`
+	SHA256        string `json:"sha256"`
 }
 
 // androidAppInfo is what a client needs to decide whether to offer a download.
@@ -48,6 +51,11 @@ type androidAppInfo struct {
 	Size int64 `json:"size,omitempty"`
 	// SHA256 of the APK, for anyone who wants to verify what they installed.
 	SHA256 string `json:"sha256,omitempty"`
+	// ApplicationID this APK installs as. The running app compares it with its
+	// own: Android replaces an app only when the id matches, so a different one
+	// is a second app rather than an update, however the versions compare.
+	// Empty when the bundled metadata predates this field.
+	ApplicationID string `json:"applicationId,omitempty"`
 	// DownloadPath on this server.
 	DownloadPath string `json:"downloadPath,omitempty"`
 }
@@ -106,11 +114,12 @@ func (s *Server) androidApp() androidAppInfo {
 		return androidAppInfo{}
 	}
 	return androidAppInfo{
-		Available:    true,
-		Version:      s.apk.meta.Version,
-		Size:         s.apk.size,
-		SHA256:       s.apk.meta.SHA256,
-		DownloadPath: "/api/app/android/download",
+		Available:     true,
+		Version:       s.apk.meta.Version,
+		Size:          s.apk.size,
+		SHA256:        s.apk.meta.SHA256,
+		ApplicationID: s.apk.meta.ApplicationID,
+		DownloadPath:  "/api/app/android/download",
 	}
 }
 

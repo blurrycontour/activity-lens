@@ -667,6 +667,76 @@ body {
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
 }
 
+/* ── First-run import introduction ── */
+
+/* Taller than it is wide on a phone, so the routes stay a readable column
+   rather than four cramped rows. The list scrolls inside the box instead of the
+   box growing past the viewport, which is what keeps the buttons reachable on a
+   short screen. */
+.import-intro {
+  max-width: 460px;
+  display: flex;
+  flex-direction: column;
+  max-height: min(640px, calc(100vh - 32px));
+}
+/* Clear of the close button in the corner. */
+.import-intro-title { font-size: 16px; font-weight: 600; padding-right: 32px; }
+.import-intro-lead {
+  font-size: 12.5px;
+  color: var(--text-3);
+  line-height: 1.55;
+  margin-top: 6px;
+}
+.import-intro-list {
+  list-style: none;
+  margin: 18px 0 20px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+  min-height: 0;
+}
+.import-intro-route { display: flex; gap: 12px; align-items: flex-start; }
+.import-intro-icon {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: var(--radius);
+  background: var(--bg-3);
+  color: var(--primary);
+  display: grid;
+  place-items: center;
+}
+.import-intro-route-title { font-size: 13.5px; font-weight: 600; }
+.import-intro-route-body {
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.55;
+  margin-top: 3px;
+}
+.import-intro-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+/* Chunkier than the app's usual button: this is the only thing to do on the
+   screen, and it reads as the end of the window rather than one control among
+   several. .btn is an inline-flex with no justification of its own, so the label
+   has to be centred here — otherwise it sits against the left edge as soon as
+   the button is stretched. */
+.import-intro-actions .btn {
+  justify-content: center;
+  padding: 11px 24px;
+  font-size: 13.5px;
+}
+@media (max-width: 480px) {
+  /* Full width on a phone: a lone button hugging the right edge is a small
+     target next to a lot of empty space. */
+  .import-intro-actions .btn { width: 100%; }
+}
+
 /* ── Floating action button ── */
 .fab {
   position: fixed;

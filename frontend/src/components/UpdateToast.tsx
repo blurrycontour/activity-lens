@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ArrowUpCircle, X } from 'lucide-react'
 import { applyPendingUpdate, useUpdatePending } from '../lib/appUpdate'
+import { canSelfUpdate } from '../lib/native/appUpdate'
 
 /**
  * Offers a newly installed build rather than applying it.
@@ -19,7 +20,10 @@ export default function UpdateToast() {
   const [dismissed, setDismissed] = useState(false)
   const [busy, setBusy] = useState(false)
 
-  if (!ready || dismissed) return null
+  // The Android app has its own dialog for this, which offers a download and an
+  // install rather than a reload. Both would otherwise appear at once, saying
+  // different things about the same update.
+  if (!ready || dismissed || canSelfUpdate()) return null
 
   return (
     <div className="update-toast" role="status">

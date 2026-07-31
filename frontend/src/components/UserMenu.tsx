@@ -37,7 +37,10 @@ export default function UserMenu({ onClose, onAccount, onSettings, onAdmin, onLo
     ...(user.isAdmin ? [{ icon: <Shield size={15} />, label: 'Admin Panel', sub: 'Users, email, SSO', action: () => { onClose(); onAdmin() } }] : []),
     { icon: <Info size={15} />, label: 'About', sub: 'Version & app info', action: () => setShowAbout(true) },
     ...(updatePending
-      ? [{ icon: <ArrowUpCircle size={15} />, label: 'Update app', sub: 'A new version is ready', accent: true, action: () => { void applyPendingUpdate() } }]
+      // Closed first: on web this reloads and the menu goes with the page, but
+      // in the Android app it opens the install dialog, which would otherwise
+      // appear underneath a menu still sitting on top of it.
+      ? [{ icon: <ArrowUpCircle size={15} />, label: 'Update app', sub: 'A new version is ready', accent: true, action: () => { onClose(); void applyPendingUpdate() } }]
       : []),
   ]
 

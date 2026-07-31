@@ -76,9 +76,22 @@ artifact as the published one and would silently take over the installed app;
 "is this the real thing" is a question about provenance, which only the person
 building knows. CI has no `.env.build`, so published APKs never carry it.
 
-The consequence to know: a `.dev` install can never update to the published app,
-and its in-app updater is downloading an APK it cannot install over itself. That
-is the trade — test in `.dev`, use the real one.
+The consequence to know: a `.dev` install can never update to the published app.
+Android matches applications by id and will not replace one whose id differs —
+it installs a second copy — so the published APK is not an update to a `.dev`
+build, it is a different app.
+
+The updater therefore does not offer it. `scripts/apk.sh` records the
+`applicationId` in `apk.json` (read back out of the built APK with `aapt2`, so
+it cannot disagree with what Gradle produced), the server reports it from
+`/api/app/android`, and the app compares it with its own package name before
+looking at versions at all.
+
+Without that check the two ids differ, the two versions differ, and the app
+concludes there is an update — one that installs beside it and changes nothing,
+so the prompt returns on the next launch and every launch after. A server whose
+`apk.json` predates the field sends no id, which is treated as "assume it fits":
+the version comparison alone then decides, exactly as it used to.
 
 CI always builds **release**, tagged or not.
 

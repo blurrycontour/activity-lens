@@ -164,11 +164,32 @@ cp "$APK" "$OUT_DIR/$NAME"
 # is actually serving rather than assuming it matches its own. The checksum is
 # what CI uses to prove the image and the release carry the same bytes.
 SHA="$(sha256sum "$OUT_DIR/$NAME" | cut -d" " -f1)"
+
+# Which application this APK installs as.
+#
+# Read back out of the built file rather than assembled from the base id and
+# AL_APP_ID_SUFFIX, so it cannot disagree with what Gradle actually produced.
+#
+# The client needs it to tell an update from a different app. Android will not
+# replace an app with one whose id differs — it installs a second copy — so a
+# server bundling the published APK has nothing to offer a locally built `.dev`
+# install, and saying so is the difference between "no update" and an update
+# prompt that reappears forever because installing it never changes anything.
+#
+# Empty if aapt2 is not around. Consumers treat that as "unknown" and fall back
+# to the version comparison alone, which is how this behaved before.
+APP_ID=""
+AAPT2="$(command -v aapt2 || ls "${ANDROID_HOME:-/opt/android-sdk}"/build-tools/*/aapt2 2>/dev/null | tail -1)"
+if [ -n "$AAPT2" ]; then
+  APP_ID="$("$AAPT2" dump packagename "$OUT_DIR/$NAME" 2>/dev/null | tr -d '\r\n' || true)"
+fi
+
 cat > "$OUT_DIR/apk.json" <<JSON
 {
   "version": "${AL_VERSION}",
   "versionCode": ${AL_VERSION_CODE},
   "buildType": "${BUILD_TYPE}",
+  "applicationId": "${APP_ID}",
   "file": "${NAME}",
   "sha256": "${SHA}"
 }

@@ -8,6 +8,7 @@ import Sidebar from './components/Sidebar'
 import BottomBar from './components/BottomBar'
 import UserMenu from './components/UserMenu'
 import ImportModal from './components/ImportModal'
+import ImportIntro, { hasSeenImportIntro, markImportIntroSeen } from './components/ImportIntro'
 import OfflineBar from './components/OfflineBar'
 import PullToRefresh from './components/PullToRefresh'
 import SwipePager from './components/SwipePager'
@@ -104,6 +105,7 @@ export default function App() {
   })
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showImport, setShowImport] = useState(false)
+  const [showImportIntro, setShowImportIntro] = useState(false)
   // Files handed to the app from outside: the Android share sheet, or a
   // desktop "Open with". Both land in the import modal the same way.
   const [incomingFiles, setIncomingFiles] = useState<File[] | null>(null)
@@ -170,6 +172,21 @@ export default function App() {
       setShowImport(true)
     })
     return () => { cancelled = true }
+  }, [user])
+
+  // The one-time "how do I get my workouts in" welcome, per user per device.
+  //
+  // Deferred to an effect on `user` rather than shown from the login handler,
+  // because signing in is not the only way to arrive here: a returning session
+  // restores without ever passing through the login screen, and installing the
+  // app on a second device is exactly the case this exists for.
+  useEffect(() => {
+    if (!user || hasSeenImportIntro(user.id)) return
+    // Written now rather than on dismiss. Whatever the user does with it — reads
+    // it, closes it, force-quits the app — it has been shown, and a welcome that
+    // can reappear is a welcome that will.
+    markImportIntroSeen(user.id)
+    setShowImportIntro(true)
   }, [user])
 
   // "Open with" on desktop. An installed PWA that declares file_handlers is
@@ -464,6 +481,9 @@ export default function App() {
           onLogout={logout}
           user={user}
         />
+      )}
+      {showImportIntro && user && (
+        <ImportIntro onClose={() => setShowImportIntro(false)} />
       )}
       {showImport && (
         <ImportModal

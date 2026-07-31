@@ -59,6 +59,26 @@ export function updateAvailable(installed: string, offered: string): boolean {
   return offered !== '' && installed !== '' && norm(installed) !== norm(offered)
 }
 
+/**
+ * Whether the offered APK would *replace* the running app rather than install
+ * beside it.
+ *
+ * Android matches applications by id, and refuses to replace one whose id
+ * differs — it installs a second copy instead. So a server bundling the
+ * published `io.blurrycontour.activitylens` has nothing to offer a locally
+ * built `io.blurrycontour.activitylens.dev`: downloading it would add another
+ * app to the launcher and leave this one exactly as it was, which is an update
+ * prompt that can never be satisfied and therefore never stops.
+ *
+ * An empty `offered` means the server's metadata predates the field. Treated as
+ * "assume it fits", which is how this behaved before it existed — the version
+ * comparison alone is then the whole test, as it was.
+ */
+export function canInstallOver(installed: string, offered: string): boolean {
+  if (offered === '' || installed === '') return true
+  return installed === offered
+}
+
 /** True only in the Android app, where an in-place update is possible at all. */
 export function canSelfUpdate(): boolean {
   return isNative()

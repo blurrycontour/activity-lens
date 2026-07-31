@@ -1,22 +1,27 @@
 import { useEffect, useRef, useState } from 'react'
 import { AlertCircle, Download, ShieldCheck, X } from 'lucide-react'
 import { api } from '../lib/api'
+import { clearUpdatePending, markUpdateReady } from '../lib/appUpdate'
 import {
-  canSelfUpdate, downloadAndInstall, installedApp, INSTALL_NOT_PERMITTED,
+  canInstallOver, canSelfUpdate, downloadAndInstall, installedApp, INSTALL_NOT_PERMITTED,
   onUpdateProgress, openInstallSettings, updateAvailable, UPDATE_CHECK_EVENT,
   type UpdateProgress,
 } from '../lib/native/appUpdate'
 
 /**
- * When a dismissed version may be offered again.
+ * The version dismissed with "Not now", for this run of the app only.
  *
- * "Not now" snoozes rather than silences. A version dismissed forever is a
- * version the user can never be reminded of — and the reason to dismiss is
- * usually "not while I am about to go for a run", not "never mention this
- * again". A day later is a different moment.
+ * Deliberately in memory rather than in storage. It used to be a 24-hour window
+ * in localStorage, which read as "dismissed forever": the next launch, and the
+ * one after, said nothing, and there was no way to tell an update had been
+ * found at all. Tying it to the process means "not now" means exactly that —
+ * quiet while you finish what you were doing, offered again next launch — and
+ * it cannot outlive the reason it was set.
+ *
+ * Switching apps and coming back is not a new launch, which is the case this
+ * protects: the module survives, so the dialog stays down.
  */
-const SNOOZE_KEY = 'al_update_snoozed'
-const SNOOZE_MS = 24 * 60 * 60 * 1000
+let snoozedVersion: string | null = null
 
 /**
  * How long to leave between checks made on *resume*.
@@ -57,18 +62,6 @@ export default function UpdatePrompt() {
     if (!canSelfUpdate()) return
     let cancelled = false
 
-    /** Whether this version is still inside its "not now" window. */
-    function snoozed(version: string): boolean {
-      try {
-        const raw = localStorage.getItem(SNOOZE_KEY)
-        if (!raw) return false
-        const { version: v, until } = JSON.parse(raw) as { version: string; until: number }
-        return v === version && Date.now() < until
-      } catch {
-        return false
-      }
-    }
-
     /**
      * @param reason 'launch'  always checks — the app just started.
      *               'resume'  rate-limited; the app came back to the foreground.
@@ -84,9 +77,25 @@ export default function UpdatePrompt() {
       try {
         const [app, current] = await Promise.all([api.androidApp(), installedApp()])
         localStorage.setItem(LAST_CHECK_KEY, String(Date.now()))
-        if (cancelled || !app.available || !app.version) return
-        if (!updateAvailable(current.version, app.version)) return
-        if (reason !== 'manual' && snoozed(app.version)) return
+        if (cancelled) return
+        // The id check comes first and is not a version question: a build with
+        // a different application id installs alongside this one rather than
+        // over it, so there is nothing here to offer however the versions
+        // compare. This is what a local `.dev` install sees against a server
+        // carrying the published APK.
+        if (!canInstallOver(current.packageName, app.applicationId ?? '')
+          || !app.available || !app.version || !updateAvailable(current.version, app.version)) {
+          // Nothing on offer — including after the server was rolled back to
+          // the version already installed. Withdrawn rather than left standing,
+          // so the avatar dot cannot outlive the update it points at.
+          clearUpdatePending()
+          return
+        }
+        // Recorded before the snooze check, so dismissing the dialog leaves the
+        // avatar dot and the user menu's "Update app" entry behind. Losing the
+        // dialog should not lose the update.
+        markUpdateReady()
+        if (reason !== 'manual' && snoozedVersion === app.version) return
         setStage('offer')
         setOffered(app.version)
       } catch {
@@ -147,9 +156,7 @@ export default function UpdatePrompt() {
   }
 
   function dismiss() {
-    if (offered) {
-      localStorage.setItem(SNOOZE_KEY, JSON.stringify({ version: offered, until: Date.now() + SNOOZE_MS }))
-    }
+    snoozedVersion = offered
     setOffered(null)
   }
 
