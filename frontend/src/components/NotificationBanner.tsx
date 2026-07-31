@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { X, Bell } from 'lucide-react'
+import { apiURL } from '../lib/api'
 
 /** How long a banner stays before dismissing itself. */
 const AUTO_DISMISS_MS = 7000
@@ -71,7 +72,9 @@ export default function NotificationBanner({ notification, onOpen, onDismiss }: 
       }}
     >
       {notification.icon
-        ? <img className="notif-banner-icon" src={notification.icon} alt="" />
+        /* Through apiURL: the icon is a path on the server, which in the app is
+           not where the page came from. */
+        ? <img className="notif-banner-icon" src={apiURL(notification.icon)} alt="" />
         : <span className="notif-banner-glyph"><Bell size={15} /></span>}
 
       <span style={{ flex: 1, minWidth: 0 }}>

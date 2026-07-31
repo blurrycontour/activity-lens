@@ -12,6 +12,7 @@ import android.util.Log;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.core.content.ContextCompat;
+import com.getcapacitor.JSObject;
 import java.nio.charset.StandardCharsets;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -149,6 +150,13 @@ public class UnifiedPushReceiver extends BroadcastReceiver {
             body = json.optString("body", "");
             link = json.optString("link", null);
             icon = json.optString("icon", null);
+
+            // The app is on screen and listening: it shows its own banner, and a
+            // system notification for something already visible would be noise.
+            // Only ever true when the page is certain to receive this.
+            if (UnifiedPushPlugin.deliverInApp(JSObject.fromJSONObject(json))) {
+                return;
+            }
         } catch (JSONException e) {
             // Not our payload — a test message sent straight to the endpoint,
             // most likely. Showing it verbatim is more useful than dropping it.

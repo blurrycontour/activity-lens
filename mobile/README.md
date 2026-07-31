@@ -336,7 +336,8 @@ reading before adding anything that touches the platform.
 | Offline data | service worker caches API GETs | `lib/nativeCache.ts`, same cache and policy |
 | Push | Web Push + VAPID | UnifiedPush distributor |
 | Clearing a notification | service worker | `UnifiedPush.dismiss` |
-| Back button | browser chrome | `MainActivity.onBackPressed` → `webView.goBack()` |
+| Push while app is open | in-app banner | in-app banner, via the `message` event |
+| Back button | browser chrome | an `OnBackPressedCallback` → `webView.goBack()` |
 | Soft keyboard | window resizes | WebView padded by the IME inset |
 | External links | new tab | Capacitor opens the system browser (nothing to do) |
 | Image URLs | same-origin, relative | must go through `apiURL()` |
@@ -348,15 +349,28 @@ and it fails invisibly, as a picture that does not appear. **Every image URL goe
 through `apiURL()`**, and `avatarUrl()` in `UserAvatar.tsx` exists so that most
 of them do not have to think about it.
 
-Two behaviours are deliberately *not* matched:
+A push that lands while the app is on screen becomes an in-app banner instead of
+a tray notification, matching the web app — being interrupted by a system
+notification for something already visible is noise. The receiver hands it to the
+page through the plugin's `message` event, and falls back to drawing the
+notification unless **all three** of these hold: the plugin exists, the activity
+is in the foreground, and the page has a listener attached. That last condition
+is what makes it safe. A push arriving in the moment between the WebView starting
+and React subscribing would otherwise be handed to nobody and lost, and a
+notification that never appears is a far worse failure than a redundant one.
 
-- **A notification arriving while the app is open** still appears in the tray.
-  The web app suppresses it and shows an in-app banner instead. Doing the same
-  here means the receiver knowing whether a WebView is in the foreground, and it
-  has not been worth the coupling yet.
-- **Map tiles are not cached.** The service worker keeps them; the app fetches
-  them each time. Route maps are therefore blank offline while everything around
-  them works.
+One behaviour is deliberately *not* matched: **map tiles are not cached.** The
+service worker keeps them; the app fetches them each time, so route maps are
+blank offline while everything around them works.
+
+**Never handle back by overriding `onBackPressed()`.** The app targets SDK 36,
+and from Android 16 predictive back is enabled by default —
+`enableOnBackInvokedCallback` went from opt-in to opt-out. Under it the system
+never calls `Activity.onBackPressed()`: back becomes an `OnBackInvokedCallback`,
+androidx forwards it to the `OnBackPressedDispatcher`, and anything not
+registered there is skipped while the activity is finished. An override compiles
+without a warning and is simply never called, which is how the first attempt at
+this shipped looking correct and quitting to the launcher.
 
 ### Permissions
 

@@ -7,13 +7,13 @@ import {
 } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useAuth } from '../context/AuthContext'
-import { api, apiURL } from '../lib/api'
+import { api } from '../lib/api'
 import { downloadWorkoutGPX, downloadWorkoutOriginal, reportSaveFailure } from '../lib/download'
 import { useLocalStorage } from '../lib/useLocalStorage'
 import { DEFAULT_HR_ZONE_CHART, HR_ZONE_CHART_KEY, type HRZoneChart } from '../lib/dashboardConfig'
 import InfoTip from '../components/InfoTip'
 import { useIsMobile } from '../lib/useIsMobile'
-import UserAvatar, { userLabel } from '../components/UserAvatar'
+import UserAvatar, { avatarUrl, userLabel } from '../components/UserAvatar'
 import ShareDialog from '../components/ShareDialog'
 import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, Popup, useMap, useMapEvents } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -1003,9 +1003,25 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
     )
   }
 
+  /**
+   * Whose face rides the route marker: the person who did the workout.
+   *
+   * `w.owner` is set on anything that came from a feed and never on your own,
+   * so it is the right answer whenever it exists — the marker on a workout
+   * shared with you was showing *your* avatar running someone else's route.
+   *
+   * Through avatarUrl() rather than reading avatarPath directly, which is the
+   * other half of the same bug: that field is empty for anyone who never
+   * uploaded a picture, so the marker simply had no face. The helper falls back
+   * to the generated identicon exactly as every other avatar in the app does.
+   */
+  const routeAvatar = w.owner
+    ? avatarUrl(w.owner)
+    : user ? avatarUrl(user) : undefined
+
   function mapCard(height: number | string) {
     return (
-      <RouteMap route={w.route} color={trailColor} duration={w.duration} currentTime={currentTime} onScrub={handleScrub} height={height} distance={w.distance} hrTimeline={w.hrTimeline} paceTimeline={w.paceTimeline} elevTimeline={w.elevTimeline} cadenceTimeline={cadenceTimeline} cadenceLabel={cadenceUnit(w.type)} avatarUrl={user?.avatarPath ? apiURL(user.avatarPath) : undefined} maxHR={effectiveMaxHR} />
+      <RouteMap route={w.route} color={trailColor} duration={w.duration} currentTime={currentTime} onScrub={handleScrub} height={height} distance={w.distance} hrTimeline={w.hrTimeline} paceTimeline={w.paceTimeline} elevTimeline={w.elevTimeline} cadenceTimeline={cadenceTimeline} cadenceLabel={cadenceUnit(w.type)} avatarUrl={routeAvatar} maxHR={effectiveMaxHR} />
     )
   }
 

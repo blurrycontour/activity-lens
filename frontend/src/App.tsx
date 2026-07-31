@@ -31,6 +31,7 @@ import { adjacentPage, DESKTOP_PAGES, LEGACY_ROUTES, type Page } from './lib/nav
 import { useSwipeNav } from './lib/useSwipeNav'
 import { consumeShareParam, takeSharedFiles } from './lib/shareTarget'
 import { applySystemBars } from './lib/native/systemBars'
+import { onPushMessage } from './lib/native/unifiedPush'
 import { api } from './lib/api'
 
 const SIDEBAR_KEY = 'al_sidebar_w'
@@ -250,6 +251,14 @@ export default function App() {
     navigator.serviceWorker.addEventListener('message', onMessage)
     return () => navigator.serviceWorker.removeEventListener('message', onMessage)
   }, [openLink])
+
+  // The same thing in the Android app, which has no service worker to route it.
+  // The native receiver only hands a push over while this listener is attached;
+  // otherwise it draws a notification, so unmounting cannot lose one.
+  useEffect(() => onPushMessage(payload => {
+    setBanner(payload)
+    window.dispatchEvent(new Event(PUSH_EVENT))
+  }), [])
 
   const selectWorkout = useCallback((w: Workout | null) => {
     setSelectedWorkout(w)

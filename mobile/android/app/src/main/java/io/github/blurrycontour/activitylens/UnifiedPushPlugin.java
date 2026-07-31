@@ -56,6 +56,20 @@ public class UnifiedPushPlugin extends Plugin {
     private static final String TAP_EVENT = "notificationTap";
 
     /**
+     * Emitted instead of drawing a notification, when the app is already on
+     * screen to show it itself.
+     */
+    private static final String MESSAGE_EVENT = "message";
+
+    /**
+     * Whether the app is in the foreground.
+     *
+     * Volatile because it is written from the main thread and read from whatever
+     * thread a broadcast arrives on.
+     */
+    private static volatile boolean foreground = false;
+
+    /**
      * The live instance, so the receiver can reach the bridge.
      *
      * Static because a BroadcastReceiver is constructed by the system with no
@@ -76,6 +90,42 @@ public class UnifiedPushPlugin extends Plugin {
         if (instance == this) {
             instance = null;
         }
+        foreground = false;
+    }
+
+    @Override
+    protected void handleOnResume() {
+        foreground = true;
+    }
+
+    @Override
+    protected void handleOnPause() {
+        foreground = false;
+    }
+
+    /**
+     * Hands a push to the running app instead of the notification tray.
+     *
+     * The web app does this through the service worker: a push that arrives
+     * while a window is visible becomes an in-app banner, because being
+     * interrupted by a system notification for something already on screen is
+     * noise. This is the same rule for the same reason.
+     *
+     * Returns false unless it is genuinely certain the app will show it, and the
+     * caller then draws the notification as usual. All three conditions matter:
+     * the plugin has to exist, the app has to be in front, and the page has to
+     * have subscribed. Without that last one a push arriving in the half second
+     * between the WebView starting and the listener attaching would be handed to
+     * nobody and silently lost — a dropped notification is a far worse failure
+     * than a redundant one.
+     */
+    static boolean deliverInApp(JSObject payload) {
+        UnifiedPushPlugin plugin = instance;
+        if (plugin == null || !foreground || !plugin.hasListeners(MESSAGE_EVENT)) {
+            return false;
+        }
+        plugin.notifyListeners(MESSAGE_EVENT, payload);
+        return true;
     }
 
     static void onEndpointChanged(String endpoint) {

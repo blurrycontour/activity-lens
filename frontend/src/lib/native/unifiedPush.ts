@@ -10,9 +10,18 @@ interface UnifiedPushPlugin {
   unregister(): Promise<void>
   dismiss(options: { tag: string }): Promise<void>
   consumeTapLink(): Promise<{ link?: string | null }>
-  addListener(event: 'endpoint', fn: (e: { endpoint?: string | null }) => void): Promise<PluginListenerHandle>
-  addListener(event: 'registrationFailed', fn: (e: { reason?: string }) => void): Promise<PluginListenerHandle>
-  addListener(event: 'notificationTap', fn: (e: { link?: string }) => void): Promise<PluginListenerHandle>
+  addListener<E extends keyof PluginEvents>(
+    event: E,
+    fn: (e: PluginEvents[E]) => void,
+  ): Promise<PluginListenerHandle>
+}
+
+/** Everything the plugin emits, and what each event carries. */
+interface PluginEvents {
+  endpoint: { endpoint?: string | null }
+  registrationFailed: { reason?: string }
+  notificationTap: { link?: string }
+  message: PushMessage
 }
 
 export interface NativePushStatus {
@@ -24,6 +33,15 @@ export interface NativePushStatus {
   endpoint?: string | null
   /** Whether Android is currently allowing this app to post notifications. */
   permitted: boolean
+}
+
+/** A push the receiver handed to the app instead of drawing it. */
+export interface PushMessage {
+  id?: string
+  title?: string
+  body?: string
+  link?: string
+  icon?: string
 }
 
 export interface Distributor {
@@ -179,15 +197,37 @@ export async function consumeNotificationTap(): Promise<string | null> {
  * listeners and navigate several times for one tap.
  */
 export function onNotificationTap(fn: (link: string) => void): () => void {
+  return subscribe('notificationTap', e => {
+    if (e.link) fn(e.link)
+  })
+}
+
+/**
+ * A push that arrived while the app was on screen.
+ *
+ * The receiver only routes one here when this listener is attached, so
+ * subscribing is what turns the suppression on — unsubscribe and pushes go back
+ * to the notification tray, which is the right fallback rather than a gap.
+ */
+export function onPushMessage(fn: (message: PushMessage) => void): () => void {
+  return subscribe('message', fn)
+}
+
+/**
+ * addListener, made safe to use from an effect.
+ *
+ * The plugin's own subscribe is async, so a component that mounts and unmounts
+ * quickly can ask to unsubscribe before it has a handle to unsubscribe with.
+ * Without the cancelled flag that listener would leak, and a second mount would
+ * see every event twice.
+ */
+function subscribe<E extends keyof PluginEvents>(event: E, fn: (e: PluginEvents[E]) => void): () => void {
   if (!isNative()) return () => {}
   let handle: PluginListenerHandle | undefined
   let cancelled = false
-  void UnifiedPush.addListener('notificationTap', e => {
-    if (e.link) fn(e.link)
-  })
+  void UnifiedPush.addListener(event, fn)
     .then(h => {
       handle = h
-      // Removed immediately if the caller gave up while this was resolving.
       if (cancelled) void h.remove()
     })
     .catch(() => {})

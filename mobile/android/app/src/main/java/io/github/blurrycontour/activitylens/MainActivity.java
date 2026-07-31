@@ -6,6 +6,7 @@ import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.webkit.WebView;
+import androidx.activity.OnBackPressedCallback;
 import androidx.core.content.ContextCompat;
 import com.getcapacitor.BridgeActivity;
 
@@ -47,6 +48,7 @@ public class MainActivity extends BridgeActivity {
         // light/dark toggle.
         getWindow().setBackgroundDrawableResource(R.color.app_background);
 
+        getOnBackPressedDispatcher().addCallback(this, backCallback);
         askForNotifications();
     }
 
@@ -87,24 +89,42 @@ public class MainActivity extends BridgeActivity {
     /**
      * Back navigates the app, rather than closing it.
      *
-     * Capacitor's BridgeActivity does not touch the back button, so the platform
-     * default applies and the activity finishes — from any screen. In the browser
-     * the same app's back button walks the history the router pushes, so the app
-     * was the only place where backing out of a workout quit to the launcher.
+     * Capacitor's BridgeActivity does not touch the back button, so without this
+     * the platform default applies and the activity finishes from any screen. In
+     * a browser the same app's back button walks the history its router pushes,
+     * so the app was the only place where backing out of a workout quit to the
+     * launcher.
      *
-     * goBack() is the whole fix: pushState entries are real WebView history
-     * entries, so this replays exactly the popstate the router already listens
-     * for. At the first entry there is nothing to go back to and the default
-     * takes over, which is what leaving an app should do.
+     * Registered with the dispatcher rather than by overriding onBackPressed(),
+     * which is the part that matters. The app targets SDK 36, and from Android 16
+     * predictive back is on by default — `enableOnBackInvokedCallback` flipped
+     * from opt-in to opt-out. Under it the system never calls
+     * Activity.onBackPressed() at all: back goes to an OnBackInvokedCallback,
+     * androidx forwards it to this dispatcher, and if nothing here handles it the
+     * activity is simply finished. An override compiles, looks correct, and is
+     * dead code — which is exactly how it behaved.
+     *
+     * goBack() is the rest of it: pushState entries are real WebView history
+     * entries, so this replays the popstate the router already listens for.
      */
-    @Override
-    @SuppressWarnings("deprecation") // The predictive back API is opt-in; this is the path in use.
-    public void onBackPressed() {
+    private void handleBackNavigation() {
         WebView webView = getBridge() != null ? getBridge().getWebView() : null;
         if (webView != null && webView.canGoBack()) {
             webView.goBack();
             return;
         }
-        super.onBackPressed();
+        // Nothing left to go back to, so back should leave the app. Standing
+        // aside and re-dispatching is how a callback declines: disabling it
+        // first is what stops this from calling itself.
+        backCallback.setEnabled(false);
+        getOnBackPressedDispatcher().onBackPressed();
+        backCallback.setEnabled(true);
     }
+
+    private final OnBackPressedCallback backCallback = new OnBackPressedCallback(true) {
+        @Override
+        public void handleOnBackPressed() {
+            handleBackNavigation();
+        }
+    };
 }
