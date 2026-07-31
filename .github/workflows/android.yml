@@ -75,6 +75,9 @@ jobs:
       # Installed explicitly rather than relying on whatever the runner image
       # happens to ship. build-tools must match what the Android Gradle Plugin
       # in mobile/android/build.gradle asks for.
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
       - name: Install Android SDK packages
         run: sdkmanager --install "platform-tools" "platforms;android-36" "build-tools;35.0.0"
 
