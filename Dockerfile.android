@@ -28,8 +28,11 @@ RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
 # network fetch inside a build that should not need one.
 RUN npm install -g pnpm@11.17.0 && pnpm --version
 
+# jq is here for CI's benefit: the workflow reads mobile/dist/apk.json to publish
+# the version and checksum, and it now runs *inside* this image, so anything the
+# build's callers need has to be here too.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends unzip git ca-certificates curl \
+ && apt-get install -y --no-install-recommends unzip git ca-certificates curl jq \
  && rm -rf /var/lib/apt/lists/*
 
 ENV ANDROID_HOME=/opt/android-sdk

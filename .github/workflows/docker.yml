@@ -65,6 +65,16 @@ jobs:
           fi
           echo "Bundling $(jq -r .file mobile/dist/apk.json) ($expected)"
 
+      # The same web bundle the APK ships, rather than a second build of it. The
+      # Dockerfile's frontend-dist stage is overridden with this directory below,
+      # so stage 2 does not run at all — which also takes a full pnpm install and
+      # vite build off the image build's critical path.
+      - name: Fetch the web bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.apk.outputs.web-artifact }}
+          path: frontend/dist
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -99,6 +109,12 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # Replaces the Dockerfile's frontend-dist stage with the bundle the APK
+          # was built from. VITE_APP_VERSION was already stamped into it by
+          # scripts/apk.sh from the same `git describe` computed above, so the
+          # VERSION build arg below still agrees with what the bundle reports.
+          build-contexts: |
+            frontend-dist=frontend/dist
           # The OCI labels metadata-action produces live on the image manifest,
           # which the running container cannot read. Pass the same facts in as
           # build args so they can be compiled into the binary and surfaced in

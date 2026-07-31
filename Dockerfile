@@ -35,14 +35,20 @@ RUN mkdir -p /data && chown 65532:65532 /data
 
 
 # --- Stage 2: build the React (Vite) frontend ------------------------------
-FROM node:22-alpine AS frontend
+#
+# Node and pnpm are pinned to the same versions as Dockerfile.android. The APK
+# and this image ship the same bundle, and "the same" has to survive being built
+# by two different toolchains — so it is simpler for there to be one. In CI there
+# is: see the frontend-dist stage below.
+FROM node:22.21.1-alpine AS frontend
 WORKDIR /app/frontend
 
 ARG VERSION=dev
 ENV VITE_APP_VERSION=$VERSION
 
-# Enable pnpm via corepack and install using the lockfile for reproducibility.
-RUN corepack enable
+# Installed rather than left to corepack, which resolves the version at first use
+# — a network fetch, and a moving target, inside a build that wants neither.
+RUN npm install -g pnpm@11.17.0
 
 COPY frontend/package.json frontend/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
@@ -51,12 +57,27 @@ COPY frontend/ ./
 RUN pnpm build
 
 
+# --- Stage 2b: the bundle to embed -----------------------------------------
+#
+# A seam, so the bundle can come from somewhere else without this file needing
+# to know. By default it is what stage 2 just built, which is what a plain
+# `docker build` does and what keeps this image buildable on its own from a
+# clean checkout.
+#
+# CI overrides it — `--build-context frontend-dist=frontend/dist` replaces a
+# stage of the same name — and passes in the exact bundle already built for the
+# APK. That makes the PWA and the native app the same files rather than two
+# builds of the same source, and skips stage 2 entirely while it is at it.
+FROM scratch AS frontend-dist
+COPY --from=frontend /app/frontend/dist /
+
+
 # --- Stage 3: link the backend with the embedded frontend ------------------
 FROM backend AS backend-final
 WORKDIR /app/backend
 
 # Embed the compiled frontend into the binary, replacing the placeholder.
-COPY --from=frontend /app/frontend/dist ./internal/web/dist
+COPY --from=frontend-dist / ./internal/web/dist
 
 # Pure-Go SQLite => CGO can stay off for a fully static binary. Dependencies
 # are already compiled in the backend stage's cache, so this is fast.

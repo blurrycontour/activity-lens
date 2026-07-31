@@ -17,9 +17,18 @@ scripts/build-apk.sh          # debug
 scripts/build-apk.sh release  # release (unsigned unless a keystore is supplied)
 ```
 
-The APK lands in `mobile/dist/`. The first run downloads the Android SDK into a
-container image and takes a few minutes; after that the toolchain and the Gradle
+The APK lands in `mobile/dist/`. The first run pulls the toolchain image CI
+publishes and takes a couple of minutes; after that the image and the Gradle
 cache are reused.
+
+The image is tagged with a hash of `Dockerfile.android`, and CI computes that
+same tag, so the toolchain a local build asks for is the one CI already built —
+it is pulled rather than rebuilt. That distinction matters more than it looks:
+rebuilding from the Dockerfile reproduces the *recipe*, but its base images are
+tags rather than digests, so a rebuild months apart can resolve to a different
+JDK patch. Pulling gets the bytes. Editing `Dockerfile.android` changes the hash,
+finds nothing published, and falls back to building — as does a fork, or a
+machine with no network.
 
 ### With a local Android SDK
 
@@ -180,6 +189,18 @@ In CI the APK is built **once** (`.github/workflows/android.yml`) and consumed
 by both the image build and the GitHub release, each of which re-checks its
 SHA-256 against what the build job recorded. The bytes in the image and the bytes
 on the releases page are identical by construction, and verified besides.
+
+`android.yml` has no `push` trigger: `docker.yml` calls it. A workflow that is
+both called and independently triggered runs twice on every commit, which is
+what produced two identical status checks and two identical APK builds.
+
+The **web bundle** is built once too, by `scripts/apk.sh`, and handed to the
+image build as the `frontend-dist` build context — which overrides the stage in
+`Dockerfile` that would otherwise build it again. Before that, the image built
+the frontend a second time on a different, unpinned Node and pnpm, so the PWA
+and the native app were assembled by different toolchains while claiming to ship
+the same bundle. A plain `docker build` with no build context still builds it
+itself, so the image remains buildable from a clean checkout.
 
 > [!IMPORTANT]
 > **Android refuses to replace an app with one signed by a different key** — the

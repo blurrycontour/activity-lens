@@ -17,7 +17,22 @@ set -euo pipefail
 
 BUILD_TYPE="${1:-debug}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-IMAGE="activity-lens-android:latest"
+# The toolchain is identified by a hash of the file that defines it, which is the
+# same tag CI computes in .github/workflows/android.yml. Two consequences worth
+# stating: changing Dockerfile.android automatically means a different image
+# rather than a stale one under a `latest` tag, and the tag this build wants is
+# the tag CI already published — so it can be pulled rather than rebuilt.
+#
+# Pulling is what makes "the same tools as CI" exact rather than approximate.
+# Rebuilding from the Dockerfile gets the same *recipe*, but its base images
+# (`eclipse-temurin:21-jdk-noble`, `node:22.21.1-bookworm-slim`) are tags, not
+# digests, so a rebuild months later can quietly resolve to a different JDK patch
+# than the image CI is using. Pulling gets the bytes.
+IMAGE_TAG="$(sha256sum "$REPO_ROOT/Dockerfile.android" | cut -c1-12)"
+IMAGE="activity-lens-android:${IMAGE_TAG}"
+# Override to point at a fork's registry; unset AL_ANDROID_REGISTRY to skip the
+# pull entirely and always build locally.
+REGISTRY_IMAGE="${AL_ANDROID_REGISTRY-ghcr.io/blurrycontour/activity-lens-android}"
 
 # Build-time settings (version stamp, Android signing) live in .env.build, which
 # is separate from the runtime .env the server reads. Loaded here rather than
@@ -64,8 +79,21 @@ load_build_env
 # complete reset.
 CACHE_VOLUME="activity-lens-android-home"
 
-echo "==> Preparing the build image (cached after the first run)"
-docker build -f "$REPO_ROOT/Dockerfile.android" -t "$IMAGE" "$REPO_ROOT"
+# Already here from a previous run: nothing to do. The tag is content-addressed,
+# so this can never be a stale toolchain.
+if docker image inspect "$IMAGE" >/dev/null 2>&1; then
+  echo "==> Toolchain $IMAGE (already present)"
+elif [ -n "$REGISTRY_IMAGE" ] && docker pull "$REGISTRY_IMAGE:$IMAGE_TAG" 2>/dev/null; then
+  # Byte-identical to what CI builds with.
+  echo "==> Toolchain $IMAGE (pulled from $REGISTRY_IMAGE)"
+  docker tag "$REGISTRY_IMAGE:$IMAGE_TAG" "$IMAGE"
+else
+  # No published image for this Dockerfile — an unpushed local edit to it, a
+  # fork, or no network. Building it gives the same recipe, which is the right
+  # answer here even though it is not the same bytes.
+  echo "==> Toolchain $IMAGE (building; not published for this Dockerfile.android)"
+  docker build -f "$REPO_ROOT/Dockerfile.android" -t "$IMAGE" "$REPO_ROOT"
+fi
 
 docker volume create "$CACHE_VOLUME" >/dev/null
 
