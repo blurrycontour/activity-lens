@@ -231,6 +231,98 @@ assets it would cache already ship in the APK, and a worker that outlived an app
 update could serve the previous build's HTML with no way to clear it. The APK is
 the update mechanism, and there should only be one.
 
+### Push notifications, without Google
+
+The web app enrols through the browser's push service. The app cannot: that
+service is Firebase Cloud Messaging, it is part of Google Play Services, and on
+GrapheneOS or any other de-Googled Android it is not there. So the app speaks
+**UnifiedPush** instead.
+
+UnifiedPush is a protocol, not a service. Another app on the phone — a
+*distributor*, in practice [ntfy](https://ntfy.sh) — hands out a push URL, and
+the server POSTs notifications to it. The distributor holds the one long-lived
+connection that every app then shares, which is what makes this cheap on battery
+and what FCM does on a stock phone.
+
+Three files implement it, split by lifetime rather than by topic:
+
+| File | Runs when |
+|---|---|
+| `UnifiedPush.java` | the protocol itself: discovery, the four broadcasts, persisted token and endpoint |
+| `UnifiedPushReceiver.java` | with nothing else of the app alive — draws the notification |
+| `UnifiedPushPlugin.java` | while the user is in Settings — the bridge to the web app |
+
+**Requirements on the phone.** A distributor app has to be installed; the app
+does not bundle one and Settings says so plainly when none is found. The
+`<queries>` element in `AndroidManifest.xml` is what makes distributors visible
+at all — without it, Android 11+ hides them and push looks unavailable on every
+modern phone. `POST_NOTIFICATIONS` is requested when the user enables push, not
+at launch.
+
+**The payload carries the notification text.** The message the server sends is
+the same JSON the web service worker receives — title, one line of body, and the
+in-app link — so the receiver draws it directly, with no network call, no token
+handling and nothing to fail while the app is closed.
+
+That means **the distributor can read the notification's title and text**. With
+your own ntfy server that is the same trust boundary as the server itself, which
+is the deployment this is built for. The alternative — a content-free ping
+followed by an authenticated fetch — would keep the text private at the cost of
+reproducing the app's auth inside a BroadcastReceiver, and would show nothing at
+all whenever the server was briefly unreachable. If you ever point this at a
+public distributor, that is the trade you are making. Nothing beyond the
+notification is ever sent: no workout data, and nothing the user did not already
+choose to be notified about.
+
+**It is drawn to match the web app.** The payload's `icon` — the sender's avatar
+for a shared workout, empty for a system event — is the same field the service
+worker hands to `showNotification`, so both platforms show the same picture from
+one server-side decision. `NotificationImages` fetches it, crops it to a circle
+and sets it as the large icon; the app mark stays as the small icon, tinted with
+the accent.
+
+Two details that are not obvious:
+
+- **The notification is posted twice** when there is an avatar — immediately, then
+  again with the picture. A BroadcastReceiver has about ten seconds to live, so
+  waiting on the network before showing anything would delay every share
+  notification and lose it outright when the server is unreachable. The second
+  post updates the banner in place with `setOnlyAlertOnce`, so the phone buzzes
+  once.
+- **The circle is cropped here, not by Android**, which clips large icons to a
+  circle from Android 12 and shows them square before that. The web app's avatars
+  are round everywhere, so doing it ourselves is what makes the notification match
+  on every phone rather than on recent ones.
+
+Avatar routes are unauthenticated by design — `handleAutoAvatar` in `account.go`
+says so — because an OS notification fetches them from outside any session, on
+web and here alike. The receiver has no token and needs none. It does need the
+server address, which it reads back out of the Capacitor Preferences store the
+web app wrote it to; a failed lookup costs the avatar and nothing else.
+
+The accent tint is the default green from `colors.xml`, not the user's chosen
+accent: the notification is built with no WebView running, and the accent lives in
+the web app's local storage.
+
+**Reading in the app clears the banner.** `dismissOSNotification` cancels the
+tray notification by the id it was tagged with. On web the service worker does
+it; the app has no service worker, so `lib/push.ts` routes the same call to the
+plugin instead. The tag and the numeric id have to match what the receiver posted
+with — hence `UnifiedPushReceiver.NOTIFICATION_ID` rather than a literal at each
+call site.
+
+**Endpoints drift, so they are re-sent.** A distributor can issue a new endpoint
+while the app is closed, and the broadcast announcing it reaches a receiver with
+no WebView to tell. `syncNativePush()` re-registers whatever the phone holds on
+every launch; it is an upsert keyed on the endpoint, so doing it unconditionally
+beats trying to detect the mismatch.
+
+Server side: `POST /api/push/unifiedpush` stores the endpoint in the same
+`push_subscriptions` table as Web Push, distinguished by a `kind` column, so
+fan-out, per-kind preferences and account deletion all work unchanged. VAPID keys
+are a Web Push concern and are **not** required for any of this — a server with
+push otherwise unconfigured still reaches phones.
+
 ## Not here yet
 
 Folder watching, share-sheet and "open with" intents are the next round. The

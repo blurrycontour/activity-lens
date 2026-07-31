@@ -100,14 +100,36 @@ func (p Prefs) Wants(k Kind) bool {
 	return !ok || enabled
 }
 
-// Subscription is one browser's Web Push endpoint.
+// Kinds of push endpoint. Both are "a URL this device can be reached at"; they
+// differ only in how a request to that URL is formed.
+const (
+	// KindWebPush is a browser endpoint, addressed with RFC 8291 encryption and
+	// a VAPID signature.
+	KindWebPush = "webpush"
+	// KindUnifiedPush is an endpoint handed out by a UnifiedPush distributor on
+	// the user's phone — ntfy and similar. The payload is POSTed to it as-is:
+	// there is no encryption layer and no VAPID, because the distributor is the
+	// user's own infrastructure rather than a vendor's.
+	KindUnifiedPush = "unifiedpush"
+)
+
+// Subscription is one device's push endpoint, browser or phone.
 type Subscription struct {
-	Endpoint  string
-	UserID    int64
+	Endpoint string
+	UserID   int64
+	// Kind is KindWebPush or KindUnifiedPush; empty means Web Push, for rows
+	// that predate the column.
+	Kind string
+	// P256dh and Auth are the Web Push encryption keys. Empty for UnifiedPush.
 	P256dh    string
 	Auth      string
 	UserAgent string
 	CreatedAt time.Time
+}
+
+// IsUnifiedPush reports whether this endpoint is addressed by a plain POST.
+func (s Subscription) IsUnifiedPush() bool {
+	return s.Kind == KindUnifiedPush
 }
 
 // DecodePrefs parses stored preference JSON, falling back to defaults when it

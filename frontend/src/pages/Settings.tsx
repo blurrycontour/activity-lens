@@ -10,6 +10,7 @@ import { useAuth } from '../context/AuthContext'
 import { apiBase, forgetServer, isNative } from '../lib/serverConfig'
 import { installedApp, requestUpdateCheck } from '../lib/native/appUpdate'
 import ConfirmDialog from '../components/ConfirmDialog'
+import NativePushCard from '../components/NativePushCard'
 import {
   DASHBOARD_CFG_KEY, DEFAULT_DASHBOARD_CONFIG, STAT_CARDS, WINDOW_OPTIONS,
   DEFAULT_HR_ZONE_CHART, HR_ZONE_CHART_KEY,
@@ -370,6 +371,23 @@ export default function Settings({ accent, onAccentChange }: SettingsProps) {
           {/* The master switch leads: whether notifications can reach you at all
               matters more than which ones, and the per-kind list below is
               meaningless to someone who has not granted permission. */}
+          {isNative() ? (
+            /* The app enrols through a UnifiedPush distributor instead of the
+               browser's push service, which does not exist in the WebView. Its
+               own component: none of the state below — VAPID key, permission,
+               subscription — applies to it. */
+            <>
+              <NativePushCard
+                pushPref={notify.push}
+                onPushPrefChange={on => saveNotify({ ...notify, push: on })}
+              />
+              {/* saveNotify reports its own failures here rather than throwing,
+                  so a preference that did not save still says so on native. */}
+              {notifyMsg && !notifyMsg.ok && (
+                <p style={{ fontSize: 12, marginTop: 10, color: '#ef4444' }}>{notifyMsg.text}</p>
+              )}
+            </>
+          ) : (
           <div style={{ paddingBottom: 16, borderBottom: '1px solid var(--border)' }}>
             {pushState === 'unsupported' ? (
               <>
@@ -405,6 +423,7 @@ export default function Settings({ accent, onAccentChange }: SettingsProps) {
               <p style={{ fontSize: 12, marginTop: 10, color: notifyMsg.ok ? 'var(--primary)' : '#ef4444' }}>{notifyMsg.text}</p>
             )}
           </div>
+          )}
 
           <div style={{ marginTop: 16 }}>
             <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-3)', marginBottom: 12 }}>

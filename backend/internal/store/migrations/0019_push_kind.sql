@@ -1,0 +1,12 @@
+-- What kind of endpoint each push subscription is.
+--
+-- Web Push (browsers) and UnifiedPush (the Android app) are both "a URL this
+-- user's device can be reached at", and they differ only in how a request to it
+-- is formed — so they share one table rather than growing a parallel one with
+-- its own enrolment, expiry and purge paths to keep correct.
+--
+-- Existing rows are all browsers, hence the default. p256dh and auth stay NOT
+-- NULL and are written empty for UnifiedPush, which needs no encryption keys:
+-- widening them to nullable would mean a table rebuild, which SQLite does not
+-- do with ALTER and Postgres would do differently.
+ALTER TABLE push_subscriptions ADD COLUMN kind TEXT NOT NULL DEFAULT 'webpush';

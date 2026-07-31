@@ -4,4 +4,7 @@
     <string name="title_activity_main">Activity Lens</string>
     <string name="package_name">io.github.blurrycontour.activitylens</string>
     <string name="custom_url_scheme">io.github.blurrycontour.activitylens</string>
+    <!-- Shown in Android's per-app notification settings. -->
+    <string name="notification_channel_name">Activity Lens</string>
+    <string name="notification_channel_description">Shared workouts, gear wear and training goals.</string>
 </resources>

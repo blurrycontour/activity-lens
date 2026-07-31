@@ -183,13 +183,17 @@ func (r *SQLiteRepository) assertExists(ctx context.Context, userID int64, id st
 func (r *SQLiteRepository) SaveSubscription(ctx context.Context, s Subscription) error {
 	// The endpoint is the device's identity, so re-subscribing updates the keys
 	// (which rotate) rather than accumulating dead rows.
+	kind := s.Kind
+	if kind == "" {
+		kind = KindWebPush
+	}
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO push_subscriptions (endpoint, user_id, p256dh, auth, user_agent, created_at)
-		 VALUES (?,?,?,?,?,?)
+		`INSERT INTO push_subscriptions (endpoint, user_id, kind, p256dh, auth, user_agent, created_at)
+		 VALUES (?,?,?,?,?,?,?)
 		 ON CONFLICT (endpoint) DO UPDATE SET
-		   user_id = excluded.user_id, p256dh = excluded.p256dh,
+		   user_id = excluded.user_id, kind = excluded.kind, p256dh = excluded.p256dh,
 		   auth = excluded.auth, user_agent = excluded.user_agent`,
-		s.Endpoint, s.UserID, s.P256dh, s.Auth, s.UserAgent,
+		s.Endpoint, s.UserID, kind, s.P256dh, s.Auth, s.UserAgent,
 		time.Now().UTC().Format(time.RFC3339))
 	if err != nil {
 		return fmt.Errorf("save push subscription: %w", err)
@@ -206,7 +210,7 @@ func (r *SQLiteRepository) DeleteSubscription(ctx context.Context, endpoint stri
 
 func (r *SQLiteRepository) Subscriptions(ctx context.Context, userID int64) ([]Subscription, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT endpoint, user_id, p256dh, auth, user_agent FROM push_subscriptions WHERE user_id = ?`, userID)
+		`SELECT endpoint, user_id, kind, p256dh, auth, user_agent FROM push_subscriptions WHERE user_id = ?`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("query push subscriptions: %w", err)
 	}
@@ -214,7 +218,7 @@ func (r *SQLiteRepository) Subscriptions(ctx context.Context, userID int64) ([]S
 	out := make([]Subscription, 0)
 	for rows.Next() {
 		var s Subscription
-		if err := rows.Scan(&s.Endpoint, &s.UserID, &s.P256dh, &s.Auth, &s.UserAgent); err != nil {
+		if err := rows.Scan(&s.Endpoint, &s.UserID, &s.Kind, &s.P256dh, &s.Auth, &s.UserAgent); err != nil {
 			return nil, err
 		}
 		out = append(out, s)

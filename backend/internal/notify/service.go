@@ -3,6 +3,7 @@ package notify
 import (
 	"context"
 	"log/slog"
+	"net/http"
 )
 
 // listLimit caps how many notifications the panel loads. The bell is a recent
@@ -21,12 +22,16 @@ type Service struct {
 	repo  Repository
 	keys  VAPIDKeys
 	prefs PrefsLoader
+	// client sends UnifiedPush requests. A field rather than http.DefaultClient
+	// so a test can point it at an httptest server, and so the timeout is this
+	// package's to set rather than the process's.
+	client *http.Client
 }
 
 // NewService builds a notification service. Passing empty VAPID keys disables
 // push; everything else keeps working in-app.
 func NewService(repo Repository, keys VAPIDKeys, prefs PrefsLoader) *Service {
-	return &Service{repo: repo, keys: keys, prefs: prefs}
+	return &Service{repo: repo, keys: keys, prefs: prefs, client: &http.Client{}}
 }
 
 // PushPublicKey is the VAPID public key browsers need to subscribe, or "" when
@@ -117,15 +122,20 @@ func (s *Service) DeleteAll(ctx context.Context, userID int64) error {
 	return s.repo.DeleteAll(ctx, userID)
 }
 
-// Subscribe registers a browser for push.
+// Subscribe registers a device for push.
+//
+// The VAPID check applies to browsers only. A UnifiedPush endpoint is addressed
+// with a plain POST and needs no keypair, so a server with push otherwise
+// unconfigured can still reach phones — gating it on VAPID would have made the
+// Android app silently unable to enrol.
 func (s *Service) Subscribe(ctx context.Context, sub Subscription) error {
-	if s.keys.Public == "" {
+	if !sub.IsUnifiedPush() && s.keys.Public == "" {
 		return ErrPushUnavailable
 	}
 	return s.repo.SaveSubscription(ctx, sub)
 }
 
-// Unsubscribe removes a browser's registration.
+// Unsubscribe removes a device's registration.
 func (s *Service) Unsubscribe(ctx context.Context, endpoint string) error {
 	return s.repo.DeleteSubscription(ctx, endpoint)
 }

@@ -91,6 +91,23 @@ every device would have to re-enable notifications.
 Push additionally requires **HTTPS** (localhost is exempt). On iOS, Safari only
 grants push to a PWA that has been added to the Home Screen.
 
+### The Android app
+
+The app does not use Web Push — the browser push service behind it is Google's,
+and it does not exist on a de-Googled phone. It uses **UnifiedPush**: a
+distributor app on the phone (usually [ntfy](https://ntfy.sh), pointed at your
+own ntfy server if you run one) issues a push URL, and Activity Lens POSTs
+notifications to it.
+
+Nothing to configure on the server. There are no keys, `AL_PUSH_SUBJECT` does not
+apply, and it works on an instance where Web Push was never set up. The user
+picks a distributor in **Settings → Notifications** in the app; if none is
+installed, that is what the screen says.
+
+Worth knowing before you enable it: the notification's title and text pass
+through the distributor, so it can read them. Full reasoning, and what is
+deliberately never sent, in `mobile/README.md`.
+
 ## Single sign-on (OIDC)
 
 All of these are also settable from **Admin → SSO**, which is usually easier.

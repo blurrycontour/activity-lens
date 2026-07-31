@@ -157,6 +157,7 @@ func (s *Server) apiRoutes() http.Handler {
 	mux.Handle("DELETE /api/notifications/{id}", s.authedCSRF(s.handleDeleteNotification))
 	mux.Handle("DELETE /api/notifications", s.authedCSRF(s.handleClearNotifications))
 	mux.Handle("POST /api/push/subscribe", s.authedCSRF(s.handlePushSubscribe))
+	mux.Handle("POST /api/push/unifiedpush", s.authedCSRF(s.handleUnifiedPushSubscribe))
 	mux.Handle("POST /api/push/unsubscribe", s.authedCSRF(s.handlePushUnsubscribe))
 
 	// --- Equipment (authenticated) ---

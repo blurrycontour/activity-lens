@@ -30,6 +30,21 @@
 
         </activity>
 
+        <!-- Receives push from a UnifiedPush distributor (ntfy and friends).
+             Exported because the distributor is a different app and has to be
+             able to reach it; the receiver itself checks that the token on every
+             broadcast is the one we registered with. -->
+        <receiver
+            android:name=".UnifiedPushReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="org.unifiedpush.android.connector.NEW_ENDPOINT" />
+                <action android:name="org.unifiedpush.android.connector.REGISTRATION_FAILED" />
+                <action android:name="org.unifiedpush.android.connector.UNREGISTERED" />
+                <action android:name="org.unifiedpush.android.connector.MESSAGE" />
+            </intent-filter>
+        </receiver>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -50,4 +65,17 @@
          unknown apps" for this app, and the system still shows its own
          confirmation dialog for every install. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <!-- Required from Android 13 to show a notification at all. Requested at the
+         moment the user enables push, not at launch. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Android 11 and later hide installed packages from an app unless it says
+         what it is looking for. Without this, querying for distributors returns
+         nothing and push looks unavailable on every modern phone. -->
+    <queries>
+        <intent>
+            <action android:name="org.unifiedpush.android.distributor.REGISTER" />
+        </intent>
+    </queries>
 </manifest>

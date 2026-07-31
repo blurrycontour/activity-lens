@@ -375,6 +375,13 @@ export const api = {
   clearNotifications: () => request<unknown>('/api/notifications', { method: 'DELETE' }),
   pushSubscribe: (sub: PushSubscriptionJSON) =>
     request<unknown>('/api/push/subscribe', { method: 'POST', body: sub }),
+  /**
+   * Registers an endpoint issued by a UnifiedPush distributor, for the Android
+   * app. A separate route from pushSubscribe because it carries no encryption
+   * keys — the distributor is the user's own server, not a browser vendor's.
+   */
+  pushSubscribeUnifiedPush: (endpoint: string) =>
+    request<unknown>('/api/push/unifiedpush', { method: 'POST', body: { endpoint } }),
   pushUnsubscribe: (endpoint: string) =>
     request<unknown>('/api/push/unsubscribe', { method: 'POST', body: { endpoint } }),
   login: (identifier: string, password: string) =>

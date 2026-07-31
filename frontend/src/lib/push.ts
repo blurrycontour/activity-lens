@@ -1,4 +1,6 @@
 import { api } from './api'
+import { dismissNativeNotification } from './native/unifiedPush'
+import { isNative } from './serverConfig'
 
 // Web Push enrolment. The service worker receives the push and draws the
 // notification; this module only handles permission and the subscription
@@ -128,6 +130,13 @@ export async function maybePromptForPush(vapidKey: string): Promise<PushState> {
  * Notifications are tagged with their id, which is what makes this targetable.
  */
 export async function dismissOSNotification(tag: string): Promise<void> {
+  // The Android app runs no service worker — the notification was posted by the
+  // UnifiedPush receiver, so that is what has to take it back. Same intent,
+  // different mechanism, so callers do not have to care which they are on.
+  if (isNative()) {
+    await dismissNativeNotification(tag)
+    return
+  }
   if (!('serviceWorker' in navigator)) return
   const reg = await navigator.serviceWorker.ready
   reg.active?.postMessage({ type: 'DISMISS_NOTIFICATION', tag })

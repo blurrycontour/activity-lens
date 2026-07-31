@@ -3,6 +3,8 @@ package httpapi
 import (
 	"errors"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/blurrycontour/activity-lens/backend/internal/notify"
 
@@ -100,6 +102,7 @@ func (s *Server) handlePushSubscribe(w http.ResponseWriter, r *http.Request) {
 	err := s.notify.Subscribe(r.Context(), notify.Subscription{
 		Endpoint:  req.Endpoint,
 		UserID:    user.ID,
+		Kind:      notify.KindWebPush,
 		P256dh:    req.Keys.P256dh,
 		Auth:      req.Keys.Auth,
 		UserAgent: r.UserAgent(),
@@ -113,6 +116,63 @@ func (s *Server) handlePushSubscribe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleUnifiedPushSubscribe registers an endpoint the Android app was handed by
+// a UnifiedPush distributor.
+//
+// A separate route from /api/push/subscribe rather than a `kind` field on it:
+// the two carry genuinely different things — this one has no encryption keys and
+// never will — and keeping the browser's request shape a faithful mirror of what
+// pushManager.subscribe() produces is worth more than one fewer handler.
+//
+// The endpoint is validated as an absolute http(s) URL, because the server will
+// later POST to whatever is stored here. That is a request made by this server,
+// to a host chosen by a user, which is worth being deliberate about; see
+// validPushEndpoint.
+func (s *Server) handleUnifiedPushSubscribe(w http.ResponseWriter, r *http.Request) {
+	user := httpmw.UserFrom(r)
+	var req struct {
+		Endpoint string `json:"endpoint"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if !validPushEndpoint(req.Endpoint) {
+		writeError(w, http.StatusBadRequest, "endpoint must be an absolute http or https URL")
+		return
+	}
+	err := s.notify.Subscribe(r.Context(), notify.Subscription{
+		Endpoint:  req.Endpoint,
+		UserID:    user.ID,
+		Kind:      notify.KindUnifiedPush,
+		UserAgent: r.UserAgent(),
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not save push subscription")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// validPushEndpoint reports whether a distributor endpoint is safe to store.
+//
+// Only the shape is checked, not the host. A self-hosted deployment's ntfy is
+// very often on the same private network as the server — sometimes the same
+// machine — so refusing private addresses would break the common case rather
+// than protect it. What is refused is anything that is not an absolute http(s)
+// URL, which is what stops a stored value being interpreted as some other
+// scheme later.
+func validPushEndpoint(raw string) bool {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return false
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return false
+	}
+	return u.Host != ""
 }
 
 func (s *Server) handlePushUnsubscribe(w http.ResponseWriter, r *http.Request) {

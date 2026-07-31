@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Bell, Check, Share2, Footprints, Trophy, Clock, X, Trash2 } from 'lucide-react'
-import { api, type AppNotification, type NotificationKind } from '../lib/api'
+import { api, apiURL, type AppNotification, type NotificationKind } from '../lib/api'
 import { dismissOSNotification, enablePush, maybePromptForPush, pushState, syncPushSubscription, type PushState } from '../lib/push'
+import { consumeNotificationTap, onNotificationTap, syncNativePush } from '../lib/native/unifiedPush'
 import { useIsMobile } from '../lib/useIsMobile'
 
 /**
@@ -85,6 +86,12 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
   // maybePromptForPush for why this cannot be relied on alone.
   useEffect(() => {
     void (async () => {
+      // The app enrols through a UnifiedPush distributor rather than the
+      // browser's push service, and its endpoint can change while the app is
+      // closed — see syncNativePush. Independent of the VAPID key below, which
+      // is a Web Push concern the app has no use for.
+      void syncNativePush()
+
       const key = await load()
       if (!key) return
       // Keep the server's record of this device in step with the browser's.
@@ -94,6 +101,18 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
     // Runs once on mount; the polling effect below keeps it current after that.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // A tapped Android notification names the page it belongs to. Both asked for
+  // and subscribed to: a cold start delivers the intent before this component
+  // exists, and a tap while the app is open delivers it after.
+  useEffect(() => {
+    const go = (link: string) => {
+      void load()
+      onNavigate(link)
+    }
+    void consumeNotificationTap().then(link => { if (link) go(link) })
+    return onNotificationTap(go)
+  }, [load, onNavigate])
 
   // Poll while the tab is visible. Push covers the app being closed, so this
   // only has to catch changes made in another session or on another device.
@@ -247,7 +266,11 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
                 onClick={() => void openItem(n)}
               >
                 {n.icon
-                  ? <img className="notif-avatar" src={n.icon} alt="" />
+                  /* Through apiURL, like every other avatar: the icon is a
+                     server path, and in the app the server is somewhere else —
+                     unprefixed it would point at the WebView's own origin,
+                     where nothing is listening. */
+                  ? <img className="notif-avatar" src={apiURL(n.icon)} alt="" />
                   : <span className="notif-icon">{KIND_ICON[n.kind] ?? <Bell size={14} />}</span>}
                 <span style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
                   <span className="notif-title">{n.title}</span>

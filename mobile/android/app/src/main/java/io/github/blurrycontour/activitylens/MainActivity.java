@@ -17,6 +17,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(SystemBarsPlugin.class);
         registerPlugin(AppUpdatePlugin.class);
+        registerPlugin(UnifiedPushPlugin.class);
         super.onCreate(savedInstanceState);
 
         // Replace the launch theme's window background with a flat colour.

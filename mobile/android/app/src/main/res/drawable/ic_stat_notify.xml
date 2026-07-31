@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The status bar icon.
+
+  A separate drawable from the launcher icon, and not a colour choice we get to
+  make: Android takes the alpha channel of a notification's small icon and
+  discards everything else, so anything with colour or fill renders as a white
+  blob. This is the same mark as ic_launcher_foreground.xml drawn as flat white
+  strokes at 24dp, which is what the platform actually displays.
+
+  The mark is drawn at the same 0.55 scale as the launcher's, leaving the
+  breathing room Android expects around a status bar icon.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512"
+    android:tint="#ffffff">
+
+    <group
+        android:pivotX="256"
+        android:pivotY="256"
+        android:scaleX="0.75"
+        android:scaleY="0.75">
+
+        <path
+            android:pathData="M 121.65,390.35 A 190,190 0 1 1 390.35,390.35"
+            android:strokeColor="#ffffff"
+            android:strokeWidth="40"
+            android:strokeLineCap="round" />
+
+        <path
+            android:pathData="M 380,256 H 319 L 287,360 L 224,151 L 193,256 H 130"
+            android:strokeColor="#ffffff"
+            android:strokeWidth="32"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+    </group>
+</vector>
