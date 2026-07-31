@@ -323,6 +323,66 @@ fan-out, per-kind preferences and account deletion all work unchanged. VAPID key
 are a Web Push concern and are **not** required for any of this — a server with
 push otherwise unconfigured still reaches phones.
 
+### Parity with the PWA
+
+The app is the same web build in a WebView, so most things are identical by
+construction. These are the places where they cannot be, and what each one does
+instead. Every one of them was a silent failure before it was a feature — worth
+reading before adding anything that touches the platform.
+
+| What | Web | App |
+|---|---|---|
+| Saving a file | `<a download>` + blob URL | `Shell.saveFile` → Downloads folder, with a toast |
+| Offline data | service worker caches API GETs | `lib/nativeCache.ts`, same cache and policy |
+| Push | Web Push + VAPID | UnifiedPush distributor |
+| Clearing a notification | service worker | `UnifiedPush.dismiss` |
+| Back button | browser chrome | `MainActivity.onBackPressed` → `webView.goBack()` |
+| Soft keyboard | window resizes | WebView padded by the IME inset |
+| External links | new tab | Capacitor opens the system browser (nothing to do) |
+| Image URLs | same-origin, relative | must go through `apiURL()` |
+
+That last row is the one that keeps biting. The app's origin is not the server,
+so a bare `/api/...` in a `src` resolves to the WebView and 404s. It has been
+wrong three times — the notification panel's avatar, the map player's avatar —
+and it fails invisibly, as a picture that does not appear. **Every image URL goes
+through `apiURL()`**, and `avatarUrl()` in `UserAvatar.tsx` exists so that most
+of them do not have to think about it.
+
+Two behaviours are deliberately *not* matched:
+
+- **A notification arriving while the app is open** still appears in the tray.
+  The web app suppresses it and shows an in-app banner instead. Doing the same
+  here means the receiver knowing whether a WebView is in the foreground, and it
+  has not been worth the coupling yet.
+- **Map tiles are not cached.** The service worker keeps them; the app fetches
+  them each time. Route maps are therefore blank offline while everything around
+  them works.
+
+### Permissions
+
+Three are declared, and they are requested in three different ways because
+Android has three kinds:
+
+| Permission | When | How |
+|---|---|---|
+| `INTERNET` | install | granted automatically, no prompt exists |
+| `POST_NOTIFICATIONS` | first launch | `MainActivity.askForNotifications`, once |
+| `WRITE_EXTERNAL_STORAGE` | first export, Android 9 and older only | in context, from `ShellPlugin` |
+| `REQUEST_INSTALL_PACKAGES` | first in-app update | special access — a settings screen, opened by the updater |
+
+Notification permission is asked for at launch rather than when push is switched
+on. That is a deliberate departure from Google's guidance, which prefers asking
+in context: one prompt on first run beats an interruption later, and the
+in-context request still exists for anyone who declines and changes their mind.
+It is asked **once** — Android silently refuses a third attempt, and a prompt on
+every cold start would be worse than no push at all.
+
+`REQUEST_INSTALL_PACKAGES` cannot be requested this way at all: it is special
+access, granted from a system settings screen. Sending a new user there before
+they have ever seen an update would be asking them to approve something
+frightening for no visible reason, so the updater opens it at the point it is
+needed.
+
 ## Not here yet
 
 Folder watching, share-sheet and "open with" intents are the next round. The

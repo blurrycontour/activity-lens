@@ -7,8 +7,8 @@ import {
 } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useAuth } from '../context/AuthContext'
-import { api } from '../lib/api'
-import { downloadWorkoutGPX, downloadWorkoutOriginal } from '../lib/download'
+import { api, apiURL } from '../lib/api'
+import { downloadWorkoutGPX, downloadWorkoutOriginal, reportSaveFailure } from '../lib/download'
 import { useLocalStorage } from '../lib/useLocalStorage'
 import { DEFAULT_HR_ZONE_CHART, HR_ZONE_CHART_KEY, type HRZoneChart } from '../lib/dashboardConfig'
 import InfoTip from '../components/InfoTip'
@@ -1005,7 +1005,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
 
   function mapCard(height: number | string) {
     return (
-      <RouteMap route={w.route} color={trailColor} duration={w.duration} currentTime={currentTime} onScrub={handleScrub} height={height} distance={w.distance} hrTimeline={w.hrTimeline} paceTimeline={w.paceTimeline} elevTimeline={w.elevTimeline} cadenceTimeline={cadenceTimeline} cadenceLabel={cadenceUnit(w.type)} avatarUrl={user?.avatarPath || undefined} maxHR={effectiveMaxHR} />
+      <RouteMap route={w.route} color={trailColor} duration={w.duration} currentTime={currentTime} onScrub={handleScrub} height={height} distance={w.distance} hrTimeline={w.hrTimeline} paceTimeline={w.paceTimeline} elevTimeline={w.elevTimeline} cadenceTimeline={cadenceTimeline} cadenceLabel={cadenceUnit(w.type)} avatarUrl={user?.avatarPath ? apiURL(user.avatarPath) : undefined} maxHR={effectiveMaxHR} />
     )
   }
 
@@ -1139,13 +1139,13 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
             {readOnly ? (
               // Export stays available even on someone else's workout: it is a
               // purely client-side render of data already on screen.
-              <button className="btn-icon" title="Export as GPX" onClick={() => downloadWorkoutGPX(w)}>
+              <button className="btn-icon" title="Export as GPX" onClick={() => void downloadWorkoutGPX(w).catch(reportSaveFailure)}>
                 <Download size={16} />
               </button>
             ) : (
               <OptionsMenu
                 onEdit={startEdit}
-                onExport={() => downloadWorkoutGPX(w)}
+                onExport={() => void downloadWorkoutGPX(w).catch(reportSaveFailure)}
                 onDownloadOriginal={w.hasOriginal ? downloadOriginal : undefined}
                 onShare={() => setSharing(true)}
                 onRecalculate={() => { setRecalcErr(null); setConfirmRecalc(true) }}

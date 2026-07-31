@@ -8,6 +8,8 @@
 
 import { type Workout } from '../data/workouts'
 import { api } from './api'
+import { nativeToast, saveFileNative } from './native/shell'
+import { isNative } from './serverConfig'
 
 /** Escapes text for inclusion in XML character data or an attribute value. */
 function escapeXML(value: string): string {
@@ -48,10 +50,20 @@ export function workoutFileName(w: Workout, ext: string): string {
 /**
  * Saves a blob to the user's device under the given filename.
  *
- * Phase 3 adds a native branch here (Capacitor Filesystem + Share), which is
- * the reason every caller goes through this one function.
+ * The two platforms have nothing in common here, which is exactly why every
+ * caller goes through this one function. A browser takes an anchor pointed at a
+ * blob URL; an Android WebView does not — `blob:` is one of the two schemes
+ * Capacitor's navigation handler deliberately declines to pass to the system,
+ * and `download` is not implemented, so the click did nothing and reported
+ * nothing. Native writes the bytes to the Downloads folder instead, and says so,
+ * because there is no download shelf to notice it.
  */
-export function saveFile(filename: string, blob: Blob): void {
+export async function saveFile(filename: string, blob: Blob): Promise<void> {
+  if (isNative()) {
+    const path = await saveFileNative(filename, blob)
+    await nativeToast(`Saved to ${path}`)
+    return
+  }
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -61,9 +73,23 @@ export function saveFile(filename: string, blob: Blob): void {
 }
 
 /** Exports a workout's route as a GPX file. */
-export function downloadWorkoutGPX(w: Workout): void {
+export async function downloadWorkoutGPX(w: Workout): Promise<void> {
   const blob = new Blob([workoutToGPX(w)], { type: 'application/gpx+xml' })
-  saveFile(workoutFileName(w, 'gpx'), blob)
+  await saveFile(workoutFileName(w, 'gpx'), blob)
+}
+
+/**
+ * Reports a failed save.
+ *
+ * The export buttons are scattered across list rows and menus with nowhere to
+ * put an error message, and a save that fails silently is what this whole change
+ * is fixing. On web the console is the honest answer — a browser download that
+ * fails has already told the user itself.
+ */
+export function reportSaveFailure(err: unknown): void {
+  const message = err instanceof Error ? err.message : 'could not save the file'
+  if (isNative()) void nativeToast(message)
+  else console.error(message)
 }
 
 /**
@@ -81,5 +107,5 @@ export async function downloadWorkoutOriginal(w: Workout): Promise<void> {
   const { blob, filename } = await api.getWorkoutOriginal(w.id)
   // The server names the file, since it knows what the upload was called. The
   // fallback keeps the extension it was stored under rather than assuming gpx.
-  saveFile(filename || workoutFileName(w, 'original'), blob)
+  await saveFile(filename || workoutFileName(w, 'original'), blob)
 }

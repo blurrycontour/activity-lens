@@ -11,7 +11,7 @@ import ShareDialog from '../components/ShareDialog'
 import UserAvatar, { userLabel } from '../components/UserAvatar'
 import { filterByRange, RANGE_OPTIONS } from '../lib/range'
 import { api } from '../lib/api'
-import { downloadWorkoutGPX } from '../lib/download'
+import { downloadWorkoutGPX, reportSaveFailure } from '../lib/download'
 import { useIsMobile } from '../lib/useIsMobile'
 
 interface WorkoutsProps {
@@ -357,7 +357,11 @@ async function exportWorkout(w: Workout, e: React.MouseEvent) {
   e.stopPropagation()
   // The list view only carries summary fields (no route) for efficiency, so
   // fetch the full workout — including its route — on demand when exporting.
-  downloadWorkoutGPX(await api.getWorkout(w.id))
+  try {
+    await downloadWorkoutGPX(await api.getWorkout(w.id))
+  } catch (err) {
+    reportSaveFailure(err)
+  }
 }
 
 interface WorkoutCardProps {

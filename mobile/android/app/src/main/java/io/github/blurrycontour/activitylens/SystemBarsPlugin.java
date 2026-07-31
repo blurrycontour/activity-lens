@@ -92,12 +92,31 @@ public class SystemBarsPlugin extends Plugin {
         // a notch in landscape, the cutout intrudes further than the bars do.
         Insets bars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
 
+        // The soft keyboard, which drawing edge to edge makes our problem.
+        //
+        // An app that lets the system fit its content gets the window resized
+        // when the keyboard opens, and every text field stays visible for free.
+        // Once decorFitsSystemWindows is false — which API 35+ forces anyway —
+        // nothing resizes, and the keyboard simply covers the bottom of the page:
+        // type in a field near the foot of a form and you cannot see what you are
+        // typing. Shrinking the WebView by the keyboard's height restores the
+        // behaviour the platform used to provide.
+        int keyboard = windowInsets.getInsets(WindowInsetsCompat.Type.ime()).bottom;
+        View webView = getBridge() != null ? getBridge().getWebView() : null;
+        if (webView != null) {
+            webView.setPadding(0, 0, 0, keyboard);
+        }
+
         // CSS pixels, not device pixels: the page reasons in the former and the
         // ratio between them is exactly the display density.
         float density = getContext().getResources().getDisplayMetrics().density;
         JSObject insets = new JSObject();
         insets.put("top", bars.top / density);
-        insets.put("bottom", bars.bottom / density);
+        // While the keyboard is up it has already taken the navigation bar's
+        // space, and the WebView has been shrunk past both. Reporting the bar
+        // inset as well would pad the page a second time for room that is no
+        // longer there, leaving a gap above the keyboard.
+        insets.put("bottom", keyboard > 0 ? 0 : bars.bottom / density);
         insets.put("left", bars.left / density);
         insets.put("right", bars.right / density);
 

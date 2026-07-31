@@ -17,6 +17,7 @@
 
 import { Capacitor } from '@capacitor/core'
 import { Preferences } from '@capacitor/preferences'
+import { clearApiCache } from './swCache'
 
 const SERVER_URL_KEY = 'al_server_url'
 const TOKEN_KEY = 'al_auth_token'
@@ -146,6 +147,10 @@ export async function forgetServer(): Promise<void> {
   await setAuthToken(null)
   baseURL = ''
   await Preferences.remove({ key: SERVER_URL_KEY })
+  // Cached responses are keyed by absolute URL, so another server's entries
+  // would never be read — but they are still one account's data sitting on the
+  // device after it was disconnected, which is reason enough to drop them.
+  await clearApiCache()
   forgetListeners.forEach(fn => fn())
 }
 

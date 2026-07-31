@@ -70,6 +70,13 @@
          moment the user enables push, not at launch. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Saving an export to the Downloads folder, on Android 9 and older only.
+         From Android 10 MediaStore does this with no permission, and the cap
+         means newer phones never see the request. -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+
     <!-- Android 11 and later hide installed packages from an app unless it says
          what it is looking for. Without this, querying for distributors returns
          nothing and push looks unavailable on every modern phone. -->

@@ -2,7 +2,8 @@
 // (double-submit cookie echoed in a header), and error normalization.
 
 import { reportReachability, respondedFromBackend } from './network'
-import { apiBase, authToken } from './serverConfig'
+import { fetchWithCache } from './nativeCache'
+import { apiBase, authToken, isNative } from './serverConfig'
 
 export interface ApiUser {
   id: number
@@ -263,7 +264,15 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
 
   let res: Response
   try {
-    res = await fetch(apiURL(path), { method, headers, body, credentials: 'same-origin' })
+    // Reads in the app go through the offline cache, which is what the service
+    // worker does for the same requests on web. Writes never do: there is
+    // nothing to serve from cache for one, and a queued mutation is a different
+    // feature with different rules.
+    const url = apiURL(path)
+    const init: RequestInit = { method, headers, body, credentials: 'same-origin' }
+    res = isNative() && method === 'GET'
+      ? await fetchWithCache(url, init)
+      : await fetch(url, init)
   } catch (err) {
     // fetch only rejects on a transport failure, which is the clearest possible
     // signal that the backend is unreachable.
