@@ -64,7 +64,7 @@ jobs:
     outputs:
       image: ${{ steps.tag.outputs.image }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Resolve the image tag
         id: tag
@@ -75,13 +75,13 @@ jobs:
           echo "image=ghcr.io/${repo}-android:${hash}" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       # Built only when the tag is missing. `docker manifest inspect` asks the
       # registry directly rather than trusting a cache, so a deleted package is
@@ -118,7 +118,7 @@ jobs:
       version: ${{ steps.built.outputs.version }}
       sha256: ${{ steps.built.outputs.sha256 }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # scripts/apk.sh derives the version name from `git describe` and the
           # version code from the commit count; both need full history.
@@ -136,7 +136,7 @@ jobs:
       # The SDK and the JDK are in the image; this is the part that genuinely
       # varies per commit. GRADLE_USER_HOME is where Dockerfile.android puts it.
       - name: Cache Gradle
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: /home/builder/.gradle
           key: gradle-${{ hashFiles('mobile/android/**/*.gradle', 'mobile/android/gradle/wrapper/gradle-wrapper.properties') }}
@@ -186,7 +186,7 @@ jobs:
 
       # apk.json travels with the APK: it is what the server reads to report the
       # bundled version, and what consumers check the download against.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: activity-lens-apk
           path: |
@@ -200,7 +200,7 @@ jobs:
       # Stage 2 of the Dockerfile used to rebuild this on a different, unpinned
       # Node and pnpm — so the PWA and the native app were built by different
       # toolchains while a comment claimed they shipped the same bundle.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: activity-lens-web
           path: frontend/dist
