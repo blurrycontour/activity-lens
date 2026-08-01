@@ -175,7 +175,7 @@ regenerated.
 | `AndroidManifest.xml` | `VIEW` intent filter on `${applicationId}://auth` | Where the browser returns a finished SSO sign-in. `${applicationId}` so a local build claims a different scheme than the published app. |
 | `java/.../NativeAuthPlugin.java` | new | Opens SSO in a Custom Tab and collects the code the deep link brings back. |
 | `AndroidManifest.xml` | `SEND` / `SEND_MULTIPLE` intent filter | Puts the app in the share sheet for workout files. Android does not honour the web manifest's `share_target` for an installed PWA, so without this the APK is the one install that cannot receive a share. |
-| `AndroidManifest.xml` | `VIEW` intent filters for `.gpx` / `.tcx` / `.zip` / `.gz` | "Open with" on a workout file, the native equivalent of the manifest's `file_handlers`. One filter matches the MIME type a `content://` URI carries, another the path of a `file://` one. |
+| `AndroidManifest.xml` | `VIEW` intent filters for `.gpx` / `.tcx` / `.zip` / `.gz` | "Open with" on a workout file, the native equivalent of the manifest's `file_handlers`. Archives match on MIME type; `.gpx` and `.tcx` have none registered on Android and must match on the file name. See below. |
 | `java/.../IncomingFiles.java`, `java/.../IncomingFilesPlugin.java` | new | Copies a shared file out of its `content://` URI while the read grant is still valid, and hands the page a path. See below. |
 
 ## Distribution and updating
@@ -538,6 +538,38 @@ at all, so a filter that accepted only the correct MIME types would miss most
 real shares. `IncomingFiles.isWorkoutFile` then drops anything whose name is not
 `.gpx`, `.tcx`, `.zip` or `.gz`. Being offered a file the app cannot use costs a
 message; not being offered one it can costs the feature.
+
+#### Why "open with" needs four filters and ten path patterns
+
+**`.gpx` and `.tcx` are not in Android's `MimeTypeMap`.** Nothing on the platform
+will ever hand you `application/gpx+xml`: a file manager asks for the type, gets
+null, and sends `application/octet-stream` or `*/*`. Matching those two
+extensions on type cannot work, so they match on the file name instead. Archives
+are the opposite — `.zip` and `.gz` *are* registered, so they match on type and
+need no name pattern at all.
+
+Three things about name matching are easy to get wrong, and all three were:
+
+- **A filter with a path but no `mimeType` only matches an intent that carries no
+  type.** Since file managers nearly always set one, such a filter looks correct
+  and never fires. Hence `mimeType="*/*"` on the main filter, and a second,
+  otherwise identical filter with no type for the intents that genuinely have
+  none.
+- **`android:host` is required for any path attribute to be read at all.** Without
+  it Android ignores `pathPattern` outright. `host="*"` matches any authority.
+- **`pathPattern` does not backtrack.** It is `PATTERN_SIMPLE_GLOB`, whose `.*`
+  scans to the *first* occurrence of the next literal character and gives up if
+  the rest fails to match — so `.*\.gpx` stops at the first dot and fails on
+  `2024-03-01.morning.gpx`. The fix is one alternative per dot the name might
+  contain, which is where five patterns per extension come from.
+
+What this still does not catch is a `content://` URI whose path is an opaque row
+id, such as `content://media/external/file/12345` — there is neither a usable
+type nor a name to match. Covering those would mean claiming every
+`application/octet-stream` file on the device, which would put Activity Lens in
+the "open with" list for every unknown binary. Sharing to the app works
+regardless, and is the better route in for anything the file manager cannot
+describe.
 
 The name also comes from another app, so it is never used as a path as given —
 `safeName` strips it to something that cannot climb out of the cache directory.
