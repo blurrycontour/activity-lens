@@ -489,22 +489,24 @@ export default function Dashboard() {
                 </div>
                 <p className="chart-card-desc">Share of activities by sport over the {caption}.</p>
                 <div className="activity-mix-body">
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, justifyContent: 'center', width: 150 }}>
+                  <div className="activity-mix-legend">
                     {d.radialData.map(r => (
                       <div key={r.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <div style={{ width: 10, height: 10, borderRadius: 3, background: r.fill }} />
-                          <span style={{ fontSize: 13, color: 'var(--text-2)' }}>{r.name}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                          <div style={{ width: 10, height: 10, borderRadius: 3, background: r.fill, flexShrink: 0 }} />
+                          <span style={{ fontSize: 13, color: 'var(--text-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
                         </div>
                         <span style={{ fontSize: 13, fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{r.value}</span>
                       </div>
                     ))}
                   </div>
-                  <ResponsiveContainer width="100%" height={150}>
-                    <RadialBarChart innerRadius={24} outerRadius={70} data={d.radialData} startAngle={90} endAngle={-270}>
-                      <RadialBar dataKey="value" background={{ fill: 'var(--bg-3)' }} />
-                    </RadialBarChart>
-                  </ResponsiveContainer>
+                  <div className="activity-mix-chart">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <RadialBarChart innerRadius="34%" outerRadius="92%" data={d.radialData} startAngle={90} endAngle={-270}>
+                        <RadialBar dataKey="value" background={{ fill: 'var(--bg-3)' }} />
+                      </RadialBarChart>
+                    </ResponsiveContainer>
+                  </div>
                 </div>
               </div>
             </div>

@@ -33,6 +33,7 @@ import {
 } from './lib/nav'
 import { useSwipeNav } from './lib/useSwipeNav'
 import { consumeShareParam, takeSharedFiles } from './lib/shareTarget'
+import { onNativeIncomingFiles, takeNativeIncomingFiles } from './lib/native/incomingFiles'
 import { applySystemBars } from './lib/native/systemBars'
 import { onPushMessage } from './lib/native/unifiedPush'
 import { api } from './lib/api'
@@ -157,6 +158,30 @@ export default function App() {
     return () => { cancelled = true }
   }, [user])
 
+  // The same thing in the Android app, which gets there by a different road.
+  //
+  // There is no service worker in the loop and no ?share= to react to: the
+  // shell registers intent filters, copies whatever arrives, and this collects
+  // it. Checked once on load — the share is usually what launched the app — and
+  // again on the event, for one that arrives while it is already open.
+  //
+  // Unlike the web path this does not open an empty modal when nothing is
+  // waiting, because it runs on every launch rather than only after a share.
+  useEffect(() => {
+    if (!user) return
+    let cancelled = false
+    const collect = () => {
+      takeNativeIncomingFiles().then(files => {
+        if (cancelled || files.length === 0) return
+        setIncomingFiles(files)
+        setShowImport(true)
+      })
+    }
+    collect()
+    const stop = onNativeIncomingFiles(collect)
+    return () => { cancelled = true; stop() }
+  }, [user])
+
   // The one-time "how do I get my workouts in" welcome, per user per device.
   //
   // Deferred to an effect on `user` rather than shown from the login handler,
@@ -175,8 +200,9 @@ export default function App() {
   // "Open with" on desktop. An installed PWA that declares file_handlers is
   // launched with the files in launchQueue; Chrome and Edge on desktop are the
   // only places this exists, so the whole block is feature-detected away
-  // elsewhere. Android has no file association for PWAs — the share sheet above
-  // is that platform's equivalent, and it already works.
+  // elsewhere. Android gives an installed PWA no file association at all, which
+  // is why the app registers real intent filters and arrives via the native
+  // effect above rather than this one.
   useEffect(() => {
     if (!user || !('launchQueue' in window)) return
     const queue = (window as { launchQueue?: LaunchQueue }).launchQueue
