@@ -170,10 +170,13 @@ regenerated.
 | `values/styles.xml` | `AppTheme.NoActionBar` sets window, status-bar and navigation-bar colours | Capacitor's own version inherits AppCompat's defaults, which show as grey bars above and below the WebView. |
 | `java/.../SystemBarsPlugin.java` | new | Follows the in-app light/dark toggle at runtime, the native equivalent of the `theme-color` meta tag. |
 | `java/.../AppUpdatePlugin.java` | new | In-app update: streams the APK into a `PackageInstaller` session with progress. |
-| `java/.../MainActivity.java` | registers both plugins | Plugins in this module are not auto-discovered the way npm ones are. |
+| `java/.../MainActivity.java` | registers this module's plugins | Plugins in this module are not auto-discovered the way npm ones are. |
 | `AndroidManifest.xml` | `REQUEST_INSTALL_PACKAGES` | Needed to install an update. The user must still grant "install unknown apps" and confirm each install. |
 | `AndroidManifest.xml` | `VIEW` intent filter on `${applicationId}://auth` | Where the browser returns a finished SSO sign-in. `${applicationId}` so a local build claims a different scheme than the published app. |
 | `java/.../NativeAuthPlugin.java` | new | Opens SSO in a Custom Tab and collects the code the deep link brings back. |
+| `AndroidManifest.xml` | `SEND` / `SEND_MULTIPLE` intent filter | Puts the app in the share sheet for workout files. Android does not honour the web manifest's `share_target` for an installed PWA, so without this the APK is the one install that cannot receive a share. |
+| `AndroidManifest.xml` | `VIEW` intent filters for `.gpx` / `.tcx` / `.zip` / `.gz` | "Open with" on a workout file, the native equivalent of the manifest's `file_handlers`. One filter matches the MIME type a `content://` URI carries, another the path of a `file://` one. |
+| `java/.../IncomingFiles.java`, `java/.../IncomingFilesPlugin.java` | new | Copies a shared file out of its `content://` URI while the read grant is still valid, and hands the page a path. See below. |
 
 ## Distribution and updating
 
@@ -475,6 +478,8 @@ reading before adding anything that touches the platform.
 | Soft keyboard | window resizes | WebView padded by the IME inset |
 | External links | new tab | Capacitor opens the system browser (nothing to do) |
 | Image URLs | same-origin, relative | must go through `apiURL()` |
+| A workout shared in | `share_target` → service worker → Cache API | `SEND` intent filter → `IncomingFiles` → cache dir |
+| "Open with" a workout | `file_handlers` → `launchQueue` (desktop only) | `VIEW` intent filter → `IncomingFiles` |
 
 That last row is the one that keeps biting. The app's origin is not the server,
 so a bare `/api/...` in a `src` resolves to the WebView and 404s. It has been
@@ -505,6 +510,40 @@ androidx forwards it to the `OnBackPressedDispatcher`, and anything not
 registered there is skipped while the activity is finished. An override compiles
 without a warning and is simply never called, which is how the first attempt at
 this shipped looking correct and quitting to the launcher.
+
+### Receiving a workout file
+
+Two ways in, both of which the web manifest declares and Android ignores for an
+installed PWA: `share_target` (another app sending a file) and `file_handlers`
+("open with" in a file manager). The shell declares them as real intent filters
+instead, and `IncomingFiles.java` turns what arrives into the same `File[]` the
+service worker route produces — so both end at the same import modal.
+
+**The bytes are copied the moment the intent arrives**, in `onCreate` or
+`onNewIntent`, not when the page asks for them. The read grant on a `content://`
+URI lives and dies with the intent that carried it, and on a cold start the
+WebView does not exist yet — by the time any JavaScript runs the grant is
+usually gone. Copying first is what makes a share that *launches* the app work
+at all, which is the common case.
+
+**What crosses the bridge is a path, never the bytes.** The page turns it into a
+URL with `Capacitor.convertFileSrc` and `fetch`es it. A Strava export is a zip
+that can run to hundreds of megabytes and the app unpacks it client-side; moving
+that as a base64 string would cost several times its size in memory on both
+sides of the bridge, where this costs none.
+
+**The intent filters are deliberately broad and the name check is strict.**
+Exporters routinely share a `.gpx` as `application/octet-stream`, or with no type
+at all, so a filter that accepted only the correct MIME types would miss most
+real shares. `IncomingFiles.isWorkoutFile` then drops anything whose name is not
+`.gpx`, `.tcx`, `.zip` or `.gz`. Being offered a file the app cannot use costs a
+message; not being offered one it can costs the feature.
+
+The name also comes from another app, so it is never used as a path as given —
+`safeName` strips it to something that cannot climb out of the cache directory.
+That and the extension check are the two things covered by
+`app/src/test/java/io/blurrycontour/activitylens/IncomingFilesTest.java`, which
+runs on the host with `./gradlew test`.
 
 ### Auto import (folder watching)
 

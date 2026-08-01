@@ -47,6 +47,68 @@
                 <data android:scheme="${applicationId}" android:host="auth" />
             </intent-filter>
 
+            <!-- The share sheet: another app sending a workout file here.
+                 This is what `share_target` in the web manifest does for the
+                 PWA, which Android does not honour for an installed web app —
+                 so without it the APK is the one install where sharing a
+                 workout offers everything except Activity Lens.
+
+                 The type list mirrors the web manifest's. It is deliberately
+                 wide: exporters routinely share a .gpx as octet-stream, or as
+                 nothing at all, and a filter that only accepted the correct
+                 types would miss most of them. IncomingFiles then drops
+                 anything whose name is not a workout file, so the cost of
+                 being offered a file we cannot use is a message, not an
+                 import. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/gpx+xml" />
+                <data android:mimeType="application/vnd.garmin.tcx+xml" />
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/gzip" />
+                <data android:mimeType="application/xml" />
+                <data android:mimeType="text/xml" />
+                <data android:mimeType="application/octet-stream" />
+            </intent-filter>
+
+            <!-- "Open with" on a workout file in a file manager, the native
+                 equivalent of the manifest's `file_handlers`.
+
+                 Matched on type, which is what a `content://` URI from a
+                 document provider carries; its path is the provider's own
+                 business and says nothing about the file. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="application/gpx+xml" />
+                <data android:mimeType="application/vnd.garmin.tcx+xml" />
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/gzip" />
+            </intent-filter>
+
+            <!-- The same thing for a `file://` URI, where there is a real path
+                 to match and the type is usually missing or wrong.
+
+                 One `pathPattern` per extension because Android's globbing has
+                 no alternation, and `.*\\.gpx` is greedy in a way that already
+                 covers a name with dots in it — `2024.03.01-run.gpx` matches. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="file" />
+                <data android:host="*" />
+                <data android:pathPattern=".*\\.gpx" />
+                <data android:pathPattern=".*\\.tcx" />
+                <data android:pathPattern=".*\\.gpx\\.gz" />
+                <data android:pathPattern=".*\\.tcx\\.gz" />
+            </intent-filter>
+
         </activity>
 
         <!-- Receives push from a UnifiedPush distributor (ntfy and friends).

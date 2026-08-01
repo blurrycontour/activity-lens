@@ -33,6 +33,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(ShellPlugin.class);
         registerPlugin(FolderSyncPlugin.class);
         registerPlugin(NativeAuthPlugin.class);
+        registerPlugin(IncomingFilesPlugin.class);
         super.onCreate(savedInstanceState);
 
         // Replace the launch theme's window background with a flat colour.
@@ -59,6 +60,11 @@ public class MainActivity extends BridgeActivity {
         // Same reasoning for a sign-in returning from the browser: the deep link
         // may be what launched us, in which case nothing is listening yet.
         NativeAuthPlugin.stashDeepLink(this, getIntent());
+        // And for a workout file shared in or opened with the app. This one has
+        // a deadline as well as a listener problem: the read permission on the
+        // content:// URI expires with the intent, so the bytes are copied now
+        // rather than whenever the page gets around to asking.
+        IncomingFiles.stash(this, getIntent());
 
         getOnBackPressedDispatcher().addCallback(this, backCallback);
         askForNotifications();
@@ -80,6 +86,7 @@ public class MainActivity extends BridgeActivity {
         // The plugin also stashes on its own handleOnNewIntent, which is what
         // fires the event. This covers the case where the bridge is not up yet.
         NativeAuthPlugin.stashDeepLink(this, intent);
+        IncomingFiles.stash(this, intent);
     }
 
     /**
