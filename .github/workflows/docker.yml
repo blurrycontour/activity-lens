@@ -31,7 +31,7 @@ jobs:
     needs: apk
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           # Full history + tags so `git describe` can resolve the nearest tag
           # and commit distance for untagged (main) builds.
@@ -47,7 +47,7 @@ jobs:
       # Dropped into the build context, where the Dockerfile's androidapp stage
       # copies it into the image.
       - name: Fetch the APK
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: ${{ needs.apk.outputs.artifact }}
           path: mobile/dist
@@ -70,7 +70,7 @@ jobs:
       # so stage 2 does not run at all — which also takes a full pnpm install and
       # vite build off the image build's critical path.
       - name: Fetch the web bundle
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: ${{ needs.apk.outputs.web-artifact }}
           path: frontend/dist
@@ -139,7 +139,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: ${{ needs.apk.outputs.artifact }}
           path: apk
