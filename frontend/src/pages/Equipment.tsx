@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Plus, Watch, Bike, Shirt, Package, Footprints, Pencil, Trash2, X, ChevronRight,
-  ArrowLeft, AlertTriangle, Search, SlidersHorizontal, ArrowDownWideNarrow,
+  ArrowLeft, AlertTriangle, Search, SlidersHorizontal, ArrowDownWideNarrow, Layers,
 } from 'lucide-react'
 import { api, type Equipment, type EquipmentInput, type LinkedWorkout } from '../lib/api'
 import { useRefreshHandler } from '../context/RefreshContext'
@@ -24,11 +24,32 @@ const TYPES = [
 
 type SortField = 'name' | 'workouts' | 'distance' | 'wear' | 'type'
 
+function typeIcon(type: string, size = 18, color?: string) {
+  switch (type) {
+    case 'shoes': return <Footprints size={size} color={color} />
+    case 'watch': return <Watch size={size} color={color} />
+    case 'bike': return <Bike size={size} color={color} />
+    case 'apparel': return <Shirt size={size} color={color} />
+    default: return <Package size={size} color={color} />
+  }
+}
+
+/**
+ * Gear marks in a menu, in the accent the list rows already draw them in.
+ * Unlike a sport, a gear type has no colour of its own to carry.
+ */
+const typeGlyph = (id: string) => typeIcon(id, 14, 'var(--primary)')
+
 /** Filter and sort choices, shared by the desktop dropdowns and mobile sheet. */
 const TYPE_OPTIONS: DropdownOption<string>[] = [
-  { value: 'all', label: 'All types' },
-  ...TYPES.map(t => ({ value: t.id, label: t.label })),
+  { value: 'all', label: 'All types', glyph: <Layers size={14} color="var(--text-3)" aria-hidden /> },
+  ...TYPES.map(t => ({ value: t.id, label: t.label, glyph: typeGlyph(t.id) })),
 ]
+
+/** The same list without "all", for the add and edit form. */
+const FORM_TYPE_OPTIONS: DropdownOption<string>[] = TYPES.map(t => ({
+  value: t.id, label: t.label, glyph: typeGlyph(t.id),
+}))
 
 const SORT_OPTIONS: DropdownOption<SortField>[] = [
   { value: 'name', label: 'By name', short: 'A→Z' },
@@ -38,15 +59,6 @@ const SORT_OPTIONS: DropdownOption<SortField>[] = [
   { value: 'type', label: 'By type', short: '·' },
 ]
 
-function typeIcon(type: string, size = 18) {
-  switch (type) {
-    case 'shoes': return <Footprints size={size} />
-    case 'watch': return <Watch size={size} />
-    case 'bike': return <Bike size={size} />
-    case 'apparel': return <Shirt size={size} />
-    default: return <Package size={size} />
-  }
-}
 
 const EMPTY: EquipmentInput = { name: '', type: 'shoes', brand: '', model: '', notes: '', retired: false, retireAtKm: 0 }
 
@@ -209,7 +221,7 @@ export default function EquipmentPage({ onSelectWorkout }: EquipmentPageProps) {
             {
               key: 'type', label: 'Type', value: typeFilter,
               onChange: v => setTypeFilter(v as string),
-              options: TYPE_OPTIONS.map(o => ({ value: o.value, label: o.label })),
+              options: TYPE_OPTIONS.map(o => ({ value: o.value, label: o.label, glyph: o.glyph })),
             },
             {
               key: 'sort', label: 'Sort by', value: sortBy,
@@ -469,9 +481,13 @@ function EquipmentForm({ initial, onClose, onSaved }: {
             </div>
             <div>
               <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Type</label>
-              <select className="select" style={{ width: '100%' }} value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
-                {TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
-              </select>
+              <Dropdown
+                value={form.type}
+                options={FORM_TYPE_OPTIONS}
+                onChange={v => setForm({ ...form, type: v })}
+                block
+                ariaLabel="Equipment type"
+              />
             </div>
             <div>
               <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Brand</label>
