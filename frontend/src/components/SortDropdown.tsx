@@ -1,4 +1,7 @@
-import { ArrowDownWideNarrow } from 'lucide-react'
+import {
+  ArrowDownWideNarrow, ArrowUpNarrowWide, ArrowUpDown,
+  CalendarArrowDown, CalendarArrowUp, ClockArrowDown, ClockArrowUp,
+} from 'lucide-react'
 import Dropdown, { type DropdownOption } from './Dropdown'
 
 /** A sort field paired with its direction, e.g. `distance-asc`. */
@@ -7,13 +10,24 @@ export type SortKey =
   | 'distance-desc' | 'distance-asc'
   | 'duration-desc' | 'duration-asc'
 
+/**
+ * Each option's mark names its field *and* its direction, so no two are alike.
+ *
+ * These were bare arrows in the mono `short` column, which meant three options
+ * carried an identical mark and the column distinguished nothing — the label
+ * beside it was doing all the work. `short` is for text that is genuinely an
+ * abbreviation, as in the range picker's "7d"; a symbol standing in for an icon
+ * is what this used to be.
+ */
+const mark = (Icon: typeof ArrowUpDown) => <Icon size={14} color="var(--text-3)" aria-hidden />
+
 export const SORT_OPTIONS: DropdownOption<SortKey>[] = [
-  { value: 'date-desc', label: 'Newest first', short: '↓' },
-  { value: 'date-asc', label: 'Oldest first', short: '↑' },
-  { value: 'distance-desc', label: 'Longest distance', short: '↓' },
-  { value: 'distance-asc', label: 'Shortest distance', short: '↑' },
-  { value: 'duration-desc', label: 'Longest time', short: '↓' },
-  { value: 'duration-asc', label: 'Shortest time', short: '↑' },
+  { value: 'date-desc', label: 'Newest first', glyph: mark(CalendarArrowDown) },
+  { value: 'date-asc', label: 'Oldest first', glyph: mark(CalendarArrowUp) },
+  { value: 'distance-desc', label: 'Longest distance', glyph: mark(ArrowDownWideNarrow) },
+  { value: 'distance-asc', label: 'Shortest distance', glyph: mark(ArrowUpNarrowWide) },
+  { value: 'duration-desc', label: 'Longest time', glyph: mark(ClockArrowDown) },
+  { value: 'duration-asc', label: 'Shortest time', glyph: mark(ClockArrowUp) },
 ]
 
 /**
@@ -44,7 +58,7 @@ export default function SortDropdown({ value, onChange }: {
       options={SORT_OPTIONS}
       onChange={onChange}
       ariaLabel="Sort order"
-      icon={<ArrowDownWideNarrow size={13} color="var(--text-3)" style={{ flexShrink: 0 }} />}
+      icon={<ArrowUpDown size={13} color="var(--text-3)" style={{ flexShrink: 0 }} />}
     />
   )
 }

@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Plus, Watch, Bike, Shirt, Package, SportShoe, Pencil, Trash2, X, ChevronRight,
-  ArrowLeft, AlertTriangle, Search, SlidersHorizontal, ArrowDownWideNarrow, Layers,
+  ArrowLeft, AlertTriangle, Search, SlidersHorizontal, ArrowUpDown, Layers,
+  ArrowDownAZ, Activity, Route, Gauge, Shapes,
 } from 'lucide-react'
 import { api, type Equipment, type EquipmentInput, type LinkedWorkout } from '../lib/api'
 import { useRefreshHandler } from '../context/RefreshContext'
@@ -51,12 +52,20 @@ const FORM_TYPE_OPTIONS: DropdownOption<string>[] = TYPES.map(t => ({
   value: t.id, label: t.label, glyph: typeGlyph(t.id),
 }))
 
+/**
+ * Marked by field rather than direction, unlike the workout list's sort. Every
+ * option here is a different field and the label already carries the direction
+ * ("Most used"), so an arrow would have been the same mark five times over —
+ * which is what "A→Z", three identical arrows and a middot amounted to.
+ */
+const sortMark = (Icon: typeof Shapes) => <Icon size={14} color="var(--text-3)" aria-hidden />
+
 const SORT_OPTIONS: DropdownOption<SortField>[] = [
-  { value: 'name', label: 'By name', short: 'A→Z' },
-  { value: 'workouts', label: 'Most used', short: '↓' },
-  { value: 'distance', label: 'Longest distance', short: '↓' },
-  { value: 'wear', label: 'Most worn', short: '↓' },
-  { value: 'type', label: 'By type', short: '·' },
+  { value: 'name', label: 'By name', glyph: sortMark(ArrowDownAZ) },
+  { value: 'workouts', label: 'Most used', glyph: sortMark(Activity) },
+  { value: 'distance', label: 'Longest distance', glyph: sortMark(Route) },
+  { value: 'wear', label: 'Most worn', glyph: sortMark(Gauge) },
+  { value: 'type', label: 'By type', glyph: sortMark(Shapes) },
 ]
 
 
@@ -196,7 +205,7 @@ export default function EquipmentPage({ onSelectWorkout }: EquipmentPageProps) {
                   options={SORT_OPTIONS}
                   onChange={setSortBy}
                   ariaLabel="Sort order"
-                  icon={<ArrowDownWideNarrow size={13} color="var(--text-3)" style={{ flexShrink: 0 }} />}
+                  icon={<ArrowUpDown size={13} color="var(--text-3)" style={{ flexShrink: 0 }} />}
                 />
               </>
             )}
@@ -226,7 +235,7 @@ export default function EquipmentPage({ onSelectWorkout }: EquipmentPageProps) {
             {
               key: 'sort', label: 'Sort by', value: sortBy,
               onChange: v => setSortBy(v as SortField),
-              options: SORT_OPTIONS.map(o => ({ value: o.value, label: o.label })),
+              options: SORT_OPTIONS.map(o => ({ value: o.value, label: o.label, glyph: o.glyph })),
             },
           ]}
           onReset={() => { setTypeFilter('all'); setSortBy('name') }}

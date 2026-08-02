@@ -166,7 +166,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
       label: 'Sort by',
       value: sortBy,
       onChange: v => setSortBy(v as SortKey),
-      options: SORT_OPTIONS.map(o => ({ value: o.value, label: o.label })),
+      options: SORT_OPTIONS.map(o => ({ value: o.value, label: o.label, glyph: o.glyph })),
     },
     {
       key: 'range',
