@@ -350,8 +350,10 @@ export default function Analysis() {
                 grid — it used to sit on the grid alone, so the empty state,
                 which replaces the grid rather than filling it, ran straight
                 into the next card. Every other empty state on this page is
-                inside a ChartCard, which is why this was the only one. */}
-            <div style={{ marginBottom: 24 }}>
+                inside a ChartCard, which is why this was the only one.
+                16 is what separates one card from the next everywhere else
+                here; the 24 this inherited was the odd one out. */}
+            <div style={{ marginBottom: 16 }}>
               {Object.keys(PRs).length === 0 ? (
                 <div className="card"><EmptyPlot height={120}>No activities in the {rangeLabel(rangeDays)}</EmptyPlot></div>
               ) : (
