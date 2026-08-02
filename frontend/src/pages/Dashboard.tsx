@@ -91,7 +91,6 @@ function WorkoutRow({ w }: { w: Workout }) {
       <div style={{
         width: 36, height: 36, borderRadius: 10, flexShrink: 0,
         background: `${TYPE_COLOR[w.type]}20`,
-        color: TYPE_COLOR[w.type],
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontSize: 18,
       }}>

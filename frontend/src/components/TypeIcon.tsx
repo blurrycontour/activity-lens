@@ -1,4 +1,4 @@
-import { TYPE_ICON, type WorkoutType } from '../data/workouts'
+import { TYPE_COLOR, TYPE_ICON, type WorkoutType } from '../data/workouts'
 
 interface TypeIconProps {
   type: WorkoutType
@@ -12,7 +12,12 @@ interface TypeIconProps {
 }
 
 /**
- * The sport mark, sized to its container and drawn in `currentColor`.
+ * The sport mark, sized to its container and drawn in the sport's own colour.
+ *
+ * The colour is not the caller's to choose. A sport is that colour everywhere —
+ * the tiles, the badges and the dropdowns all agreed on it already, each by its
+ * own route — so making it a prop would only create the opportunity for one
+ * surface to disagree with the rest.
  *
  * A component rather than `TYPE_ICON[type]` at each call site: the lookup yields
  * a component, which JSX will only render from a capitalised binding, so every
@@ -20,5 +25,5 @@ interface TypeIconProps {
  */
 export default function TypeIcon({ type, size = '1em' }: TypeIconProps) {
   const Icon = TYPE_ICON[type]
-  return <Icon size={size} aria-hidden />
+  return <Icon size={size} color={TYPE_COLOR[type]} aria-hidden />
 }

@@ -1881,8 +1881,6 @@ body {
   align-items: center;
   justify-content: center;
   font-size: 18px;
-  /* The sport icon inside draws in currentColor. */
-  color: var(--row-accent);
   background: color-mix(in srgb, var(--row-accent) 14%, transparent);
 }
 .share-subject-name {
@@ -2122,8 +2120,6 @@ body {
   align-items: center;
   justify-content: center;
   font-size: 22px;
-  /* The sport icon inside draws in currentColor. */
-  color: var(--row-accent);
   background: color-mix(in srgb, var(--row-accent) 12%, transparent);
   /* Anchors .origin-mark, which sits on the icon's corner. */
   position: relative;

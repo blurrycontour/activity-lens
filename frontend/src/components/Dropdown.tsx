@@ -6,7 +6,12 @@ export interface DropdownOption<T> {
   label: string
   /** Short mono prefix in the menu, e.g. an arrow or "7d". */
   short?: string
-  /** Colour dot before the label, and the colour of the label when selected. */
+  /**
+   * Colour of the label when selected, and of the dot before it.
+   *
+   * The dot is the fallback mark: an option carrying a `glyph` already shows
+   * its colour through the icon, so it does not get one as well.
+   */
   color?: string
   /** Small mark shown before the label, in both trigger and menu. */
   glyph?: React.ReactNode
@@ -80,7 +85,7 @@ export default function Dropdown<T extends string | number>({
         aria-label={ariaLabel}
       >
         {icon}
-        {selected.color && dot(selected, 10, Boolean(selected.color))}
+        {selected.color && !selected.glyph && dot(selected, 10, true)}
         <span style={{ flex: 1, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 6 }}>
           {selected.glyph}
           {selected.label}
@@ -105,7 +110,7 @@ export default function Dropdown<T extends string | number>({
                   {o.short}
                 </span>
               )}
-              {o.color && dot(o, 10, false)}
+              {o.color && !o.glyph && dot(o, 10, false)}
               <span style={{ color: value === o.value ? o.color : undefined, display: 'flex', alignItems: 'center', gap: 6 }}>
                 {o.glyph}
                 {o.label}

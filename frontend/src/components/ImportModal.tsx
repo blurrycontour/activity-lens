@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Upload, X, CheckCircle, FileText, AlertCircle, ArrowRight, Info, Loader2, FolderOpen, PencilLine } from 'lucide-react'
+import SportDropdown from './SportDropdown'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { isNative } from '../lib/serverConfig'
 import { api, ApiError, type Equipment } from '../lib/api'
-import { type Workout, fmtDist, fmtDuration, fmtPace } from '../data/workouts'
+import { type Workout, type WorkoutType, fmtDist, fmtDuration, fmtPace } from '../data/workouts'
 import BatchImportList from './BatchImportList'
 import {
   expand, preflight, runImport, summarize,
@@ -104,7 +105,7 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
 
   // Manual form state
   const [form, setForm] = useState({
-    name: '', type: 'Run', date: new Date().toISOString().split('T')[0],
+    name: '', type: 'Run' as WorkoutType, date: new Date().toISOString().split('T')[0],
     duration: '', distance: '', hr: '', elevation: '', notes: '',
   })
 
@@ -473,18 +474,7 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
                     </div>
                     <div>
                       <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Sport Type</label>
-                      <select
-                        className="select"
-                        style={{ width: '100%' }}
-                        value={form.type}
-                        onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
-                      >
-                        <option>Run</option>
-                        <option>Ride</option>
-                        <option>Hike</option>
-                        <option>Swim</option>
-                        <option>Strength</option>
-                      </select>
+                      <SportDropdown value={form.type} onChange={t => setForm(f => ({ ...f, type: t }))} />
                     </div>
                     <div>
                       <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Date</label>

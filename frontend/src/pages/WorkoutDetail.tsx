@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { type Workout, type WorkoutType, WORKOUT_TYPES, fmtDuration, fmtDist, fmtPace, TYPE_COLOR } from '../data/workouts'
+import { type Workout, type WorkoutType, fmtDuration, fmtDist, fmtPace, TYPE_COLOR } from '../data/workouts'
 import TypeIcon from '../components/TypeIcon'
+import SportDropdown from '../components/SportDropdown'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ReferenceDot, BarChart, Bar } from 'recharts'
 import {
   ArrowLeft, Heart, Mountain, Zap, Clock, TrendingUp, Navigation, Download, Pencil, Trash2, Gauge,
@@ -1075,9 +1076,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
                 </div>
                 <div>
                   <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Sport Type</label>
-                  <select className="select" style={{ width: '100%' }} value={editType} onChange={e => setEditType(e.target.value as WorkoutType)}>
-                    {WORKOUT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
+                  <SportDropdown value={editType} onChange={setEditType} />
                 </div>
                 <div>
                   <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Date</label>

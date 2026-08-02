@@ -3,7 +3,7 @@ import { fmtDuration, fmtDist, fmtPace, TYPE_COLOR, WORKOUT_TYPES, type WorkoutT
 import TypeIcon from '../components/TypeIcon'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useRefreshHandler } from '../context/RefreshContext'
-import { Search, Clock, Mountain, Flame, Download, Plus, Grid2X2, List, Navigation, Library, Inbox, Globe, Users, Share2, SlidersHorizontal, X, Trash2, Check, LoaderCircle, Handshake } from 'lucide-react'
+import { Search, Clock, Mountain, Flame, Download, Plus, Grid2X2, List, Navigation, Library, Inbox, Globe, Users, Share2, SlidersHorizontal, X, Trash2, Check, LoaderCircle, Handshake, Layers } from 'lucide-react'
 import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
 import SortDropdown, { SORT_OPTIONS, type SortKey } from '../components/SortDropdown'
@@ -157,8 +157,8 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
       value: typeFilter,
       onChange: v => setTypeFilter(v as WorkoutType | 'All'),
       options: [
-        { value: 'All', label: 'All types' },
-        ...WORKOUT_TYPES.map(t => ({ value: t, label: t, color: TYPE_COLOR[t] })),
+        { value: 'All', label: 'All types', glyph: <Layers size={13} color="var(--text-3)" aria-hidden /> },
+        ...WORKOUT_TYPES.map(t => ({ value: t, label: t, glyph: <TypeIcon type={t} size={13} /> })),
       ],
     },
     {
@@ -638,7 +638,6 @@ function WorkoutCard({
           <div style={{
             width: 40, height: 40, borderRadius: 10, flexShrink: 0,
             background: `${color}18`,
-            color,
             display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20,
             position: 'relative',
           }}>
