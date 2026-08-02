@@ -25,6 +25,14 @@ interface DropdownProps<T extends string | number> {
   icon?: React.ReactNode
   /** Fill the available width, for use inside a form field. */
   block?: boolean
+  /**
+   * Fixed trigger label, for a menu that acts rather than holds a value —
+   * "+ Add equipment…" stays itself after every pick. Suppresses the tick and
+   * the active row with it, since nothing here is selected.
+   */
+  placeholder?: string
+  /** Open upwards, for a trigger too near the bottom of its container. */
+  dropUp?: boolean
   disabled?: boolean
   ariaLabel?: string
 }
@@ -39,7 +47,7 @@ interface DropdownProps<T extends string | number> {
  * look alike.
  */
 export default function Dropdown<T extends string | number>({
-  value, options, onChange, icon, block, disabled, ariaLabel,
+  value, options, onChange, icon, block, disabled, ariaLabel, placeholder, dropUp,
 }: DropdownProps<T>) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -75,7 +83,7 @@ export default function Dropdown<T extends string | number>({
   )
 
   return (
-    <div className={`al-dropdown${block ? ' block' : ''}`} ref={ref}>
+    <div className={`al-dropdown${block ? ' block' : ''}${dropUp ? ' drop-up' : ''}`} ref={ref}>
       <button
         className="al-dropdown-trigger"
         onClick={() => setOpen(o => !o)}
@@ -85,10 +93,9 @@ export default function Dropdown<T extends string | number>({
         aria-label={ariaLabel}
       >
         {icon}
-        {selected.color && !selected.glyph && dot(selected, 10, true)}
+        {!placeholder && selected.color && !selected.glyph && dot(selected, 10, true)}
         <span style={{ flex: 1, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 6 }}>
-          {selected.glyph}
-          {selected.label}
+          {placeholder ?? <>{selected.glyph}{selected.label}</>}
         </span>
         <ChevronDown
           size={14}
@@ -102,7 +109,7 @@ export default function Dropdown<T extends string | number>({
           {options.map(o => (
             <button
               key={String(o.value)}
-              className={`al-dropdown-item ${value === o.value ? 'active' : ''}`}
+              className={`al-dropdown-item ${!placeholder && value === o.value ? 'active' : ''}`}
               onClick={() => { onChange(o.value); setOpen(false) }}
             >
               {o.short !== undefined && (
@@ -111,11 +118,11 @@ export default function Dropdown<T extends string | number>({
                 </span>
               )}
               {o.color && !o.glyph && dot(o, 10, false)}
-              <span style={{ color: value === o.value ? o.color : undefined, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ color: !placeholder && value === o.value ? o.color : undefined, display: 'flex', alignItems: 'center', gap: 6 }}>
                 {o.glyph}
                 {o.label}
               </span>
-              {value === o.value && (
+              {!placeholder && value === o.value && (
                 <Check size={13} style={{ marginLeft: 'auto', flexShrink: 0 }} color={o.color ?? 'var(--primary)'} />
               )}
             </button>

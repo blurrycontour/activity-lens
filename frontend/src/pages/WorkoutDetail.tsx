@@ -2,10 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { type Workout, type WorkoutType, fmtDuration, fmtDist, fmtPace, TYPE_COLOR } from '../data/workouts'
 import TypeIcon from '../components/TypeIcon'
 import SportDropdown from '../components/SportDropdown'
+import Dropdown from '../components/Dropdown'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ReferenceDot, BarChart, Bar } from 'recharts'
 import {
   ArrowLeft, Heart, Mountain, Zap, Clock, TrendingUp, Navigation, Download, Pencil, Trash2, Gauge,
-  Check, X as XIcon, Play, Pause, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, Layers, AlertTriangle, Activity, Share2, Lock, FileDown,
+  Check, X as XIcon, Play, Pause, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, Layers, AlertTriangle, Activity, Share2, Lock, FileDown, Route, Plus,
 } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useAuth } from '../context/AuthContext'
@@ -497,13 +498,21 @@ function RouteMap({
   return (
     <div style={{ width: '100%', height, position: 'relative' }}>
       <LayerSwitcher layer={layer} onChange={setLayer} />
-      <select className="map-shade-select" value={shading} onChange={e => setShading(e.target.value as Shading)} title="Track shading">
-        <option value="accent">Default</option>
-        {hrTimeline.length > 0 && <option value="hr">Heart rate zones</option>}
-        {paceTimeline.length > 0 && <option value="pace">Pace / Speed</option>}
-        {elevTimeline.length > 0 && <option value="elevation">Elevation</option>}
-        {cadenceTimeline.length > 0 && <option value="cadence">Cadence</option>}
-      </select>
+      <div className="map-shade-picker">
+        <Dropdown
+          value={shading}
+          onChange={setShading}
+          dropUp
+          ariaLabel="Track shading"
+          options={[
+            { value: 'accent' as Shading, label: 'Default', glyph: <Route size={14} color="var(--text-3)" aria-hidden /> },
+            ...(hrTimeline.length > 0 ? [{ value: 'hr' as Shading, label: 'Heart rate zones', glyph: <Heart size={14} color="var(--text-3)" aria-hidden /> }] : []),
+            ...(paceTimeline.length > 0 ? [{ value: 'pace' as Shading, label: 'Pace / Speed', glyph: <Gauge size={14} color="var(--text-3)" aria-hidden /> }] : []),
+            ...(elevTimeline.length > 0 ? [{ value: 'elevation' as Shading, label: 'Elevation', glyph: <Mountain size={14} color="var(--text-3)" aria-hidden /> }] : []),
+            ...(cadenceTimeline.length > 0 ? [{ value: 'cadence' as Shading, label: 'Cadence', glyph: <Activity size={14} color="var(--text-3)" aria-hidden /> }] : []),
+          ]}
+        />
+      </div>
       <MapContainer center={current} zoom={14} style={{ width: '100%', height: '100%' }} scrollWheelZoom attributionControl={false}>
         <TileLayer
           key={layer}
@@ -1441,15 +1450,15 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
                     {allEquipment.length === 0 ? (
                       <p style={{ fontSize: 13, color: 'var(--text-3)' }}>No equipment yet. Add some on the Equipment page.</p>
                     ) : available.length > 0 ? (
-                      <select
-                        className="select"
+                      <Dropdown
                         value=""
-                        onChange={e => { if (e.target.value) setEquipSel(prev => [...prev, e.target.value]) }}
-                        style={{ width: '100%' }}
-                      >
-                        <option value="">+ Add equipment…</option>
-                        {available.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-                      </select>
+                        placeholder="Add equipment…"
+                        onChange={id => { if (id) setEquipSel(prev => [...prev, id]) }}
+                        block
+                        icon={<Plus size={13} color="var(--text-3)" style={{ flexShrink: 0 }} />}
+                        ariaLabel="Add equipment"
+                        options={available.map(e => ({ value: e.id, label: e.name }))}
+                      />
                     ) : (
                       <p style={{ fontSize: 12, color: 'var(--text-3)' }}>All equipment added.</p>
                     )}

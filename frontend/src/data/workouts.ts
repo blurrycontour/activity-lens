@@ -1,4 +1,4 @@
-import { Bike, Dumbbell, Footprints, Mountain, Waves, type LucideIcon } from 'lucide-react'
+import { Bike, Dumbbell, Mountain, SportShoe, Waves, type LucideIcon } from 'lucide-react'
 
 export type WorkoutType = 'Run' | 'Ride' | 'Hike' | 'Swim' | 'Strength'
 
@@ -103,15 +103,15 @@ export const TYPE_COLOR: Record<WorkoutType, string> = {
  * differ between Android, iOS and each desktop font — so the same screen looked
  * like a different app depending on where it was opened, and nothing about them
  * followed the accent or the light/dark theme. These are the same stroked
- * lucide icons the rest of the app uses, so they inherit `currentColor` and size
- * with their container.
+ * lucide icons the rest of the app uses, drawn in the sport's own colour and
+ * sized to whatever contains them.
  *
  * Render through `<TypeIcon>` rather than reaching for the component directly;
  * it exists so call sites do not each have to capitalise the lookup to make JSX
  * of it.
  */
 export const TYPE_ICON: Record<WorkoutType, LucideIcon> = {
-  Run: Footprints,
+  Run: SportShoe,
   Ride: Bike,
   Hike: Mountain,
   Swim: Waves,

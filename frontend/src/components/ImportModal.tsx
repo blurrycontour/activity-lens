@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Upload, X, CheckCircle, FileText, AlertCircle, ArrowRight, Info, Loader2, FolderOpen, PencilLine } from 'lucide-react'
+import { Upload, X, CheckCircle, FileText, AlertCircle, ArrowRight, Info, Loader2, FolderOpen, PencilLine, Plus } from 'lucide-react'
 import SportDropdown from './SportDropdown'
+import Dropdown from './Dropdown'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { isNative } from '../lib/serverConfig'
 import { api, ApiError, type Equipment } from '../lib/api'
@@ -577,17 +578,15 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
                   </div>
                 ) : (
                   equipmentList.some(e => !selectedEquipment.includes(e.id)) && (
-                    <select
-                      className="select"
+                    <Dropdown
                       value=""
-                      onChange={e => { if (e.target.value) setSelectedEquipment(prev => [...prev, e.target.value]) }}
-                      style={{ width: '100%' }}
-                    >
-                      <option value="">+ Add equipment…</option>
-                      {equipmentList.filter(e => !selectedEquipment.includes(e.id)).map(e => (
-                        <option key={e.id} value={e.id}>{e.name}</option>
-                      ))}
-                    </select>
+                      placeholder="Add equipment…"
+                      onChange={id => { if (id) setSelectedEquipment(prev => [...prev, id]) }}
+                      block
+                      icon={<Plus size={13} color="var(--text-3)" style={{ flexShrink: 0 }} />}
+                      ariaLabel="Add equipment"
+                      options={equipmentList.filter(e => !selectedEquipment.includes(e.id)).map(e => ({ value: e.id, label: e.name }))}
+                    />
                   )
                 )}
               </div>

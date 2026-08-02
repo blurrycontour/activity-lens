@@ -1,13 +1,12 @@
 /*
  * The sport marks were emoji until they became icons. These cover the two ways
  * that swap silently goes wrong: an icon that stops scaling with its container,
- * and a glyph that gets interpolated into a string — which is what `Dropdown`
- * used to do, and which renders "[object Object]" rather than failing.
+ * and one that stops carrying its sport's colour — which is the whole of its
+ * meaning in a dropdown, where no tinted tile sits behind it.
  */
 import { renderToStaticMarkup } from 'react-dom/server'
 import { expect, test } from 'vitest'
 import TypeIcon from '../TypeIcon'
-import Dropdown from '../Dropdown'
 import SportDropdown from '../SportDropdown'
 import { TYPE_COLOR, WORKOUT_TYPES } from '../../data/workouts'
 
@@ -35,14 +34,4 @@ test('the sport picker offers every sport and no filter-only value', () => {
 
 test('explicit size overrides the inherited one', () => {
   expect(renderToStaticMarkup(<TypeIcon type="Run" size={12} />)).toContain('width="12"')
-})
-
-test('dropdown renders a node glyph instead of interpolating it', () => {
-  const html = renderToStaticMarkup(
-    <Dropdown value="Run" onChange={() => {}}
-      options={[{ value: 'Run', label: 'Run', glyph: <TypeIcon type="Run" size={14} /> }]} />,
-  )
-  expect(html).toContain('<svg')
-  expect(html).not.toContain('[object Object]')
-  expect(html).toContain('Run')
 })

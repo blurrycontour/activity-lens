@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
-  Plus, Watch, Bike, Shirt, Package, Footprints, Pencil, Trash2, X, ChevronRight,
+  Plus, Watch, Bike, Shirt, Package, SportShoe, Pencil, Trash2, X, ChevronRight,
   ArrowLeft, AlertTriangle, Search, SlidersHorizontal, ArrowDownWideNarrow, Layers,
 } from 'lucide-react'
 import { api, type Equipment, type EquipmentInput, type LinkedWorkout } from '../lib/api'
@@ -26,7 +26,7 @@ type SortField = 'name' | 'workouts' | 'distance' | 'wear' | 'type'
 
 function typeIcon(type: string, size = 18, color?: string) {
   switch (type) {
-    case 'shoes': return <Footprints size={size} color={color} />
+    case 'shoes': return <SportShoe size={size} color={color} />
     case 'watch': return <Watch size={size} color={color} />
     case 'bike': return <Bike size={size} color={color} />
     case 'apparel': return <Shirt size={size} color={color} />
