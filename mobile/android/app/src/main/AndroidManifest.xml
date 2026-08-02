@@ -73,12 +73,12 @@
                 <data android:mimeType="application/octet-stream" />
             </intent-filter>
 
-            <!-- "Open with" on a workout file in a file manager, the native
-                 equivalent of the manifest's `file_handlers`.
+            <!-- "Open with" on a workout file, the native equivalent of the web
+                 manifest's `file_handlers`.
 
-                 Matched on type, which is what a `content://` URI from a
-                 document provider carries; its path is the provider's own
-                 business and says nothing about the file. -->
+                 Types first, which covers the archives: `.zip` and `.gz` are in
+                 Android's MimeTypeMap, so a file manager opening one really does
+                 send application/zip or application/gzip. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -91,22 +91,65 @@
                 <data android:mimeType="application/gzip" />
             </intent-filter>
 
-            <!-- The same thing for a `file://` URI, where there is a real path
-                 to match and the type is usually missing or wrong.
+            <!-- `.gpx` and `.tcx`, which the filter above cannot catch.
+                 Neither extension is in Android's MimeTypeMap, so nothing ever
+                 sends application/gpx+xml: a file manager asks the platform for
+                 the type, gets null, and falls back to application/octet-stream
+                 or */*. Matching on the *name* is the only thing that works,
+                 and `mimeType="*/*"` is required to get there — a filter with a
+                 path but no type only matches an intent carrying no type at all,
+                 which is why this did nothing when it was first added.
 
-                 One `pathPattern` per extension because Android's globbing has
-                 no alternation, and `.*\\.gpx` is greedy in a way that already
-                 covers a name with dots in it — `2024.03.01-run.gpx` matches. -->
+                 `host="*"` is equally load-bearing: Android ignores path
+                 attributes entirely unless a scheme and a host are both given.
+
+                 The repeated patterns are the ugly part, and they are not
+                 redundant. `pathPattern` is PATTERN_SIMPLE_GLOB, whose `.*`
+                 scans to the *first* occurrence of the character after it and
+                 never backtracks — so `.*\\.gpx` stops at the first dot and
+                 fails on `2024-03-01.morning.gpx`. One extra `.*\\.` per dot
+                 the name might contain is the standard workaround. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:host="*" />
+                <data android:mimeType="*/*" />
+                <data android:pathPattern=".*\\.gpx" />
+                <data android:pathPattern=".*\\..*\\.gpx" />
+                <data android:pathPattern=".*\\..*\\..*\\.gpx" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.gpx" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.gpx" />
+                <data android:pathPattern=".*\\.tcx" />
+                <data android:pathPattern=".*\\..*\\.tcx" />
+                <data android:pathPattern=".*\\..*\\..*\\.tcx" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.tcx" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.tcx" />
+            </intent-filter>
+
+            <!-- The same names again, for an intent that carries no type at all.
+                 A filter that declares a mimeType cannot match one that does not,
+                 so the two cases genuinely need separate filters. Mostly this is
+                 `file://` URIs from older apps. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
                 <data android:scheme="file" />
                 <data android:host="*" />
                 <data android:pathPattern=".*\\.gpx" />
+                <data android:pathPattern=".*\\..*\\.gpx" />
+                <data android:pathPattern=".*\\..*\\..*\\.gpx" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.gpx" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.gpx" />
                 <data android:pathPattern=".*\\.tcx" />
-                <data android:pathPattern=".*\\.gpx\\.gz" />
-                <data android:pathPattern=".*\\.tcx\\.gz" />
+                <data android:pathPattern=".*\\..*\\.tcx" />
+                <data android:pathPattern=".*\\..*\\..*\\.tcx" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.tcx" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.tcx" />
             </intent-filter>
 
         </activity>
