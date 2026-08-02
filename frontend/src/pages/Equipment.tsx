@@ -88,6 +88,14 @@ export default function EquipmentPage({ onSelectWorkout }: EquipmentPageProps) {
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState<Equipment | 'new' | null>(null)
   const [detail, setDetail] = useState<string | null>(null)
+  /**
+   * Incremented on every save, to tell an open detail view its row changed.
+   *
+   * The list and the detail each fetch the same row separately, and saving only
+   * ever invalidated the list — so an edit made from the detail was not visible
+   * until it was closed and reopened, which is what remounts it.
+   */
+  const [savedAt, setSavedAt] = useState(0)
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState<string>('all')
   const [sortBy, setSortBy] = useState<SortField>('name')
@@ -247,6 +255,7 @@ export default function EquipmentPage({ onSelectWorkout }: EquipmentPageProps) {
         {detail ? (
           <EquipmentDetail
             id={detail}
+            reloadToken={savedAt}
             onBack={() => { setDetail(null); void load() }}
             onSelectWorkout={onSelectWorkout}
             onEdit={e => setEditing(e)}
@@ -316,15 +325,17 @@ export default function EquipmentPage({ onSelectWorkout }: EquipmentPageProps) {
         <EquipmentForm
           initial={editing === 'new' ? null : editing}
           onClose={() => setEditing(null)}
-          onSaved={() => { setEditing(null); void load() }}
+          onSaved={() => { setEditing(null); setSavedAt(n => n + 1); void load() }}
         />
       )}
     </div>
   )
 }
 
-function EquipmentDetail({ id, onBack, onSelectWorkout, onEdit, onDeleted }: {
+function EquipmentDetail({ id, reloadToken, onBack, onSelectWorkout, onEdit, onDeleted }: {
   id: string
+  /** Bumped by the page when an edit is saved; any change refetches. */
+  reloadToken: number
   onBack: () => void
   onSelectWorkout: (id: string) => void
   onEdit: (e: Equipment) => void
@@ -337,7 +348,16 @@ function EquipmentDetail({ id, onBack, onSelectWorkout, onEdit, onDeleted }: {
     setData(await api.getEquipment(id))
   }, [id])
 
-  useEffect(() => { void load() }, [load])
+  // `reloadToken` changes when the editor saves. Without it this effect only
+  // ran on a change of `id`, so editing the item already on screen left the
+  // page showing what it fetched when it opened — the page reloaded the list
+  // behind the detail, which is a different copy of the same row.
+  useEffect(() => { void load() }, [load, reloadToken])
+
+  // The detail owns its own fetch, so it has to opt into the pull-to-refresh
+  // gesture separately from the list. Registering both is the point of the
+  // context holding a set: with the detail open, a pull reloads both.
+  useRefreshHandler(load)
 
   async function doDelete() {
     await api.deleteEquipment(id)
