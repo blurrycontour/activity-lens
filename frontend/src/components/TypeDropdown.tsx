@@ -1,4 +1,5 @@
-import { TYPE_ICON, type WorkoutType } from '../data/workouts'
+import { type WorkoutType } from '../data/workouts'
+import TypeIcon from './TypeIcon'
 import Dropdown, { type DropdownOption } from './Dropdown'
 
 type Option = WorkoutType | 'All'
@@ -17,7 +18,7 @@ const OPTIONS: DropdownOption<Option>[] = (['All', 'Run', 'Ride', 'Hike', 'Swim'
     value: o,
     label: o === 'All' ? 'All Types' : o,
     color: SPORT_COLOR[o],
-    glyph: o === 'All' ? undefined : TYPE_ICON[o as WorkoutType],
+    glyph: o === 'All' ? undefined : <TypeIcon type={o as WorkoutType} size={14} />,
   }))
 
 /** Activity-type filter. */

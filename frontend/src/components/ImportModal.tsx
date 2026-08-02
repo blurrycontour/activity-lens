@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Upload, X, CheckCircle, FileText, AlertCircle, ArrowRight, Info, Loader2 } from 'lucide-react'
+import { Upload, X, CheckCircle, FileText, AlertCircle, ArrowRight, Info, Loader2, FolderOpen, PencilLine } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { isNative } from '../lib/serverConfig'
 import { api, ApiError, type Equipment } from '../lib/api'
@@ -331,7 +331,10 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
             <>
               {/* Tabs */}
               <div style={{ display: 'flex', gap: 0, marginBottom: 20, background: 'var(--bg-3)', borderRadius: 10, padding: 4 }}>
-                {([['file', '📁 File Upload'], ['manual', '✏️ Manual Entry']] as [Tab, string][]).map(([t, label]) => (
+                {([
+                  ['file', 'File Upload', <FolderOpen size={14} key="f" />],
+                  ['manual', 'Manual Entry', <PencilLine size={14} key="m" />],
+                ] as [Tab, string, React.ReactNode][]).map(([t, label, icon]) => (
                   <button
                     key={t}
                     onClick={() => setTab(t)}
@@ -341,8 +344,10 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
                       background: tab === t ? 'var(--bg-2)' : 'transparent',
                       color: tab === t ? 'var(--text)' : 'var(--text-3)',
                       boxShadow: tab === t ? '0 1px 4px rgba(0,0,0,0.3)' : 'none',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                     }}
                   >
+                    {icon}
                     {label}
                   </button>
                 ))}

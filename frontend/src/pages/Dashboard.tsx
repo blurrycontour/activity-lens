@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useWorkouts } from '../context/WorkoutsContext'
-import { fmtDuration, fmtDist, fmtPace, TYPE_COLOR, TYPE_ICON, type Workout, type WorkoutType } from '../data/workouts'
+import { fmtDuration, fmtDist, fmtPace, TYPE_COLOR, type Workout, type WorkoutType } from '../data/workouts'
+import TypeIcon from '../components/TypeIcon'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
   RadialBarChart, RadialBar,
 } from 'recharts'
-import { TrendingUp, Zap, Flame, Clock, Mountain, Heart, Trophy, Target, Activity, Footprints } from 'lucide-react'
+import { TrendingUp, Zap, Flame, Clock, Mountain, Heart, Trophy, Target, Activity, Footprints, ChartColumnBig } from 'lucide-react'
 import { useLocalStorage } from '../lib/useLocalStorage'
 import { useIsMobile } from '../lib/useIsMobile'
 import InfoTip from '../components/InfoTip'
@@ -90,10 +91,11 @@ function WorkoutRow({ w }: { w: Workout }) {
       <div style={{
         width: 36, height: 36, borderRadius: 10, flexShrink: 0,
         background: `${TYPE_COLOR[w.type]}20`,
+        color: TYPE_COLOR[w.type],
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontSize: 18,
       }}>
-        {TYPE_ICON[w.type]}
+        <TypeIcon type={w.type} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.name}</div>
@@ -137,7 +139,7 @@ function GoalRow({ progress: p }: { progress: GoalProgress }) {
 
         {p.streak > 0 && (
           <span className="goal-flame" title={`${p.streak} ${p.streak === 1 ? unit : `${unit}s`} in a row`}>
-            🔥 {p.streak}
+            <Flame size={12} /> {p.streak}
           </span>
         )}
       </div>
@@ -304,7 +306,7 @@ export default function Dashboard() {
           <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-3)', fontSize: 13 }}>Loading…</div>
         ) : workouts.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-3)' }}>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>📊</div>
+            <ChartColumnBig size={32} style={{ margin: '0 auto 12px' }} strokeWidth={1.5} />
             <p style={{ fontSize: 14 }}>No workouts yet — import a file or add one manually to get started.</p>
           </div>
         ) : (
@@ -526,7 +528,7 @@ export default function Dashboard() {
                       <h3 style={{ fontSize: 15, fontWeight: 700 }}>{d.latest.name}</h3>
                       <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>{new Date(`${d.latest.date}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div>
                     </div>
-                    <span className={`badge tag-${d.latest.type.toLowerCase()}`}>{TYPE_ICON[d.latest.type]} {d.latest.type}</span>
+                    <span className={`badge tag-${d.latest.type.toLowerCase()}`}><TypeIcon type={d.latest.type} size={12} /> {d.latest.type}</span>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
                     {[

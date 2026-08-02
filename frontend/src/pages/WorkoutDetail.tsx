@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { type Workout, type WorkoutType, WORKOUT_TYPES, fmtDuration, fmtDist, fmtPace, TYPE_COLOR, TYPE_ICON } from '../data/workouts'
+import { type Workout, type WorkoutType, WORKOUT_TYPES, fmtDuration, fmtDist, fmtPace, TYPE_COLOR } from '../data/workouts'
+import TypeIcon from '../components/TypeIcon'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ReferenceDot, BarChart, Bar } from 'recharts'
 import {
   ArrowLeft, Heart, Mountain, Zap, Clock, TrendingUp, Navigation, Download, Pencil, Trash2, Gauge,
@@ -1075,7 +1076,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
                 <div>
                   <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Sport Type</label>
                   <select className="select" style={{ width: '100%' }} value={editType} onChange={e => setEditType(e.target.value as WorkoutType)}>
-                    {WORKOUT_TYPES.map(t => <option key={t} value={t}>{TYPE_ICON[t]} {t}</option>)}
+                    {WORKOUT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
                 <div>
@@ -1136,7 +1137,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <h1 style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em' }}>{w.name}</h1>
-              <span className={`badge tag-${w.type.toLowerCase()}`}>{TYPE_ICON[w.type]} {w.type}</span>
+              <span className={`badge tag-${w.type.toLowerCase()}`}><TypeIcon type={w.type} size={12} /> {w.type}</span>
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
               {new Date(w.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}

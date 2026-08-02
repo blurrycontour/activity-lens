@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronDown } from 'lucide-react'
+import { Check, ChevronDown } from 'lucide-react'
 
 export interface DropdownOption<T> {
   value: T
@@ -8,8 +8,8 @@ export interface DropdownOption<T> {
   short?: string
   /** Colour dot before the label, and the colour of the label when selected. */
   color?: string
-  /** Emoji or glyph shown before the label, in both trigger and menu. */
-  glyph?: string
+  /** Small mark shown before the label, in both trigger and menu. */
+  glyph?: React.ReactNode
 }
 
 interface DropdownProps<T extends string | number> {
@@ -81,8 +81,9 @@ export default function Dropdown<T extends string | number>({
       >
         {icon}
         {selected.color && dot(selected, 10, Boolean(selected.color))}
-        <span style={{ flex: 1, textAlign: 'left' }}>
-          {selected.glyph ? `${selected.glyph} ${selected.label}` : selected.label}
+        <span style={{ flex: 1, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 6 }}>
+          {selected.glyph}
+          {selected.label}
         </span>
         <ChevronDown
           size={14}
@@ -105,11 +106,12 @@ export default function Dropdown<T extends string | number>({
                 </span>
               )}
               {o.color && dot(o, 10, false)}
-              <span style={{ color: value === o.value ? o.color : undefined }}>
-                {o.glyph ? `${o.glyph} ${o.label}` : o.label}
+              <span style={{ color: value === o.value ? o.color : undefined, display: 'flex', alignItems: 'center', gap: 6 }}>
+                {o.glyph}
+                {o.label}
               </span>
               {value === o.value && (
-                <span style={{ marginLeft: 'auto', fontSize: 11, color: o.color ?? 'var(--primary)' }}>✓</span>
+                <Check size={13} style={{ marginLeft: 'auto', flexShrink: 0 }} color={o.color ?? 'var(--primary)'} />
               )}
             </button>
           ))}
