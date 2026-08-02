@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Upload, X, CheckCircle, FileText, AlertCircle, ArrowRight, Info, Loader2 } from 'lucide-react'
+import { Upload, X, CheckCircle, FileText, AlertCircle, ArrowRight, Info, Loader2, FolderOpen, PencilLine, Plus } from 'lucide-react'
+import SportDropdown from './SportDropdown'
+import Dropdown from './Dropdown'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { isNative } from '../lib/serverConfig'
 import { api, ApiError, type Equipment } from '../lib/api'
-import { type Workout, fmtDist, fmtDuration, fmtPace } from '../data/workouts'
+import { type Workout, type WorkoutType, fmtDist, fmtDuration, fmtPace } from '../data/workouts'
 import BatchImportList from './BatchImportList'
 import {
   expand, preflight, runImport, summarize,
@@ -104,7 +106,7 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
 
   // Manual form state
   const [form, setForm] = useState({
-    name: '', type: 'Run', date: new Date().toISOString().split('T')[0],
+    name: '', type: 'Run' as WorkoutType, date: new Date().toISOString().split('T')[0],
     duration: '', distance: '', hr: '', elevation: '', notes: '',
   })
 
@@ -331,7 +333,10 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
             <>
               {/* Tabs */}
               <div style={{ display: 'flex', gap: 0, marginBottom: 20, background: 'var(--bg-3)', borderRadius: 10, padding: 4 }}>
-                {([['file', '📁 File Upload'], ['manual', '✏️ Manual Entry']] as [Tab, string][]).map(([t, label]) => (
+                {([
+                  ['file', 'File Upload', <FolderOpen size={14} key="f" />],
+                  ['manual', 'Manual Entry', <PencilLine size={14} key="m" />],
+                ] as [Tab, string, React.ReactNode][]).map(([t, label, icon]) => (
                   <button
                     key={t}
                     onClick={() => setTab(t)}
@@ -341,8 +346,10 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
                       background: tab === t ? 'var(--bg-2)' : 'transparent',
                       color: tab === t ? 'var(--text)' : 'var(--text-3)',
                       boxShadow: tab === t ? '0 1px 4px rgba(0,0,0,0.3)' : 'none',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                     }}
                   >
+                    {icon}
                     {label}
                   </button>
                 ))}
@@ -468,18 +475,7 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
                     </div>
                     <div>
                       <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Sport Type</label>
-                      <select
-                        className="select"
-                        style={{ width: '100%' }}
-                        value={form.type}
-                        onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
-                      >
-                        <option>Run</option>
-                        <option>Ride</option>
-                        <option>Hike</option>
-                        <option>Swim</option>
-                        <option>Strength</option>
-                      </select>
+                      <SportDropdown value={form.type} onChange={t => setForm(f => ({ ...f, type: t }))} />
                     </div>
                     <div>
                       <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Date</label>
@@ -582,17 +578,15 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
                   </div>
                 ) : (
                   equipmentList.some(e => !selectedEquipment.includes(e.id)) && (
-                    <select
-                      className="select"
+                    <Dropdown
                       value=""
-                      onChange={e => { if (e.target.value) setSelectedEquipment(prev => [...prev, e.target.value]) }}
-                      style={{ width: '100%' }}
-                    >
-                      <option value="">+ Add equipment…</option>
-                      {equipmentList.filter(e => !selectedEquipment.includes(e.id)).map(e => (
-                        <option key={e.id} value={e.id}>{e.name}</option>
-                      ))}
-                    </select>
+                      placeholder="Add equipment…"
+                      onChange={id => { if (id) setSelectedEquipment(prev => [...prev, id]) }}
+                      block
+                      icon={<Plus size={13} color="var(--text-3)" style={{ flexShrink: 0 }} />}
+                      ariaLabel="Add equipment"
+                      options={equipmentList.filter(e => !selectedEquipment.includes(e.id)).map(e => ({ value: e.id, label: e.name }))}
+                    />
                   )
                 )}
               </div>

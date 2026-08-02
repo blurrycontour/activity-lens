@@ -5,8 +5,10 @@ import { X } from 'lucide-react'
 export interface FilterOption<T> {
   value: T
   label: string
-  /** Optional colour dot, used for activity types. */
+  /** Optional colour dot, for options with no glyph of their own. */
   color?: string
+  /** Mark before the label. Replaces the dot, which it already carries the colour of. */
+  glyph?: React.ReactNode
 }
 
 /**
@@ -126,9 +128,9 @@ export default function FilterSheet({ groups, onClose, onReset }: FilterSheetPro
                     aria-pressed={o.value === g.value}
                     onClick={() => g.onChange(o.value)}
                   >
-                    {o.color && (
+                    {o.glyph ?? (o.color && (
                       <span style={{ width: 7, height: 7, borderRadius: '50%', background: o.color, flexShrink: 0 }} />
-                    )}
+                    ))}
                     {o.label}
                   </button>
                 ))}

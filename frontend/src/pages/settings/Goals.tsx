@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { usePreferences } from '../../context/PreferencesContext'
 import { ApiError } from '../../lib/api'
-import { WORKOUT_TYPES, TYPE_ICON } from '../../data/workouts'
+import { WORKOUT_TYPES } from '../../data/workouts'
+import TypeIcon from '../../components/TypeIcon'
 import { describeGoal, newGoal, type Goal } from '../../lib/insights'
 import SettingsCard from '../../components/SettingsCard'
 import Field from '../../components/Field'
@@ -13,7 +14,7 @@ const MAX_GOALS = 12
 
 const SPORT_OPTIONS: DropdownOption<string>[] = [
   { value: '', label: 'Any activity' },
-  ...WORKOUT_TYPES.map(t => ({ value: t, label: t, glyph: TYPE_ICON[t] })),
+  ...WORKOUT_TYPES.map(t => ({ value: t, label: t, glyph: <TypeIcon type={t} size={14} /> })),
 ]
 
 const PERIOD_OPTIONS: DropdownOption<Goal['period']>[] = [

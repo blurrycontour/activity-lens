@@ -1,8 +1,9 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
-import { fmtDuration, fmtDist, fmtPace, TYPE_COLOR, TYPE_ICON, WORKOUT_TYPES, type WorkoutType, type Workout } from '../data/workouts'
+import { fmtDuration, fmtDist, fmtPace, TYPE_COLOR, WORKOUT_TYPES, type WorkoutType, type Workout } from '../data/workouts'
+import TypeIcon from '../components/TypeIcon'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useRefreshHandler } from '../context/RefreshContext'
-import { Search, Clock, Mountain, Flame, Download, Plus, Grid2X2, List, Navigation, Library, Inbox, Globe, Users, Share2, SlidersHorizontal, X, Trash2, Check } from 'lucide-react'
+import { Search, Clock, Mountain, Flame, Download, Plus, Grid2X2, List, Navigation, Library, Inbox, Globe, Users, Share2, SlidersHorizontal, X, Trash2, Check, LoaderCircle, Handshake, Layers } from 'lucide-react'
 import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
 import SortDropdown, { SORT_OPTIONS, type SortKey } from '../components/SortDropdown'
@@ -156,8 +157,8 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
       value: typeFilter,
       onChange: v => setTypeFilter(v as WorkoutType | 'All'),
       options: [
-        { value: 'All', label: 'All types' },
-        ...WORKOUT_TYPES.map(t => ({ value: t, label: t, color: TYPE_COLOR[t] })),
+        { value: 'All', label: 'All types', glyph: <Layers size={13} color="var(--text-3)" aria-hidden /> },
+        ...WORKOUT_TYPES.map(t => ({ value: t, label: t, glyph: <TypeIcon type={t} size={13} /> })),
       ],
     },
     {
@@ -165,7 +166,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
       label: 'Sort by',
       value: sortBy,
       onChange: v => setSortBy(v as SortKey),
-      options: SORT_OPTIONS.map(o => ({ value: o.value, label: o.label })),
+      options: SORT_OPTIONS.map(o => ({ value: o.value, label: o.label, glyph: o.glyph })),
     },
     {
       key: 'range',
@@ -403,7 +404,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
           </div>
         ) : filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-3)' }}>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>{busy ? '⏳' : scope === 'mine' ? '🔍' : scope === 'public' ? '🌐' : '🤝'}</div>
+            <EmptyScopeIcon busy={busy} scope={scope} />
             <p style={{ fontSize: 14 }}>{busy ? 'Loading workouts…' : emptyMessage(scope, sharedOnly)}</p>
           </div>
         ) : (
@@ -531,6 +532,24 @@ function emptyMessage(scope: Scope, sharedOnly: boolean): string {
   return sharedOnly ? 'You have not shared any workouts yet' : 'No workouts found'
 }
 
+/**
+ * The mark above an empty list, matching whichever tab is empty — so "nothing
+ * shared with you" and "nothing matched your filter" do not look like the same
+ * outcome. Pairs with `emptyMessage`, which is why they sit together.
+ */
+function EmptyScopeIcon({ busy, scope }: { busy: boolean; scope: Scope }) {
+  const Icon = busy ? LoaderCircle : scope === 'public' ? Globe : scope === 'shared' ? Handshake : Search
+  return (
+    <Icon
+      size={32}
+      strokeWidth={1.5}
+      className={busy ? 'spin' : undefined}
+      style={{ margin: '0 auto 12px' }}
+      aria-hidden
+    />
+  )
+}
+
 /** Marks a workout you have made public or shared with someone. */
 function ShareBadge({ workout: w }: { workout: Workout }) {
   const count = w.sharedWithCount ?? 0
@@ -622,7 +641,7 @@ function WorkoutCard({
             display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20,
             position: 'relative',
           }}>
-            {TYPE_ICON[w.type]}
+            <TypeIcon type={w.type} />
             <SourceMark source={w.source} />
             {selecting && <SelectionMark selected={selected} />}
           </div>
@@ -679,7 +698,7 @@ function WorkoutCard({
       style={{ '--row-accent': color, ...selectionStyle } as React.CSSProperties}
     >
       <div className="workout-row-icon">
-        {TYPE_ICON[w.type]}
+        <TypeIcon type={w.type} />
         <SourceMark source={w.source} />
         {selecting && <SelectionMark selected={selected} />}
       </div>

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Globe, Lock, Search, X, Loader2 } from 'lucide-react'
 import { api, ApiError, type UserRef, type WorkoutShares } from '../lib/api'
-import { fmtDist, fmtDuration, TYPE_COLOR, TYPE_ICON, type Workout } from '../data/workouts'
+import { fmtDist, fmtDuration, TYPE_COLOR, type Workout } from '../data/workouts'
+import TypeIcon from './TypeIcon'
 import UserAvatar, { userLabel } from './UserAvatar'
 
 interface ShareDialogProps {
@@ -81,7 +82,7 @@ export default function ShareDialog({ workout, onClose, onChange }: ShareDialogP
               place where getting the wrong one wrong exposes it to other
               people. */}
           <div className="share-subject" style={{ '--row-accent': TYPE_COLOR[workout.type] } as React.CSSProperties}>
-            <span className="share-subject-icon">{TYPE_ICON[workout.type]}</span>
+            <span className="share-subject-icon"><TypeIcon type={workout.type} /></span>
             <span style={{ minWidth: 0, flex: 1 }}>
               <span className="share-subject-name">{workout.name}</span>
               <span className="share-subject-meta">

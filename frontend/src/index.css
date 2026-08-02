@@ -872,28 +872,6 @@ body {
    padding above actually apply — a native select lays out its own box and
    ignores it — but it also removes the caret, so we draw one. The colour is a
    mid grey that reads on both themes; a data URI cannot use currentColor. */
-.select {
-  background-color: var(--bg-3);
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238b93a1' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>");
-  background-repeat: no-repeat;
-  background-position: right 9px center;
-  background-size: 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text);
-  font-size: 13px;
-  /* Room on the right for the caret we just drew. */
-  padding: 7px 30px 7px 10px;
-  outline: none;
-  cursor: pointer;
-  appearance: none;
-  font-family: var(--font-sans);
-  transition: border-color 0.15s;
-}
-.select:focus { border-color: var(--primary); }
-.select:disabled { opacity: 0.55; cursor: not-allowed; }
-.select:focus { border-color: var(--primary); }
-
 /* ── Overlay / Modal ── */
 .overlay {
   position: fixed;
@@ -1179,6 +1157,10 @@ body {
   min-width: 170px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
+/* For a trigger near the bottom of its container — the map's shading picker —
+   where a menu dropping down would leave the container entirely. */
+.al-dropdown.drop-up .al-dropdown-menu { top: auto; bottom: calc(100% + 4px); }
+
 .al-dropdown-item {
   display: flex;
   align-items: center;
@@ -2195,24 +2177,14 @@ body {
 .workout-row-pace small { font-family: var(--font-mono); font-size: 10px; color: var(--text-3); }
 .route-pin { background: none !important; border: none !important; display: grid; place-items: center; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5)); }
 .route-avatar { background: none !important; border: none !important; }
-.map-shade-select {
+/* The track-shading picker, pinned inside the map. Above Leaflet's own panes
+   and controls, which top out around 1000. */
+.map-shade-picker {
   position: absolute;
   bottom: 8px;
   left: 8px;
   z-index: 1000;
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text);
-  font-size: 12px;
-  padding: 6px 30px 6px 10px;
   max-width: calc(100% - 20px);
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  appearance: none;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239aa0aa' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
 }
 
 /* ── Responsive ── */

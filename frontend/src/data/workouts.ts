@@ -1,3 +1,5 @@
+import { Bike, Dumbbell, Mountain, SportShoe, Waves, type LucideIcon } from 'lucide-react'
+
 export type WorkoutType = 'Run' | 'Ride' | 'Hike' | 'Swim' | 'Strength'
 
 export interface HeartRatePoint { t: number; hr: number }
@@ -94,10 +96,24 @@ export const TYPE_COLOR: Record<WorkoutType, string> = {
   Strength: 'var(--strength)',
 }
 
-export const TYPE_ICON: Record<WorkoutType, string> = {
-  Run: '🏃',
-  Ride: '🚴',
-  Hike: '🥾',
-  Swim: '🏊',
-  Strength: '🏋️',
+/**
+ * The mark for each sport, as a component rather than an emoji.
+ *
+ * Emoji render in whatever the platform ships — colour, weight and metrics all
+ * differ between Android, iOS and each desktop font — so the same screen looked
+ * like a different app depending on where it was opened, and nothing about them
+ * followed the accent or the light/dark theme. These are the same stroked
+ * lucide icons the rest of the app uses, drawn in the sport's own colour and
+ * sized to whatever contains them.
+ *
+ * Render through `<TypeIcon>` rather than reaching for the component directly;
+ * it exists so call sites do not each have to capitalise the lookup to make JSX
+ * of it.
+ */
+export const TYPE_ICON: Record<WorkoutType, LucideIcon> = {
+  Run: SportShoe,
+  Ride: Bike,
+  Hike: Mountain,
+  Swim: Waves,
+  Strength: Dumbbell,
 }

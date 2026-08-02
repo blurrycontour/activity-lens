@@ -346,22 +346,31 @@ export default function Analysis() {
               <h3 style={{ fontSize: 14, fontWeight: 600 }}>Personal Records</h3>
               <InfoTip text={`Your best single activity in each category, within the ${scope}. Widen the time range to see all-time bests — these follow the page filter, so a 30-day window shows your best month, not your best ever.`} label="Personal Records" />
             </div>
-            {Object.keys(PRs).length === 0 ? (
-              <div className="card"><EmptyPlot height={120}>No activities in the {rangeLabel(rangeDays)}</EmptyPlot></div>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10, marginBottom: 24 }}>
-                {(Object.entries(PRs) as [WorkoutType, PR][]).map(([type, pr]) => (
-                  <div key={type} className="card" style={{ borderTop: `3px solid ${TYPE_COLOR[type]}` }}>
-                    <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12, color: TYPE_COLOR[type] }}>{type}</div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <PRRow label="Longest" value={`${(pr.longest.distance / 1000).toFixed(1)} km`} />
-                      {pr.fastest && <PRRow label="Best Pace" value={`${fmtPace(pr.fastest.avgPace)} /km`} accent />}
-                      <PRRow label="Most Elevation" value={`${Math.round(pr.highest.elevationGain)} m`} />
+            {/* The gap to the chart below belongs to the section, not to the
+                grid — it used to sit on the grid alone, so the empty state,
+                which replaces the grid rather than filling it, ran straight
+                into the next card. Every other empty state on this page is
+                inside a ChartCard, which is why this was the only one.
+                16 is what separates one card from the next everywhere else
+                here; the 24 this inherited was the odd one out. */}
+            <div style={{ marginBottom: 16 }}>
+              {Object.keys(PRs).length === 0 ? (
+                <div className="card"><EmptyPlot height={120}>No activities in the {rangeLabel(rangeDays)}</EmptyPlot></div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10 }}>
+                  {(Object.entries(PRs) as [WorkoutType, PR][]).map(([type, pr]) => (
+                    <div key={type} className="card" style={{ borderTop: `3px solid ${TYPE_COLOR[type]}` }}>
+                      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12, color: TYPE_COLOR[type] }}>{type}</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        <PRRow label="Longest" value={`${(pr.longest.distance / 1000).toFixed(1)} km`} />
+                        {pr.fastest && <PRRow label="Best Pace" value={`${fmtPace(pr.fastest.avgPace)} /km`} accent />}
+                        <PRRow label="Most Elevation" value={`${Math.round(pr.highest.elevationGain)} m`} />
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+            </div>
 
             <ChartCard
               title="Total Calories by Type"

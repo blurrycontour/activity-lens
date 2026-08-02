@@ -1,5 +1,5 @@
 import { useRef, useCallback } from 'react'
-import { LayoutDashboard, Dumbbell, CalendarCheck, BarChart2, HelpCircle, Plus, Watch } from 'lucide-react'
+import { LayoutDashboard, Dumbbell, CalendarCheck, BarChart2, HelpCircle, Plus, Watch, Tag } from 'lucide-react'
 import { DESKTOP_PAGES, type Page } from '../lib/nav'
 
 interface SidebarProps {
@@ -136,7 +136,10 @@ export default function Sidebar({ currentPage, onNavigate, collapsed, sidebarWid
       {!isMobile && !collapsed && (
         <div style={{ padding: '12px', borderTop: '1px solid var(--border)' }}>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>⌖ Version: {__APP_VERSION__}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
+              <Tag size={11} aria-hidden />
+              Version: {__APP_VERSION__}
+            </span>
           </div>
         </div>
       )}
