@@ -18,10 +18,8 @@ import InfoTip from '../components/InfoTip'
 import { useIsMobile } from '../lib/useIsMobile'
 import UserAvatar, { avatarUrl, userLabel } from '../components/UserAvatar'
 import ShareDialog from '../components/ShareDialog'
-import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, Popup, useMap, useMapEvents } from 'react-leaflet'
-import 'leaflet/dist/leaflet.css'
-import { divIcon } from 'leaflet'
-import type { LatLngBoundsExpression } from 'leaflet'
+import * as maplibregl from 'maplibre-gl'
+import 'maplibre-gl/dist/maplibre-gl.css'
 
 interface WorkoutDetailProps {
   workout: Workout
@@ -288,65 +286,66 @@ function smoothTimeline(data: Array<{ t: number; value: number }>, radius = 3) {
   })
 }
 
-function FitBounds({ route }: { route: Array<[number, number]> }) {
-  const map = useMap()
-  useEffect(() => {
-    if (route.length === 0) return
-    if (route.length === 1) {
-      map.setView(route[0], 15)
-      return
-    }
-    const bounds = route as unknown as LatLngBoundsExpression
-    map.fitBounds(bounds, { padding: [24, 24] })
-  }, [route, map])
-  return null
-}
-
-function MapClickHandler({ route, duration, onScrub, onPoint }: { route: Array<[number, number]>; duration: number; onScrub: (t: number) => void; onPoint: (index: number) => void }) {
-  useMapEvents({
-    click(e) {
-      if (route.length < 2 || duration <= 0) return
-      const idx = nearestRouteIndex(route, e.latlng.lat, e.latlng.lng)
-      onScrub((idx / (route.length - 1)) * duration)
-      onPoint(idx)
-    },
-  })
-  return null
-}
-
 type MapLayerId = 'street' | 'topo' | 'satellite'
 
 const MAP_LAYER_KEY = 'al_map_layer'
-const START_MARKER = divIcon({
-  className: 'route-pin',
-  html: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-label="Start"><circle cx="12" cy="12" r="7" fill="var(--success)" stroke="#fff" stroke-width="2.5"/></svg>',
-  iconSize: [26, 26],
-  iconAnchor: [13, 13],
-})
-const FINISH_MARKER = divIcon({
-  className: 'route-pin',
-  html: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-label="Finish"><path d="M6 21V4" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><path d="M6 5h11l-2.2 3.3L17 12H6z" fill="var(--danger)" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>',
-  iconSize: [28, 28],
-  iconAnchor: [7, 25],
-})
+/** Start and finish pins, as plain elements for a MapLibre marker. */
+function pinElement(html: string, cls = 'route-pin'): HTMLElement {
+  const el = document.createElement('div')
+  el.className = cls
+  el.innerHTML = html
+  return el
+}
 
-const MAP_LAYERS: Record<MapLayerId, { label: string; url: string; attribution: string; maxZoom: number }> = {
+const START_SVG = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-label="Start"><circle cx="12" cy="12" r="7" fill="var(--success)" stroke="#fff" stroke-width="2.5"/></svg>'
+const FINISH_SVG = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-label="Finish"><path d="M6 21V4" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><path d="M6 5h11l-2.2 3.3L17 12H6z" fill="var(--danger)" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>'
+
+
+/**
+ * A raster style wrapping a plain XYZ tile service, so imagery can sit beside
+ * the vector style in the same switcher. MapLibre has no {s} subdomain token,
+ * so a server that wants them gets one entry per host and MapLibre spreads
+ * requests over them itself.
+ */
+function rasterStyle(tiles: string[], attribution: string, maxzoom: number): maplibregl.StyleSpecification {
+  return {
+    version: 8,
+    sources: { base: { type: 'raster', tiles, tileSize: 256, maxzoom, attribution } },
+    layers: [{ id: 'base', type: 'raster', source: 'base' }],
+  }
+}
+
+/**
+ * What the layer switcher offers.
+ *
+ * Street is OpenFreeMap's Liberty, which is vector: the tiles carry geometry
+ * rather than pictures of geometry, so the GPU draws them and panning and
+ * zooming are continuous instead of a staircase of raster levels. The other two
+ * stay raster because there is no vector equivalent — aerial imagery is
+ * photographs, and OpenTopoMap's relief shading is baked into its tiles.
+ */
+const MAP_LAYERS: Record<MapLayerId, { label: string; style: string | maplibregl.StyleSpecification; maxZoom: number }> = {
   street: {
     label: 'Street',
-    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    maxZoom: 19,
+    style: 'https://tiles.openfreemap.org/styles/liberty',
+    maxZoom: 20,
   },
   topo: {
     label: 'Topographic',
-    url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-    attribution: 'Map data: &copy; OpenStreetMap contributors, SRTM | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)',
+    style: rasterStyle(
+      ['https://a.tile.opentopomap.org/{z}/{x}/{y}.png', 'https://b.tile.opentopomap.org/{z}/{x}/{y}.png', 'https://c.tile.opentopomap.org/{z}/{x}/{y}.png'],
+      'Map data: &copy; OpenStreetMap contributors, SRTM | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)',
+      17,
+    ),
     maxZoom: 17,
   },
   satellite: {
     label: 'Satellite',
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+    style: rasterStyle(
+      ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+      'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+      19,
+    ),
     maxZoom: 19,
   },
 }
@@ -448,14 +447,16 @@ function RouteMap({
   // The moving playback marker shows the user's (minified) profile picture when
   // available, so it reads as "you" tracing the route. Falls back to a plain
   // dot when there's no avatar. Rebuilt only when the avatar/color changes.
-  const avatarIcon = useMemo(() => {
-    if (!avatarUrl) return null
-    return divIcon({
-      className: 'route-avatar',
-      html: `<img src="${avatarUrl}" width="34" height="34" loading="lazy" decoding="async" style="width:34px;height:34px;border-radius:50%;object-fit:cover;display:block;border:2.5px solid ${color};box-shadow:0 1px 6px rgba(0,0,0,0.45);background:var(--bg-2)" alt="" />`,
-      iconSize: [34, 34],
-      iconAnchor: [17, 17],
-    })
+  // The moving playback marker shows the user's (minified) profile picture when
+  // available, so it reads as "you" tracing the route. Falls back to a plain
+  // dot when there's no avatar.
+  const markerElement = useMemo(() => {
+    const el = document.createElement('div')
+    el.className = 'route-avatar'
+    el.innerHTML = avatarUrl
+      ? `<img src="${avatarUrl}" width="34" height="34" loading="lazy" decoding="async" style="width:34px;height:34px;border-radius:50%;object-fit:cover;display:block;border:2.5px solid ${color};box-shadow:0 1px 6px rgba(0,0,0,0.45);background:var(--bg-2)" alt="" />`
+      : `<div style="width:16px;height:16px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.5)"></div>`
+    return el
   }, [avatarUrl, color])
 
   // Shading is precomputed once per route/metric (never per playback tick) and
@@ -496,6 +497,122 @@ function RouteMap({
     return segs
   }, [route, shading, hrTimeline, paceTimeline, elevTimeline, cadenceTimeline, duration, color, maxHR])
 
+  /**
+   * The track as GeoJSON, one feature per shaded segment, carrying its colour
+   * as a property so a single line layer can draw the lot.
+   *
+   * This is the whole reason panning stayed smooth while the track plays. The
+   * route used to be up to 220 React components, reconciled and handed to the
+   * map on every animation frame of playback — so moving the map while playing
+   * meant React rebuilding the entire track sixty times a second on top of the
+   * map's own work. Here the geometry is uploaded once and only the marker
+   * moves, which is a single imperative call.
+   */
+  const routeGeoJSON = useMemo<maplibregl.GeoJSONSourceSpecification['data']>(() => ({
+    type: 'FeatureCollection',
+    features: shadedSegments.map(seg => ({
+      type: 'Feature' as const,
+      properties: { color: seg.color },
+      // GeoJSON is lng,lat; the route is stored lat,lng.
+      geometry: { type: 'LineString' as const, coordinates: seg.positions.map(([lat, lng]) => [lng, lat]) },
+    })),
+  }), [shadedSegments])
+
+  // ── The map itself ────────────────────────────────────────────────────────
+  //
+  // Held in refs and driven imperatively. React renders the container and the
+  // controls around it and nothing inside it, so a playback frame costs one
+  // setLngLat rather than a reconciliation of the whole track.
+  const mapNode = useRef<HTMLDivElement>(null)
+  const mapRef = useRef<maplibregl.Map | null>(null)
+  const markerRef = useRef<maplibregl.Marker | null>(null)
+  const popupRef = useRef<maplibregl.Popup | null>(null)
+  const [styleReady, setStyleReady] = useState(0)
+
+  // Latest values for the click handler, which is bound once to the map and
+  // would otherwise capture the first render's props forever.
+  const clickData = useRef({ route, duration, onScrub })
+  clickData.current = { route, duration, onScrub }
+
+  useEffect(() => {
+    if (!mapNode.current || mapRef.current || route.length < 2) return
+    const map = new maplibregl.Map({
+      container: mapNode.current,
+      style: MAP_LAYERS[layer].style,
+      center: [route[0][1], route[0][0]],
+      zoom: 13,
+      attributionControl: { compact: true },
+      // Pitch and rotation have no use for a route trace and make it easy to
+      // leave the map in a state a two-finger drag cannot undo.
+      pitchWithRotate: false,
+      dragRotate: false,
+      touchZoomRotate: true,
+    })
+    map.touchZoomRotate.disableRotation()
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right')
+    map.on('click', (e: maplibregl.MapMouseEvent) => {
+      const { route: r, duration: d, onScrub: scrub } = clickData.current
+      if (r.length < 2 || d <= 0) return
+      const idx = nearestRouteIndex(r, e.lngLat.lat, e.lngLat.lng)
+      scrub((idx / (r.length - 1)) * d)
+      setSelectedPoint(idx)
+    })
+    // Fires on first load and again after every setStyle, which discards all
+    // custom sources and layers — so the track is (re)added from here.
+    map.on('styledata', () => setStyleReady(n => n + 1))
+    mapRef.current = map
+    return () => { map.remove(); mapRef.current = null }
+    // Built once. Layer and data changes are handled by the effects below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (map) map.setStyle(MAP_LAYERS[layer].style)
+  }, [layer])
+
+  // Track geometry, re-added whenever a style swap has wiped it.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !map.isStyleLoaded()) return
+    const existing = map.getSource('route') as maplibregl.GeoJSONSource | undefined
+    if (existing) {
+      existing.setData(routeGeoJSON)
+      return
+    }
+    map.addSource('route', { type: 'geojson', data: routeGeoJSON })
+    map.addLayer({
+      id: 'route',
+      type: 'line',
+      source: 'route',
+      layout: { 'line-join': 'round', 'line-cap': 'round' },
+      // Each feature carries its own colour, so shading is a data change rather
+      // than a different set of layers.
+      paint: { 'line-color': ['get', 'color'], 'line-width': 4, 'line-opacity': 0.85 },
+    })
+  }, [routeGeoJSON, styleReady])
+
+  // Start, finish and playback markers. Markers survive a style change, so
+  // these are created once and only the moving one is updated.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || route.length < 2) return
+    const start = new maplibregl.Marker({ element: pinElement(START_SVG) }).setLngLat([route[0][1], route[0][0]]).addTo(map)
+    const finish = new maplibregl.Marker({ element: pinElement(FINISH_SVG), anchor: 'bottom' }).setLngLat([route[route.length - 1][1], route[route.length - 1][0]]).addTo(map)
+    const marker = new maplibregl.Marker({ element: markerElement }).setLngLat([route[0][1], route[0][0]]).addTo(map)
+    markerRef.current = marker
+    return () => { start.remove(); finish.remove(); marker.remove(); markerRef.current = null }
+  }, [route, markerElement])
+
+  // Frame the whole route when it changes.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || route.length < 2) return
+    const bounds = new maplibregl.LngLatBounds()
+    for (const [lat, lng] of route) bounds.extend([lng, lat])
+    map.fitBounds(bounds, { padding: 28, duration: 0 })
+  }, [route])
+
   if (route.length < 2) {
     return (
       <div style={{ width: '100%', height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-3)', fontSize: 13 }}>
@@ -523,16 +640,40 @@ function RouteMap({
     route[i0][0] + (route[i1][0] - route[i0][0]) * between,
     route[i0][1] + (route[i1][1] - route[i0][1]) * between,
   ]
-  const start = route[0]
-  const end = route[route.length - 1]
-  const activeLayer = MAP_LAYERS[layer]
   const sampleAt = <T extends { t: number }>(samples: T[], index: number) => samples.reduce<T | null>((closest, sample) => !closest || Math.abs(sample.t - timeAt(index)) < Math.abs(closest.t - timeAt(index)) ? sample : closest, null)
 
-  const selectedTime = selectedPoint == null ? 0 : timeAt(selectedPoint)
-  const selectedHR = selectedPoint == null ? null : sampleAt(hrTimeline, selectedPoint)?.hr
-  const selectedPace = selectedPoint == null ? null : sampleAt(paceTimeline, selectedPoint)?.pace
-  const selectedElev = selectedPoint == null ? null : sampleAt(elevTimeline, selectedPoint)?.elev
-  const selectedCad = selectedPoint == null ? null : sampleAt(cadenceTimeline, selectedPoint)?.cad
+  // Playback position, applied straight to the marker.
+  //
+  // This is the only thing that happens per animation frame. It deliberately
+  // does not touch React state or the map's own sources — moving a marker is a
+  // transform on an element the map already owns, which is why panning while
+  // the track plays no longer collapses.
+  useEffect(() => {
+    markerRef.current?.setLngLat([current[1], current[0]])
+  }, [current])
+
+  // The point popup, opened on click and torn down with the selection.
+  useEffect(() => {
+    const map = mapRef.current
+    popupRef.current?.remove()
+    popupRef.current = null
+    if (!map || selectedPoint == null || route.length < 2) return
+    const at = route[selectedPoint]
+    const cad = cadenceTimeline.length > 0 ? `<br />Cadence ${sampleAt(cadenceTimeline, selectedPoint)?.cad ?? '—'} ${cadenceLabel}` : ''
+    const pace = sampleAt(paceTimeline, selectedPoint)?.pace
+    popupRef.current = new maplibregl.Popup({ closeButton: false, offset: 12 })
+      .setLngLat([at[1], at[0]])
+      .setHTML(`<div style="font-size:12px;line-height:1.6"><strong>${fmtDuration(timeAt(selectedPoint))}</strong><br />`
+        + `Distance ${fmtDist((selectedPoint / Math.max(route.length - 1, 1)) * distance)}<br />`
+        + `HR ${sampleAt(hrTimeline, selectedPoint)?.hr ?? '—'} bpm<br />`
+        + `Pace ${pace ? `${fmtPace(pace)} /km` : '—'}<br />`
+        + `Speed ${pace ? `${(3600 / pace).toFixed(1)} km/h` : '—'}<br />`
+        + `Elevation ${sampleAt(elevTimeline, selectedPoint)?.elev ?? '—'} m${cad}</div>`)
+      .addTo(map)
+    return () => { popupRef.current?.remove(); popupRef.current = null }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPoint, route, distance, cadenceLabel])
+
 
   return (
     <div style={{ width: '100%', height, position: 'relative' }}>
@@ -553,22 +694,7 @@ function RouteMap({
           ]}
         />
       </div>
-      <MapContainer center={current} zoom={14} style={{ width: '100%', height: '100%' }} scrollWheelZoom attributionControl={false}>
-        <TileLayer
-          key={layer}
-          url={activeLayer.url}
-          maxZoom={activeLayer.maxZoom}
-        />
-        <FitBounds route={route} />
-        <MapClickHandler route={route} duration={duration} onScrub={onScrub} onPoint={setSelectedPoint} />
-        {shadedSegments.map((seg, index) => <Polyline key={index} positions={seg.positions} pathOptions={{ color: seg.color, weight: 4, opacity: 0.85 }} />)}
-        <Marker position={start} icon={START_MARKER} interactive={false} />
-        <Marker position={end} icon={FINISH_MARKER} interactive={false} />
-        {avatarIcon
-          ? <Marker position={current} icon={avatarIcon} interactive={false} />
-          : <CircleMarker center={current} radius={7} pane="markerPane" pathOptions={{ color: '#fff', fillColor: color, fillOpacity: 1, weight: 2 }} />}
-        {selectedPoint != null && <Popup position={route[selectedPoint]} closeButton={false} autoPan><div style={{ fontSize: 12, lineHeight: 1.6 }}><strong>{fmtDuration(selectedTime)}</strong><br />Distance {fmtDist((selectedPoint / Math.max(route.length - 1, 1)) * distance)}<br />HR {selectedHR ?? '—'} bpm<br />Pace {selectedPace ? `${fmtPace(selectedPace)} /km` : '—'}<br />Speed {selectedPace ? `${(3600 / selectedPace).toFixed(1)} km/h` : '—'}<br />Elevation {selectedElev ?? '—'} m{cadenceTimeline.length > 0 && <><br />Cadence {selectedCad ?? '—'} {cadenceLabel}</>}</div></Popup>}
-      </MapContainer>
+      <div ref={mapNode} className="route-map-canvas" />
     </div>
   )
 }
@@ -683,15 +809,25 @@ function HRZoneTooltip({ active, payload }: { active?: boolean; payload?: any[] 
   )
 }
 
-function ExpandModal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+function ExpandModal({ title, onClose, children, variant }: {
+  title: string
+  onClose: () => void
+  children: React.ReactNode
+  /**
+   * 'map' drops the card's padding and lets the content run to the edges. On a
+   * phone that is the difference between a map in a box inside a scrolling page
+   * and a map you can actually read a route on.
+   */
+  variant?: 'map'
+}) {
   return (
     <>
       <div className="overlay" onClick={onClose} />
-      <div className="modal">
-        <div className="modal-box" style={{ maxWidth: 900, width: '95vw' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+      <div className={`modal${variant === 'map' ? ' modal-immersive' : ''}`}>
+        <div className={`modal-box${variant === 'map' ? ' modal-box-immersive' : ''}`} style={variant === 'map' ? undefined : { maxWidth: 900, width: '95vw' }}>
+          <div className={variant === 'map' ? 'modal-immersive-head' : undefined} style={variant === 'map' ? undefined : { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <h3 style={{ fontSize: 15, fontWeight: 700 }}>{title}</h3>
-            <button className="btn-icon" onClick={onClose} title="Close"><XIcon size={18} /></button>
+            <button className="btn-icon" onClick={onClose} title="Close" aria-label="Close"><XIcon size={18} /></button>
           </div>
           {children}
         </div>
@@ -1601,11 +1737,13 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
       )}
 
       {expanded === 'map' && (
-        <ExpandModal title="Route" onClose={() => setExpanded(null)}>
-          <div style={{ marginBottom: 12 }}>
-            {mapCard(Math.round(window.innerHeight * 0.6))}
+        <ExpandModal title="Route" onClose={() => setExpanded(null)} variant="map">
+          <div className="modal-immersive-map">
+            {mapCard('100%')}
           </div>
-          <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onEnd={handleEnd} onScrub={handleScrub} />
+          <div className="modal-immersive-foot">
+            <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onEnd={handleEnd} onScrub={handleScrub} />
+          </div>
         </ExpandModal>
       )}
       {expanded === 'hr' && (
