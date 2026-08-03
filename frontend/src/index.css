@@ -1014,6 +1014,33 @@ body {
   font-family: var(--font-mono);
 }
 
+/* ── Metric panel: one chart on the workout detail page ── */
+
+/* Title and expand button only. The min/avg/max used to sit in this row, and
+   on a phone there was never width for both — the title wrapped to make room
+   for a figure that then wrapped too. */
+.metric-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+}
+.metric-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+/* Its own line, directly under the title. */
+.metric-panel-stats {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-3);
+  margin: 4px 0 10px;
+}
+
 /* ── Chart card: title row, info tip, description ── */
 .chart-card-head {
   display: flex;
