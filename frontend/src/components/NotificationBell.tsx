@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { Bell, Check, Share2, Footprints, Trophy, Clock, X, Trash2, FolderDown } from 'lucide-react'
 import { api, apiURL, type AppNotification, type NotificationKind } from '../lib/api'
 import { dismissOSNotification, enablePush, maybePromptForPush, pushState, syncPushSubscription, type PushState } from '../lib/push'
-import { consumeNotificationTap, maybeEnrolNativePush, onNotificationTap, syncNativePush, type NotificationTap } from '../lib/native/unifiedPush'
+import { consumeNotificationTap, maybeEnrolNativePush, onNotificationTap, syncNativePush, watchNativeEndpoint, type NotificationTap } from '../lib/native/unifiedPush'
 import { markNotificationOpened, PUSH_EVENT } from '../lib/notifications'
 import { useIsMobile } from '../lib/useIsMobile'
 
@@ -76,6 +76,11 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
     }
     return ''
   }, [])
+
+  // An endpoint the distributor issues later — a refresh, a registration it had
+  // to recreate — reaches the server through here. Nothing about it is visible
+  // in the UI, so there is no other moment that would notice.
+  useEffect(watchNativeEndpoint, [])
 
   // Ask for permission once, on first load, rather than making every user find
   // the switch in Settings. Deliberately fire-and-forget: see the notes on

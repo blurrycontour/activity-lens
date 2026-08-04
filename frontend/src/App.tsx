@@ -216,8 +216,21 @@ export default function App() {
   }, [user])
 
   // Keep app state in sync with browser back/forward navigation.
+  // The URL the visible state corresponds to, refreshed after every render so
+  // it covers pushState navigation as well as the pops below.
+  const appliedPath = useRef(window.location.pathname + window.location.search)
+  useEffect(() => {
+    appliedPath.current = window.location.pathname + window.location.search
+  })
+
   useEffect(() => {
     function onPopState() {
+      // Overlays — a maximized chart, selection mode — push an entry at the
+      // current URL so the back gesture closes them instead of leaving the
+      // page. Popping one is not navigation, and treating it as such refetched
+      // the workout and remounted the page underneath, throwing away whatever
+      // state the overlay was opened from.
+      if (window.location.pathname + window.location.search === appliedPath.current) return
       const loc = parseLocation()
       setPage(loc.page)
       setSection(loc.section)

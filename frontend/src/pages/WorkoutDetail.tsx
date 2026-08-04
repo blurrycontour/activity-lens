@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { type Workout, type WorkoutType, fmtDuration, fmtDist, fmtPace, TYPE_COLOR } from '../data/workouts'
 import TypeIcon from '../components/TypeIcon'
 import SportDropdown from '../components/SportDropdown'
@@ -16,6 +17,7 @@ import { useLocalStorage } from '../lib/useLocalStorage'
 import { DEFAULT_HR_ZONE_CHART, HR_ZONE_CHART_KEY, type HRZoneChart } from '../lib/dashboardConfig'
 import InfoTip from '../components/InfoTip'
 import { useIsMobile } from '../lib/useIsMobile'
+import useDismissOnBack from '../lib/useDismissOnBack'
 import UserAvatar, { avatarUrl, userLabel } from '../components/UserAvatar'
 import ShareDialog from '../components/ShareDialog'
 import * as maplibregl from 'maplibre-gl'
@@ -455,12 +457,14 @@ function hasWebGL(): boolean {
  * parts this page is actually about, and all three are plain SVG. Clicking
  * still scrubs, so the chart cursors and the transport keep working together.
  */
-function RouteShapeFallback({ route, segments, current, onScrub, duration }: {
+function RouteShapeFallback({ route, segments, current, onScrub, duration, avatar, color }: {
   route: Array<[number, number]>
   segments: Array<{ positions: Array<[number, number]>; color: string }>
   current: [number, number]
   onScrub: (t: number) => void
   duration: number
+  avatar?: string
+  color: string
 }) {
   const box = useMemo(() => {
     let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity
@@ -533,12 +537,26 @@ function RouteShapeFallback({ route, segments, current, onScrub, duration }: {
         ))}
         <circle cx={sx} cy={sy} r={1.7} fill="var(--success)" stroke="#fff" strokeWidth={0.6} />
         <circle cx={ex} cy={ey} r={1.7} fill="var(--danger)" stroke="#fff" strokeWidth={0.6} />
-        <circle cx={cx} cy={cy} r={2.2} fill="var(--primary)" stroke="#fff" strokeWidth={0.8} />
+        {/* The same avatar the map marker uses, so playback reads as "you"
+            here too rather than as an anonymous dot. Drawn in the viewBox
+            rather than layered over it in HTML, because the SVG is letterboxed
+            to keep its aspect ratio and only its own coordinate space knows
+            where that put the route. */}
+        {avatar
+          ? (
+            <>
+              <clipPath id="route-avatar-clip"><circle cx={cx} cy={cy} r={4} /></clipPath>
+              <image
+                href={avatar}
+                x={cx - 4} y={cy - 4} width={8} height={8}
+                preserveAspectRatio="xMidYMid slice"
+                clipPath="url(#route-avatar-clip)"
+              />
+              <circle cx={cx} cy={cy} r={4} fill="none" stroke={color} strokeWidth={0.9} />
+            </>
+          )
+          : <circle cx={cx} cy={cy} r={2.2} fill={color} stroke="#fff" strokeWidth={0.8} />}
       </svg>
-      <p style={{ margin: 0, padding: '6px 10px', fontSize: 11, color: 'var(--text-3)', borderTop: '1px solid var(--border)' }}>
-        Showing the route outline only — this browser has no WebGL, which the map needs.
-        Enabling hardware acceleration brings the map back.
-      </p>
     </div>
   )
 }
@@ -679,8 +697,26 @@ function RouteMap({
 
   // Latest values for the click handler, which is bound once to the map and
   // would otherwise capture the first render's props forever.
-  const clickData = useRef({ route, duration, onScrub })
-  clickData.current = { route, duration, onScrub }
+  const clickData = useRef({ route, duration, onScrub, selected: selectedPoint })
+  clickData.current = { route, duration, onScrub, selected: selectedPoint }
+
+  /**
+   * The playback time this component last asked for, so a move it did not cause
+   * can be told apart from one it did.
+   *
+   * The popup describes one point the user picked, and any transport action —
+   * play, reset, jump to end, dragging the slider — makes it a label for
+   * somewhere the playhead no longer is. Reset in particular left it sitting at
+   * the old position looking authoritative. Comparing against our own scrub is
+   * what distinguishes the two without threading a signal down from the
+   * transport controls, which live several components up.
+   */
+  const ownScrub = useRef<number | null>(null)
+  useEffect(() => {
+    if (currentTime === ownScrub.current) return
+    ownScrub.current = null
+    setSelectedPoint(null)
+  }, [currentTime])
 
   useEffect(() => {
     if (!mapNode.current || mapRef.current || !mapBuildable) return
@@ -699,15 +735,33 @@ function RouteMap({
     map.touchZoomRotate.disableRotation()
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right')
     map.on('click', (e: maplibregl.MapMouseEvent) => {
-      const { route: r, duration: d, onScrub: scrub } = clickData.current
+      const { route: r, duration: d, onScrub: scrub, selected } = clickData.current
       if (r.length < 2 || d <= 0) return
+      // A click while the popup is up means "close it", and nothing else.
+      // Moving it instead is why dismissing took two clicks: the first landed
+      // on the popup itself and did nothing, and the second reopened it
+      // somewhere new rather than putting it away.
+      if (selected != null) {
+        setSelectedPoint(null)
+        return
+      }
       const idx = nearestRouteIndex(r, e.lngLat.lat, e.lngLat.lng)
-      scrub((idx / (r.length - 1)) * d)
+      const t = (idx / (r.length - 1)) * d
+      ownScrub.current = t
+      scrub(t)
       setSelectedPoint(idx)
     })
     // Fires on first load and again after every setStyle, which discards all
     // custom sources and layers — so the track is (re)added from here.
     map.on('styledata', () => setStyleReady(n => n + 1))
+    // Attribution opens expanded even when compact, and on a phone that is a
+    // bar of link text across the bottom of the map. Collapsed to the "i" it
+    // already knows how to be; the class stays, so it is not re-expanded.
+    map.once('load', () => {
+      const attrib = map.getContainer().querySelector('.maplibregl-ctrl-attrib')
+      attrib?.classList.remove('maplibregl-compact-show')
+      attrib?.removeAttribute('open')
+    })
     mapRef.current = map
     return () => { map.remove(); mapRef.current = null }
     // Built once, on the first render that has a route to put in it. Layer and
@@ -816,7 +870,10 @@ function RouteMap({
     const at = route[selectedPoint]
     const cad = cadenceTimeline.length > 0 ? `<br />Cadence ${sampleAt(cadenceTimeline, selectedPoint)?.cad ?? '—'} ${cadenceLabel}` : ''
     const pace = sampleAt(paceTimeline, selectedPoint)?.pace
-    popupRef.current = new maplibregl.Popup({ closeButton: false, offset: 12 })
+    // closeOnClick off: MapLibre would tear the element down on the next map
+    // click while our state still said it was open, leaving the two out of step.
+    // The click handler above is the single place that decides.
+    popupRef.current = new maplibregl.Popup({ closeButton: false, offset: 12, closeOnClick: false })
       .setLngLat([at[1], at[0]])
       .setHTML(`<div style="font-size:12px;line-height:1.6"><strong>${fmtDuration(timeAt(selectedPoint))}</strong><br />`
         + `Distance ${fmtDist((selectedPoint / Math.max(route.length - 1, 1)) * distance)}<br />`
@@ -860,7 +917,17 @@ function RouteMap({
       </div>
       {glAvailable
         ? <div ref={mapNode} className="route-map-canvas" />
-        : <RouteShapeFallback route={route} segments={shadedSegments} current={current} onScrub={onScrub} duration={duration} />}
+        : (
+          <>
+            <RouteShapeFallback route={route} segments={shadedSegments} current={current} onScrub={onScrub} duration={duration} avatar={avatarUrl} color={color} />
+            {/* Along the top, because the bottom of the frame belongs to the
+                shading picker — which used to cover this outright. */}
+            <p className="route-fallback-note">
+              Showing the route outline only — this browser has no WebGL, which the map needs.
+              Enabling hardware acceleration brings the map back.
+            </p>
+          </>
+        )}
     </div>
   )
 }
@@ -986,19 +1053,32 @@ function ExpandModal({ title, onClose, children, variant }: {
    */
   variant?: 'map'
 }) {
-  return (
+  useDismissOnBack(true, onClose)
+
+  const map = variant === 'map'
+  // Portalled to the body, and not merely fixed-positioned. It renders from
+  // deep inside the scrolling main content, whose ancestors carry the transform
+  // that drives pull-to-refresh — and a transform makes a fixed child position
+  // and stack against *it*, so the modal's z-index stopped applying to the app
+  // chrome and the top and bottom bars sat on top of it.
+  return createPortal(
     <>
       <div className="overlay" onClick={onClose} />
-      <div className={`modal${variant === 'map' ? ' modal-immersive' : ''}`}>
-        <div className={`modal-box${variant === 'map' ? ' modal-box-immersive' : ''}`} style={variant === 'map' ? undefined : { maxWidth: 900, width: '95vw' }}>
-          <div className={variant === 'map' ? 'modal-immersive-head' : undefined} style={variant === 'map' ? undefined : { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+      <div className={`modal modal-expand${map ? ' modal-immersive' : ''}`}>
+        <div className={`modal-box modal-box-expand${map ? ' modal-box-immersive' : ''}`}>
+          <div className={map ? 'modal-immersive-head' : 'modal-expand-head'}>
             <h3 style={{ fontSize: 15, fontWeight: 700 }}>{title}</h3>
             <button className="btn-icon" onClick={onClose} title="Close" aria-label="Close"><XIcon size={18} /></button>
           </div>
-          {children}
+          {map ? children : (
+            <div className="modal-expand-body">
+              <div className="modal-expand-inner">{children}</div>
+            </div>
+          )}
         </div>
       </div>
-    </>
+    </>,
+    document.body,
   )
 }
 
