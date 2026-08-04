@@ -13,9 +13,10 @@ import (
 // dedupe key means the extra runs cost a query and produce nothing.
 const dailySweepInterval = time.Hour
 
-// StartScheduler runs the notification checks that are driven by the clock
-// rather than by a user action — currently only "a goal period is nearly over
-// and you are short". It returns when ctx is cancelled.
+// StartScheduler runs the work that is driven by the clock rather than by a
+// user action: the "a goal period is nearly over and you are short" check, and
+// pruning push subscriptions nothing is behind any more. It returns when ctx is
+// cancelled.
 //
 // This is an in-process ticker rather than a cron entry or a job queue because
 // the work is a handful of queries for a handful of users; anything more would
@@ -47,5 +48,13 @@ func (s *Server) sweep(ctx context.Context) {
 			continue
 		}
 		s.checkGoalsAtRisk(ctx, u.ID)
+	}
+
+	// Cheap enough to run on the same hourly tick as everything else: one
+	// indexed DELETE that matches nothing on all but a handful of passes.
+	if n, err := s.notify.PruneSubscriptions(ctx); err != nil {
+		slog.Warn("could not prune stale push subscriptions", "error", err)
+	} else if n > 0 {
+		slog.Info("pruned stale push subscriptions", "count", n)
 	}
 }

@@ -162,6 +162,7 @@ public class UnifiedPushPlugin extends Plugin {
         result.put("available", !found.isEmpty());
         result.put("distributor", UnifiedPush.distributor(getContext()));
         result.put("endpoint", UnifiedPush.endpoint(getContext()));
+        result.put("enabled", UnifiedPush.enabled(getContext()));
         result.put("permitted", NotificationManagerCompat.from(getContext()).areNotificationsEnabled());
         call.resolve(result);
     }
@@ -246,7 +247,9 @@ public class UnifiedPushPlugin extends Plugin {
     @PluginMethod
     public void refresh(PluginCall call) {
         String distributor = UnifiedPush.distributor(getContext());
-        if (distributor != null) {
+        // Keyed on the user's intent rather than on holding an endpoint: the
+        // case worth repairing is precisely the one where the endpoint is gone.
+        if (UnifiedPush.enabled(getContext()) && distributor != null) {
             UnifiedPush.register(getContext(), distributor);
         }
         call.resolve();

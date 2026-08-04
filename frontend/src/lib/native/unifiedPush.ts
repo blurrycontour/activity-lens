@@ -32,6 +32,17 @@ export interface NativePushStatus {
   distributor?: string | null
   /** The push URL the distributor issued, once it has. */
   endpoint?: string | null
+  /**
+   * Whether the user asked for push and has not asked to stop.
+   *
+   * Not the same as holding an endpoint, and the difference is the point: a
+   * distributor can drop the registration on its own — the subscription gets
+   * deleted in ntfy, its data is cleared — leaving no endpoint and an intent
+   * that is still perfectly valid. Reading the endpoint as the answer showed
+   * that as the user having turned push off, and left them to turn it back on
+   * by hand. syncNativePush repairs it instead.
+   */
+  enabled?: boolean
   /** Whether Android is currently allowing this app to post notifications. */
   permitted: boolean
 }
@@ -151,10 +162,15 @@ export async function enableNativePush(distributor: string): Promise<string> {
 /** Gives the endpoint back to the distributor and forgets it server-side. */
 export async function disableNativePush(): Promise<void> {
   const { endpoint } = await nativePushStatus()
-  if (endpoint) {
+  // Falls back to the last endpoint we told the server about. The phone may
+  // hold none — the distributor can withdraw it without being asked — and
+  // turning push off would then leave the server's row behind with nothing
+  // left that knows its address.
+  const stale = endpoint || localStorage.getItem(REPORTED_ENDPOINT_KEY)
+  if (stale) {
     // The server first, for the same reason as Web Push: unregistering first and
     // then failing here would leave the server pushing to a dead endpoint.
-    await api.pushUnsubscribe(endpoint).catch(() => {})
+    await api.pushUnsubscribe(stale).catch(() => {})
   }
   localStorage.removeItem(REPORTED_ENDPOINT_KEY)
   await UnifiedPush.unregister().catch(() => {})

@@ -54,6 +54,7 @@ final class UnifiedPush {
     private static final String PREFS = "unifiedpush";
     private static final String KEY_TOKEN = "token";
     private static final String KEY_DISTRIBUTOR = "distributor";
+    private static final String KEY_ENABLED = "enabled";
     private static final String KEY_ENDPOINT = "endpoint";
     private static final String KEY_TAP_LINK = "tap_link";
     private static final String KEY_TAP_ID = "tap_id";
@@ -84,6 +85,24 @@ final class UnifiedPush {
         return prefs(context).getString(KEY_DISTRIBUTOR, null);
     }
 
+    /**
+     * Whether the user wants push at all.
+     *
+     * Deliberately separate from holding an endpoint, because the two are not
+     * the same fact and treating them as one is what made a deleted ntfy
+     * subscription look like a deliberate opt-out. The distributor announces
+     * that loss with UNREGISTERED, which used to wipe everything — so the app
+     * came back with no endpoint, no distributor to ask for a new one, and a
+     * switch showing "off" that the user never touched.
+     *
+     * This is set by registering and cleared only by unregistering, so it means
+     * exactly "the user asked for this and has not asked to stop". Everything
+     * else is recoverable state, and refresh() recovers it.
+     */
+    static boolean enabled(Context context) {
+        return prefs(context).getBoolean(KEY_ENABLED, false);
+    }
+
     static String endpoint(Context context) {
         return prefs(context).getString(KEY_ENDPOINT, null);
     }
@@ -97,14 +116,26 @@ final class UnifiedPush {
     }
 
     /**
-     * Forgets the registration.
+     * Forgets the endpoint, keeping the intent to have one.
      *
-     * The endpoint goes but the token stays: the same token is what lets a
-     * distributor recognise a re-registration as the same client rather than
-     * leaking a new endpoint every time the user toggles the switch.
+     * For losses the user did not ask for: the distributor refused us, or
+     * dropped the registration because its subscription was deleted. The
+     * distributor and the enabled flag stay so refresh() can ask for a new
+     * endpoint on the next launch, and the token stays so the distributor
+     * recognises that request as the same client rather than issuing a fresh
+     * topic every time.
      */
-    static void clear(Context context) {
-        prefs(context).edit().remove(KEY_DISTRIBUTOR).remove(KEY_ENDPOINT).apply();
+    static void clearEndpoint(Context context) {
+        prefs(context).edit().remove(KEY_ENDPOINT).apply();
+    }
+
+    /**
+     * Forgets the registration entirely, including the intent to have one.
+     *
+     * Only for an explicit opt-out. The token still stays — see above.
+     */
+    static void forget(Context context) {
+        prefs(context).edit().remove(KEY_DISTRIBUTOR).remove(KEY_ENDPOINT).putBoolean(KEY_ENABLED, false).apply();
     }
 
     /**
@@ -196,6 +227,7 @@ final class UnifiedPush {
      */
     static void register(Context context, String distributorPackage) {
         setDistributor(context, distributorPackage);
+        prefs(context).edit().putBoolean(KEY_ENABLED, true).apply();
         Intent intent = new Intent(ACTION_REGISTER);
         intent.setPackage(distributorPackage);
         intent.putExtra(EXTRA_TOKEN, token(context));
@@ -212,7 +244,7 @@ final class UnifiedPush {
             intent.putExtra(EXTRA_TOKEN, token(context));
             context.sendBroadcast(intent);
         }
-        clear(context);
+        forget(context);
     }
 
     /**

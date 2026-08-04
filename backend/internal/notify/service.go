@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"time"
 )
 
 // listLimit caps how many notifications the panel loads. The bell is a recent
@@ -138,6 +139,28 @@ func (s *Service) Subscribe(ctx context.Context, sub Subscription) error {
 // Unsubscribe removes a device's registration.
 func (s *Service) Unsubscribe(ctx context.Context, endpoint string) error {
 	return s.repo.DeleteSubscription(ctx, endpoint)
+}
+
+/*
+SubscriptionRetention is how long a push subscription survives without the
+device behind it checking in.
+
+Every client re-sends its subscription on launch, so this is generous: it is the
+gap after which someone has not opened Activity Lens on that device at all. A
+phone coming back from three months in a drawer re-subscribes on the first
+launch and loses nothing but the notifications it was never going to see.
+
+The alternative — waiting for delivery to fail — does not work here. A ntfy
+publish to a topic with no subscribers succeeds, so a dead UnifiedPush endpoint
+is indistinguishable from a live one at the point of sending, and the rows
+accumulate for the life of the instance.
+*/
+const SubscriptionRetention = 90 * 24 * time.Hour
+
+// PruneSubscriptions drops subscriptions no device has confirmed within
+// SubscriptionRetention, returning how many were removed.
+func (s *Service) PruneSubscriptions(ctx context.Context) (int64, error) {
+	return s.repo.PruneSubscriptions(ctx, time.Now().Add(-SubscriptionRetention))
 }
 
 // PurgeUser removes every notification and push subscription for an account,
