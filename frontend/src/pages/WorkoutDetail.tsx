@@ -20,6 +20,23 @@ import UserAvatar, { avatarUrl, userLabel } from '../components/UserAvatar'
 import ShareDialog from '../components/ShareDialog'
 import * as maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
+// The worker is a separate module that MapLibre fetches at runtime, by URL.
+// It builds that URL from a variable, which Vite cannot follow — so without
+// this import the file is never emitted, the request falls through to the SPA
+// handler, and the browser refuses the index.html it gets back:
+//
+//   Failed to load module script: ... non-JavaScript MIME type "text/html"
+//
+// Nothing then parses tiles or GeoJSON, which is why the vector style rendered
+// blank and the track was missing from every layer, raster ones included.
+// `?url` makes it a real emitted asset and hands back its hashed path.
+// `?worker&url` and not `?url`: the plain asset form copies the worker file
+// byte-for-byte, and it opens with `import "./maplibre-gl-shared.mjs"` — a
+// sibling Vite never emits, so the worker booted and immediately 404'd on it.
+// `?worker` builds it as its own entry with that dependency rolled in.
+import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
+
+maplibregl.setWorkerUrl(maplibreWorkerUrl)
 
 interface WorkoutDetailProps {
   workout: Workout
@@ -401,6 +418,131 @@ function LayerSwitcher({ layer, onChange, offsetRight = 46 }: {
 
 type Shading = 'accent' | 'hr' | 'pace' | 'elevation' | 'cadence'
 
+/**
+ * Whether this browser can give MapLibre the GL context it needs.
+ *
+ * Checked before constructing a map rather than after: MapLibre throws on
+ * construction when WebGL is missing, and that took the whole page down with a
+ * blank screen and "failed to initialize WebGL" in the console. Browsers with
+ * hardware acceleration switched off, some remote desktops and a few Linux
+ * setups without a working GPU stack all land here.
+ *
+ * Computed once. Nothing about the answer changes within a session, and
+ * creating a throwaway context per render is not free.
+ */
+let webglAnswer: boolean | null = null
+function hasWebGL(): boolean {
+  if (webglAnswer !== null) return webglAnswer
+  try {
+    const canvas = document.createElement('canvas')
+    const gl = canvas.getContext('webgl2') ?? canvas.getContext('webgl')
+    // Released explicitly: some drivers cap the number of live contexts, and
+    // the map is about to want one of its own.
+    const lose = (gl as WebGLRenderingContext | null)?.getExtension('WEBGL_lose_context')
+    lose?.loseContext()
+    webglAnswer = Boolean(gl)
+  } catch {
+    webglAnswer = false
+  }
+  return webglAnswer
+}
+
+/**
+ * The route without a map behind it, for browsers that cannot run MapLibre.
+ *
+ * There is no basemap to draw — every tile renderer worth using needs a GPU —
+ * but the route's shape, its shading, and where playback has reached are the
+ * parts this page is actually about, and all three are plain SVG. Clicking
+ * still scrubs, so the chart cursors and the transport keep working together.
+ */
+function RouteShapeFallback({ route, segments, current, onScrub, duration }: {
+  route: Array<[number, number]>
+  segments: Array<{ positions: Array<[number, number]>; color: string }>
+  current: [number, number]
+  onScrub: (t: number) => void
+  duration: number
+}) {
+  const box = useMemo(() => {
+    let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity
+    for (const [lat, lng] of route) {
+      if (lat < minLat) minLat = lat
+      if (lat > maxLat) maxLat = lat
+      if (lng < minLng) minLng = lng
+      if (lng > maxLng) maxLng = lng
+    }
+    // Longitude degrees are shorter than latitude degrees away from the
+    // equator, so they are scaled by cos(lat) — without it a north-south route
+    // comes out stretched sideways.
+    const midLat = (minLat + maxLat) / 2
+    const kx = Math.cos((midLat * Math.PI) / 180)
+    const w = Math.max((maxLng - minLng) * kx, 1e-9)
+    const h = Math.max(maxLat - minLat, 1e-9)
+    return { minLat, maxLat, minLng, kx, w, h }
+  }, [route])
+
+  // Into a 100x100 viewBox, keeping the aspect ratio and leaving a margin so
+  // the stroke and the end markers are not clipped.
+  const project = ([lat, lng]: [number, number]): [number, number] => {
+    const scale = 92 / Math.max(box.w, box.h)
+    const x = 4 + ((lng - box.minLng) * box.kx) * scale + (92 - box.w * scale) / 2
+    const y = 4 + (box.maxLat - lat) * scale + (92 - box.h * scale) / 2
+    return [x, y]
+  }
+
+  const [cx, cy] = project(current)
+  const [sx, sy] = project(route[0])
+  const [ex, ey] = project(route[route.length - 1])
+
+  return (
+    // Sized by the map frame, exactly as the WebGL canvas is. Laying it out in
+    // flow with height:100% instead made it grow to whatever it liked whenever
+    // the frame's own height was not a resolved length.
+    <div className="route-map-canvas" style={{ background: 'var(--bg-3)', display: 'flex', flexDirection: 'column' }}>
+      <svg
+        viewBox="0 0 100 100"
+        preserveAspectRatio="xMidYMid meet"
+        style={{ flex: 1, minHeight: 0, width: '100%', cursor: 'crosshair' }}
+        onClick={e => {
+          if (route.length < 2 || duration <= 0) return
+          const r = (e.target as SVGElement).ownerSVGElement ?? (e.currentTarget as SVGSVGElement)
+          const rect = r.getBoundingClientRect()
+          // Back out of the viewBox using the rendered box, then pick the
+          // nearest point in projected space.
+          const side = Math.min(rect.width, rect.height)
+          const px = ((e.clientX - rect.left) - (rect.width - side) / 2) / side * 100
+          const py = ((e.clientY - rect.top) - (rect.height - side) / 2) / side * 100
+          let best = 0, bestD = Infinity
+          for (let i = 0; i < route.length; i++) {
+            const [x, y] = project(route[i])
+            const d = (x - px) ** 2 + (y - py) ** 2
+            if (d < bestD) { bestD = d; best = i }
+          }
+          onScrub((best / (route.length - 1)) * duration)
+        }}
+      >
+        {segments.map((seg, i) => (
+          <polyline
+            key={i}
+            points={seg.positions.map(p => project(p).join(',')).join(' ')}
+            fill="none"
+            stroke={seg.color}
+            strokeWidth={1.1}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        ))}
+        <circle cx={sx} cy={sy} r={1.7} fill="var(--success)" stroke="#fff" strokeWidth={0.6} />
+        <circle cx={ex} cy={ey} r={1.7} fill="var(--danger)" stroke="#fff" strokeWidth={0.6} />
+        <circle cx={cx} cy={cy} r={2.2} fill="var(--primary)" stroke="#fff" strokeWidth={0.8} />
+      </svg>
+      <p style={{ margin: 0, padding: '6px 10px', fontSize: 11, color: 'var(--text-3)', borderTop: '1px solid var(--border)' }}>
+        Showing the route outline only — this browser has no WebGL, which the map needs.
+        Enabling hardware acceleration brings the map back.
+      </p>
+    </div>
+  )
+}
+
 function RouteMap({
   route, color, duration, currentTime, onScrub, height, distance, hrTimeline, paceTimeline, elevTimeline, cadenceTimeline, avatarUrl, maxHR, cadenceLabel,
   shading, onShadingChange, maximizeButton,
@@ -528,6 +670,12 @@ function RouteMap({
   const markerRef = useRef<maplibregl.Marker | null>(null)
   const popupRef = useRef<maplibregl.Popup | null>(null)
   const [styleReady, setStyleReady] = useState(0)
+  const glAvailable = useMemo(hasWebGL, [])
+  // The workout arrives after the first render, so the map cannot be built
+  // there — this is what the init effect waits for. Depending on the route
+  // array itself would tear the map down and rebuild it whenever the reference
+  // changed; the only thing that matters is whether there is one to draw.
+  const mapBuildable = glAvailable && route.length >= 2
 
   // Latest values for the click handler, which is bound once to the map and
   // would otherwise capture the first render's props forever.
@@ -535,7 +683,7 @@ function RouteMap({
   clickData.current = { route, duration, onScrub }
 
   useEffect(() => {
-    if (!mapNode.current || mapRef.current || route.length < 2) return
+    if (!mapNode.current || mapRef.current || !mapBuildable) return
     const map = new maplibregl.Map({
       container: mapNode.current,
       style: MAP_LAYERS[layer].style,
@@ -562,9 +710,10 @@ function RouteMap({
     map.on('styledata', () => setStyleReady(n => n + 1))
     mapRef.current = map
     return () => { map.remove(); mapRef.current = null }
-    // Built once. Layer and data changes are handled by the effects below.
+    // Built once, on the first render that has a route to put in it. Layer and
+    // data changes are handled by the effects below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [mapBuildable])
 
   useEffect(() => {
     const map = mapRef.current
@@ -574,22 +723,30 @@ function RouteMap({
   // Track geometry, re-added whenever a style swap has wiped it.
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !map.isStyleLoaded()) return
-    const existing = map.getSource('route') as maplibregl.GeoJSONSource | undefined
-    if (existing) {
-      existing.setData(routeGeoJSON)
-      return
+    if (!map) return
+    const draw = () => {
+      const existing = map.getSource('route') as maplibregl.GeoJSONSource | undefined
+      if (existing) {
+        existing.setData(routeGeoJSON)
+        return
+      }
+      map.addSource('route', { type: 'geojson', data: routeGeoJSON })
+      map.addLayer({
+        id: 'route',
+        type: 'line',
+        source: 'route',
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        // Each feature carries its own colour, so shading is a data change
+        // rather than a different set of layers.
+        paint: { 'line-color': ['get', 'color'], 'line-width': 4, 'line-opacity': 0.85 },
+      })
     }
-    map.addSource('route', { type: 'geojson', data: routeGeoJSON })
-    map.addLayer({
-      id: 'route',
-      type: 'line',
-      source: 'route',
-      layout: { 'line-join': 'round', 'line-cap': 'round' },
-      // Each feature carries its own colour, so shading is a data change rather
-      // than a different set of layers.
-      paint: { 'line-color': ['get', 'color'], 'line-width': 4, 'line-opacity': 0.85 },
-    })
+    // Sources cannot be added before the style owning them exists. Bailing out
+    // when it does not yet — the previous behaviour — left the track missing
+    // for good if no further `styledata` event happened to re-run this.
+    if (map.isStyleLoaded()) { draw(); return }
+    map.once('load', draw)
+    return () => { map.off('load', draw) }
   }, [routeGeoJSON, styleReady])
 
   // Start, finish and playback markers. Markers survive a style change, so
@@ -613,13 +770,6 @@ function RouteMap({
     map.fitBounds(bounds, { padding: 28, duration: 0 })
   }, [route])
 
-  if (route.length < 2) {
-    return (
-      <div style={{ width: '100%', height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-3)', fontSize: 13 }}>
-        No route data
-      </div>
-    )
-  }
   const fraction = duration > 0 ? Math.max(0, Math.min(1, currentTime / duration)) : 0
   // Where playback is between two fixes, not at the nearer of the two.
   //
@@ -632,14 +782,19 @@ function RouteMap({
   // Straight-line between neighbours is enough. GPS fixes on a recorded track
   // are metres apart, so the chord and the true path differ by less than the
   // marker is wide.
-  const exact = fraction * (route.length - 1)
-  const i0 = Math.floor(exact)
+  // Computed before the "no route" return below, because the effects that use
+  // it are hooks and cannot be skipped — so it has to hold up with no route at
+  // all, which is the state this page is in while the workout loads.
+  const exact = fraction * Math.max(route.length - 1, 0)
+  const i0 = Math.min(Math.floor(exact), Math.max(route.length - 1, 0))
   const i1 = Math.min(i0 + 1, route.length - 1)
   const between = exact - i0
-  const current: [number, number] = [
-    route[i0][0] + (route[i1][0] - route[i0][0]) * between,
-    route[i0][1] + (route[i1][1] - route[i0][1]) * between,
-  ]
+  const current: [number, number] = route.length > 0
+    ? [
+      route[i0][0] + (route[i1][0] - route[i0][0]) * between,
+      route[i0][1] + (route[i1][1] - route[i0][1]) * between,
+    ]
+    : [0, 0]
   const sampleAt = <T extends { t: number }>(samples: T[], index: number) => samples.reduce<T | null>((closest, sample) => !closest || Math.abs(sample.t - timeAt(index)) < Math.abs(closest.t - timeAt(index)) ? sample : closest, null)
 
   // Playback position, applied straight to the marker.
@@ -674,11 +829,20 @@ function RouteMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPoint, route, distance, cadenceLabel])
 
+  if (route.length < 2) {
+    return (
+      <div style={{ width: '100%', height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-3)', fontSize: 13 }}>
+        No route data
+      </div>
+    )
+  }
+
+
 
   return (
     <div style={{ width: '100%', height, position: 'relative' }}>
       {maximizeButton}
-      <LayerSwitcher layer={layer} onChange={setLayer} offsetRight={maximizeButton ? 46 : 10} />
+      {glAvailable && <LayerSwitcher layer={layer} onChange={setLayer} offsetRight={maximizeButton ? 46 : 10} />}
       <div className="map-shade-picker">
         <Dropdown
           value={shading}
@@ -694,7 +858,9 @@ function RouteMap({
           ]}
         />
       </div>
-      <div ref={mapNode} className="route-map-canvas" />
+      {glAvailable
+        ? <div ref={mapNode} className="route-map-canvas" />
+        : <RouteShapeFallback route={route} segments={shadedSegments} current={current} onScrub={onScrub} duration={duration} />}
     </div>
   )
 }
@@ -1587,13 +1753,6 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
               onExpand={() => setExpanded('hrzones')}
             >
               {hrZoneChart(160)}
-              {/* The only chart here with no time axis of its own, so it needs
-                  the transport to say what "so far" means. */}
-              {w.hrTimeline.length > 0 && (
-                <div style={{ marginTop: 10 }}>
-                  <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onEnd={handleEnd} onScrub={handleScrub} />
-                </div>
-              )}
             </MetricPanel>
           )}
 

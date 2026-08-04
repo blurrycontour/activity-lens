@@ -40,6 +40,11 @@ export default defineConfig(({ mode }) => {
       sourcemap: emitSourcemaps ? 'inline' : false,
       minify: !emitSourcemaps,
     },
+    // MapLibre starts its worker with `{ type: 'module' }`, so the bundle we
+    // hand it has to be a module rather than Vite's default IIFE.
+    worker: {
+      format: 'es',
+    },
     plugins: [
       react(),
       tailwindcss(),
@@ -59,7 +64,10 @@ export default defineConfig(({ mode }) => {
         // Registration happens explicitly in main.tsx.
         injectRegister: null,
         injectManifest: {
-          globPatterns: ['**/*.{js,css,html,png,svg,woff,woff2}'],
+          // `mjs` is here for MapLibre's worker, which is a separate module
+          // fetched at runtime rather than imported. Without it the map works
+          // online and silently loses tile and GeoJSON parsing offline.
+          globPatterns: ['**/*.{js,mjs,css,html,png,svg,woff,woff2}'],
         },
         manifest: {
           name: 'Activity Lens',
