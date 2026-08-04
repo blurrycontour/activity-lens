@@ -27,10 +27,15 @@ const (
 	// imported them. The one kind that reports something the user did not do
 	// from this device, which is exactly why it is worth telling them about.
 	KindWorkoutImported Kind = "workout_imported"
+	// KindFeedback: someone filed feedback. Only ever sent to administrators —
+	// it is the one kind that reports on the instance rather than on the
+	// recipient's own training, which is why Settings hides its switch from
+	// everyone else rather than offering a toggle that can never fire.
+	KindFeedback Kind = "feedback"
 )
 
 // AllKinds is every kind, in the order Settings lists them.
-var AllKinds = []Kind{KindWorkoutShared, KindGearWorn, KindGoalMet, KindGoalAtRisk, KindWorkoutImported}
+var AllKinds = []Kind{KindWorkoutShared, KindGearWorn, KindGoalMet, KindGoalAtRisk, KindWorkoutImported, KindFeedback}
 
 // ValidKind reports whether k is a known kind.
 func ValidKind(k Kind) bool {

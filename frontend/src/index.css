@@ -407,6 +407,82 @@ body {
 .settings-card.danger .settings-card-title { color: var(--danger); }
 .settings-card-desc { font-size: 12px; color: var(--text-3); line-height: 1.5; }
 .settings-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.settings-empty { font-size: 13px; color: var(--text-3); margin: 0; }
+
+/* ── Feedback ── */
+
+/* Checkbox and its explanation. The sub-line is deliberately specific about
+   what gets attached — "attach logs" is not consent to anything. */
+.feedback-attach {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  margin-top: 4px;
+}
+.feedback-attach input { margin-top: 2px; flex-shrink: 0; }
+.feedback-attach-label { display: block; font-size: 13px; color: var(--text); }
+.feedback-attach-sub { display: block; font-size: 11px; color: var(--text-3); margin-top: 2px; line-height: 1.5; }
+
+.feedback-preview-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--text-3);
+  font-size: 11px;
+  cursor: pointer;
+}
+.feedback-preview-toggle:hover { color: var(--text-2); }
+.feedback-preview { margin-top: 10px; }
+/* Scrolls in both directions inside its own box: a stack trace is wide, and the
+   page must not gain a horizontal scrollbar because of it. */
+.feedback-preview-body {
+  margin: 8px 0 0;
+  padding: 10px;
+  max-height: 260px;
+  overflow: auto;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--text-2);
+  white-space: pre;
+}
+
+.feedback-list { display: flex; flex-direction: column; gap: 10px; }
+.feedback-item {
+  padding: 12px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+/* Resolved reports stay in the list — the history is the point — but recede. */
+.feedback-item.resolved { opacity: 0.55; }
+.feedback-item-head { display: flex; align-items: center; gap: 8px; }
+.feedback-item-icon { color: var(--text-3); display: inline-flex; flex-shrink: 0; }
+.feedback-item-meta { flex: 1; min-width: 0; }
+.feedback-item-who { display: block; font-size: 13px; font-weight: 600; }
+.feedback-item-when {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: -0.02em;
+  color: var(--text-3);
+}
+.feedback-item-body {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.feedback-item .feedback-preview-toggle { margin-top: 8px; }
 
 /* Form field: mono micro-label above a control, matching the login page. */
 .field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }

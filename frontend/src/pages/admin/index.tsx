@@ -5,6 +5,7 @@ import SettingsRow from '../../components/SettingsRow'
 import type { AdminSection } from '../../lib/nav'
 import { ADMIN_META, adminMeta } from './sections'
 import UsersAdmin from './Users'
+import FeedbackAdmin from './Feedback'
 import EmailAdmin from './Email'
 import SsoAdmin from './Sso'
 import StorageAdmin from './Storage'
@@ -52,6 +53,7 @@ export default function Admin({ section, onOpen, onBack }: AdminProps) {
       <div className="page-content settings-page">
         {loadErr && <div className="settings-card danger"><span className="status-msg err">{loadErr}</span></div>}
         {section === 'users' && <UsersAdmin users={users} onChanged={load} />}
+        {section === 'feedback' && <FeedbackAdmin />}
         {/* The three server-config pages need the settings record; until it
             arrives there is nothing to render but the error above. */}
         {settings && section === 'email' && <EmailAdmin settings={settings} onSaved={setSettings} />}

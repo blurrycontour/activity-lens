@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Bell, Check, Share2, Footprints, Trophy, Clock, X, Trash2, FolderDown } from 'lucide-react'
+import { Bell, Check, Share2, Footprints, Trophy, Clock, X, Trash2, FolderDown, MessageSquare } from 'lucide-react'
 import { api, apiURL, type AppNotification, type NotificationKind } from '../lib/api'
 import { dismissOSNotification, enablePush, maybePromptForPush, pushState, syncPushSubscription, type PushState } from '../lib/push'
 import { consumeNotificationTap, maybeEnrolNativePush, onNotificationTap, syncNativePush, watchNativeEndpoint, type NotificationTap } from '../lib/native/unifiedPush'
@@ -18,6 +18,7 @@ const KIND_ICON: Record<NotificationKind, React.ReactNode> = {
   goal_met: <Trophy size={14} />,
   goal_at_risk: <Clock size={14} />,
   workout_imported: <FolderDown size={14} />,
+  feedback: <MessageSquare size={14} />,
 }
 
 /** Relative time, at the granularity a notification list actually needs. */

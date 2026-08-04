@@ -6,6 +6,7 @@ import (
 
 	"github.com/blurrycontour/activity-lens/backend/internal/config"
 	"github.com/blurrycontour/activity-lens/backend/internal/equipment"
+	"github.com/blurrycontour/activity-lens/backend/internal/feedback"
 	"github.com/blurrycontour/activity-lens/backend/internal/notify"
 	"github.com/blurrycontour/activity-lens/backend/internal/settings"
 	"github.com/blurrycontour/activity-lens/backend/internal/web"
@@ -27,6 +28,7 @@ type Server struct {
 	settings   *settings.Store
 	rawUploads *workout.RawUploadStore
 	notify     *notify.Service
+	feedback   *feedback.Service
 	build      BuildInfo
 	// apk is the Android app bundled into this image, or nil when there is
 	// none. Resolved once at startup; see androidapp.go.
@@ -37,8 +39,8 @@ type Server struct {
 }
 
 // New constructs a Server and its auth middleware/OIDC handler.
-func New(cfg config.Config, authSvc *auth.Service, workoutSvc *workout.Service, equipmentSvc *equipment.Service, settingsStore *settings.Store, rawUploads *workout.RawUploadStore, notifySvc *notify.Service, build BuildInfo) *Server {
-	s := &Server{cfg: cfg, auth: authSvc, workout: workoutSvc, equipment: equipmentSvc, settings: settingsStore, rawUploads: rawUploads, notify: notifySvc, build: build}
+func New(cfg config.Config, authSvc *auth.Service, workoutSvc *workout.Service, equipmentSvc *equipment.Service, settingsStore *settings.Store, rawUploads *workout.RawUploadStore, notifySvc *notify.Service, feedbackSvc *feedback.Service, build BuildInfo) *Server {
+	s := &Server{cfg: cfg, auth: authSvc, workout: workoutSvc, equipment: equipmentSvc, settings: settingsStore, rawUploads: rawUploads, notify: notifySvc, feedback: feedbackSvc, build: build}
 	s.apk = loadBundledAPK(cfg.AndroidAPKDir)
 	s.nativeCodes = newNativeAuthCodes()
 	s.mw = &httpmw.Middleware{
@@ -176,7 +178,14 @@ func (s *Server) apiRoutes() http.Handler {
 	mux.Handle("PATCH /api/equipment/{id}", s.authedCSRF(s.handlePatchEquipment))
 	mux.Handle("DELETE /api/equipment/{id}", s.authedCSRF(s.handleDeleteEquipment))
 
+	// Feedback: anyone may file one, only admins may read them.
+	mux.Handle("POST /api/feedback", s.authedCSRF(s.handleCreateFeedback))
+
 	// --- Admin (administrators only) ---
+	mux.Handle("GET /api/admin/feedback", s.authedAdmin(s.handleListFeedback))
+	mux.Handle("GET /api/admin/feedback/{id}", s.authedAdmin(s.handleGetFeedback))
+	mux.Handle("PATCH /api/admin/feedback/{id}", s.authedAdminCSRF(s.handleUpdateFeedback))
+	mux.Handle("DELETE /api/admin/feedback/{id}", s.authedAdminCSRF(s.handleDeleteFeedback))
 	mux.Handle("GET /api/admin/settings", s.authedAdmin(s.handleGetSettings))
 	mux.Handle("PUT /api/admin/settings/smtp", s.authedAdminCSRF(s.handleSaveSMTP))
 	mux.Handle("PUT /api/admin/settings/oidc", s.authedAdminCSRF(s.handleSaveOIDC))

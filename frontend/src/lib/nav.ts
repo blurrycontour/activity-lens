@@ -30,11 +30,12 @@ export const PAGES: Page[] = [...DESKTOP_PAGES, 'settings', 'admin']
 export const SETTINGS_SECTIONS = [
   'profile', 'security', 'body',
   'appearance', 'dashboard', 'goals', 'notifications',
+  'feedback',
   'autoimport', 'app', 'server',
 ] as const
 export type SettingsSection = typeof SETTINGS_SECTIONS[number]
 
-export const ADMIN_SECTIONS = ['users', 'email', 'sso', 'storage'] as const
+export const ADMIN_SECTIONS = ['users', 'feedback', 'email', 'sso', 'storage'] as const
 export type AdminSection = typeof ADMIN_SECTIONS[number]
 
 /** The section ids valid under a given hub page. */
