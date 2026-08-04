@@ -13,20 +13,20 @@
   },
   "packageManager": "pnpm@11.17.0",
   "dependencies": {
-    "@capacitor/core": "8.4.2",
+    "@capacitor/core": "8.5.0",
     "@capacitor/preferences": "8.0.1",
     "fflate": "^0.8.3",
-    "lucide-react": "^1.26.0",
+    "lucide-react": "^1.28.0",
     "maplibre-gl": "^6.1.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "recharts": "^3.10.0"
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "recharts": "^3.10.1"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",
     "@types/node": "^22.0.0",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.0.0",
     "oxfmt": "^0.2.0",
     "tailwindcss": "^4.0.0",
