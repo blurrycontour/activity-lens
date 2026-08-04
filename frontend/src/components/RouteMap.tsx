@@ -18,8 +18,12 @@ import Dropdown from './Dropdown'
 import { hrZoneColor } from '../lib/hrZones'
 import { fmtDist, fmtDuration, fmtPace, type Workout } from '../data/workouts'
 import type { Playhead } from '../lib/playhead'
+import { cachedURL, installTileCache } from '../lib/tileCache'
 
 maplibregl.setWorkerUrl(maplibreWorkerUrl)
+// Registered alongside the worker, before any map is built, because the style
+// URLs below are already addressed to it.
+installTileCache()
 
 function nearestRouteIndex(route: Array<[number, number]>, lat: number, lng: number): number {
   let best = 0
@@ -60,7 +64,7 @@ const FINISH_SVG = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" 
 function rasterStyle(tiles: string[], attribution: string, maxzoom: number): maplibregl.StyleSpecification {
   return {
     version: 8,
-    sources: { base: { type: 'raster', tiles, tileSize: 256, maxzoom, attribution } },
+    sources: { base: { type: 'raster', tiles: tiles.map(cachedURL), tileSize: 256, maxzoom, attribution } },
     layers: [{ id: 'base', type: 'raster', source: 'base' }],
   }
 }
@@ -77,7 +81,7 @@ function rasterStyle(tiles: string[], attribution: string, maxzoom: number): map
 const MAP_LAYERS: Record<MapLayerId, { label: string; style: string | maplibregl.StyleSpecification; maxZoom: number }> = {
   street: {
     label: 'Street',
-    style: 'https://tiles.openfreemap.org/styles/liberty',
+    style: cachedURL('https://tiles.openfreemap.org/styles/liberty'),
     maxZoom: 20,
   },
   topo: {
