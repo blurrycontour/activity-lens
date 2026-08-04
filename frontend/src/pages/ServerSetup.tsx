@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { AlertCircle, ArrowRight, Loader2, Server } from 'lucide-react'
 import Logo from '../components/Logo'
 import AuthBackdrop from '../components/AuthBackdrop'
-import { normalizeServerURL, probeServer, setServerURL } from '../lib/serverConfig'
+import { isInsecureURL, normalizeServerURL, probeServer, setServerURL } from '../lib/serverConfig'
+import InsecureWarning from '../components/InsecureWarning'
 
 /**
  * First run in the Android app: which server does this belong to?
@@ -20,11 +21,20 @@ export default function ServerSetup({ onConfigured }: { onConfigured: () => void
   const [value, setValue] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Typing http:// is allowed — a LAN or Tailscale instance is a legitimate
+  // setup — but not by accident, so it takes a second, deliberate press.
+  const [acceptedInsecure, setAcceptedInsecure] = useState(false)
+
+  const insecure = isInsecureURL(normalizeServerURL(value))
 
   async function connect() {
     const url = normalizeServerURL(value)
     if (!url) {
       setError('Enter your server address')
+      return
+    }
+    if (isInsecureURL(url) && !acceptedInsecure) {
+      setAcceptedInsecure(true)
       return
     }
     setBusy(true)
@@ -67,7 +77,7 @@ export default function ServerSetup({ onConfigured }: { onConfigured: () => void
                 style={{ width: '100%', paddingLeft: 34 }}
                 placeholder="activity.example.com"
                 value={value}
-                onChange={e => { setValue(e.target.value); setError(null) }}
+                onChange={e => { setValue(e.target.value); setError(null); setAcceptedInsecure(false) }}
                 onKeyDown={e => { if (e.key === 'Enter' && !busy) void connect() }}
                 autoCapitalize="none"
                 autoCorrect="off"
@@ -88,6 +98,8 @@ export default function ServerSetup({ onConfigured }: { onConfigured: () => void
             </div>
           )}
 
+          {insecure && <InsecureWarning />}
+
           <button
             className="btn btn-primary auth-submit"
             onClick={() => void connect()}
@@ -95,7 +107,9 @@ export default function ServerSetup({ onConfigured }: { onConfigured: () => void
           >
             {busy
               ? <><Loader2 size={15} className="spin" /> Checking…</>
-              : <>Connect <ArrowRight size={15} /></>}
+              : insecure && !acceptedInsecure
+                ? <>Connect anyway <ArrowRight size={15} /></>
+                : <>Connect <ArrowRight size={15} /></>}
           </button>
         </div>
       </div>

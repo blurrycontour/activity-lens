@@ -39,6 +39,28 @@ export default defineConfig(({ mode }) => {
     build: {
       sourcemap: emitSourcemaps ? 'inline' : false,
       minify: !emitSourcemaps,
+      // 500 kB is the default warning threshold and neither of the two vendor
+      // chunks below will ever be under it — a mapping engine and a charting
+      // library are simply that size. The warning has done its job (MapLibre no
+      // longer loads for everyone), so this stops it crying wolf over the split
+      // it asked for.
+      chunkSizeWarningLimit: 1000,
+      rolldownOptions: {
+        output: {
+          codeSplitting: {
+            // Dependencies that change on their own schedule, split out so a
+            // release of the app does not invalidate them in every user's
+            // cache. Recharts and React together are most of what is left in
+            // the entry chunk once MapLibre is lazily loaded (see the dynamic
+            // import in WorkoutDetail), and neither changes between releases.
+            groups: [
+              { name: 'maplibre', test: /node_modules[\\/]maplibre-gl[\\/]/ },
+              { name: 'charts', test: /node_modules[\\/](recharts|d3-[^\\/]+|victory-vendor)[\\/]/ },
+              { name: 'react', test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/ },
+            ],
+          },
+        },
+      },
     },
     // MapLibre starts its worker with `{ type: 'module' }`, so the bundle we
     // hand it has to be a module rather than Vite's default IIFE.

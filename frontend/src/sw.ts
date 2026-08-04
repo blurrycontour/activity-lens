@@ -26,8 +26,14 @@ declare const self: ServiceWorkerGlobalScope
 const SHARE_LANDING = '/workouts'
 
 // Host suffixes of the map tile providers used by the workout map. Matching on
-// suffix covers the numbered subdomains (a/b/c.tile.openstreetmap.org).
-const TILE_HOSTS = ['tile.openstreetmap.org', 'tile.opentopomap.org', 'arcgisonline.com']
+// suffix covers the numbered subdomains (a/b/c.tile.opentopomap.org).
+//
+// tiles.openfreemap.org serves the default street layer and was missing here:
+// the raster OSM entry it replaced was left behind when the map moved to vector
+// tiles, so the one layer everybody sees by default was the one layer never
+// cached. It carries the style JSON, glyphs and sprites as well as the tiles,
+// and all of them are wanted — a vector map with no glyphs renders unlabelled.
+const TILE_HOSTS = ['tiles.openfreemap.org', 'tile.opentopomap.org', 'arcgisonline.com']
 
 precacheAndRoute(self.__WB_MANIFEST)
 cleanupOutdatedCaches()

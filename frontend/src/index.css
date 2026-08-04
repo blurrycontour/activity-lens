@@ -1001,6 +1001,30 @@ body {
 }
 .user-menu-identity:hover { opacity: 0.85; }
 
+/* Unencrypted-connection notice. Sized to be read rather than dismissed —
+   this is the only sign the user gets that nothing here is private. */
+.insecure-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border-radius: var(--radius);
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid var(--danger-border);
+  color: var(--danger);
+}
+.insecure-warning strong { display: block; font-size: 13px; }
+.insecure-warning p {
+  margin: 4px 0 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+.insecure-warning code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
 /* ── First-run import introduction ── */
 
 /* Taller than it is wide on a phone, so the routes stay a readable column
@@ -1648,6 +1672,16 @@ body {
     overflow: hidden;
   }
   .modal-box-immersive { max-width: 1200px; }
+}
+
+/* Holds the map's place while its chunk loads, so the cards below do not jump. */
+.route-map-loading {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  background: var(--bg-3);
+  color: var(--text-3);
+  font-size: 12px;
 }
 
 /* The map fills its card; MapLibre needs an explicitly sized container. */
