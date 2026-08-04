@@ -17,6 +17,7 @@ import { useLocalStorage } from '../lib/useLocalStorage'
 import { DEFAULT_HR_ZONE_CHART, HR_ZONE_CHART_KEY, type HRZoneChart } from '../lib/dashboardConfig'
 import InfoTip from '../components/InfoTip'
 import { useIsMobile } from '../lib/useIsMobile'
+import { usePlayhead, useThrottledPlayhead, type Playhead } from '../lib/playhead'
 import useDismissOnBack from '../lib/useDismissOnBack'
 import UserAvatar, { avatarUrl, userLabel } from '../components/UserAvatar'
 import ShareDialog from '../components/ShareDialog'
@@ -561,14 +562,43 @@ function RouteShapeFallback({ route, segments, current, onScrub, duration, avata
   )
 }
 
+/**
+ * Where playback has reached along the route, as a fraction of the whole.
+ *
+ * Interpolated between two fixes rather than snapped to the nearer one. The
+ * clock advances every animation frame, so the stepping the marker used to show
+ * was entirely this rounding: a 600-point track played over 15 seconds changes
+ * its nearest fix 40 times a second and the marker jumped between them.
+ *
+ * Straight-line between neighbours is enough — GPS fixes on a recorded track
+ * are metres apart, so the chord and the true path differ by less than the
+ * marker is wide.
+ *
+ * Holds up with an empty route, which is the state the page is in while the
+ * workout loads and before the early return that would otherwise cover it.
+ */
+function positionAt(route: Array<[number, number]>, fraction: number): [number, number] {
+  if (route.length === 0) return [0, 0]
+  const exact = fraction * (route.length - 1)
+  const i0 = Math.min(Math.floor(exact), route.length - 1)
+  const i1 = Math.min(i0 + 1, route.length - 1)
+  const between = exact - i0
+  return [
+    route[i0][0] + (route[i1][0] - route[i0][0]) * between,
+    route[i0][1] + (route[i1][1] - route[i0][1]) * between,
+  ]
+}
+
 function RouteMap({
-  route, color, duration, currentTime, onScrub, height, distance, hrTimeline, paceTimeline, elevTimeline, cadenceTimeline, avatarUrl, maxHR, cadenceLabel,
+  route, color, duration, currentTime, playhead, onScrub, height, distance, hrTimeline, paceTimeline, elevTimeline, cadenceTimeline, avatarUrl, maxHR, cadenceLabel,
   shading, onShadingChange, maximizeButton,
 }: {
   route: Array<[number, number]>
   color: string
   duration: number
+  /** Throttled, for anything that renders. The marker uses playhead instead. */
   currentTime: number
+  playhead: Playhead
   onScrub: (t: number) => void
   height: number | string
   distance: number
@@ -595,7 +625,9 @@ function RouteMap({
 }) {
   const [layer, setLayer] = useState<MapLayerId>(() => {
     const stored = localStorage.getItem(MAP_LAYER_KEY)
-    return (stored === 'street' || stored === 'topo' || stored === 'satellite') ? stored : 'satellite'
+    // Street by default: it is the vector layer, so it is the one that stays
+    // sharp at any zoom and costs the least to pan.
+    return (stored === 'street' || stored === 'topo' || stored === 'satellite') ? stored : 'street'
   })
   const [selectedPoint, setSelectedPoint] = useState<number | null>(null)
   useEffect(() => {
@@ -839,27 +871,29 @@ function RouteMap({
   // Computed before the "no route" return below, because the effects that use
   // it are hooks and cannot be skipped — so it has to hold up with no route at
   // all, which is the state this page is in while the workout loads.
-  const exact = fraction * Math.max(route.length - 1, 0)
-  const i0 = Math.min(Math.floor(exact), Math.max(route.length - 1, 0))
-  const i1 = Math.min(i0 + 1, route.length - 1)
-  const between = exact - i0
-  const current: [number, number] = route.length > 0
-    ? [
-      route[i0][0] + (route[i1][0] - route[i0][0]) * between,
-      route[i0][1] + (route[i1][1] - route[i0][1]) * between,
-    ]
-    : [0, 0]
+  // Read inside the per-frame subscriber below, which must not be resubscribed
+  // for a new route array — that would tear down and rebuild the subscription
+  // on every render which produced one.
+  const routeRef = useRef(route)
+  routeRef.current = route
+
+  const current = positionAt(route, fraction)
   const sampleAt = <T extends { t: number }>(samples: T[], index: number) => samples.reduce<T | null>((closest, sample) => !closest || Math.abs(sample.t - timeAt(index)) < Math.abs(closest.t - timeAt(index)) ? sample : closest, null)
 
   // Playback position, applied straight to the marker.
   //
-  // This is the only thing that happens per animation frame. It deliberately
-  // does not touch React state or the map's own sources — moving a marker is a
-  // transform on an element the map already owns, which is why panning while
-  // the track plays no longer collapses.
-  useEffect(() => {
-    markerRef.current?.setLngLat([current[1], current[0]])
-  }, [current])
+  // Subscribed to the playhead rather than driven by a prop, so this is the one
+  // thing that happens per animation frame: no render, no React state, no map
+  // source touched — just a transform on an element the map already owns. That
+  // is what leaves the main thread free enough to answer a pan while the track
+  // is playing.
+  useEffect(() => playhead.subscribe(t => {
+    const marker = markerRef.current
+    if (!marker) return
+    const at = positionAt(routeRef.current, duration > 0 ? Math.max(0, Math.min(1, t / duration)) : 0)
+    marker.setLngLat([at[1], at[0]])
+  }), [playhead, duration])
+
 
   // The point popup, opened on click and torn down with the selection.
   useEffect(() => {
@@ -1217,17 +1251,21 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
   )
 
   // --- Playback: drives the map marker and the "draw up to here" chart cursor ---
-  const [currentTime, setCurrentTime] = useState(w.duration)
+  //
+  // Two rates, deliberately. `playhead` is exact and updates every frame; the
+  // map marker rides it without React involved. `currentTime` is a throttled
+  // copy for everything that costs a render — see lib/playhead.
   const [playing, setPlaying] = useState(false)
+  const playhead = usePlayhead(w.duration)
+  const currentTime = useThrottledPlayhead(playhead, playing)
 
   /**
    * The same buckets, counting only what has been played so far, so the chart
    * fills as the track runs.
    *
-   * Cheap enough to recompute every frame: it is one pass over the heart-rate
-   * samples, a few hundred of them, against a 60fps clock that is already
-   * re-rendering five other charts. Slicing the samples first would cost the
-   * same scan to find where to cut.
+   * One pass over the heart-rate samples, a few hundred of them, and only at
+   * the throttled rate rather than per frame. Slicing the samples first would
+   * cost the same scan to find where to cut.
    *
    * Percentages stay relative to the whole activity rather than to the part
    * played, so the bars grow instead of rearranging themselves — the shares of
@@ -1246,12 +1284,12 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
     if (!playing || w.duration <= 0) return
     const totalMs = 15000 // full playback takes 15s of wall-clock time
     const startWall = performance.now()
-    const startT = currentTime
+    const startT = playhead.value
     let raf = 0
     function tick(now: number) {
       const elapsed = now - startWall
       const t = Math.min(w.duration, startT + (elapsed / totalMs) * w.duration)
-      setCurrentTime(t)
+      playhead.set(t)
       if (t >= w.duration) {
         setPlaying(false)
         return
@@ -1268,23 +1306,23 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
       setPlaying(false)
       return
     }
-    if (currentTime >= w.duration) setCurrentTime(0)
+    if (playhead.value >= w.duration) playhead.set(0)
     setPlaying(true)
   }
 
   function handleReset() {
     setPlaying(false)
-    setCurrentTime(0)
+    playhead.set(0)
   }
 
   function handleEnd() {
     setPlaying(false)
-    setCurrentTime(w.duration)
+    playhead.set(w.duration)
   }
 
   function handleScrub(t: number) {
     setPlaying(false)
-    setCurrentTime(Math.max(0, Math.min(w.duration, t)))
+    playhead.set(Math.max(0, Math.min(w.duration, t)))
   }
 
   function domainOf(data: number[]): [number, number] {
@@ -1529,7 +1567,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
 
   function mapCard(height: number | string, maximizeButton?: React.ReactNode) {
     return (
-      <RouteMap route={w.route} color={trailColor} duration={w.duration} currentTime={currentTime} onScrub={handleScrub} height={height} distance={w.distance} hrTimeline={w.hrTimeline} paceTimeline={w.paceTimeline} elevTimeline={w.elevTimeline} cadenceTimeline={cadenceTimeline} cadenceLabel={cadenceUnit(w.type)} avatarUrl={routeAvatar} maxHR={effectiveMaxHR} shading={shading} onShadingChange={setShading} maximizeButton={maximizeButton} />
+      <RouteMap route={w.route} color={trailColor} duration={w.duration} currentTime={currentTime} playhead={playhead} onScrub={handleScrub} height={height} distance={w.distance} hrTimeline={w.hrTimeline} paceTimeline={w.paceTimeline} elevTimeline={w.elevTimeline} cadenceTimeline={cadenceTimeline} cadenceLabel={cadenceUnit(w.type)} avatarUrl={routeAvatar} maxHR={effectiveMaxHR} shading={shading} onShadingChange={setShading} maximizeButton={maximizeButton} />
     )
   }
 

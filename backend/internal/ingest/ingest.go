@@ -24,6 +24,51 @@ type trackPoint struct {
 	HasCad   bool
 	Time     time.Time
 	HasTime  bool
+	// Speed as the device recorded it, in metres per second. Preferred over
+	// anything derived from GPS fixes: the watch fuses the same fixes with an
+	// accelerometer or a foot pod and knows its own error, which two
+	// coordinates and a clock cannot.
+	Speed    float64
+	HasSpeed bool
+}
+
+// The window a derived pace sample is averaged over: it closes after this many
+// seconds, or this many metres, whichever happens first.
+//
+// Both bounds are needed. Time alone gives a sprinter a sample every 40 m and a
+// walker one every 8, and distance alone never closes the window at all while
+// someone is standing still. Together they hold the sample rate roughly steady
+// across the range of speeds a person actually moves at, which is what makes
+// the resulting chart readable rather than spiky.
+const (
+	paceWindowSec    = 5
+	paceWindowMetres = 25
+)
+
+// Pace bounds, in seconds per kilometre. Outside these a sample is dropped
+// rather than clamped.
+//
+// The fast end rejects GPS teleports — a fix that lands 200 m away is not a
+// 90 km/h sprint, and one such sample rescales the whole chart's axis. The slow
+// end is where "moving" stops meaning anything: a 40-minute kilometre is a rest
+// stop, and drawing it flattens every real variation in the activity into a
+// line at the bottom of the plot.
+const (
+	minPaceSecPerKm = 100
+	maxPaceSecPerKm = 2400
+)
+
+// paceFromSpeed converts metres per second to seconds per kilometre, reporting
+// whether the result is a speed worth plotting.
+func paceFromSpeed(metresPerSec float64) (int, bool) {
+	if metresPerSec <= 0 {
+		return 0, false
+	}
+	pace := 1000 / metresPerSec
+	if pace < minPaceSecPerKm || pace > maxPaceSecPerKm {
+		return 0, false
+	}
+	return int(math.Round(pace)), true
 }
 
 // ErrUnsupported is returned for file extensions we cannot parse.
@@ -82,6 +127,11 @@ func buildInput(name string, typ workout.Type, points []trackPoint, calories int
 		prevPaceLng  float64
 		prevPaceT    int
 		havePrevPace bool
+		// Set as soon as one point carries a recorded speed. The two sources
+		// must not be mixed: a file where only some points have the field
+		// would otherwise interleave measured and derived samples on different
+		// scales, which reads as noise.
+		usedFileSpeed bool
 	)
 
 	for _, p := range points {
@@ -119,20 +169,36 @@ func buildInput(name string, typ workout.Type, points []trackPoint, calories int
 		if p.HasCad {
 			in.CadenceTimeline = append(in.CadenceTimeline, workout.CadencePoint{T: tSec, Cad: p.Cad})
 		}
-		// Most GPX/TCX exports don't carry a pace/speed field directly, so it
-		// is derived here from consecutive GPS fixes and their timestamps
-		// (distance / elapsed time). A minimum segment distance avoids
-		// division blow-ups from GPS jitter while stationary.
-		if p.HasLL && p.HasTime && haveStart {
+		// A recorded speed is used as-is; only files without one get a derived
+		// series. See paceWindow for what "derived" has to mean to be usable.
+		if p.HasSpeed && p.HasTime && haveStart {
+			usedFileSpeed = true
+			if pace, ok := paceFromSpeed(p.Speed); ok {
+				in.PaceTimeline = append(in.PaceTimeline, workout.PacePoint{T: tSec, Pace: pace})
+			}
+		} else if !usedFileSpeed && p.HasLL && p.HasTime && haveStart {
 			if havePrevPace {
 				segDist := haversine(prevPaceLat, prevPaceLng, p.Lat, p.Lng)
 				dt := tSec - prevPaceT
-				if dt > 0 && segDist >= 3 {
-					paceSecPerKm := float64(dt) / (segDist / 1000)
-					in.PaceTimeline = append(in.PaceTimeline, workout.PacePoint{T: tSec, Pace: int(math.Round(paceSecPerKm))})
+				// The window closes on whichever comes first: enough time for
+				// the average to mean something, or enough ground covered that
+				// it does. Crucially the previous point only advances when it
+				// does close — leaving it to advance every fix is what broke
+				// this. Each sample was one second of GPS noise, and at any
+				// speed where a second covers less than the distance floor
+				// (walking, most of a hike) the sample was simply dropped and
+				// the next one measured from the point that replaced it. The
+				// result was a sparse series of the jitteriest moments in the
+				// activity, which is exactly what the charts showed.
+				if dt >= paceWindowSec || segDist >= paceWindowMetres {
+					if pace, ok := paceFromSpeed(segDist / float64(dt)); ok {
+						in.PaceTimeline = append(in.PaceTimeline, workout.PacePoint{T: tSec, Pace: pace})
+					}
+					prevPaceLat, prevPaceLng, prevPaceT = p.Lat, p.Lng, tSec
 				}
+			} else {
+				prevPaceLat, prevPaceLng, prevPaceT, havePrevPace = p.Lat, p.Lng, tSec, true
 			}
-			prevPaceLat, prevPaceLng, prevPaceT, havePrevPace = p.Lat, p.Lng, tSec, true
 		}
 	}
 

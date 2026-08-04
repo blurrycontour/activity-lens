@@ -908,6 +908,23 @@ body {
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
 }
 
+/* The avatar and name in the user menu, which open your profile. */
+.user-menu-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+  padding: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius);
+}
+.user-menu-identity:hover { opacity: 0.85; }
+
 /* ── First-run import introduction ── */
 
 /* Taller than it is wide on a phone, so the routes stay a readable column
@@ -1504,13 +1521,20 @@ body {
   flex-direction: column;
 }
 .modal-expand-inner { margin: auto 0; width: 100%; }
+/* The map goes further still and takes the top bar's strip as well. A chart
+   needs the bar as an escape hatch; the map has its own close button, and the
+   bar over a blurred basemap is just a stripe of chrome across the thing you
+   maximized to look at. */
 .modal-immersive {
+  top: 0;
   padding: 0;
   align-items: stretch;
   justify-content: stretch;
 }
 .modal-box-immersive {
   margin: 0 auto;
+  /* Reclaims the status-bar inset the top bar used to hold clear. */
+  padding-top: var(--safe-top, 0px);
 }
 .modal-immersive-head {
   display: flex;

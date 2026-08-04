@@ -521,6 +521,7 @@ export default function App() {
         <UserMenu
           onClose={() => setShowUserMenu(false)}
           onSettings={() => navigate('settings')}
+          onProfile={() => openSection('settings', 'profile')}
           onAdmin={() => navigate('admin')}
           onHelp={() => navigate('help')}
           onLogout={logout}
