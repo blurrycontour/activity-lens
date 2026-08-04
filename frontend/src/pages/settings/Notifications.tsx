@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { usePreferences } from '../../context/PreferencesContext'
+import { useAuth } from '../../context/AuthContext'
 import { api, ApiError, type NotificationKind, type NotifyPrefs } from '../../lib/api'
 import { enablePush, disablePush, pushState as pushState_, type PushState } from '../../lib/push'
 import { isNative } from '../../lib/serverConfig'
@@ -7,13 +8,20 @@ import NativePushCard from '../../components/NativePushCard'
 import SettingsCard from '../../components/SettingsCard'
 import StatusMsg, { type Msg } from '../../components/StatusMsg'
 
-/** The switches this page offers, in the order they are listed. */
-const NOTIFY_KINDS: { id: NotificationKind; label: string }[] = [
+/**
+ * The switches this page offers, in the order they are listed.
+ *
+ * `adminOnly` marks a kind the server only ever sends to administrators.
+ * Showing it to everyone else would offer a switch that can never fire, which
+ * reads as a broken feature rather than an inapplicable one.
+ */
+const NOTIFY_KINDS: { id: NotificationKind; label: string; adminOnly?: boolean }[] = [
   { id: 'workout_shared', label: 'Someone shares a workout with me' },
   { id: 'gear_worn', label: 'Gear reaches its replacement distance' },
   { id: 'goal_met', label: 'I complete a training goal' },
   { id: 'goal_at_risk', label: "A goal's period is nearly over and I'm short" },
   { id: 'workout_imported', label: 'Auto import brings in new workouts' },
+  { id: 'feedback', label: 'A user sends feedback', adminOnly: true },
 ]
 
 /** Everything on, matching the server's default for a user who never saved. */
@@ -24,6 +32,7 @@ const DEFAULT_NOTIFY: NotifyPrefs = {
 
 export default function NotificationSettings() {
   const { prefs, save } = usePreferences()
+  const { user } = useAuth()
   const [notify, setNotify] = useState<NotifyPrefs>(DEFAULT_NOTIFY)
   const [msg, setMsg] = useState<Msg | null>(null)
   const [pushKey, setPushKey] = useState('')
@@ -117,7 +126,7 @@ export default function NotificationSettings() {
 
       <SettingsCard title="Notify me when">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {NOTIFY_KINDS.map(k => (
+          {NOTIFY_KINDS.filter(k => !k.adminOnly || user?.isAdmin).map(k => (
             <label className="switch" key={k.id} style={{ fontSize: 13, color: 'var(--text-2)' }}>
               <input
                 type="checkbox"

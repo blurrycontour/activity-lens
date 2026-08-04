@@ -7,6 +7,7 @@ interface UnifiedPushPlugin {
   getStatus(): Promise<NativePushStatus>
   getDistributors(): Promise<{ distributors: Distributor[] }>
   register(options: { distributor: string }): Promise<void>
+  refresh(): Promise<void>
   unregister(): Promise<void>
   dismiss(options: { tag: string }): Promise<void>
   consumeTapLink(): Promise<NotificationTap>
@@ -31,6 +32,17 @@ export interface NativePushStatus {
   distributor?: string | null
   /** The push URL the distributor issued, once it has. */
   endpoint?: string | null
+  /**
+   * Whether the user asked for push and has not asked to stop.
+   *
+   * Not the same as holding an endpoint, and the difference is the point: a
+   * distributor can drop the registration on its own — the subscription gets
+   * deleted in ntfy, its data is cleared — leaving no endpoint and an intent
+   * that is still perfectly valid. Reading the endpoint as the answer showed
+   * that as the user having turned push off, and left them to turn it back on
+   * by hand. syncNativePush repairs it instead.
+   */
+  enabled?: boolean
   /** Whether Android is currently allowing this app to post notifications. */
   permitted: boolean
 }
@@ -143,18 +155,24 @@ export async function enableNativePush(distributor: string): Promise<string> {
       })
   })
 
-  await api.pushSubscribeUnifiedPush(endpoint)
+  await report(endpoint)
   return endpoint
 }
 
 /** Gives the endpoint back to the distributor and forgets it server-side. */
 export async function disableNativePush(): Promise<void> {
   const { endpoint } = await nativePushStatus()
-  if (endpoint) {
+  // Falls back to the last endpoint we told the server about. The phone may
+  // hold none — the distributor can withdraw it without being asked — and
+  // turning push off would then leave the server's row behind with nothing
+  // left that knows its address.
+  const stale = endpoint || localStorage.getItem(REPORTED_ENDPOINT_KEY)
+  if (stale) {
     // The server first, for the same reason as Web Push: unregistering first and
     // then failing here would leave the server pushing to a dead endpoint.
-    await api.pushUnsubscribe(endpoint).catch(() => {})
+    await api.pushUnsubscribe(stale).catch(() => {})
   }
+  localStorage.removeItem(REPORTED_ENDPOINT_KEY)
   await UnifiedPush.unregister().catch(() => {})
 }
 
@@ -174,8 +192,50 @@ export async function disableNativePush(): Promise<void> {
 export async function syncNativePush(): Promise<void> {
   if (!isNative()) return
   const { endpoint } = await nativePushStatus()
-  if (!endpoint) return
+  if (endpoint) await report(endpoint)
+
+  // Then ask the distributor to confirm the registration still exists. It may
+  // not: deleting the subscription in ntfy, or clearing that app's data, leaves
+  // our endpoint in place and perfectly plausible while nothing is listening at
+  // the other end — the one failure mode with no symptom except notifications
+  // quietly stopping. Re-registering is idempotent and repairs it.
+  //
+  // The reply is a broadcast, so it is not awaited here; the listener below is
+  // what carries a changed endpoint to the server.
+  await UnifiedPush.refresh().catch(() => {})
+}
+
+/** The endpoint most recently handed to the server, so a change can be seen. */
+const REPORTED_ENDPOINT_KEY = 'push.nativeEndpoint'
+
+/**
+ * Tells the server where to push, and retires whatever it was told before.
+ *
+ * Subscriptions are keyed on the endpoint, so a re-registration that yields a
+ * new one is a new row rather than an update — and the old row would keep the
+ * server posting to a dead topic for as long as the account exists.
+ */
+async function report(endpoint: string): Promise<void> {
+  // Sent every time, not only on a change: it is a cheap upsert, and detecting
+  // "the server already knows" is guesswork the phone cannot actually do.
   await api.pushSubscribeUnifiedPush(endpoint).catch(() => {})
+  const previous = localStorage.getItem(REPORTED_ENDPOINT_KEY)
+  localStorage.setItem(REPORTED_ENDPOINT_KEY, endpoint)
+  // Retired only after the replacement is in place, so a failure here cannot
+  // leave the account with no endpoint at all.
+  if (previous && previous !== endpoint) await api.pushUnsubscribe(previous).catch(() => {})
+}
+
+/**
+ * Keeps the server in step with endpoints that arrive while the app is open.
+ *
+ * A refresh, a distributor that reconnects, a registration recreated after the
+ * user deleted it — all of them land as an `endpoint` event, and none of them
+ * involve the UI. Subscribed for the life of the app rather than for the life of
+ * a component, which is why this is not a hook.
+ */
+export function watchNativeEndpoint(): () => void {
+  return subscribe('endpoint', e => { if (e.endpoint) void report(e.endpoint) })
 }
 
 /** Remembers that the automatic enrolment below has had its one attempt. */

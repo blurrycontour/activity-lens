@@ -48,7 +48,7 @@ const IDLE: SwipeState = { offset: 0, phase: 'idle', direction: 0, animating: fa
 function startedInHorizontalScroller(target: EventTarget | null): boolean {
   let el = target instanceof Element ? target : null
   while (el && !el.classList.contains('main-content')) {
-    if (el.classList.contains('leaflet-container')) return true
+    if (el.classList.contains('maplibregl-map')) return true
     if (el.scrollWidth > el.clientWidth + 4) {
       const overflowX = getComputedStyle(el).overflowX
       if (overflowX === 'auto' || overflowX === 'scroll') return true

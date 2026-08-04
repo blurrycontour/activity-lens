@@ -104,6 +104,40 @@ export function normalizeServerURL(input: string): string {
   return `${url.protocol}//${url.host}${path}`
 }
 
+/**
+ * Whether a URL reaches its server without encryption.
+ *
+ * Loopback is excluded because the traffic never touches a network there, which
+ * is why browsers treat http://localhost as a secure context too.
+ *
+ * This is not a check that can be softened by anything the client does. Over
+ * plain HTTP the password is readable on the wire, and so is the session token
+ * that comes back, and every request that token then authenticates. Hashing the
+ * password in the browser would not change that: the hash becomes the
+ * credential and is replayed just as easily, and the session is exposed
+ * regardless. There is no client-side fix — only TLS.
+ */
+export function isInsecureURL(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol !== 'http:') return false
+    return !/^(localhost|127\.0\.0\.1|\[::1\])$/i.test(parsed.hostname)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Whether this session's traffic is unencrypted, whichever platform it is on.
+ *
+ * The app knows its server URL; the web app is served from the origin it talks
+ * to, so the page's own protocol is the answer there.
+ */
+export function isInsecureConnection(): boolean {
+  if (isNative()) return baseURL !== '' && isInsecureURL(baseURL)
+  return window.location.protocol === 'http:' && !window.isSecureContext
+}
+
 /** Stores the server URL after a successful reachability check. */
 export async function setServerURL(url: string): Promise<void> {
   baseURL = url

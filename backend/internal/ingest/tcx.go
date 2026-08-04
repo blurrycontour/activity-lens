@@ -41,6 +41,9 @@ type tcxPoint struct {
 	// namespace-agnostically by encoding/xml.
 	Cadence    *int `xml:"Cadence"`
 	RunCadence *int `xml:"Extensions>TPX>RunCadence"`
+	// Metres per second, from the same Garmin ActivityExtension block. Present
+	// in most watch exports and better than anything we could derive.
+	Speed *float64 `xml:"Extensions>TPX>Speed"`
 }
 
 func parseTCX(data []byte, defaultType workout.Type) (workout.Input, error) {
@@ -79,6 +82,9 @@ func parseTCX(data []byte, defaultType workout.Type) (workout.Input, error) {
 					tp.Cad, tp.HasCad = *p.RunCadence, true
 				} else if p.Cadence != nil {
 					tp.Cad, tp.HasCad = *p.Cadence, true
+				}
+				if p.Speed != nil {
+					tp.Speed, tp.HasSpeed = *p.Speed, true
 				}
 				if p.Time != "" {
 					if ts, err := time.Parse(time.RFC3339, p.Time); err == nil {

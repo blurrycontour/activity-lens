@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { AlertCircle, Loader2, LogIn, Server, Smartphone, UserPlus, WifiOff } from 'lucide-react'
 import { clearCachedUser, useAuth } from '../context/AuthContext'
 import { api, ApiError, apiURL, type AndroidApp } from '../lib/api'
-import { apiBase, forgetServer, isNative } from '../lib/serverConfig'
+import { apiBase, forgetServer, isInsecureConnection, isNative } from '../lib/serverConfig'
+import InsecureWarning from '../components/InsecureWarning'
 import { SSO_CANCELLED } from '../lib/native/nativeAuth'
 import { isGatewayError, useOnlineStatus } from '../lib/network'
 import Logo from '../components/Logo'
@@ -155,6 +156,9 @@ export default function Login() {
         )}
 
         <form onSubmit={submit} className="auth-form">
+          {/* Above the fields, not below the button: the point is to be read
+              before a password is typed, not after it has been sent. */}
+          {isInsecureConnection() && <InsecureWarning />}
           {registering ? (
             <>
               <Field label="Username">

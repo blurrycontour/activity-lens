@@ -33,6 +33,9 @@ type Repository interface {
 
 	SaveSubscription(ctx context.Context, s Subscription) error
 	DeleteSubscription(ctx context.Context, endpoint string) error
+	// PruneSubscriptions removes subscriptions no device has confirmed since
+	// `before`, and reports how many went.
+	PruneSubscriptions(ctx context.Context, before time.Time) (int64, error)
 	Subscriptions(ctx context.Context, userID int64) ([]Subscription, error)
 	DeleteUserData(ctx context.Context, userID int64) error
 }
@@ -187,18 +190,36 @@ func (r *SQLiteRepository) SaveSubscription(ctx context.Context, s Subscription)
 	if kind == "" {
 		kind = KindWebPush
 	}
+	// Every re-subscribe is also a heartbeat: clients send theirs on each
+	// launch, and this column is how a subscription nobody is behind any more
+	// is eventually told apart from one that simply has nothing to deliver.
+	now := time.Now().UTC().Format(time.RFC3339)
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO push_subscriptions (endpoint, user_id, kind, p256dh, auth, user_agent, created_at)
-		 VALUES (?,?,?,?,?,?,?)
+		`INSERT INTO push_subscriptions (endpoint, user_id, kind, p256dh, auth, user_agent, created_at, last_seen_at)
+		 VALUES (?,?,?,?,?,?,?,?)
 		 ON CONFLICT (endpoint) DO UPDATE SET
 		   user_id = excluded.user_id, kind = excluded.kind, p256dh = excluded.p256dh,
-		   auth = excluded.auth, user_agent = excluded.user_agent`,
-		s.Endpoint, s.UserID, kind, s.P256dh, s.Auth, s.UserAgent,
-		time.Now().UTC().Format(time.RFC3339))
+		   auth = excluded.auth, user_agent = excluded.user_agent,
+		   last_seen_at = excluded.last_seen_at`,
+		s.Endpoint, s.UserID, kind, s.P256dh, s.Auth, s.UserAgent, now, now)
 	if err != nil {
 		return fmt.Errorf("save push subscription: %w", err)
 	}
 	return nil
+}
+
+func (r *SQLiteRepository) PruneSubscriptions(ctx context.Context, before time.Time) (int64, error) {
+	res, err := r.db.ExecContext(ctx,
+		`DELETE FROM push_subscriptions WHERE last_seen_at < ?`,
+		before.UTC().Format(time.RFC3339))
+	if err != nil {
+		return 0, fmt.Errorf("prune push subscriptions: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("prune push subscriptions: %w", err)
+	}
+	return n, nil
 }
 
 func (r *SQLiteRepository) DeleteSubscription(ctx context.Context, endpoint string) error {

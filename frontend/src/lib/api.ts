@@ -5,6 +5,21 @@ import { reportReachability, respondedFromBackend } from './network'
 import { fetchWithCache } from './nativeCache'
 import { apiBase, authToken, isNative } from './serverConfig'
 
+/** What kind of report this is — mirrors feedback.AllCategories on the server. */
+export type FeedbackCategory = 'bug' | 'idea' | 'other'
+
+export interface Feedback {
+  id: string
+  username: string
+  category: FeedbackCategory
+  message: string
+  /** Only present on the single-report fetch; listings omit the blob. */
+  diagnostics?: string
+  hasDiagnostics: boolean
+  resolvedAt?: string
+  createdAt: string
+}
+
 export interface ApiUser {
   id: number
   username: string
@@ -35,7 +50,7 @@ export interface BuildInfo {
 }
 
 /** What happened, driving the icon the notification panel renders. */
-export type NotificationKind = 'workout_shared' | 'gear_worn' | 'goal_met' | 'goal_at_risk' | 'workout_imported'
+export type NotificationKind = 'workout_shared' | 'gear_worn' | 'goal_met' | 'goal_at_risk' | 'workout_imported' | 'feedback'
 
 export interface AppNotification {
   id: string
@@ -398,6 +413,15 @@ export const api = {
     request<unknown>('/api/push/unifiedpush', { method: 'POST', body: { endpoint } }),
   pushUnsubscribe: (endpoint: string) =>
     request<unknown>('/api/push/unsubscribe', { method: 'POST', body: { endpoint } }),
+
+  sendFeedback: (body: { category: FeedbackCategory; message: string; diagnostics?: string }) =>
+    request<{ feedback: Feedback }>('/api/feedback', { method: 'POST', body }),
+  adminFeedback: () => request<{ feedback: Feedback[] }>('/api/admin/feedback'),
+  adminFeedbackDetail: (id: string) => request<{ feedback: Feedback }>(`/api/admin/feedback/${id}`),
+  adminResolveFeedback: (id: string, resolved: boolean) =>
+    request<unknown>(`/api/admin/feedback/${id}`, { method: 'PATCH', body: { resolved } }),
+  adminDeleteFeedback: (id: string) =>
+    request<unknown>(`/api/admin/feedback/${id}`, { method: 'DELETE' }),
   login: (identifier: string, password: string) =>
     request<{ user: ApiUser; csrfToken: string }>('/api/auth/login', {
       method: 'POST',

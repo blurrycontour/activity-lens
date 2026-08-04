@@ -81,6 +81,10 @@
   --radius: 0.5rem;
   --sidebar-w: 240px;
   --bottombar-h: 0px;
+  /* The top bar's full height including the status-bar inset it reaches up
+     behind. Anything that wants to sit exactly below the bar reads this rather
+     than repeating the sum. */
+  --topbar-h: calc(48px + var(--safe-top));
 
   /* Space the system reserves for the status bar, notch and gesture handle.
      Zero everywhere except the Android app and an installed iOS PWA, which are
@@ -155,7 +159,7 @@ body {
      The first row carries the status-bar inset on top of its own 48px: the app
      draws edge to edge, so the bar has to be taller by exactly that much or its
      contents end up underneath the clock. */
-  grid-template-rows: calc(48px + var(--safe-top)) auto 1fr;
+  grid-template-rows: var(--topbar-h) auto 1fr;
   height: 100vh;
   width: 100vw;
   overflow: hidden;
@@ -403,6 +407,82 @@ body {
 .settings-card.danger .settings-card-title { color: var(--danger); }
 .settings-card-desc { font-size: 12px; color: var(--text-3); line-height: 1.5; }
 .settings-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.settings-empty { font-size: 13px; color: var(--text-3); margin: 0; }
+
+/* ── Feedback ── */
+
+/* Checkbox and its explanation. The sub-line is deliberately specific about
+   what gets attached — "attach logs" is not consent to anything. */
+.feedback-attach {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  margin-top: 4px;
+}
+.feedback-attach input { margin-top: 2px; flex-shrink: 0; }
+.feedback-attach-label { display: block; font-size: 13px; color: var(--text); }
+.feedback-attach-sub { display: block; font-size: 11px; color: var(--text-3); margin-top: 2px; line-height: 1.5; }
+
+.feedback-preview-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--text-3);
+  font-size: 11px;
+  cursor: pointer;
+}
+.feedback-preview-toggle:hover { color: var(--text-2); }
+.feedback-preview { margin-top: 10px; }
+/* Scrolls in both directions inside its own box: a stack trace is wide, and the
+   page must not gain a horizontal scrollbar because of it. */
+.feedback-preview-body {
+  margin: 8px 0 0;
+  padding: 10px;
+  max-height: 260px;
+  overflow: auto;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--text-2);
+  white-space: pre;
+}
+
+.feedback-list { display: flex; flex-direction: column; gap: 10px; }
+.feedback-item {
+  padding: 12px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+/* Resolved reports stay in the list — the history is the point — but recede. */
+.feedback-item.resolved { opacity: 0.55; }
+.feedback-item-head { display: flex; align-items: center; gap: 8px; }
+.feedback-item-icon { color: var(--text-3); display: inline-flex; flex-shrink: 0; }
+.feedback-item-meta { flex: 1; min-width: 0; }
+.feedback-item-who { display: block; font-size: 13px; font-weight: 600; }
+.feedback-item-when {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: -0.02em;
+  color: var(--text-3);
+}
+.feedback-item-body {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.feedback-item .feedback-preview-toggle { margin-top: 8px; }
 
 /* Form field: mono micro-label above a control, matching the login page. */
 .field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
@@ -904,6 +984,47 @@ body {
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
 }
 
+/* The avatar and name in the user menu, which open your profile. */
+.user-menu-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+  padding: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius);
+}
+.user-menu-identity:hover { opacity: 0.85; }
+
+/* Unencrypted-connection notice. Sized to be read rather than dismissed —
+   this is the only sign the user gets that nothing here is private. */
+.insecure-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border-radius: var(--radius);
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid var(--danger-border);
+  color: var(--danger);
+}
+.insecure-warning strong { display: block; font-size: 13px; }
+.insecure-warning p {
+  margin: 4px 0 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+.insecure-warning code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
 /* ── First-run import introduction ── */
 
 /* Taller than it is wide on a phone, so the routes stay a readable column
@@ -1012,6 +1133,33 @@ body {
   padding: 8px 12px;
   font-size: 12px;
   font-family: var(--font-mono);
+}
+
+/* ── Metric panel: one chart on the workout detail page ── */
+
+/* Title and expand button only. The min/avg/max used to sit in this row, and
+   on a phone there was never width for both — the title wrapped to make room
+   for a figure that then wrapped too. */
+.metric-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+}
+.metric-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+/* Its own line, directly under the title. */
+.metric-panel-stats {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-3);
+  margin: 4px 0 10px;
 }
 
 /* ── Chart card: title row, info tip, description ── */
@@ -1421,20 +1569,171 @@ body {
 
 /* Leaflet popups/tooltips: use theme surfaces so they read correctly in dark
  * mode (Leaflet defaults to white). */
-.leaflet-popup-content-wrapper,
-.leaflet-tooltip {
+/* ── Maximized map ──────────────────────────────────────────────────────
+   A route is the one thing on this page that is worth the whole screen, so
+   the maximized map is a full-bleed surface rather than a card in a modal.
+   Header and transport are the only chrome, and both stay reachable. */
+/* ── Maximized chart and map ──
+   A maximized panel is the whole screen below the top bar on a phone: the bar
+   stays because it is how you get out, and everything else is the thing you
+   asked to see. It covers the tab bar, which is only navigation the modal has
+   temporarily replaced. Note `top`, not padding — the overlay behind it must not
+   sit under the bar either, or the bar looks like part of the modal. */
+.modal-expand {
+  top: var(--topbar-h);
+  padding: 0;
+  align-items: stretch;
+  justify-content: stretch;
+}
+.modal-box-expand {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: 100%;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  /* Clear of the home indicator, which is what makes edge-to-edge safe rather
+     than merely big. The top is already handled by the bar above. */
+  padding-bottom: var(--safe-bottom, 0px);
+}
+.modal-expand-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+}
+/* Charts are sized in px by Recharts rather than stretching, so the panel is
+   taller than its contents; the inner block's auto margins centre it in the
+   space. `margin: auto` and not `justify-content: center`, which has no way to
+   overflow upwards and would clip the top of a chart too tall to fit. */
+.modal-expand-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+}
+.modal-expand-inner { margin: auto 0; width: 100%; }
+/* The map goes further still and takes the top bar's strip as well. A chart
+   needs the bar as an escape hatch; the map has its own close button, and the
+   bar over a blurred basemap is just a stripe of chrome across the thing you
+   maximized to look at. */
+.modal-immersive {
+  top: 0;
+  padding: 0;
+  align-items: stretch;
+  justify-content: stretch;
+}
+.modal-box-immersive {
+  margin: 0 auto;
+  /* Reclaims the status-bar inset the top bar used to hold clear. */
+  padding-top: var(--safe-top, 0px);
+}
+.modal-immersive-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+}
+/* Takes every pixel the header and transport do not. */
+.modal-immersive-map {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+.modal-immersive-foot {
+  flex-shrink: 0;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+}
+
+@media (min-width: 769px) {
+  /* On a desktop the surrounding page is still useful context, so a maximized
+     panel is large but does not swallow the window. */
+  .modal-expand { top: 0; padding: 24px; }
+  .modal-box-expand {
+    width: 100%;
+    max-width: 1000px;
+    height: min(88vh, 900px);
+    margin: auto;
+    border: 1px solid var(--border-strong);
+    border-radius: calc(var(--radius) * 2);
+    padding-bottom: 0;
+    overflow: hidden;
+  }
+  .modal-box-immersive { max-width: 1200px; }
+}
+
+/* Holds the map's place while its chunk loads, so the cards below do not jump. */
+.route-map-loading {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  background: var(--bg-3);
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+/* The map fills its card; MapLibre needs an explicitly sized container. */
+.route-map-canvas { position: absolute; inset: 0; }
+
+/* Why there is an outline instead of a map. Kept clear of the maximize button
+   on the right, which shares this corner. */
+.route-fallback-note {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 6px 46px 6px 10px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-3);
+  background: color-mix(in srgb, var(--bg-2) 88%, transparent);
+  border-bottom: 1px solid var(--border);
+}
+
+/* MapLibre's popups and controls ship light and would otherwise be the one
+   white surface in a dark app. */
+.maplibregl-popup-content {
   background: var(--bg-2) !important;
   color: var(--text) !important;
-  border: 1px solid var(--border-strong) !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4) !important;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
 }
-.leaflet-popup-tip {
+.maplibregl-popup-content strong { color: var(--text); }
+.maplibregl-popup-anchor-top .maplibregl-popup-tip { border-bottom-color: var(--border-strong); }
+.maplibregl-popup-anchor-bottom .maplibregl-popup-tip { border-top-color: var(--border-strong); }
+.maplibregl-popup-anchor-left .maplibregl-popup-tip { border-right-color: var(--border-strong); }
+.maplibregl-popup-anchor-right .maplibregl-popup-tip { border-left-color: var(--border-strong); }
+.maplibregl-ctrl-group {
   background: var(--bg-2) !important;
-  border: 1px solid var(--border-strong) !important;
+  border: 1px solid var(--border);
 }
-.leaflet-popup-content-wrapper strong { color: var(--text); }
-.leaflet-tooltip::before { border-top-color: var(--border-strong) !important; }
-.leaflet-container a.leaflet-popup-close-button { color: var(--text-3) !important; }
+.maplibregl-ctrl-group button + button { border-top-color: var(--border) !important; }
+.maplibregl-ctrl-group button span { filter: invert(var(--map-ctrl-invert, 1)); }
+.maplibregl-ctrl-attrib {
+  background: color-mix(in srgb, var(--bg-2) 82%, transparent) !important;
+  color: var(--text-3) !important;
+  font-size: 10px;
+}
+.maplibregl-ctrl-attrib a { color: var(--text-2) !important; }
+/* The control glyphs are dark artwork meant for a light map, so they are
+   inverted for the dark theme and left alone for the light one. */
+:root { --map-ctrl-invert: 1; }
+:root.light { --map-ctrl-invert: 0; }
 
 .detail-top {
   display: grid;

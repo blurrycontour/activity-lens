@@ -74,6 +74,9 @@ func (s *Server) purgeUserData(ctx context.Context, user auth.User) {
 	if err := s.notify.PurgeUser(ctx, user.ID); err != nil {
 		fail("notifications", err)
 	}
+	if err := s.feedback.PurgeUser(ctx, user.ID); err != nil {
+		fail("feedback", err)
+	}
 	if err := s.settings.PurgeUser(ctx, user.ID); err != nil {
 		fail("preferences", err)
 	}

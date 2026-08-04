@@ -8,6 +8,8 @@ import type { ApiUser } from '../lib/api'
 interface UserMenuProps {
   onClose: () => void
   onSettings: () => void
+  /** Opens the Profile section of Settings, from the header. */
+  onProfile: () => void
   onAdmin: () => void
   onHelp: () => void
   onLogout: () => void | Promise<void>
@@ -16,7 +18,7 @@ interface UserMenuProps {
   user: ApiUser
 }
 
-export default function UserMenu({ onClose, onSettings, onAdmin, onHelp, onLogout, isMobile, user }: UserMenuProps) {
+export default function UserMenu({ onClose, onSettings, onProfile, onAdmin, onHelp, onLogout, isMobile, user }: UserMenuProps) {
   const ref = useRef<HTMLDivElement>(null)
   const [showAbout, setShowAbout] = useState(false)
   // Dismissing the update toast should not lose the update; this is where it
@@ -76,12 +78,20 @@ export default function UserMenu({ onClose, onSettings, onAdmin, onHelp, onLogou
         }}
       >
         <div style={{ padding: '16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <img src={avatarUrl(user)} alt="Avatar" style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, background: 'var(--bg-3)' }} />
-          <div>
-            <div style={{ fontWeight: 600, fontSize: 14 }}>{user.displayName || user.username}</div>
-            <div style={{ fontSize: 12, color: 'var(--text-3)' }}>{user.email}</div>
-          </div>
-          <button className="btn-icon" onClick={onClose} style={{ marginLeft: 'auto' }}>
+          {/* The picture and name are the obvious thing to press to get at your
+              own account, so they are the shortcut rather than decoration. */}
+          <button
+            className="user-menu-identity"
+            onClick={() => { onClose(); onProfile() }}
+            aria-label="Open your profile"
+          >
+            <img src={avatarUrl(user)} alt="" style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, background: 'var(--bg-3)' }} />
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.displayName || user.username}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.email}</div>
+            </div>
+          </button>
+          <button className="btn-icon" onClick={onClose} style={{ marginLeft: 'auto', flexShrink: 0 }} aria-label="Close">
             <X size={15} />
           </button>
         </div>

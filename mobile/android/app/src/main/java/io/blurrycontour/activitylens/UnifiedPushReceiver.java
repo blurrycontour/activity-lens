@@ -92,12 +92,18 @@ public class UnifiedPushReceiver extends BroadcastReceiver {
             case UnifiedPush.ACTION_REGISTRATION_FAILED: {
                 String reason = intent.getStringExtra(UnifiedPush.EXTRA_REASON);
                 Log.w(TAG, "registration refused by distributor: " + reason);
-                UnifiedPush.clear(context);
+                UnifiedPush.clearEndpoint(context);
                 UnifiedPushPlugin.onRegistrationFailed(reason);
                 break;
             }
             case UnifiedPush.ACTION_UNREGISTERED: {
-                UnifiedPush.clear(context);
+                // The endpoint is gone, but the user's intent is not. Deleting
+                // the subscription in ntfy lands here, and wiping the
+                // distributor with it left nothing able to ask for a new one.
+                // Repaired on the next launch by refresh() rather than
+                // immediately: re-registering the instant the user deletes
+                // something in another app is arguing with them.
+                UnifiedPush.clearEndpoint(context);
                 UnifiedPushPlugin.onEndpointChanged(null);
                 break;
             }

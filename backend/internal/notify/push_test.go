@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 // browserKeys mints the keypair a browser hands over when it subscribes, so the
@@ -118,5 +119,75 @@ func TestNotifyWorksWithoutPushConfigured(t *testing.T) {
 	list, err := svc.List(ctx, alice)
 	if err != nil || len(list) != 1 {
 		t.Fatalf("List() = %d rows, %v; want the notification stored", len(list), err)
+	}
+}
+
+// A ntfy publish to a topic nobody is subscribed to succeeds, so a dead
+// UnifiedPush endpoint cannot be found by watching delivery fail — it is only
+// ever found by nobody vouching for it. This is that mechanism.
+func TestPruneSubscriptionsDropsOnlyTheUnseen(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	repo := NewSQLiteRepository(db)
+
+	for _, endpoint := range []string{"https://ntfy.example/fresh", "https://ntfy.example/stale"} {
+		if err := repo.SaveSubscription(ctx, Subscription{
+			Endpoint: endpoint, UserID: alice, Kind: KindUnifiedPush,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Backdate one past the retention window, as a device that stopped opening
+	// the app would leave it.
+	old := time.Now().Add(-SubscriptionRetention - time.Hour).UTC().Format(time.RFC3339)
+	if _, err := db.ExecContext(ctx,
+		`UPDATE push_subscriptions SET last_seen_at = ? WHERE endpoint LIKE '%stale'`, old); err != nil {
+		t.Fatal(err)
+	}
+
+	n, err := repo.PruneSubscriptions(ctx, time.Now().Add(-SubscriptionRetention))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("PruneSubscriptions() removed %d, want 1", n)
+	}
+
+	subs, err := repo.Subscriptions(ctx, alice)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(subs) != 1 || subs[0].Endpoint != "https://ntfy.example/fresh" {
+		t.Fatalf("remaining subscriptions = %v, want only the fresh one", subs)
+	}
+}
+
+// Re-subscribing is the heartbeat: without last_seen_at moving, a device that
+// checks in every launch would still be pruned after the retention window.
+func TestSaveSubscriptionRefreshesLastSeen(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	repo := NewSQLiteRepository(db)
+
+	sub := Subscription{Endpoint: "https://ntfy.example/a", UserID: alice, Kind: KindUnifiedPush}
+	if err := repo.SaveSubscription(ctx, sub); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-SubscriptionRetention - time.Hour).UTC().Format(time.RFC3339)
+	if _, err := db.ExecContext(ctx, `UPDATE push_subscriptions SET last_seen_at = ?`, old); err != nil {
+		t.Fatal(err)
+	}
+
+	// What a launch does.
+	if err := repo.SaveSubscription(ctx, sub); err != nil {
+		t.Fatal(err)
+	}
+
+	n, err := repo.PruneSubscriptions(ctx, time.Now().Add(-SubscriptionRetention))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("PruneSubscriptions() removed %d after a check-in, want 0", n)
 	}
 }

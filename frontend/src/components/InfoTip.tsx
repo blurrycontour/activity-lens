@@ -20,6 +20,14 @@ interface Position { top: number; left: number; width: number }
  * Doing both unconditionally is why it used to need two taps: touch browsers
  * synthesise a mouseenter that opened it, and the click that followed
  * immediately toggled it back shut.
+ *
+ * Focus is the same trap a second time over, and is why it still did. Tapping a
+ * button focuses it, so `onFocus` opened the tip and the click behind it closed
+ * it again — one tap, nothing visible, and a second tap needed because by then
+ * the button already held focus and no new focus event fired. `:focus-visible`
+ * is the distinction that was missing: it is set when focus came from the
+ * keyboard and not when it came from a pointer, which is exactly the case that
+ * should open on focus at all.
  */
 export default function InfoTip({ text, label }: { text: string; label?: string }) {
   const [open, setOpen] = useState(false)
@@ -93,7 +101,9 @@ export default function InfoTip({ text, label }: { text: string; label?: string 
         onPointerDown={e => { pointerType.current = e.pointerType }}
         onPointerEnter={e => { if (e.pointerType === 'mouse') setOpen(true) }}
         onPointerLeave={e => { if (e.pointerType === 'mouse') setOpen(false) }}
-        onFocus={() => setOpen(true)}
+        // Keyboard focus only. A tap focuses the button too, and opening here
+        // would be undone by the click that follows it.
+        onFocus={e => { if (e.target.matches(':focus-visible')) setOpen(true) }}
         onBlur={() => setOpen(false)}
         onClick={e => {
           e.stopPropagation()

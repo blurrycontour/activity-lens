@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { type Workout, type WorkoutType, fmtDuration, fmtDist, fmtPace, TYPE_COLOR } from '../data/workouts'
 import TypeIcon from '../components/TypeIcon'
 import SportDropdown from '../components/SportDropdown'
@@ -6,7 +7,7 @@ import Dropdown from '../components/Dropdown'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ReferenceDot, BarChart, Bar } from 'recharts'
 import {
   ArrowLeft, Heart, Mountain, Zap, Clock, TrendingUp, Navigation, Download, Pencil, Trash2, Gauge,
-  Check, X as XIcon, Play, Pause, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, Layers, AlertTriangle, Activity, Share2, Lock, FileDown, Route, Plus,
+  Check, X as XIcon, Play, Pause, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, AlertTriangle, Activity, Share2, Lock, FileDown, Plus,
 } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useAuth } from '../context/AuthContext'
@@ -16,12 +17,25 @@ import { useLocalStorage } from '../lib/useLocalStorage'
 import { DEFAULT_HR_ZONE_CHART, HR_ZONE_CHART_KEY, type HRZoneChart } from '../lib/dashboardConfig'
 import InfoTip from '../components/InfoTip'
 import { useIsMobile } from '../lib/useIsMobile'
+import { usePlayhead, useThrottledPlayhead } from '../lib/playhead'
+import { hrZoneBuckets, hrZoneStops } from '../lib/hrZones'
+import type { Shading } from '../components/RouteMap'
+
+/**
+ * MapLibre is by a wide margin the largest thing this app depends on, and it is
+ * needed on exactly one screen — by no one who never opens a workout with a
+ * route, which includes everybody on their first load. Splitting it out is what
+ * takes the initial bundle from "the whole application" to "the application
+ * without a mapping engine in it".
+ *
+ * Deliberately not preloaded on a hunch. The chart cards render immediately and
+ * the map arrives a beat later behind its own placeholder, which is a far
+ * better trade than a slower first paint on every page in the app.
+ */
+const RouteMap = lazy(() => import('../components/RouteMap'))
+import useDismissOnBack from '../lib/useDismissOnBack'
 import UserAvatar, { avatarUrl, userLabel } from '../components/UserAvatar'
 import ShareDialog from '../components/ShareDialog'
-import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, Popup, useMap, useMapEvents } from 'react-leaflet'
-import 'leaflet/dist/leaflet.css'
-import { divIcon } from 'leaflet'
-import type { LatLngBoundsExpression } from 'leaflet'
 
 interface WorkoutDetailProps {
   workout: Workout
@@ -213,68 +227,7 @@ function cadenceUnit(type: WorkoutType): string {
   return type === 'Ride' ? 'rpm' : 'spm'
 }
 
-const HR_ZONE_COLORS = ['#60a5fa', '#34d399', '#fbbf24', 'var(--danger)', '#a855f7']
-const HR_ZONE_LABELS = ['Zone 1 (<60%)', 'Zone 2 (60-70%)', 'Zone 3 (70-80%)', 'Zone 4 (80-90%)', 'Zone 5 (90-100%)']
-const HR_ZONE_SHORT = ['Z1', 'Z2', 'Z3', 'Z4', 'Z5']
 
-/** Maps a heart rate (bpm) to its zone colour, given the user's max HR. */
-function hrZoneColor(hr: number, maxHR: number): string {
-  if (maxHR <= 0) return HR_ZONE_COLORS[0]
-  const pct = (hr / maxHR) * 100
-  const idx = pct < 60 ? 0 : pct < 70 ? 1 : pct < 80 ? 2 : pct < 90 ? 3 : 4
-  return HR_ZONE_COLORS[idx]
-}
-
-/** Builds vertical gradient stops (top→bottom) that colour an HR line by zone,
- * mapping bpm values within [yMin, yMax] to the 5-zone palette. */
-function hrZoneStops(yMin: number, yMax: number, maxHR: number): { offset: number; color: string }[] | null {
-  if (maxHR <= 0 || yMax <= yMin) return null
-  const offAt = (v: number) => Math.min(1, Math.max(0, (yMax - v) / (yMax - yMin)))
-  const stops: { offset: number; color: string }[] = [{ offset: 0, color: hrZoneColor(yMax, maxHR) }]
-  for (const f of [0.9, 0.8, 0.7, 0.6]) {
-    const b = f * maxHR
-    if (b > yMin && b < yMax) {
-      const off = offAt(b)
-      stops.push({ offset: off, color: hrZoneColor(b + 0.01, maxHR) })
-      stops.push({ offset: off, color: hrZoneColor(b - 0.01, maxHR) })
-    }
-  }
-  stops.push({ offset: 1, color: hrZoneColor(yMin, maxHR) })
-  return stops
-}
-
-function hrZoneBuckets(hrTimeline: { t: number; hr: number }[], maxHR: number) {
-  if (hrTimeline.length === 0 || maxHR <= 0) return []
-  const counts = [0, 0, 0, 0, 0]
-  for (let i = 0; i < hrTimeline.length; i++) {
-    const pct = (hrTimeline[i].hr / maxHR) * 100
-    const idx = pct < 60 ? 0 : pct < 70 ? 1 : pct < 80 ? 2 : pct < 90 ? 3 : 4
-    counts[idx]++
-  }
-  const total = counts.reduce((a, b) => a + b, 0)
-  if (total === 0) return []
-  // Every zone is returned, including empty ones: the histogram wants the gaps
-  // to be visible. The donut filters them out at render time instead.
-  return counts.map((c, i) => ({
-    name: HR_ZONE_LABELS[i], short: HR_ZONE_SHORT[i],
-    value: c, pct: Math.round((c / total) * 100), color: HR_ZONE_COLORS[i],
-  }))
-}
-
-function nearestRouteIndex(route: Array<[number, number]>, lat: number, lng: number): number {
-  let best = 0
-  let bestDist = Infinity
-  for (let i = 0; i < route.length; i++) {
-    const dLat = route[i][0] - lat
-    const dLng = route[i][1] - lng
-    const dist = dLat * dLat + dLng * dLng
-    if (dist < bestDist) {
-      bestDist = dist
-      best = i
-    }
-  }
-  return best
-}
 
 function smoothTimeline(data: Array<{ t: number; value: number }>, radius = 3) {
   return data.map((point, index) => {
@@ -285,253 +238,6 @@ function smoothTimeline(data: Array<{ t: number; value: number }>, radius = 3) {
   })
 }
 
-function FitBounds({ route }: { route: Array<[number, number]> }) {
-  const map = useMap()
-  useEffect(() => {
-    if (route.length === 0) return
-    if (route.length === 1) {
-      map.setView(route[0], 15)
-      return
-    }
-    const bounds = route as unknown as LatLngBoundsExpression
-    map.fitBounds(bounds, { padding: [24, 24] })
-  }, [route, map])
-  return null
-}
-
-function MapClickHandler({ route, duration, onScrub, onPoint }: { route: Array<[number, number]>; duration: number; onScrub: (t: number) => void; onPoint: (index: number) => void }) {
-  useMapEvents({
-    click(e) {
-      if (route.length < 2 || duration <= 0) return
-      const idx = nearestRouteIndex(route, e.latlng.lat, e.latlng.lng)
-      onScrub((idx / (route.length - 1)) * duration)
-      onPoint(idx)
-    },
-  })
-  return null
-}
-
-type MapLayerId = 'street' | 'topo' | 'satellite'
-
-const MAP_LAYER_KEY = 'al_map_layer'
-const START_MARKER = divIcon({
-  className: 'route-pin',
-  html: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-label="Start"><circle cx="12" cy="12" r="7" fill="var(--success)" stroke="#fff" stroke-width="2.5"/></svg>',
-  iconSize: [26, 26],
-  iconAnchor: [13, 13],
-})
-const FINISH_MARKER = divIcon({
-  className: 'route-pin',
-  html: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-label="Finish"><path d="M6 21V4" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><path d="M6 5h11l-2.2 3.3L17 12H6z" fill="var(--danger)" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>',
-  iconSize: [28, 28],
-  iconAnchor: [7, 25],
-})
-
-const MAP_LAYERS: Record<MapLayerId, { label: string; url: string; attribution: string; maxZoom: number }> = {
-  street: {
-    label: 'Street',
-    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    maxZoom: 19,
-  },
-  topo: {
-    label: 'Topographic',
-    url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-    attribution: 'Map data: &copy; OpenStreetMap contributors, SRTM | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)',
-    maxZoom: 17,
-  },
-  satellite: {
-    label: 'Satellite',
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
-    maxZoom: 19,
-  },
-}
-
-function LayerSwitcher({ layer, onChange }: { layer: MapLayerId; onChange: (l: MapLayerId) => void }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    function handle(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handle)
-    return () => document.removeEventListener('mousedown', handle)
-  }, [])
-
-  return (
-    <div
-      className="options-menu-wrap"
-      ref={ref}
-      style={{ position: 'absolute', top: 10, right: 46, zIndex: 500 }}
-    >
-      <button
-        className="btn-icon"
-        onClick={() => setOpen(o => !o)}
-        title="Map layer"
-        style={{ background: 'var(--bg-2)', border: '1px solid var(--border)' }}
-      >
-        <Layers size={14} />
-      </button>
-      {open && (
-        <div className="options-menu" style={{ animation: 'fadeIn 0.12s ease' }}>
-          {(Object.keys(MAP_LAYERS) as MapLayerId[]).map(id => (
-            <button
-              key={id}
-              className={`options-menu-item${layer === id ? ' active' : ''}`}
-              onClick={() => { setOpen(false); onChange(id) }}
-            >
-              {MAP_LAYERS[id].label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-type Shading = 'accent' | 'hr' | 'pace' | 'elevation' | 'cadence'
-
-function RouteMap({
-  route, color, duration, currentTime, onScrub, height, distance, hrTimeline, paceTimeline, elevTimeline, cadenceTimeline, avatarUrl, maxHR, cadenceLabel,
-}: {
-  route: Array<[number, number]>
-  color: string
-  duration: number
-  currentTime: number
-  onScrub: (t: number) => void
-  height: number | string
-  distance: number
-  hrTimeline: Workout['hrTimeline']
-  paceTimeline: Workout['paceTimeline']
-  elevTimeline: Workout['elevTimeline']
-  cadenceTimeline: Array<{ t: number; cad: number }>
-  avatarUrl?: string
-  maxHR: number
-  cadenceLabel: string
-}) {
-  const [layer, setLayer] = useState<MapLayerId>(() => {
-    const stored = localStorage.getItem(MAP_LAYER_KEY)
-    return (stored === 'street' || stored === 'topo' || stored === 'satellite') ? stored : 'satellite'
-  })
-  const [shading, setShading] = useState<Shading>('accent')
-  const [selectedPoint, setSelectedPoint] = useState<number | null>(null)
-  useEffect(() => {
-    localStorage.setItem(MAP_LAYER_KEY, layer)
-  }, [layer])
-
-  const timeAt = (index: number) => (index / Math.max(route.length - 1, 1)) * duration
-
-  // The moving playback marker shows the user's (minified) profile picture when
-  // available, so it reads as "you" tracing the route. Falls back to a plain
-  // dot when there's no avatar. Rebuilt only when the avatar/color changes.
-  const avatarIcon = useMemo(() => {
-    if (!avatarUrl) return null
-    return divIcon({
-      className: 'route-avatar',
-      html: `<img src="${avatarUrl}" width="34" height="34" loading="lazy" decoding="async" style="width:34px;height:34px;border-radius:50%;object-fit:cover;display:block;border:2.5px solid ${color};box-shadow:0 1px 6px rgba(0,0,0,0.45);background:var(--bg-2)" alt="" />`,
-      iconSize: [34, 34],
-      iconAnchor: [17, 17],
-    })
-  }, [avatarUrl, color])
-
-  // Shading is precomputed once per route/metric (never per playback tick) and
-  // capped to a fixed number of segments so long, high-frequency tracks stay
-  // smooth. The metric min/max is computed a single time rather than
-  // re-scanned for every segment (which was O(n^2) and caused the lag).
-  // NOTE: this hook must run unconditionally (before the early return below)
-  // to keep hook order stable when route data loads asynchronously.
-  const shadedSegments = useMemo(() => {
-    if (shading === 'accent' || route.length < 2) {
-      return [{ positions: route, color }]
-    }
-    const series: Record<Exclude<Shading, 'accent'>, { samples: Array<{ t: number }>; values: number[] }> = {
-      hr: { samples: hrTimeline, values: hrTimeline.map(p => p.hr) },
-      pace: { samples: paceTimeline, values: paceTimeline.map(p => p.pace) },
-      elevation: { samples: elevTimeline, values: elevTimeline.map(p => p.elev) },
-      cadence: { samples: cadenceTimeline, values: cadenceTimeline.map(p => p.cad) },
-    }
-    const { samples, values } = series[shading]
-    if (samples.length === 0) return [{ positions: route, color }]
-    const min = Math.min(...values)
-    const span = Math.max(Math.max(...values) - min, 1)
-    const maxSegments = 220
-    const step = Math.max(1, Math.ceil((route.length - 1) / maxSegments))
-    const segStep = duration / Math.max(route.length - 1, 1)
-    let cursor = 0
-    const colorFor = (t: number) => {
-      while (cursor < samples.length - 1 && Math.abs(samples[cursor + 1].t - t) <= Math.abs(samples[cursor].t - t)) cursor++
-      if (shading === 'hr') return hrZoneColor(values[cursor], maxHR)
-      const ratio = (values[cursor] - min) / span
-      return `hsl(${210 - ratio * 190} 78% 52%)`
-    }
-    const segs: Array<{ positions: Array<[number, number]>; color: string }> = []
-    for (let i = 0; i < route.length - 1; i += step) {
-      const end = Math.min(i + step, route.length - 1)
-      segs.push({ positions: route.slice(i, end + 1), color: colorFor(i * segStep) })
-    }
-    return segs
-  }, [route, shading, hrTimeline, paceTimeline, elevTimeline, cadenceTimeline, duration, color, maxHR])
-
-  if (route.length < 2) {
-    return (
-      <div style={{ width: '100%', height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-3)', fontSize: 13 }}>
-        No route data
-      </div>
-    )
-  }
-  const fraction = duration > 0 ? Math.max(0, Math.min(1, currentTime / duration)) : 0
-  const idx = Math.round(fraction * (route.length - 1))
-  const current = route[idx]
-  const start = route[0]
-  const end = route[route.length - 1]
-  const activeLayer = MAP_LAYERS[layer]
-  const sampleAt = <T extends { t: number }>(samples: T[], index: number) => samples.reduce<T | null>((closest, sample) => !closest || Math.abs(sample.t - timeAt(index)) < Math.abs(closest.t - timeAt(index)) ? sample : closest, null)
-
-  const selectedTime = selectedPoint == null ? 0 : timeAt(selectedPoint)
-  const selectedHR = selectedPoint == null ? null : sampleAt(hrTimeline, selectedPoint)?.hr
-  const selectedPace = selectedPoint == null ? null : sampleAt(paceTimeline, selectedPoint)?.pace
-  const selectedElev = selectedPoint == null ? null : sampleAt(elevTimeline, selectedPoint)?.elev
-  const selectedCad = selectedPoint == null ? null : sampleAt(cadenceTimeline, selectedPoint)?.cad
-
-  return (
-    <div style={{ width: '100%', height, position: 'relative' }}>
-      <LayerSwitcher layer={layer} onChange={setLayer} />
-      <div className="map-shade-picker">
-        <Dropdown
-          value={shading}
-          onChange={setShading}
-          dropUp
-          ariaLabel="Track shading"
-          options={[
-            { value: 'accent' as Shading, label: 'Default', glyph: <Route size={14} color="var(--text-3)" aria-hidden /> },
-            ...(hrTimeline.length > 0 ? [{ value: 'hr' as Shading, label: 'Heart rate zones', glyph: <Heart size={14} color="var(--text-3)" aria-hidden /> }] : []),
-            ...(paceTimeline.length > 0 ? [{ value: 'pace' as Shading, label: 'Pace / Speed', glyph: <Gauge size={14} color="var(--text-3)" aria-hidden /> }] : []),
-            ...(elevTimeline.length > 0 ? [{ value: 'elevation' as Shading, label: 'Elevation', glyph: <Mountain size={14} color="var(--text-3)" aria-hidden /> }] : []),
-            ...(cadenceTimeline.length > 0 ? [{ value: 'cadence' as Shading, label: 'Cadence', glyph: <Activity size={14} color="var(--text-3)" aria-hidden /> }] : []),
-          ]}
-        />
-      </div>
-      <MapContainer center={current} zoom={14} style={{ width: '100%', height: '100%' }} scrollWheelZoom attributionControl={false}>
-        <TileLayer
-          key={layer}
-          url={activeLayer.url}
-          maxZoom={activeLayer.maxZoom}
-        />
-        <FitBounds route={route} />
-        <MapClickHandler route={route} duration={duration} onScrub={onScrub} onPoint={setSelectedPoint} />
-        {shadedSegments.map((seg, index) => <Polyline key={index} positions={seg.positions} pathOptions={{ color: seg.color, weight: 4, opacity: 0.85 }} />)}
-        <Marker position={start} icon={START_MARKER} interactive={false} />
-        <Marker position={end} icon={FINISH_MARKER} interactive={false} />
-        {avatarIcon
-          ? <Marker position={current} icon={avatarIcon} interactive={false} />
-          : <CircleMarker center={current} radius={7} pane="markerPane" pathOptions={{ color: '#fff', fillColor: color, fillOpacity: 1, weight: 2 }} />}
-        {selectedPoint != null && <Popup position={route[selectedPoint]} closeButton={false} autoPan><div style={{ fontSize: 12, lineHeight: 1.6 }}><strong>{fmtDuration(selectedTime)}</strong><br />Distance {fmtDist((selectedPoint / Math.max(route.length - 1, 1)) * distance)}<br />HR {selectedHR ?? '—'} bpm<br />Pace {selectedPace ? `${fmtPace(selectedPace)} /km` : '—'}<br />Speed {selectedPace ? `${(3600 / selectedPace).toFixed(1)} km/h` : '—'}<br />Elevation {selectedElev ?? '—'} m{cadenceTimeline.length > 0 && <><br />Cadence {selectedCad ?? '—'} {cadenceLabel}</>}</div></Popup>}
-      </MapContainer>
-    </div>
-  )
-}
 
 function PlaybackBar({
   playing, currentTime, duration, onPlayPause, onReset, onEnd, onScrub,
@@ -574,6 +280,53 @@ function PlaybackBar({
 }
 
 
+/**
+ * One metric's chart card: title row, then its min/avg/max, then the plot.
+ *
+ * The readout is on a line of its own rather than sharing the title row. It
+ * shared it until now, and on a phone there was never enough width for both —
+ * so "Heart Rate" wrapped to two lines to make room for a figure that then
+ * wrapped as well. Giving each a full line is also what stops the six cards
+ * from disagreeing about their header height.
+ *
+ * The six charts were six copies of this markup, which is how the expand button
+ * ended up in a different place in one of them.
+ */
+function MetricPanel({ icon, title, badge, info, stats, onExpand, children }: {
+  icon: React.ReactNode
+  title: string
+  /** Marker between title and info tip — the Σ for a derived series. */
+  badge?: React.ReactNode
+  info: string
+  /** Min/avg/max line. Omitted by charts that have nothing to summarise. */
+  stats?: React.ReactNode
+  onExpand: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <div className="card">
+      <div className="metric-panel-head">
+        <h3 className="metric-panel-title">
+          {icon}
+          {title}
+          {badge}
+          <InfoTip label={title} text={info} />
+        </h3>
+        <button className="btn-icon" onClick={onExpand} title="Expand" aria-label={`Expand ${title}`}>
+          <Maximize2 size={13} />
+        </button>
+      </div>
+      {stats && <div className="metric-panel-stats">{stats}</div>}
+      {children}
+    </div>
+  )
+}
+
+/** Axis label below the plot, clear of the tick row. Matches Analysis. */
+function xLabel(value: string) {
+  return { value, position: 'insideBottom' as const, offset: -4, fontSize: 10, fill: 'var(--text-3)' }
+}
+
 function ChartTooltip({ active, payload, label, unit, valueFormatter }: { active?: boolean; payload?: any[]; label?: string; unit: string; valueFormatter?: (value: number) => string }) {
   if (!active || !payload?.length) return null
   const mins = Math.floor(Number(label) / 60)
@@ -596,20 +349,43 @@ function HRZoneTooltip({ active, payload }: { active?: boolean; payload?: any[] 
   )
 }
 
-function ExpandModal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  return (
+function ExpandModal({ title, onClose, children, variant }: {
+  title: string
+  onClose: () => void
+  children: React.ReactNode
+  /**
+   * 'map' drops the card's padding and lets the content run to the edges. On a
+   * phone that is the difference between a map in a box inside a scrolling page
+   * and a map you can actually read a route on.
+   */
+  variant?: 'map'
+}) {
+  useDismissOnBack(true, onClose)
+
+  const map = variant === 'map'
+  // Portalled to the body, and not merely fixed-positioned. It renders from
+  // deep inside the scrolling main content, whose ancestors carry the transform
+  // that drives pull-to-refresh — and a transform makes a fixed child position
+  // and stack against *it*, so the modal's z-index stopped applying to the app
+  // chrome and the top and bottom bars sat on top of it.
+  return createPortal(
     <>
       <div className="overlay" onClick={onClose} />
-      <div className="modal">
-        <div className="modal-box" style={{ maxWidth: 900, width: '95vw' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+      <div className={`modal modal-expand${map ? ' modal-immersive' : ''}`}>
+        <div className={`modal-box modal-box-expand${map ? ' modal-box-immersive' : ''}`}>
+          <div className={map ? 'modal-immersive-head' : 'modal-expand-head'}>
             <h3 style={{ fontSize: 15, fontWeight: 700 }}>{title}</h3>
-            <button className="btn-icon" onClick={onClose} title="Close"><XIcon size={18} /></button>
+            <button className="btn-icon" onClick={onClose} title="Close" aria-label="Close"><XIcon size={18} /></button>
           </div>
-          {children}
+          {map ? children : (
+            <div className="modal-expand-body">
+              <div className="modal-expand-inner">{children}</div>
+            </div>
+          )}
         </div>
       </div>
-    </>
+    </>,
+    document.body,
   )
 }
 
@@ -748,20 +524,45 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
   )
 
   // --- Playback: drives the map marker and the "draw up to here" chart cursor ---
-  const [currentTime, setCurrentTime] = useState(w.duration)
+  //
+  // Two rates, deliberately. `playhead` is exact and updates every frame; the
+  // map marker rides it without React involved. `currentTime` is a throttled
+  // copy for everything that costs a render — see lib/playhead.
   const [playing, setPlaying] = useState(false)
+  const playhead = usePlayhead(w.duration)
+  const currentTime = useThrottledPlayhead(playhead, playing)
+
+  /**
+   * The same buckets, counting only what has been played so far, so the chart
+   * fills as the track runs.
+   *
+   * One pass over the heart-rate samples, a few hundred of them, and only at
+   * the throttled rate rather than per frame. Slicing the samples first would
+   * cost the same scan to find where to cut.
+   *
+   * Percentages stay relative to the whole activity rather than to the part
+   * played, so the bars grow instead of rearranging themselves — the shares of
+   * a few early samples would otherwise swing wildly and settle only at the end.
+   */
+  const hrZonesPlayed = useMemo(
+    () => hrZoneBuckets(w.hrTimeline.filter(p => p.t <= currentTime), effectiveMaxHR, w.hrTimeline.length),
+    [w.hrTimeline, effectiveMaxHR, currentTime],
+  )
   const [expanded, setExpanded] = useState<null | 'map' | Metric | 'hrzones'>(null)
+  // Lives here rather than in RouteMap: expanding the map mounts a second one,
+  // and a choice held inside it was lost on the way.
+  const [shading, setShading] = useState<Shading>('accent')
 
   useEffect(() => {
     if (!playing || w.duration <= 0) return
     const totalMs = 15000 // full playback takes 15s of wall-clock time
     const startWall = performance.now()
-    const startT = currentTime
+    const startT = playhead.value
     let raf = 0
     function tick(now: number) {
       const elapsed = now - startWall
       const t = Math.min(w.duration, startT + (elapsed / totalMs) * w.duration)
-      setCurrentTime(t)
+      playhead.set(t)
       if (t >= w.duration) {
         setPlaying(false)
         return
@@ -778,23 +579,23 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
       setPlaying(false)
       return
     }
-    if (currentTime >= w.duration) setCurrentTime(0)
+    if (playhead.value >= w.duration) playhead.set(0)
     setPlaying(true)
   }
 
   function handleReset() {
     setPlaying(false)
-    setCurrentTime(0)
+    playhead.set(0)
   }
 
   function handleEnd() {
     setPlaying(false)
-    setCurrentTime(w.duration)
+    playhead.set(w.duration)
   }
 
   function handleScrub(t: number) {
     setPlaying(false)
-    setCurrentTime(Math.max(0, Math.min(w.duration, t)))
+    playhead.set(Math.max(0, Math.min(w.duration, t)))
   }
 
   function domainOf(data: number[]): [number, number] {
@@ -920,7 +721,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
       <ResponsiveContainer width="100%" height={height}>
         <AreaChart
           data={visible}
-          margin={{ top: 4, right: 4, left: -24, bottom: 0 }}
+          margin={{ top: 4, right: 4, left: -24, bottom: 14 }}
           onClick={(e: any) => { if (e && e.activeLabel != null) handleScrub(Number(e.activeLabel)) }}
         >
           <defs>
@@ -939,6 +740,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
             dataKey="t" type="number" domain={[0, w.duration || 1]}
             tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}
             axisLine={false} tickLine={false} tickFormatter={v => `${Math.floor(v / 60)}m`} interval="preserveStartEnd"
+            label={xLabel('Elapsed time (min)')}
           />
           <YAxis
             tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}
@@ -973,39 +775,45 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
     if (hrZoneStyle === 'histogram') {
       return (
         <ResponsiveContainer width="100%" height={height}>
-          <BarChart data={hrZones} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
+          <BarChart data={hrZonesPlayed} margin={{ top: 4, right: 4, left: -24, bottom: 14 }}>
             <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
             <XAxis
               dataKey="short" tick={{ fontSize: 11, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}
-              axisLine={false} tickLine={false}
+              axisLine={false} tickLine={false} label={xLabel('Heart-rate zone')}
             />
             <YAxis
               tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}
               axisLine={false} tickLine={false} tickFormatter={v => `${v}%`}
+              domain={[0, Math.max(1, ...hrZones.map(z => z.pct))]}
             />
             <Tooltip cursor={{ fill: 'var(--bg-3)' }} content={<HRZoneTooltip />} />
             <Bar dataKey="pct" radius={[4, 4, 0, 0]} isAnimationActive={false}>
-              {hrZones.map(z => <Cell key={z.name} fill={z.color} />)}
+              {hrZonesPlayed.map(z => <Cell key={z.name} fill={z.color} />)}
             </Bar>
           </BarChart>
         </ResponsiveContainer>
       )
     }
-    const slices = hrZones.filter(z => z.value > 0)
+    // Rows come from the whole activity so the legend keeps a fixed set and a
+    // stable height; the figures beside them are what has played. Arcs are the
+    // played counts, so the ring fills as the track runs.
+    const rows = hrZones.filter(z => z.value > 0)
+    const playedOf = (name: string) => hrZonesPlayed.find(p => p.name === name)
+    const arcs = rows.map(z => ({ ...z, value: playedOf(z.name)?.value ?? 0 })).filter(z => z.value > 0)
     return (
       <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: 'center', gap: 12 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0, width: isMobile ? '100%' : undefined }}>
-          {slices.map(z => (
+          {rows.map(z => (
             <div key={z.name} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-2)' }}>
               <div style={{ width: 8, height: 8, borderRadius: '50%', background: z.color, flexShrink: 0 }} />
-              <span style={{ whiteSpace: 'nowrap' }}>{z.name} · {z.pct}%</span>
+              <span style={{ whiteSpace: 'nowrap' }}>{z.name} · {playedOf(z.name)?.pct ?? 0}%</span>
             </div>
           ))}
         </div>
         <ResponsiveContainer width="100%" height={height}>
           <PieChart>
-            <Pie data={slices} dataKey="value" nameKey="name" innerRadius={height * 0.25} outerRadius={height * 0.44} paddingAngle={2}>
-              {slices.map(z => <Cell key={z.name} fill={z.color} />)}
+            <Pie data={arcs} dataKey="value" nameKey="name" innerRadius={height * 0.25} outerRadius={height * 0.44} paddingAngle={2} isAnimationActive={false}>
+              {arcs.map(z => <Cell key={z.name} fill={z.color} />)}
             </Pie>
             <Tooltip content={<HRZoneTooltip />} />
           </PieChart>
@@ -1030,9 +838,13 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
     ? avatarUrl(w.owner)
     : user ? avatarUrl(user) : undefined
 
-  function mapCard(height: number | string) {
+  function mapCard(height: number | string, maximizeButton?: React.ReactNode) {
     return (
-      <RouteMap route={w.route} color={trailColor} duration={w.duration} currentTime={currentTime} onScrub={handleScrub} height={height} distance={w.distance} hrTimeline={w.hrTimeline} paceTimeline={w.paceTimeline} elevTimeline={w.elevTimeline} cadenceTimeline={cadenceTimeline} cadenceLabel={cadenceUnit(w.type)} avatarUrl={routeAvatar} maxHR={effectiveMaxHR} />
+      // The fallback matches the frame the map will fill, so its arrival does
+      // not reflow the cards underneath it.
+      <Suspense fallback={<div className="route-map-loading" style={{ height }}>Loading map…</div>}>
+      <RouteMap route={w.route} color={trailColor} duration={w.duration} currentTime={currentTime} playhead={playhead} onScrub={handleScrub} height={height} distance={w.distance} hrTimeline={w.hrTimeline} paceTimeline={w.paceTimeline} elevTimeline={w.elevTimeline} cadenceTimeline={cadenceTimeline} cadenceLabel={cadenceUnit(w.type)} avatarUrl={routeAvatar} maxHR={effectiveMaxHR} shading={shading} onShadingChange={setShading} maximizeButton={maximizeButton} />
+      </Suspense>
     )
   }
 
@@ -1198,16 +1010,18 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
         <div className="detail-top">
           <div className="card" style={{ padding: 0, overflow: 'hidden', position: 'relative', background: 'var(--bg-3)', display: 'flex', flexDirection: 'column', minHeight: 280 }}>
             <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-              {mapCard('100%')}
+              {mapCard('100%', (
+                <button
+                  className="btn-icon"
+                  onClick={() => setExpanded('map')}
+                  title="Expand map"
+                  aria-label="Expand map"
+                  style={{ position: 'absolute', top: 10, right: 10, zIndex: 500, background: 'var(--bg-2)', border: '1px solid var(--border)' }}
+                >
+                  <Maximize2 size={14} />
+                </button>
+              ))}
             </div>
-            <button
-              className="btn-icon"
-              onClick={() => setExpanded('map')}
-              title="Expand map"
-              style={{ position: 'absolute', top: 10, right: 10, zIndex: 500, background: 'var(--bg-2)', border: '1px solid var(--border)' }}
-            >
-              <Maximize2 size={14} />
-            </button>
           </div>
 
           {/* Summary: every headline + derived stat grouped by category.
@@ -1314,88 +1128,77 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
 
         {/* Charts */}
         <div className="charts-grid">
-          {/* Heart Rate chart */}
           {selectedMetrics.includes('hr') && w.hrTimeline.length > 0 && (
-            <div className="card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><Heart size={14} color="var(--danger)" /> Heart Rate<InfoTip label="Heart Rate" text="Every heart-rate sample the file recorded, plotted against elapsed time. The line is coloured by training zone using your max HR — from Settings when the activity doesn't report its own. Click anywhere on the chart to move the playback cursor and the map marker to that moment." /></h3>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)' }}>Min {derived.hrMin ?? '—'} · Avg {w.avgHR} · Max {w.maxHR}</span>
-                  <button className="btn-icon" onClick={() => setExpanded('hr')} title="Expand"><Maximize2 size={13} /></button>
-                </div>
-              </div>
+            <MetricPanel
+              icon={<Heart size={14} color="var(--danger)" />}
+              title="Heart Rate"
+              info="Every heart-rate sample the file recorded, plotted against elapsed time. The line is coloured by training zone using your max HR — from Settings when the activity doesn't report its own. Click anywhere on the chart to move the playback cursor and the map marker to that moment."
+              stats={<>Min {derived.hrMin ?? '—'} · Avg {w.avgHR} · Max {w.maxHR} bpm</>}
+              onExpand={() => setExpanded('hr')}
+            >
               {hrChart(140)}
-            </div>
+            </MetricPanel>
           )}
 
-          {/* Heart rate zones — shown right after the HR graph */}
           {selectedMetrics.includes('hr') && hrZones.length > 0 && (
-            <div className="card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Heart size={14} color="var(--danger)" /> Heart Rate Zones
-                  <InfoTip label="Heart Rate Zones" text="How the activity's time split across the five effort zones, as a share of recorded samples. Zones are percentages of your max HR: under 60% is recovery, 60-70% endurance, 70-80% tempo, 80-90% threshold, and above 90% is maximal. Switch between the histogram and donut under Settings → Charts." />
-                </h3>
-                <button className="btn-icon" onClick={() => setExpanded('hrzones')} title="Expand"><Maximize2 size={13} /></button>
-              </div>
+            <MetricPanel
+              icon={<Heart size={14} color="var(--danger)" />}
+              title="Heart Rate Zones"
+              info="How the activity's time split across the five effort zones, as a share of recorded samples. Zones are percentages of your max HR: under 60% is recovery, 60-70% endurance, 70-80% tempo, 80-90% threshold, and above 90% is maximal. Switch between the histogram and donut under Settings → Charts."
+              onExpand={() => setExpanded('hrzones')}
+            >
               {hrZoneChart(160)}
-            </div>
+            </MetricPanel>
           )}
 
-          {/* Pace chart */}
           {selectedMetrics.includes('pace') && w.paceTimeline.length > 0 && (
-            <div className="card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><TrendingUp size={14} color={color} /> Pace <CalcIcon /><InfoTip label="Pace" text="Pace derived from the distance and time between consecutive GPS fixes, then smoothed — very few files record pace directly, which is what the Σ marks. Segments shorter than three metres are skipped so standing still doesn't produce wild spikes. Lower on the chart is faster." /></h3>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)' }}>Min {derived.paceMin != null ? fmtPace(derived.paceMin) : '—'} · Avg {fmtPace(w.avgPace)} · Max {derived.paceMax != null ? fmtPace(derived.paceMax) : '—'} /km</span>
-                  <button className="btn-icon" onClick={() => setExpanded('pace')} title="Expand"><Maximize2 size={13} /></button>
-                </div>
-              </div>
+            <MetricPanel
+              icon={<TrendingUp size={14} color={color} />}
+              title="Pace"
+              badge={<CalcIcon />}
+              info="Pace derived from the distance and time between consecutive GPS fixes, then smoothed — very few files record pace directly, which is what the Σ marks. Segments shorter than three metres are skipped so standing still doesn't produce wild spikes. Lower on the chart is faster."
+              stats={<>Min {derived.paceMin != null ? fmtPace(derived.paceMin) : '—'} · Avg {fmtPace(w.avgPace)} · Max {derived.paceMax != null ? fmtPace(derived.paceMax) : '—'} /km</>}
+              onExpand={() => setExpanded('pace')}
+            >
               {paceChart(140)}
-            </div>
+            </MetricPanel>
           )}
 
-          {/* Speed chart */}
           {selectedMetrics.includes('speed') && speedTimeline.length > 0 && (
-            <div className="card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><Gauge size={14} color="var(--blue)" /> Speed <CalcIcon /><InfoTip label="Speed" text="The same GPS-derived measurement as the pace chart, expressed as km/h instead of minutes per kilometre. It's the more natural read for rides; pace is the more natural read for runs." /></h3>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)' }}>Min {derived.speedMin?.toFixed(1) ?? '—'} · Avg {w.avgSpeed > 0 ? w.avgSpeed.toFixed(1) : '—'} · Max {derived.speedMax?.toFixed(1) ?? '—'} km/h</span>
-                  <button className="btn-icon" onClick={() => setExpanded('speed')} title="Expand"><Maximize2 size={13} /></button>
-                </div>
-              </div>
+            <MetricPanel
+              icon={<Gauge size={14} color="var(--blue)" />}
+              title="Speed"
+              badge={<CalcIcon />}
+              info="The same GPS-derived measurement as the pace chart, expressed as km/h instead of minutes per kilometre. It's the more natural read for rides; pace is the more natural read for runs."
+              stats={<>Min {derived.speedMin?.toFixed(1) ?? '—'} · Avg {w.avgSpeed > 0 ? w.avgSpeed.toFixed(1) : '—'} · Max {derived.speedMax?.toFixed(1) ?? '—'} km/h</>}
+              onExpand={() => setExpanded('speed')}
+            >
               {speedChart(140)}
-            </div>
+            </MetricPanel>
           )}
 
-          {/* Elevation chart */}
           {selectedMetrics.includes('elevation') && w.elevTimeline.length > 0 && (
-            <div className="card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><Mountain size={14} color="var(--hike)" /> Elevation<InfoTip label="Elevation" text="Altitude recorded at each track point. Total gain sums only the upward steps between consecutive samples, so barometric noise on a flat route can inflate it slightly. Compare the shape against the heart-rate chart to see what the climbs actually cost you." /></h3>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)' }}>+{w.elevationGain} m gain · {derived.elevLoss} m loss</span>
-                  <button className="btn-icon" onClick={() => setExpanded('elevation')} title="Expand"><Maximize2 size={13} /></button>
-                </div>
-              </div>
+            <MetricPanel
+              icon={<Mountain size={14} color="var(--hike)" />}
+              title="Elevation"
+              info="Altitude recorded at each track point. Total gain sums only the upward steps between consecutive samples, so barometric noise on a flat route can inflate it slightly. Compare the shape against the heart-rate chart to see what the climbs actually cost you."
+              stats={<>+{w.elevationGain} m gain · {derived.elevLoss} m loss</>}
+              onExpand={() => setExpanded('elevation')}
+            >
               {elevChart(140)}
-            </div>
+            </MetricPanel>
           )}
 
-          {/* Cadence chart */}
           {selectedMetrics.includes('cadence') && cadenceTimeline.length > 0 && (
-            <div className="card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><Activity size={14} color={CADENCE_COLOR} /> Cadence<InfoTip label="Cadence" text="Steps per minute on foot, or crank revolutions per minute on a bike. Foot pods report only one leg, so those values are doubled on import to give the total most trackers show — around 170-180 spm is a common target for runners. The series is lightly smoothed to ride over dropped samples." /></h3>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)' }}>Min {derived.cadMin ?? '—'} · Avg {derived.cadAvg ?? '—'} · Max {derived.cadMax ?? '—'} {cadenceUnit(w.type)}</span>
-                  <button className="btn-icon" onClick={() => setExpanded('cadence')} title="Expand"><Maximize2 size={13} /></button>
-                </div>
-              </div>
+            <MetricPanel
+              icon={<Activity size={14} color={CADENCE_COLOR} />}
+              title="Cadence"
+              info="Steps per minute on foot, or crank revolutions per minute on a bike. Foot pods report only one leg, so those values are doubled on import to give the total most trackers show — around 170-180 spm is a common target for runners. The series is lightly smoothed to ride over dropped samples."
+              stats={<>Min {derived.cadMin ?? '—'} · Avg {derived.cadAvg ?? '—'} · Max {derived.cadMax ?? '—'} {cadenceUnit(w.type)}</>}
+              onExpand={() => setExpanded('cadence')}
+            >
               {cadenceChart(140)}
-            </div>
+            </MetricPanel>
           )}
         </div>
 
@@ -1488,11 +1291,13 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
       )}
 
       {expanded === 'map' && (
-        <ExpandModal title="Route" onClose={() => setExpanded(null)}>
-          <div style={{ marginBottom: 12 }}>
-            {mapCard(Math.round(window.innerHeight * 0.6))}
+        <ExpandModal title="Route" onClose={() => setExpanded(null)} variant="map">
+          <div className="modal-immersive-map">
+            {mapCard('100%')}
           </div>
-          <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onEnd={handleEnd} onScrub={handleScrub} />
+          <div className="modal-immersive-foot">
+            <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onEnd={handleEnd} onScrub={handleScrub} />
+          </div>
         </ExpandModal>
       )}
       {expanded === 'hr' && (
@@ -1538,6 +1343,11 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
       {expanded === 'hrzones' && (
         <ExpandModal title="Heart Rate Zones" onClose={() => setExpanded(null)}>
           {hrZoneChart(320)}
+          {w.hrTimeline.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onEnd={handleEnd} onScrub={handleScrub} />
+            </div>
+          )}
         </ExpandModal>
       )}
     </div>

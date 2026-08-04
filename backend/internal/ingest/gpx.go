@@ -34,6 +34,9 @@ type gpxPoint struct {
 		// Matches <gpxtpx:hr>/<gpxtpx:cad> under any TrackPointExtension namespace.
 		HR  *int `xml:"TrackPointExtension>hr"`
 		Cad *int `xml:"TrackPointExtension>cad"`
+		// Metres per second. Rarer than hr/cad, but Strava and several phone
+		// trackers write it, and it beats deriving from the fixes.
+		Speed *float64 `xml:"TrackPointExtension>speed"`
 	} `xml:"extensions"`
 }
 
@@ -59,6 +62,9 @@ func parseGPX(data []byte, defaultType workout.Type) (workout.Input, error) {
 			}
 			if p.Ext.Cad != nil {
 				tp.Cad, tp.HasCad = *p.Ext.Cad, true
+			}
+			if p.Ext.Speed != nil {
+				tp.Speed, tp.HasSpeed = *p.Ext.Speed, true
 			}
 			if p.Time != "" {
 				if ts, err := time.Parse(time.RFC3339, p.Time); err == nil {

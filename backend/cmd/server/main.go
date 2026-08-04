@@ -15,6 +15,7 @@ import (
 
 	"github.com/blurrycontour/activity-lens/backend/internal/config"
 	"github.com/blurrycontour/activity-lens/backend/internal/equipment"
+	"github.com/blurrycontour/activity-lens/backend/internal/feedback"
 	"github.com/blurrycontour/activity-lens/backend/internal/httpapi"
 	"github.com/blurrycontour/activity-lens/backend/internal/notify"
 	"github.com/blurrycontour/activity-lens/backend/internal/settings"
@@ -113,7 +114,9 @@ func run() error {
 	)
 	slog.Info("notifications ready", "push", vapid.Public != "")
 
-	apiServer := httpapi.New(cfg, authSvc, workoutSvc, equipmentSvc, settingsStore, rawUploads, notifySvc, httpapi.BuildInfo{
+	feedbackSvc := feedback.NewService(feedback.NewSQLiteRepository(db))
+
+	apiServer := httpapi.New(cfg, authSvc, workoutSvc, equipmentSvc, settingsStore, rawUploads, notifySvc, feedbackSvc, httpapi.BuildInfo{
 		Version:  version,
 		Revision: revision,
 		Created:  created,

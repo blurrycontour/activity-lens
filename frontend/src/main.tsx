@@ -5,7 +5,13 @@ import Root from './Root'
 import { isNative, loadServerConfig } from './lib/serverConfig'
 import { trackSafeAreaInsets } from './lib/native/systemBars'
 import { markUpdateReady, setApplyUpdate } from './lib/appUpdate'
+import { installDebugLog } from './lib/debugLog'
 import './index.css'
+
+// Before anything else runs, so a failure during startup — the most interesting
+// kind — is in the buffer a feedback report can attach. Records only; nothing
+// leaves the device unless the user asks it to.
+installDebugLog()
 
 // Registering the worker is what makes the app installable, gives it an offline
 // shell, and lets it receive files from the Android share sheet.

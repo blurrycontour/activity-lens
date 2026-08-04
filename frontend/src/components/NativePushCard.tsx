@@ -49,8 +49,14 @@ export default function NativePushCard({ pushPref, onPushPrefChange }: NativePus
     return () => { active = false }
   }, [])
 
-  const registered = Boolean(status?.endpoint)
+  // The user's intent, not the endpoint. An endpoint the distributor withdrew
+  // is repaired on the next launch, and showing the switch as off in the
+  // meantime invites them to "fix" something that is already being fixed.
+  const registered = Boolean(status?.enabled ?? status?.endpoint)
   const on = registered && pushPref
+  // Enrolled but with nothing to deliver to yet: either the first registration
+  // has not come back, or one is being reissued after being lost.
+  const reconnecting = on && !status?.endpoint
 
   async function toggle(next: boolean) {
     setBusy(true)
@@ -105,6 +111,13 @@ export default function NativePushCard({ pushPref, onPushPrefChange }: NativePus
         <span className="switch-track" />
         Push Notifications
       </label>
+
+      {reconnecting && (
+        <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8 }}>
+          Waiting for {distributors.find(d => d.packageName === chosen)?.label ?? 'the distributor'} to
+          issue an address. This happens by itself; it only takes a moment.
+        </p>
+      )}
 
       {distributors.length > 1 && (
         <div style={{ marginTop: 12 }}>

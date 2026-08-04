@@ -1,6 +1,8 @@
 package ingest
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -132,5 +134,81 @@ func TestParseGPXKeepsAlreadyTotalRunCadence(t *testing.T) {
 	}
 	if len(in.CadenceTimeline) != 2 || in.CadenceTimeline[0].Cad != 174 || in.CadenceTimeline[1].Cad != 178 {
 		t.Fatalf("CadenceTimeline = %v, want 174/178 left unscaled", in.CadenceTimeline)
+	}
+}
+
+func TestParseTCXPrefersRecordedSpeed(t *testing.T) {
+	// The positions say roughly 3.6 km/h; the recorded speed says 4 m/s. The
+	// file wins, because the watch knows things two coordinates do not.
+	data := []byte(`<?xml version="1.0"?>
+<TrainingCenterDatabase xmlns:ns3="http://www.garmin.com/xmlschemas/ActivityExtension/v2">
+<Activities><Activity Sport="Running">
+<Lap StartTime="2024-01-10T06:00:00Z"><Track>
+<Trackpoint><Time>2024-01-10T06:00:00Z</Time><Position><LatitudeDegrees>52.0</LatitudeDegrees><LongitudeDegrees>13.0</LongitudeDegrees></Position><Extensions><ns3:TPX><ns3:Speed>4.0</ns3:Speed></ns3:TPX></Extensions></Trackpoint>
+<Trackpoint><Time>2024-01-10T06:00:01Z</Time><Position><LatitudeDegrees>52.00001</LatitudeDegrees><LongitudeDegrees>13.0</LongitudeDegrees></Position><Extensions><ns3:TPX><ns3:Speed>5.0</ns3:Speed></ns3:TPX></Extensions></Trackpoint>
+</Track></Lap>
+</Activity></Activities></TrainingCenterDatabase>`)
+	in, err := parseTCX(data, workout.TypeRun)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []workout.PacePoint{{T: 0, Pace: 250}, {T: 1, Pace: 200}}
+	if len(in.PaceTimeline) != len(want) {
+		t.Fatalf("PaceTimeline = %v, want %v", in.PaceTimeline, want)
+	}
+	for i := range want {
+		if in.PaceTimeline[i] != want[i] {
+			t.Fatalf("PaceTimeline = %v, want %v", in.PaceTimeline, want)
+		}
+	}
+}
+
+func TestDerivedPaceCoversSlowMovement(t *testing.T) {
+	// A walk at about 1.4 m/s with one-second fixes: every single step is well
+	// under the old 3 m floor, which used to leave the series empty. The
+	// window has to accumulate across fixes for this to produce anything.
+	var b strings.Builder
+	b.WriteString(`<?xml version="1.0"?><gpx><trk><name>Walk</name><type>walking</type><trkseg>`)
+	base := time.Date(2024, 1, 10, 6, 0, 0, 0, time.UTC)
+	for i := 0; i < 60; i++ {
+		// ~1.4 m north per second.
+		lat := 52.0 + float64(i)*0.0000126
+		fmt.Fprintf(&b, `<trkpt lat="%.7f" lon="13.0"><time>%s</time></trkpt>`, lat, base.Add(time.Duration(i)*time.Second).Format(time.RFC3339))
+	}
+	b.WriteString(`</trkseg></trk></gpx>`)
+
+	in, err := parseGPX([]byte(b.String()), workout.TypeHike)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(in.PaceTimeline) < 8 {
+		t.Fatalf("PaceTimeline has %d samples, want a regular series over a 60s walk: %v", len(in.PaceTimeline), in.PaceTimeline)
+	}
+	// About 12 min/km. Wide bounds — this is asserting the series is in the
+	// right neighbourhood, not the exact windowing.
+	for _, p := range in.PaceTimeline {
+		if p.Pace < 600 || p.Pace > 900 {
+			t.Fatalf("pace sample %v is not a walking pace; series = %v", p, in.PaceTimeline)
+		}
+	}
+}
+
+func TestDerivedPaceDropsGPSTeleports(t *testing.T) {
+	// A single fix 500 m from its neighbours, one second apart. Left in, it
+	// rescales the whole chart's axis to a speed no human reaches.
+	data := []byte(`<?xml version="1.0"?>
+<gpx><trk><name>Run</name><type>running</type><trkseg>
+<trkpt lat="52.0000000" lon="13.0"><time>2024-01-10T06:00:00Z</time></trkpt>
+<trkpt lat="52.0045000" lon="13.0"><time>2024-01-10T06:00:01Z</time></trkpt>
+<trkpt lat="52.0000300" lon="13.0"><time>2024-01-10T06:00:02Z</time></trkpt>
+</trkseg></trk></gpx>`)
+	in, err := parseGPX(data, workout.TypeRun)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range in.PaceTimeline {
+		if p.Pace < minPaceSecPerKm {
+			t.Fatalf("kept an impossible pace sample %v; series = %v", p, in.PaceTimeline)
+		}
 	}
 }

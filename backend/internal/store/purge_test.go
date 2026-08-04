@@ -26,6 +26,7 @@ func TestEveryUserScopedTableHasAnOwnerForPurging(t *testing.T) {
 		"workout_shares":     "workout.Service.PurgeUserShares (recipient rows; owner rows cascade from workouts)",
 		"equipment":          "equipment.Service.PurgeUser",
 		"notifications":      "notify.Service.PurgeUser",
+		"feedback":           "feedback.Service.PurgeUser",
 		"push_subscriptions": "notify.Service.PurgeUser",
 		"user_prefs":         "settings.Store.PurgeUser",
 		"user_last_login":    "settings.Store.PurgeUser",

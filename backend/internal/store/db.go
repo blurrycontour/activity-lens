@@ -69,6 +69,12 @@ var rawUploadsOnDiskSchema string
 //go:embed migrations/0019_push_kind.sql
 var pushKindSchema string
 
+//go:embed migrations/0020_feedback.sql
+var feedbackSchema string
+
+//go:embed migrations/0021_push_last_seen.sql
+var pushLastSeenSchema string
+
 // OpenSQLite opens (and pings) a pure-Go SQLite database at dbPath with
 // foreign keys and WAL enabled for concurrency and integrity.
 func OpenSQLite(dbPath string) (*sql.DB, error) {
@@ -129,6 +135,8 @@ func MigrateApp(ctx context.Context, db *sql.DB) error {
 		{"notification icon", notificationIconSchema},
 		{"raw uploads on disk", rawUploadsOnDiskSchema},
 		{"push kind", pushKindSchema},
+		{"feedback", feedbackSchema},
+		{"push last seen", pushLastSeenSchema},
 	} {
 		if err := applyAlters(ctx, db, m.schema); err != nil {
 			return fmt.Errorf("apply %s schema: %w", m.name, err)

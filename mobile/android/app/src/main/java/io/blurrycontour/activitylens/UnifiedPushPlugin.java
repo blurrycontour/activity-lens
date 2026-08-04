@@ -162,6 +162,7 @@ public class UnifiedPushPlugin extends Plugin {
         result.put("available", !found.isEmpty());
         result.put("distributor", UnifiedPush.distributor(getContext()));
         result.put("endpoint", UnifiedPush.endpoint(getContext()));
+        result.put("enabled", UnifiedPush.enabled(getContext()));
         result.put("permitted", NotificationManagerCompat.from(getContext()).areNotificationsEnabled());
         call.resolve(result);
     }
@@ -211,13 +212,46 @@ public class UnifiedPushPlugin extends Plugin {
 
     private void doRegister(PluginCall call) {
         String distributor = call.getString("distributor");
-        // Any previous registration is given back first. Leaving it would leave
-        // the old distributor holding a live endpoint that the server has since
-        // replaced, and it would keep delivering to a phone nobody is watching.
-        if (UnifiedPush.distributor(getContext()) != null) {
+        String current = UnifiedPush.distributor(getContext());
+        // Only a *different* distributor is given back first, so the old one is
+        // not left holding a live endpoint the server has since replaced.
+        //
+        // Re-registering with the same one used to unregister first too, and
+        // that is what made every re-registration mint a fresh ntfy topic: the
+        // UNREGISTER deleted the subscription, so the REGISTER that followed had
+        // nothing to recognise and issued a new endpoint. Registering over the
+        // top is idempotent by design — the distributor answers NEW_ENDPOINT
+        // with the endpoint it already has.
+        if (current != null && !current.equals(distributor)) {
             UnifiedPush.unregister(getContext());
         }
         UnifiedPush.register(getContext(), distributor);
+        call.resolve();
+    }
+
+    /**
+     * Re-asserts an existing registration, if there is one.
+     *
+     * UnifiedPush expects a connector to register on every app start, and this
+     * is why: the registration lives in the distributor, and it can go away
+     * without anything telling us — the user deletes the subscription in ntfy,
+     * the distributor clears its data, its server drops it. Our endpoint stays
+     * in SharedPreferences looking perfectly healthy, the server keeps posting
+     * to a topic nobody is subscribed to, and notifications silently stop.
+     *
+     * Registering again costs one broadcast and is idempotent: an intact
+     * registration comes back with the same endpoint, a lost one is recreated.
+     * The answer arrives as NEW_ENDPOINT either way, so the web app learns about
+     * a changed endpoint through the path it already has.
+     */
+    @PluginMethod
+    public void refresh(PluginCall call) {
+        String distributor = UnifiedPush.distributor(getContext());
+        // Keyed on the user's intent rather than on holding an endpoint: the
+        // case worth repairing is precisely the one where the endpoint is gone.
+        if (UnifiedPush.enabled(getContext()) && distributor != null) {
+            UnifiedPush.register(getContext(), distributor);
+        }
         call.resolve();
     }
 
