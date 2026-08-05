@@ -6,6 +6,21 @@ import { isNative, loadServerConfig } from './lib/serverConfig'
 import { trackSafeAreaInsets } from './lib/native/systemBars'
 import { markUpdateReady, setApplyUpdate } from './lib/appUpdate'
 import { installDebugLog } from './lib/debugLog'
+// Before ./index.css, and here rather than beside the map it belongs to.
+//
+// Several rules in index.css override MapLibre's defaults, and they are written
+// as single class selectors that tie with MapLibre's own — so which one wins is
+// decided purely by stylesheet order. While this was bundled into one
+// stylesheet that was stable. Splitting the map into a lazy chunk made its CSS
+// a second stylesheet injected at runtime, landing *after* ours, and
+// `.maplibregl-map{position:relative}` began beating
+// `.route-map-canvas{position:absolute;inset:0}`. The container collapsed to
+// zero height: no error anywhere, tiles still fetched, and a blank map.
+//
+// Loading it eagerly costs ~12kB gzipped and restores the order every one of
+// those overrides was written for. The 900kB of MapLibre *JavaScript* is what
+// the split was for, and that stays lazy.
+import 'maplibre-gl/dist/maplibre-gl.css'
 import './index.css'
 
 // Before anything else runs, so a failure during startup — the most interesting

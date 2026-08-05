@@ -18,7 +18,8 @@ import { DEFAULT_HR_ZONE_CHART, HR_ZONE_CHART_KEY, type HRZoneChart } from '../l
 import InfoTip from '../components/InfoTip'
 import { useIsMobile } from '../lib/useIsMobile'
 import { usePlayhead, useThrottledPlayhead } from '../lib/playhead'
-import { hrZoneBuckets, hrZoneStops } from '../lib/hrZones'
+import { downsample, PLOT_POINTS } from '../lib/downsample'
+import { hrZoneBuckets, hrZoneCounter, hrZoneStops } from '../lib/hrZones'
 import type { Shading } from '../components/RouteMap'
 
 /**
@@ -389,6 +390,40 @@ function ExpandModal({ title, onClose, children, variant }: {
   )
 }
 
+/**
+ * A series prepared for plotting: reduced to a drawable number of points, with
+ * its extremes measured once.
+ *
+ * Both halves exist for the same reason. During playback these charts re-render
+ * on every frame, and everything derived from the full series — the reduction,
+ * the y-domain — is identical on every one of those frames. Doing it here means
+ * a frame costs a slice and a render rather than several passes over an hour of
+ * samples, per chart.
+ */
+interface PlotSeries {
+  points: Array<{ t: number;[k: string]: number }>
+  min: number
+  max: number
+  count: number
+}
+
+function preparePlot<T extends { t: number }>(data: T[], key: string): PlotSeries {
+  const rows = data as unknown as Array<{ t: number;[k: string]: number }>
+  let min = Infinity
+  let max = -Infinity
+  for (const row of rows) {
+    const v = row[key]
+    if (v < min) min = v
+    if (v > max) max = v
+  }
+  return {
+    points: downsample(rows, d => d[key], PLOT_POINTS),
+    min: rows.length ? min : 0,
+    max: rows.length ? max : 1,
+    count: rows.length,
+  }
+}
+
 export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDetailProps) {
   const { updateWorkout, removeWorkout } = useWorkouts()
   const { user } = useAuth()
@@ -523,6 +558,16 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
     [speedTimeline],
   )
 
+
+  // Rebuilt only when a series actually changes, never per playback frame.
+  const plots = useMemo(() => ({
+    hr: preparePlot(w.hrTimeline, 'hr'),
+    pace: preparePlot(smoothPaceTimeline, 'pace'),
+    speed: preparePlot(smoothSpeedTimeline, 'speed'),
+    elev: preparePlot(w.elevTimeline, 'elev'),
+    cad: preparePlot(cadenceTimeline, 'cad'),
+  }), [w.hrTimeline, w.elevTimeline, smoothPaceTimeline, smoothSpeedTimeline, cadenceTimeline])
+
   // --- Playback: drives the map marker and the "draw up to here" chart cursor ---
   //
   // Two rates, deliberately. `playhead` is exact and updates every frame; the
@@ -536,18 +581,15 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
    * The same buckets, counting only what has been played so far, so the chart
    * fills as the track runs.
    *
-   * One pass over the heart-rate samples, a few hundred of them, and only at
-   * the throttled rate rather than per frame. Slicing the samples first would
-   * cost the same scan to find where to cut.
-   *
-   * Percentages stay relative to the whole activity rather than to the part
-   * played, so the bars grow instead of rearranging themselves — the shares of
-   * a few early samples would otherwise swing wildly and settle only at the end.
+   * Built once per activity and then queried per frame: the counts are
+   * cumulative, so asking about a later moment is a binary search and five
+   * array reads rather than another two passes over the samples.
    */
-  const hrZonesPlayed = useMemo(
-    () => hrZoneBuckets(w.hrTimeline.filter(p => p.t <= currentTime), effectiveMaxHR, w.hrTimeline.length),
-    [w.hrTimeline, effectiveMaxHR, currentTime],
+  const countZonesTo = useMemo(
+    () => hrZoneCounter(w.hrTimeline, effectiveMaxHR),
+    [w.hrTimeline, effectiveMaxHR],
   )
+  const hrZonesPlayed = useMemo(() => countZonesTo(currentTime), [countZonesTo, currentTime])
   const [expanded, setExpanded] = useState<null | 'map' | Metric | 'hrzones'>(null)
   // Lives here rather than in RouteMap: expanding the map mounts a second one,
   // and a choice held inside it was lost on the way.
@@ -598,10 +640,8 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
     playhead.set(Math.max(0, Math.min(w.duration, t)))
   }
 
-  function domainOf(data: number[]): [number, number] {
-    if (!data.length) return [0, 1]
-    const min = Math.min(...data)
-    const max = Math.max(...data)
+  function padDomain(min: number, max: number, count: number): [number, number] {
+    if (count === 0) return [0, 1]
     const pad = (max - min) * 0.15 || 1
     return [Math.floor(min - pad), Math.ceil(max + pad)]
   }
@@ -696,7 +736,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
   }
 
   function areaChart(opts: {
-    data: Array<{ t: number;[k: string]: number }>
+    series: PlotSeries
     dataKey: string
     stroke: string
     gradId: string
@@ -708,12 +748,16 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
     hrZoneStroke?: boolean
     maxHRForZones?: number
   }) {
-    const { data, dataKey, stroke, gradId, unit, reversed, yTickFormatter, height, valueFormatter, hrZoneStroke, maxHRForZones } = opts
+    const { series, dataKey, stroke, gradId, unit, reversed, yTickFormatter, height, valueFormatter, hrZoneStroke, maxHRForZones } = opts
+    const data = series.points
     const visible = visibleUpTo(data, currentTime)
-    const vals = data.map(d => d[dataKey])
+    // From the extremes measured once when the series was prepared. This used
+    // to rescan the full series and spread it into Math.min/max on every frame
+    // of playback, per chart — which for a long activity is also a spread wide
+    // enough to overflow the call stack.
     const yDomain: [number, number] = yFromZero
-      ? [0, vals.length ? Math.ceil(Math.max(...vals) * 1.05) || 1 : 1]
-      : domainOf(vals)
+      ? [0, series.count ? Math.ceil(series.max * 1.05) || 1 : 1]
+      : padDomain(series.min, series.max, series.count)
     const cursorVal = valueAtTime(data, dataKey as any, currentTime)
     const strokeStops = hrZoneStroke && maxHRForZones ? hrZoneStops(yDomain[0], yDomain[1], maxHRForZones) : null
     const strokeColor = strokeStops ? `url(#${gradId}_stroke)` : stroke
@@ -756,19 +800,19 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
   }
 
   function hrChart(height: number) {
-    return areaChart({ data: w.hrTimeline as any, dataKey: 'hr', stroke: 'var(--danger)', gradId: 'hrGrad', unit: 'bpm', height, hrZoneStroke: true, maxHRForZones: effectiveMaxHR })
+    return areaChart({ series: plots.hr, dataKey: 'hr', stroke: 'var(--danger)', gradId: 'hrGrad', unit: 'bpm', height, hrZoneStroke: true, maxHRForZones: effectiveMaxHR })
   }
   function paceChart(height: number) {
-    return areaChart({ data: smoothPaceTimeline as any, dataKey: 'pace', stroke: color, gradId: 'paceGrad', unit: '/km', valueFormatter: fmtPace, reversed: true, yTickFormatter: v => fmtPace(v), height })
+    return areaChart({ series: plots.pace, dataKey: 'pace', stroke: color, gradId: 'paceGrad', unit: '/km', valueFormatter: fmtPace, reversed: true, yTickFormatter: v => fmtPace(v), height })
   }
   function speedChart(height: number) {
-    return areaChart({ data: smoothSpeedTimeline as any, dataKey: 'speed', stroke: 'var(--blue)', gradId: 'speedGrad', unit: 'km/h', valueFormatter: value => value.toFixed(1), height })
+    return areaChart({ series: plots.speed, dataKey: 'speed', stroke: 'var(--blue)', gradId: 'speedGrad', unit: 'km/h', valueFormatter: value => value.toFixed(1), height })
   }
   function elevChart(height: number) {
-    return areaChart({ data: w.elevTimeline as any, dataKey: 'elev', stroke: 'var(--hike)', gradId: 'elevGrad', unit: 'm', height })
+    return areaChart({ series: plots.elev, dataKey: 'elev', stroke: 'var(--hike)', gradId: 'elevGrad', unit: 'm', height })
   }
   function cadenceChart(height: number) {
-    return areaChart({ data: cadenceTimeline as any, dataKey: 'cad', stroke: CADENCE_COLOR, gradId: 'cadGrad', unit: cadenceUnit(w.type), height })
+    return areaChart({ series: plots.cad, dataKey: 'cad', stroke: CADENCE_COLOR, gradId: 'cadGrad', unit: cadenceUnit(w.type), height })
   }
 
   function hrZoneChart(height: number) {

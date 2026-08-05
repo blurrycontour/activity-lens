@@ -78,8 +78,8 @@ export default function NotificationBanner({ notification, onOpen, onDismiss }: 
         : <span className="notif-banner-glyph"><Bell size={15} /></span>}
 
       <span style={{ flex: 1, minWidth: 0 }}>
-        <span className="notif-banner-title">{notification.title}</span>
-        {notification.body && <span className="notif-banner-body">{notification.body}</span>}
+        <span className="notif-banner-title notif-clamp-2">{notification.title}</span>
+        {notification.body && <span className="notif-banner-body notif-clamp-2">{notification.body}</span>}
       </span>
 
       <button

@@ -54,38 +54,76 @@ export function usePlayhead(initial: number): Playhead {
 /**
  * How often the playhead is published to React, in milliseconds.
  *
- * 100ms is under the threshold where a chart cursor reads as stepping rather
- * than sliding, and it is a sixth of the work sixty frames a second would be.
+ * The one number that decides how the two halves of playback share the main
+ * thread. Every publish re-renders the charts; the map marker does not go
+ * through React at all, so it keeps 60fps regardless. Raising the rate buys a
+ * smoother chart cursor directly at the map's expense.
+ *
+ * 100ms is the rate the map was measured smooth at. The charts cost roughly an
+ * order of magnitude less per publish than they used to — see downsample.ts and
+ * hrZoneCounter — so there is headroom to trade some of it back if the cursor is
+ * worth it, but that is a trade to make deliberately and check, not to assume.
  */
 const PUBLISH_MS = 100
 
 /**
- * A React state copy of the playhead, updated at a rate a chart can afford.
+ * A React state copy of the playhead, published at a rate a chart can afford.
+ *
+ * Publishing on every animation frame instead — which this briefly did — reads
+ * like the obvious answer and is not. requestAnimationFrame has no backpressure
+ * that favours anyone: the browser keeps firing it at display rate however long
+ * the callbacks take, so a render that overruns the frame budget does not slow
+ * the publishing down, it just leaves no time for MapLibre to draw. The map
+ * stutters under a pan while the charts stay perfectly smooth, which is exactly
+ * backwards.
+ *
+ * So the rate is bounded by a clock, and rAF is used only to align the publish
+ * that is due with a frame boundary.
  *
  * Changes made while playback is stopped — a scrub, reset, jump to end — are
- * published immediately regardless, because there is no following frame to
- * carry them and a cursor that lags a deliberate action by a tenth of a second
- * looks broken rather than smooth.
+ * published immediately. There is no following frame to carry them, and a
+ * cursor that lags a deliberate action looks broken rather than smooth.
  */
 export function useThrottledPlayhead(playhead: Playhead, playing: boolean): number {
   const [value, setValue] = useState(playhead.value)
 
   useEffect(() => {
     let last = 0
+    let frame = 0
     let timer: ReturnType<typeof setTimeout> | undefined
-    const unsubscribe = playhead.subscribe(t => {
+
+    const cancel = () => {
+      if (frame) { cancelAnimationFrame(frame); frame = 0 }
       if (timer) { clearTimeout(timer); timer = undefined }
-      const now = performance.now()
-      if (!playing || now - last >= PUBLISH_MS) {
-        last = now
+    }
+    // Reads the playhead on the way out rather than closing over the value that
+    // scheduled this, so a publish that coalesced several moves carries the
+    // latest one.
+    const publish = () => {
+      frame = 0
+      last = performance.now()
+      setValue(playhead.value)
+    }
+
+    const unsubscribe = playhead.subscribe(t => {
+      if (!playing) {
+        cancel()
+        last = performance.now()
         setValue(t)
         return
       }
-      // Trailing edge, so the last frame before a pause is not left unpublished
-      // and the charts do not stop a fraction short of where the marker is.
-      timer = setTimeout(() => { last = performance.now(); setValue(playhead.value) }, PUBLISH_MS - (now - last))
+      if (frame || timer) return
+      const due = PUBLISH_MS - (performance.now() - last)
+      if (due <= 0) {
+        frame = requestAnimationFrame(publish)
+        return
+      }
+      // Trailing edge, so the last moment before a pause is not left
+      // unpublished and the charts do not stop short of where the marker is.
+      timer = setTimeout(() => { timer = undefined; frame = requestAnimationFrame(publish) }, due)
     })
-    return () => { unsubscribe(); if (timer) clearTimeout(timer) }
+
+    return () => { unsubscribe(); cancel() }
   }, [playhead, playing])
 
   return value

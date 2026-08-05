@@ -57,3 +57,44 @@ export function hrZoneBuckets(hrTimeline: { t: number; hr: number }[], maxHR: nu
     value: c, pct: Math.round((c / total) * 100), color: HR_ZONE_COLORS[i],
   }))
 }
+
+/**
+ * Zone counts up to any point in time, in constant time.
+ *
+ * Playback asks "how much of each zone has been played" on every frame, and
+ * answering it by filtering the samples and recounting is two passes over the
+ * whole activity each time. The shape of the question does not change though —
+ * only the cut point moves, forwards — so the counts are accumulated once and
+ * every later answer is a lookup.
+ *
+ * Returns a function rather than the table itself, so the caller cannot get the
+ * binary search subtly wrong in three places.
+ */
+export function hrZoneCounter(hrTimeline: { t: number; hr: number }[], maxHR: number) {
+  const total = hrTimeline.length
+  // prefix[z][i] is how many samples of zone z fall in the first i samples.
+  const prefix = [0, 1, 2, 3, 4].map(() => new Int32Array(total + 1))
+  for (let i = 0; i < total; i++) {
+    const pct = maxHR > 0 ? (hrTimeline[i].hr / maxHR) * 100 : 0
+    const zone = pct < 60 ? 0 : pct < 70 ? 1 : pct < 80 ? 2 : pct < 90 ? 3 : 4
+    for (let z = 0; z < 5; z++) prefix[z][i + 1] = prefix[z][i] + (z === zone ? 1 : 0)
+  }
+
+  return (t: number) => {
+    if (total === 0 || maxHR <= 0) return []
+    // Samples are in time order, so the cut point is a binary search.
+    let lo = 0
+    let hi = total
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1
+      if (hrTimeline[mid].t <= t) lo = mid + 1
+      else hi = mid
+    }
+    // Denominator is the whole activity, so the bars grow rather than
+    // rearranging themselves as early samples swing the shares about.
+    return [0, 1, 2, 3, 4].map(z => ({
+      name: HR_ZONE_LABELS[z], short: HR_ZONE_SHORT[z],
+      value: prefix[z][lo], pct: Math.round((prefix[z][lo] / total) * 100), color: HR_ZONE_COLORS[z],
+    }))
+  }
+}

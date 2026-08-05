@@ -19,12 +19,12 @@ export default function InsecureWarning({ compact }: { compact?: boolean }) {
     <div className="insecure-warning" role="alert">
       <ShieldAlert size={compact ? 15 : 17} aria-hidden />
       <div>
-        <strong>This connection is not encrypted.</strong>
+        <strong>This connection is not encrypted!</strong>
         {!compact && (
           <p>
-            Your password, your session and everything you do here travel in plain text over
+            Your password, session and everything you do here travel in plain text over
             <code> http://</code>, and anyone between this device and the server — on the same
-            Wi‑Fi, or anywhere along the route — can read and change them. Put the server behind
+            Wi-Fi, or anywhere along the route — can read and change them. Put the server behind
             HTTPS before using it over any network you do not control.
           </p>
         )}
