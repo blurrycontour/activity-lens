@@ -1025,6 +1025,96 @@ body {
   font-size: 11px;
 }
 
+/* ── Weather on a workout ── */
+
+.weather-card { margin-top: 16px; }
+.weather-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.weather-card-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+/* The reading itself is a number, so it follows the numeric convention. */
+.weather-reading {
+  font-family: var(--font-mono);
+  font-size: 17px;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.weather-sub {
+  font-size: 11.5px;
+  color: var(--text-3);
+  margin-top: 3px;
+}
+/* Absence is a sentence, not a dash: each case has a different remedy and the
+   text is what carries it. */
+.weather-absent {
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.6;
+}
+
+/* An inline action inside a sentence. A real button for keyboard and screen
+   readers; styled as the link it reads as. */
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--primary);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.link-button:hover { opacity: 0.85; }
+
+.weather-editor-note {
+  font-size: 11.5px;
+  color: var(--text-3);
+  line-height: 1.55;
+  margin-bottom: 14px;
+}
+.weather-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+.weather-field { display: flex; flex-direction: column; gap: 5px; }
+.weather-field-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-family: var(--font-mono);
+  color: var(--text-3);
+}
+/* The unit sits inside the field's box rather than after it, so a row of
+   inputs stays aligned however long the unit is. */
+.weather-field-input { position: relative; display: flex; align-items: center; }
+.weather-field-input .input { width: 100%; padding-right: 46px; }
+.weather-field-unit {
+  position: absolute;
+  right: 10px;
+  font-size: 11px;
+  color: var(--text-3);
+  pointer-events: none;
+}
+.weather-error { font-size: 12px; color: var(--danger); margin-top: 12px; }
+.weather-editor-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
 /* ── First-run import introduction ── */
 
 /* Taller than it is wide on a phone, so the routes stay a readable column

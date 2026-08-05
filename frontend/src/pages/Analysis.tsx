@@ -10,20 +10,26 @@ import { useLocalStorage } from '../lib/useLocalStorage'
 import { filterByRange, rangeLabel, toDateKey } from '../lib/range'
 import { AXIS_TICK, GRID_PROPS, HOVER_FILL } from '../lib/chartColors'
 import {
+  binByTemperature, describeCorrelation, hasUsableWeather, temperatureCorrelation,
+  type WeatherMetric,
+} from '../lib/weather'
+import { usePreferences } from '../context/PreferencesContext'
+import {
   ScatterChart, Scatter, XAxis, YAxis, ZAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   BarChart, Bar, Cell, LineChart, Line, ComposedChart, ReferenceArea, ReferenceLine,
 } from 'recharts'
-import { Award, Target, Zap, Activity, Navigation, TrendingUp, Gauge, Flame } from 'lucide-react'
+import { Award, Target, Zap, Activity, Navigation, TrendingUp, Gauge, Flame, CloudSun } from 'lucide-react'
 
 type PR = { longest: Workout; fastest: Workout | null; highest: Workout }
 
-type TabId = 'records' | 'trends' | 'efficiency' | 'load'
+type TabId = 'records' | 'trends' | 'efficiency' | 'load' | 'weather'
 
 const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: 'records', label: 'Records', icon: <Award size={15} /> },
   { id: 'trends', label: 'Trends', icon: <TrendingUp size={15} /> },
   { id: 'efficiency', label: 'Efficiency', icon: <Gauge size={15} /> },
   { id: 'load', label: 'Load', icon: <Flame size={15} /> },
+  { id: 'weather', label: 'Weather', icon: <CloudSun size={15} /> },
 ]
 
 type Metric = 'pace' | 'hr' | 'maxHr' | 'distance' | 'duration' | 'elevation' | 'calories' | 'speed' | 'steps'
@@ -111,6 +117,8 @@ export default function Analysis() {
   const [selectedMetrics, setSelectedMetrics] = useLocalStorage<Metric[]>('al_tl_metrics', ['pace', 'hr'])
   const [volumeBucket, setVolumeBucket] = useLocalStorage<'week' | 'month'>('al_tl_bucket', 'week')
   const [volumeMeasure, setVolumeMeasure] = useLocalStorage<'distance' | 'time'>('al_tl_vol', 'distance')
+  const [weatherMetric, setWeatherMetric] = useLocalStorage<WeatherMetric>('al_an_wx_metric', 'pace')
+  const { prefs } = usePreferences()
 
   // One filter pair governs the whole page, so a question only has to be asked
   // once rather than re-scoped on every tab.
@@ -119,6 +127,38 @@ export default function Analysis() {
     () => typeFilter === 'All' ? inRange : inRange.filter(w => w.type === typeFilter),
     [inRange, typeFilter],
   )
+
+  // ── Weather ──────────────────────────────────────────────────────────────
+  //
+  // Restricted to one activity type, and that is not a nicety: a Run and a Ride
+  // report pace in the same units and mean nothing like the same thing, so a
+  // mixed chart plots the ratio of rides to runs at each temperature rather
+  // than anything about temperature. When the page filter is 'All' this falls
+  // back to Run, which is what most libraries have most of.
+  const weatherType: WorkoutType = typeFilter === 'All' ? 'Run' : typeFilter
+  const weatherPool = useMemo(
+    () => inRange.filter(w => w.type === weatherType && hasUsableWeather(w, weatherMetric)),
+    [inRange, weatherType, weatherMetric],
+  )
+  const tempBins = useMemo(
+    () => binByTemperature(weatherPool, weatherMetric),
+    [weatherPool, weatherMetric],
+  )
+  const tempScatter = useMemo(
+    () => weatherPool.map(w => ({
+      temp: w.weather!.tempC,
+      value: weatherMetric === 'pace' ? w.avgPace : w.avgHR,
+      name: w.name,
+    })),
+    [weatherPool, weatherMetric],
+  )
+  const tempR = useMemo(
+    () => temperatureCorrelation(weatherPool, weatherMetric),
+    [weatherPool, weatherMetric],
+  )
+  // Anything at all, regardless of the current filters — the difference between
+  // "no weather yet" and "none in this window" is the whole empty state.
+  const anyWeather = useMemo(() => allWorkouts.some(w => w.weather), [allWorkouts])
 
   // ── Records ──────────────────────────────────────────────────────────────
   const { PRs, calByType } = useMemo(() => {
@@ -772,6 +812,96 @@ export default function Analysis() {
               </ResponsiveContainer>
             </ChartCard>
           </>
+        )}
+
+        {/* ── Weather: does temperature move your pace or heart rate? ── */}
+        {tab === 'weather' && (
+          <ChartCard
+            title={`Temperature vs ${weatherMetric === 'pace' ? 'pace' : 'heart rate'}`}
+            icon={<CloudSun size={14} color="var(--primary)" />}
+            description={`${weatherType} workouts, grouped into 5 °C bands.`}
+            info="Each point on the line is the average across every workout in that temperature band, with the individual workouts shown faintly behind it. Bands with fewer than three workouts are left out — one workout is not an average. This is observational: distance, terrain, sleep and training phase all move with the seasons too, so treat it as a tendency rather than a cause."
+            actions={
+              <Segmented
+                value={weatherMetric}
+                onChange={setWeatherMetric}
+                options={[{ id: 'pace', label: 'Pace' }, { id: 'hr', label: 'HR' }]}
+              />
+            }
+          >
+            {/* Three distinct empty states, because they have three different
+                remedies and one generic "no data" hides all of them. */}
+            {prefs?.weatherEnabled === false && !anyWeather ? (
+              <EmptyPlot height={260}>
+                Weather lookups are turned off, so there is nothing to compare yet.
+                Turn them on in Settings → Weather, where you can also fetch
+                conditions for workouts you already have.
+              </EmptyPlot>
+            ) : !anyWeather ? (
+              <EmptyPlot height={260}>
+                No weather recorded yet. New workouts get it automatically; to
+                include the ones you already have, use Settings → Weather.
+              </EmptyPlot>
+            ) : tempBins.length === 0 ? (
+              <EmptyPlot height={260}>
+                Not enough {weatherType.toLowerCase()} workouts with weather in this
+                period. Widen the range, or pick another activity.
+              </EmptyPlot>
+            ) : (
+              <>
+                <ResponsiveContainer width="100%" height={260}>
+                  <ComposedChart margin={{ top: 8, right: 16, left: 8, bottom: 18 }}>
+                    <CartesianGrid {...GRID_PROPS} />
+                    <XAxis
+                      type="number" dataKey="temp" name="Temperature"
+                      domain={['dataMin - 2', 'dataMax + 2']}
+                      tick={AXIS_TICK} axisLine={false} tickLine={false}
+                      label={xLabel('Temperature (°C)')}
+                    />
+                    <YAxis
+                      type="number" dataKey="value"
+                      tick={AXIS_TICK} axisLine={false} tickLine={false} width={52}
+                      tickFormatter={v => weatherMetric === 'pace' ? fmtPace(v) : String(Math.round(v))}
+                      label={yLabel(weatherMetric === 'pace' ? 'Pace (/km)' : 'Avg HR (bpm)')}
+                    />
+                    <Tooltip
+                      cursor={{ stroke: HOVER_FILL }}
+                      content={({ active, payload }) => {
+                        if (!active || !payload?.length) return null
+                        const d = payload[0].payload
+                        const value = weatherMetric === 'pace' ? fmtPace(d.value ?? d[weatherMetric]) : Math.round(d.value ?? d[weatherMetric])
+                        return (
+                          <div className="custom-tooltip">
+                            <div>{d.name ?? `${d.from}–${d.to} °C`}</div>
+                            <div style={{ color: 'var(--primary)' }}>{value}{weatherMetric === 'hr' ? ' bpm' : ''}</div>
+                            {d.count != null && <div style={{ color: 'var(--text-3)' }}>{d.count} workouts</div>}
+                          </div>
+                        )
+                      }}
+                    />
+                    {/* The individual workouts, faint. The line alone would read
+                        as a law; the spread behind it is the honest part. */}
+                    <Scatter data={tempScatter} dataKey="value" fill="var(--text-3)" opacity={0.35} isAnimationActive={false} />
+                    <Line
+                      data={tempBins.map(b => ({ temp: (b.from + b.to) / 2, value: b[weatherMetric], from: b.from, to: b.to, count: b.count }))}
+                      type="monotone" dataKey="value"
+                      stroke="var(--primary)" strokeWidth={2}
+                      dot={{ r: 3, fill: 'var(--primary)' }}
+                      isAnimationActive={false}
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
+                <p style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 10, lineHeight: 1.55 }}>
+                  {describeCorrelation(tempR, weatherMetric)}
+                  {' '}
+                  <span style={{ color: 'var(--text-3)' }}>
+                    ({weatherPool.length} workout{weatherPool.length === 1 ? '' : 's'}
+                    {tempR !== null && `, r = ${tempR.toFixed(2)}`})
+                  </span>
+                </p>
+              </>
+            )}
+          </ChartCard>
         )}
       </div>
     </div>

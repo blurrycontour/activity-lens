@@ -171,6 +171,14 @@ export interface UserPreferences {
   goals: ApiGoal[]
   /** Notification switches; absent until the user saves them once. */
   notify?: NotifyPrefs
+  /**
+   * Whether newly imported workouts get their historical conditions looked up.
+   *
+   * On by default, because it only ever covers workouts imported from now on —
+   * nothing already in the library is sent anywhere without the separate,
+   * explicit backfill below.
+   */
+  weatherEnabled?: boolean
 }
 
 export interface ApiGoal {
@@ -465,6 +473,21 @@ export const api = {
     request<{ status: string; email: string }>('/api/auth/account/deletion/request', { method: 'POST' }),
   confirmAccountDeletion: (code: string) =>
     request<{ status: string }>('/api/auth/account/deletion', { method: 'POST', body: { code } }),
+
+  // --- Weather ---
+  // Conditions a person typed in. These outrank anything fetched and are never
+  // overwritten by a later lookup.
+  setWorkoutWeather: (id: string, payload: import('../data/workouts').Weather) =>
+    request<import('../data/workouts').Workout>(`/api/workouts/${id}/weather`, { method: 'PUT', body: payload }),
+  // Undoes a manual entry, putting the workout back in the lookup queue.
+  clearWorkoutWeather: (id: string) =>
+    request<import('../data/workouts').Workout>(`/api/workouts/${id}/weather`, { method: 'DELETE' }),
+  // How many workouts have never been checked — everything that predates the
+  // feature, until the user asks.
+  weatherBackfillStatus: () =>
+    request<{ pending: number }>('/api/workouts/weather/backfill'),
+  requestWeatherBackfill: () =>
+    request<{ queued: number }>('/api/workouts/weather/backfill', { method: 'POST' }),
 
   // --- User preferences ---
   getPreferences: () => request<UserPreferences>('/api/preferences'),

@@ -29,7 +29,7 @@ export const PAGES: Page[] = [...DESKTOP_PAGES, 'settings', 'admin']
  */
 export const SETTINGS_SECTIONS = [
   'profile', 'security', 'body',
-  'appearance', 'dashboard', 'goals', 'notifications',
+  'appearance', 'dashboard', 'goals', 'notifications', 'weather',
   'feedback',
   'autoimport', 'app', 'server',
 ] as const
