@@ -134,3 +134,102 @@ func (s *Service) RecordRawFilename(ctx context.Context, workoutID, filename str
 func (s *Service) PurgeUserWorkouts(ctx context.Context, userID int64) ([]string, error) {
 	return s.repo.DeleteAllForUser(ctx, userID)
 }
+
+// --- Weather ----------------------------------------------------------------
+
+// PendingWeather returns the next batch of workouts owed a lookup, for the
+// background pass. See Repository.ListPendingWeather on why this must be fully
+// returned before any network work begins.
+func (s *Service) PendingWeather(ctx context.Context, userIDs []int64, maxAttempts, limit int) ([]WeatherTarget, error) {
+	return s.repo.ListPendingWeather(ctx, userIDs, maxAttempts, limit)
+}
+
+// ResolveWeatherStart locates a workout that predates the weather feature, by
+// reading its route. See the repository method.
+func (s *Service) ResolveWeatherStart(ctx context.Context, workoutID string) (lat, lon float64, ok bool, err error) {
+	return s.repo.ResolveWeatherStart(ctx, workoutID)
+}
+
+// RecordWeather stores a fetched reading.
+func (s *Service) RecordWeather(ctx context.Context, workoutID string, w Weather) error {
+	return s.repo.SetWeather(ctx, workoutID, WeatherOK, w)
+}
+
+// MarkWeatherSkipped settles a workout that can never have weather.
+func (s *Service) MarkWeatherSkipped(ctx context.Context, workoutID string) error {
+	return s.repo.MarkWeatherSkipped(ctx, workoutID)
+}
+
+// MarkWeatherFailed counts a failed attempt against the retry budget.
+func (s *Service) MarkWeatherFailed(ctx context.Context, workoutID string) error {
+	return s.repo.MarkWeatherFailed(ctx, workoutID)
+}
+
+// SetManualWeather records conditions a person typed in.
+//
+// Ownership is checked here rather than in the repository — unlike the
+// background pass, which has already established it by selecting per user, this
+// is reachable from a request, and a workout id is guessable enough that the
+// check has to be somewhere. Get is owner-scoped, so a workout belonging to
+// anybody else is ErrNotFound before anything is written.
+//
+// The status becomes WeatherManual, which the fetcher never overwrites: someone
+// who corrected a temperature from their own notes should not find a 25 km grid
+// average back in its place after the next pass.
+func (s *Service) SetManualWeather(ctx context.Context, userID int64, workoutID string, w Weather) error {
+	if _, err := s.repo.Get(ctx, userID, workoutID); err != nil {
+		return err
+	}
+	if err := validateWeather(w); err != nil {
+		return err
+	}
+	return s.repo.SetWeather(ctx, workoutID, WeatherManual, w)
+}
+
+// ClearManualWeather puts a workout back to whatever the fetcher can find,
+// so a mistaken manual entry is undoable rather than permanent.
+func (s *Service) ClearManualWeather(ctx context.Context, userID int64, workoutID string) error {
+	if _, err := s.repo.Get(ctx, userID, workoutID); err != nil {
+		return err
+	}
+	return s.repo.SetWeather(ctx, workoutID, WeatherPending, Weather{})
+}
+
+// RequestWeatherBackfill queues this user's never-checked workouts and reports
+// how many were queued.
+func (s *Service) RequestWeatherBackfill(ctx context.Context, userID int64) (int, error) {
+	return s.repo.RequestWeatherBackfill(ctx, userID)
+}
+
+// RetryFailedWeather re-queues this user's exhausted lookups.
+func (s *Service) RetryFailedWeather(ctx context.Context, userID int64) (int, error) {
+	return s.repo.RetryFailedWeather(ctx, userID)
+}
+
+// WeatherCounts tallies this user's workouts by weather status.
+func (s *Service) WeatherCounts(ctx context.Context, userID int64) (WeatherCounts, error) {
+	return s.repo.WeatherCounts(ctx, userID)
+}
+
+// validateWeather rejects values that are not physically possible.
+//
+// Not fussiness: these land in a chart that averages them, so a typo of 250
+// instead of 25 does not look wrong on the workout it was entered on — it
+// quietly bends a whole temperature bucket in the analysis.
+func validateWeather(w Weather) error {
+	switch {
+	case w.TempC < -90 || w.TempC > 60:
+		return fmt.Errorf("%w: temperature must be between -90 and 60 °C", ErrInvalid)
+	case w.ApparentC < -120 || w.ApparentC > 80:
+		return fmt.Errorf("%w: apparent temperature is out of range", ErrInvalid)
+	case w.Humidity < 0 || w.Humidity > 100:
+		return fmt.Errorf("%w: humidity must be between 0 and 100%%", ErrInvalid)
+	case w.WindKph < 0 || w.WindKph > 500:
+		return fmt.Errorf("%w: wind speed is out of range", ErrInvalid)
+	case w.PrecipMm < 0 || w.PrecipMm > 2000:
+		return fmt.Errorf("%w: precipitation is out of range", ErrInvalid)
+	case w.Code < 0 || w.Code > 99:
+		return fmt.Errorf("%w: weather code must be a WMO code (0-99)", ErrInvalid)
+	}
+	return nil
+}

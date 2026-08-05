@@ -8,6 +8,52 @@ export interface ElevPoint { t: number; elev: number }
 /** Steps per minute for foot-based activities, rpm for rides. */
 export interface CadencePoint { t: number; cad: number }
 
+/** Conditions over the span of a workout. See backend/internal/weather. */
+export interface Weather {
+  tempC: number
+  apparentC: number
+  /** Relative humidity, 0-100. */
+  humidity: number
+  windKph: number
+  /** Total that fell during the workout, not a rate. */
+  precipMm: number
+  /** WMO weather code, driving the icon and label. */
+  code: number
+}
+
+/**
+ * A library tallied by weather status, for the settings page.
+ *
+ * `recorded` folds looked-up and hand-entered together — from the outside a
+ * workout either has conditions on it or does not — with `manual` naming the
+ * subset that a lookup will never touch.
+ */
+export interface WeatherCounts {
+  recorded: number
+  manual: number
+  /** Queued, including anything held back by Open-Meteo rate limiting us. */
+  scheduled: number
+  /** Out of retries. Only an explicit retry moves these. */
+  failed: number
+  /** Indoor, or no GPS: can never have weather. */
+  skipped: number
+  /** Predates the feature; only ever queued by an explicit backfill. */
+  unchecked: number
+}
+
+/**
+ * Why a workout has no weather.
+ *
+ * 'none'    never checked — everything that predates the feature, until the
+ *           user asks for a backfill
+ * 'pending' queued for the background lookup
+ * 'ok'      fetched
+ * 'manual'  typed in by hand; never overwritten by a lookup
+ * 'skipped' impossible: no GPS, indoors, or a nonsense coordinate
+ * 'failed'  tried and could not — distinct from never having looked
+ */
+export type WeatherStatus = 'none' | 'pending' | 'ok' | 'manual' | 'skipped' | 'failed'
+
 export interface Workout {
   id: string
   name: string
@@ -32,6 +78,17 @@ export interface Workout {
    * answers "what just arrived".
    */
   createdAt?: string
+  /**
+   * Conditions this workout happened in, or absent when we do not know.
+   *
+   * Absence is meaningful and is the only honest representation: every column
+   * behind this is stored NOT NULL DEFAULT 0, so a workout nobody looked up
+   * would otherwise arrive as a confident 0 °C on a clear, still day. The
+   * server only sends this when it has a real reading.
+   */
+  weather?: Weather
+  /** Why `weather` is missing, so the UI can say something more useful than nothing. */
+  weatherStatus?: WeatherStatus
   caloriesManual?: boolean
   /** Calories stated by the imported file itself rather than estimated by us. */
   caloriesReported?: boolean

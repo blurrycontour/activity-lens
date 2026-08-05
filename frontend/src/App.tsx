@@ -27,6 +27,7 @@ import { type Workout } from './data/workouts'
 import { useAuth } from './context/AuthContext'
 import { useRefresh } from './context/RefreshContext'
 import { WorkoutsProvider } from './context/WorkoutsContext'
+import { PreferencesProvider } from './context/PreferencesContext'
 import {
   adjacentPage, parseLocation, pathForPage,
   type AdminSection, type Page, type SettingsSection,
@@ -434,6 +435,11 @@ export default function App() {
   }
 
   return (
+    // Preferences are app-wide now, not a Settings concern: the workout page
+    // asks whether weather lookups are on, and Analysis asks the same to tell
+    // "no data yet" apart from "you have this switched off". Mounted here, once,
+    // rather than fetched again by each page that wants it.
+    <PreferencesProvider>
     <WorkoutsProvider>
       <div className={layoutClass}>
       <TopBar
@@ -480,7 +486,13 @@ export default function App() {
         <PullToRefresh scrollEl={mainEl} enabled={gesturesEnabled} onRefresh={refresh} />
         <SwipePager page={page} swipe={swipe}>
         {selectedWorkout ? (
-          <WorkoutDetail key={selectedWorkout.id} workout={selectedWorkout} accent={accent} onBack={() => selectWorkout(null)} />
+          <WorkoutDetail
+            key={selectedWorkout.id}
+            workout={selectedWorkout}
+            accent={accent}
+            onBack={() => selectWorkout(null)}
+            onOpenSettings={() => navigate('settings')}
+          />
         ) : page === 'dashboard' ? (
           <Dashboard />
         ) : page === 'workouts' ? (
@@ -541,5 +553,6 @@ export default function App() {
       )}
       </div>
     </WorkoutsProvider>
+    </PreferencesProvider>
   )
 }

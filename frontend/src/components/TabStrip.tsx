@@ -1,0 +1,91 @@
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+
+export interface TabStripItem<T extends string> {
+  id: T
+  label: string
+  icon?: React.ReactNode
+}
+
+interface TabStripProps<T extends string> {
+  items: TabStripItem<T>[]
+  value: T
+  onChange: (id: T) => void
+  /** Names the strip for assistive tech, e.g. "Analysis sections". */
+  ariaLabel: string
+}
+
+/**
+ * A horizontal strip of sections.
+ *
+ * The strip has always scrolled when it did not fit, which was fine at four
+ * tabs and stopped being fine at five: on a phone the last one sat entirely
+ * past the right edge, with nothing on screen to suggest it existed. A tab
+ * nobody can see is a tab nobody uses.
+ *
+ * Two things fix that, and both are needed:
+ *
+ *   - the selected tab is scrolled into view, so returning to the page shows
+ *     you where you are rather than the start of a list;
+ *   - the edge fades while there is more in that direction, which is the only
+ *     on-screen evidence that scrolling is possible.
+ *
+ * The fade is driven by measurement rather than a media query, so it is right
+ * for any number of tabs at any width — including a desktop window narrowed to
+ * the point where the strip overflows, which no breakpoint would catch.
+ */
+export default function TabStrip<T extends string>({ items, value, onChange, ariaLabel }: TabStripProps<T>) {
+  const ref = useRef<HTMLElement>(null)
+  const [edges, setEdges] = useState({ start: false, end: false })
+
+  function measure() {
+    const el = ref.current
+    if (!el) return
+    // A 1px tolerance: fractional layout widths otherwise leave the "more this
+    // way" fade showing permanently at the end of the scroll.
+    const max = el.scrollWidth - el.clientWidth
+    setEdges({ start: el.scrollLeft > 1, end: el.scrollLeft < max - 1 })
+  }
+
+  // Before paint, so the strip never appears scrolled to the wrong place.
+  useLayoutEffect(() => {
+    const el = ref.current
+    const active = el?.querySelector<HTMLElement>('.tab-strip-item.active')
+    if (!el || !active) return
+    // Centred by hand rather than with scrollIntoView, which on a horizontal
+    // scroller also scrolls every ancestor — landing the user halfway down the
+    // page for the crime of switching tabs.
+    const left = active.offsetLeft - (el.clientWidth - active.clientWidth) / 2
+    el.scrollTo({ left: Math.max(0, left), behavior: 'smooth' })
+  }, [value])
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    measure()
+    // Resize covers rotation and a desktop window being dragged narrower.
+    const obs = new ResizeObserver(measure)
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [items.length])
+
+  return (
+    <nav
+      ref={ref}
+      className={`tab-strip${edges.start ? ' fade-start' : ''}${edges.end ? ' fade-end' : ''}`}
+      aria-label={ariaLabel}
+      onScroll={measure}
+    >
+      {items.map(t => (
+        <button
+          key={t.id}
+          className={`tab-strip-item${value === t.id ? ' active' : ''}`}
+          onClick={() => onChange(t.id)}
+          aria-current={value === t.id ? 'page' : undefined}
+        >
+          {t.icon}
+          {t.label}
+        </button>
+      ))}
+    </nav>
+  )
+}

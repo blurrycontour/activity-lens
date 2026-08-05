@@ -3,12 +3,14 @@ package httpapi
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/blurrycontour/activity-lens/backend/internal/config"
 	"github.com/blurrycontour/activity-lens/backend/internal/equipment"
 	"github.com/blurrycontour/activity-lens/backend/internal/feedback"
 	"github.com/blurrycontour/activity-lens/backend/internal/notify"
 	"github.com/blurrycontour/activity-lens/backend/internal/settings"
+	"github.com/blurrycontour/activity-lens/backend/internal/weather"
 	"github.com/blurrycontour/activity-lens/backend/internal/web"
 	"github.com/blurrycontour/activity-lens/backend/internal/workout"
 
@@ -36,6 +38,13 @@ type Server struct {
 	// nativeCodes holds one-time SSO codes between the browser redirect and the
 	// Android app collecting them; see oidc_native.go.
 	nativeCodes *nativeAuthCodes
+	// weather looks up the historical conditions a workout happened in. Nil
+	// disables the whole feature, which is what keeps every existing test's
+	// Server construction valid and gives a deployment a way to opt out.
+	weather weather.Fetcher
+	// weatherCooldownUntil pauses the weather pass after Open-Meteo tells us we
+	// have asked for too much. Touched only by the scheduler goroutine.
+	weatherCooldownUntil time.Time
 }
 
 // New constructs a Server and its auth middleware/OIDC handler.
@@ -65,6 +74,15 @@ func New(cfg config.Config, authSvc *auth.Service, workoutSvc *workout.Service, 
 	}
 	return s
 }
+
+// UseWeather wires the historical-weather lookup.
+//
+// Optional, and separate from New because New already takes nine dependencies
+// and this one is genuinely optional: without it the background pass returns
+// immediately and the feature is inert, which is what every existing test gets
+// for free and what a deployment that would rather not call out gets by
+// leaving it unset.
+func (s *Server) UseWeather(f weather.Fetcher) { s.weather = f }
 
 // Handler builds the top-level http.Handler: API routes plus the SPA.
 func (s *Server) Handler() (http.Handler, error) {
@@ -138,6 +156,14 @@ func (s *Server) apiRoutes() http.Handler {
 	mux.Handle("DELETE /api/workouts/{id}", s.authedCSRF(s.handleDeleteWorkout))
 	mux.Handle("GET /api/workouts/{id}/original", s.authed(s.handleDownloadOriginal))
 	mux.Handle("POST /api/workouts/{id}/recalculate", s.authedCSRF(s.handleRecalculateWorkout))
+	// Weather a person typed in, for when the grid average is not good enough.
+	mux.Handle("PUT /api/workouts/{id}/weather", s.authedCSRF(s.handleSetWorkoutWeather))
+	mux.Handle("DELETE /api/workouts/{id}/weather", s.authedCSRF(s.handleClearWorkoutWeather))
+	// How many older workouts have never been checked, and the action that
+	// queues them. Four segments, so neither collides with /api/workouts/{id}.
+	mux.Handle("GET /api/workouts/weather/status", s.authed(s.handleWeatherStatus))
+	mux.Handle("POST /api/workouts/weather/backfill", s.authedCSRF(s.handleRequestWeatherBackfill))
+	mux.Handle("POST /api/workouts/weather/retry", s.authedCSRF(s.handleRetryFailedWeather))
 	mux.Handle("POST /api/workouts/import", s.authedCSRF(s.handleImportWorkout))
 	// Bulk import support: ask once which files are already held, and run the
 	// deferred gear/goal checks once when the batch finishes.

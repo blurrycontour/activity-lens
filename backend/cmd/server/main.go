@@ -20,6 +20,7 @@ import (
 	"github.com/blurrycontour/activity-lens/backend/internal/notify"
 	"github.com/blurrycontour/activity-lens/backend/internal/settings"
 	"github.com/blurrycontour/activity-lens/backend/internal/store"
+	"github.com/blurrycontour/activity-lens/backend/internal/weather"
 	"github.com/blurrycontour/activity-lens/backend/internal/workout"
 
 	"github.com/blurrycontour/go-authkit/auth"
@@ -123,6 +124,11 @@ func run() error {
 		Licenses: licenses,
 		Source:   source,
 	})
+	// Historical weather for imported workouts. Nothing leaves the server for a
+	// user who has switched it off, and nothing already in the library is looked
+	// up unless they ask for a backfill.
+	apiServer.UseWeather(weather.New().At)
+
 	handler, err := apiServer.Handler()
 	if err != nil {
 		return err

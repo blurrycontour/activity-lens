@@ -79,6 +79,43 @@ type Repository interface {
 	// KnownContentHashes returns the subset of hashes the user has already
 	// imported, so a client can skip uploading files that would only dedupe.
 	KnownContentHashes(ctx context.Context, userID int64, hashes []string) ([]string, error)
+
+	// ListPendingWeather returns up to limit workouts belonging to userIDs that
+	// still owe a weather lookup, newest first — so someone who has just
+	// imported sees this week fill in before a five-year-old backfill finishes.
+	//
+	// Takes an explicit id set rather than being owner-scoped because only the
+	// background pass calls it, and only for users who have the setting on. Same
+	// shape of exception as SetRawFilename.
+	//
+	// The caller MUST let this return before doing any network work. It
+	// materialises its rows for exactly that reason: see the note on the
+	// implementation.
+	ListPendingWeather(ctx context.Context, userIDs []int64, maxAttempts, limit int) ([]WeatherTarget, error)
+	// ResolveWeatherStart fills in the start coordinate of a workout that
+	// predates this feature, reading it out of the route blob. Returns
+	// ok=false, having settled the row to skipped, when there is no usable one.
+	ResolveWeatherStart(ctx context.Context, workoutID string) (lat, lon float64, ok bool, err error)
+	// SetWeather records a reading and the status that vouches for it —
+	// WeatherOK from a lookup, WeatherManual from a person.
+	SetWeather(ctx context.Context, workoutID string, status WeatherStatus, w Weather) error
+	// MarkWeatherSkipped records that this workout can never have weather.
+	MarkWeatherSkipped(ctx context.Context, workoutID string) error
+	// MarkWeatherFailed increments the attempt counter, leaving the row
+	// retryable until the caller's cap is reached.
+	MarkWeatherFailed(ctx context.Context, workoutID string) error
+	// RequestWeatherBackfill queues every workout of this user's that was never
+	// asked about, and returns how many. This is the only thing that moves rows
+	// out of WeatherNone in bulk, which is what keeps "turn the setting on" from
+	// silently meaning "send my whole location history somewhere".
+	RequestWeatherBackfill(ctx context.Context, userID int64) (int, error)
+	// RetryFailedWeather re-queues this user's exhausted lookups, clearing the
+	// attempt counter. The only way out of WeatherFailed short of typing the
+	// conditions in by hand.
+	RetryFailedWeather(ctx context.Context, userID int64) (int, error)
+	// WeatherCounts tallies this user's workouts by status, so the UI can offer
+	// each action with a number rather than a vague promise.
+	WeatherCounts(ctx context.Context, userID int64) (WeatherCounts, error)
 }
 
 // SQLiteRepository implements Repository on top of *sql.DB (SQLite dialect).
@@ -104,9 +141,23 @@ const insertCols = workoutCols + `, external_id, content_hash`
 // Selection column sets add visibility, which reads back into the model but is
 // deliberately absent from insertCols and from the UPDATE in Update: sharing
 // state has its own method, so no create or patch path can ever change it.
+//
+// weatherCols is appended to both sets, and appended is the operative word: the
+// two scanners below take positional arguments, so anything inserted in the
+// middle silently shifts every field after it. New columns go on the end.
+//
+// It is in the *summary* set deliberately. That is what lets the Analysis page
+// correlate temperature against pace from the list it already loads, with no
+// second endpoint and no per-workout request. Seven scalars against a row that
+// already carries twenty is nothing, and the summary scanner does not touch the
+// route blob either way. start_lat/start_lon are deliberately absent: only the
+// background pass reads those, through its own narrow query.
+const weatherCols = `weather_status, weather_temp_c, weather_apparent_c,
+	weather_humidity, weather_wind_kph, weather_precip_mm, weather_code`
+
 const (
-	selectCols        = workoutCols + `, visibility, raw_filename, created_at`
-	selectSummaryCols = workoutSummaryCols + `, visibility, created_at`
+	selectCols        = workoutCols + `, visibility, raw_filename, created_at, ` + weatherCols
+	selectSummaryCols = workoutSummaryCols + `, visibility, created_at, ` + weatherCols
 )
 
 func (r *SQLiteRepository) Create(ctx context.Context, w *Workout) error {
@@ -115,13 +166,19 @@ func (r *SQLiteRepository) Create(ctx context.Context, w *Workout) error {
 		return err
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
-	_, err = r.db.ExecContext(ctx, `INSERT INTO workouts (`+insertCols+`, created_at, updated_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	// The weather columns are written here and nowhere else in this statement's
+	// vicinity: Update deliberately never mentions them, so no edit or
+	// recalculation can wipe a reading. See SetWeather and friends below.
+	lat, lon, weatherStatus := deriveWeatherTarget(w)
+	_, err = r.db.ExecContext(ctx, `INSERT INTO workouts (`+insertCols+`, created_at, updated_at,
+		start_lat, start_lon, weather_status)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		w.ID, w.UserID, w.Name, string(w.Type), w.StartTime.UTC().Format(time.RFC3339),
 		w.Duration, w.Distance, w.AvgHR, w.MaxHR, w.ElevationGain, w.Calories, w.Steps,
 		w.AvgPace, w.AvgSpeed, s.route, s.hr, s.pace, s.elev, s.cadence, w.Notes,
 		boolToInt(w.CaloriesManual), boolToInt(w.CaloriesReported), boolToInt(w.StepsManual),
-		string(w.Source), nullIfEmpty(w.ExternalID), nullIfEmpty(w.ContentHash), now, now)
+		string(w.Source), nullIfEmpty(w.ExternalID), nullIfEmpty(w.ContentHash), now, now,
+		lat, lon, string(weatherStatus))
 	if err != nil {
 		if isUniqueViolation(err) {
 			return ErrDuplicate
@@ -335,6 +392,245 @@ func (r *SQLiteRepository) KnownContentHashes(ctx context.Context, userID int64,
 	return out, rows.Err()
 }
 
+// ListPendingWeather returns the next batch of workouts owed a weather lookup.
+//
+// Every row is read into the slice before this returns, and that is not an
+// implementation detail — it is load-bearing. The pool is capped at one
+// connection (store/db.go), so a caller that iterated *sql.Rows while making
+// HTTP calls and then issued an UPDATE would deadlock: the UPDATE waits for the
+// connection the open cursor is holding, and nothing ever releases it. That
+// takes down every HTTP handler in the process, not just this pass. Draining
+// first makes the deadlock structurally impossible rather than a rule someone
+// has to remember.
+func (r *SQLiteRepository) ListPendingWeather(ctx context.Context, userIDs []int64, maxAttempts, limit int) ([]WeatherTarget, error) {
+	if len(userIDs) == 0 || limit <= 0 {
+		return nil, nil
+	}
+	// Placeholders from the slice length, never its contents.
+	args := make([]any, 0, len(userIDs)+2)
+	placeholders := make([]string, len(userIDs))
+	for i, id := range userIDs {
+		placeholders[i] = "?"
+		args = append(args, id)
+	}
+	args = append(args, maxAttempts, limit)
+	query := `SELECT id, start_time, duration, start_lat, start_lon FROM workouts
+		WHERE user_id IN (` + strings.Join(placeholders, ",") + `)
+		  AND weather_status IN ('pending','failed')
+		  AND weather_attempts < ?
+		ORDER BY start_time DESC
+		LIMIT ?`
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query pending weather: %w", err)
+	}
+	defer rows.Close()
+	var out []WeatherTarget
+	for rows.Next() {
+		var (
+			t         WeatherTarget
+			startTime string
+		)
+		if err := rows.Scan(&t.ID, &startTime, &t.Duration, &t.Lat, &t.Lon); err != nil {
+			return nil, err
+		}
+		// An unparseable start time cannot be looked up and will never become
+		// parseable, so it is simply not returned; the row stays pending and
+		// costs one skipped scan per pass rather than a doomed request.
+		if parsed, err := time.Parse(time.RFC3339, startTime); err == nil {
+			t.StartTime = parsed
+			out = append(out, t)
+		}
+	}
+	return out, rows.Err()
+}
+
+// SetWeather records a reading. Not owner-scoped: the background pass has
+// already established ownership by selecting the batch per user, and a manual
+// edit goes through the service, which checks.
+func (r *SQLiteRepository) SetWeather(ctx context.Context, workoutID string, status WeatherStatus, w Weather) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE workouts SET
+		weather_status = ?, weather_temp_c = ?, weather_apparent_c = ?, weather_humidity = ?,
+		weather_wind_kph = ?, weather_precip_mm = ?, weather_code = ?, weather_attempts = 0
+		WHERE id = ?`,
+		string(status), w.TempC, w.ApparentC, w.Humidity, w.WindKph, w.PrecipMm, w.Code, workoutID)
+	if err != nil {
+		return fmt.Errorf("set weather: %w", err)
+	}
+	return nil
+}
+
+// MarkWeatherSkipped records that this workout can never have weather.
+func (r *SQLiteRepository) MarkWeatherSkipped(ctx context.Context, workoutID string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE workouts SET weather_status = ? WHERE id = ?`, string(WeatherSkipped), workoutID)
+	if err != nil {
+		return fmt.Errorf("mark weather skipped: %w", err)
+	}
+	return nil
+}
+
+// MarkWeatherFailed counts one failed attempt. The row stays selectable until
+// the caller's cap is reached, at which point the WHERE clause in
+// ListPendingWeather stops returning it and it rests as 'failed' — which the UI
+// reads as "we tried and could not", distinct from "we have not looked".
+//
+// A manual entry is never demoted: someone who typed a temperature in should
+// not have that undone by a lookup that happened to be in flight.
+func (r *SQLiteRepository) MarkWeatherFailed(ctx context.Context, workoutID string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE workouts SET weather_status = ?, weather_attempts = weather_attempts + 1
+		 WHERE id = ? AND weather_status != ?`,
+		string(WeatherFailed), workoutID, string(WeatherManual))
+	if err != nil {
+		return fmt.Errorf("mark weather failed: %w", err)
+	}
+	return nil
+}
+
+// ResolveWeatherStart fills in a workout's start coordinate from its route.
+//
+// Only workouts that predate this feature need this. Everything inserted since
+// had its coordinate written at insert, which is the whole point of the
+// denormalisation — but the migration could not do the same for existing rows,
+// because the coordinate lives inside a gzipped JSON blob that SQL cannot read.
+//
+// So the cost is paid here instead: once per legacy workout, inside the paced
+// background pass, rather than in one enormous pass at the moment somebody
+// clicks a button. Returns ok=false when there is no usable point, and settles
+// the row to 'skipped' so it is never decompressed again.
+func (r *SQLiteRepository) ResolveWeatherStart(ctx context.Context, workoutID string) (lat, lon float64, ok bool, err error) {
+	var blob []byte
+	if err := r.db.QueryRowContext(ctx,
+		`SELECT route FROM workouts WHERE id = ?`, workoutID).Scan(&blob); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, 0, false, ErrNotFound
+		}
+		return 0, 0, false, fmt.Errorf("read route: %w", err)
+	}
+	var route []LatLng
+	if err := unmarshalInto(blob, &route); err != nil {
+		return 0, 0, false, err
+	}
+	// Reuse the same judgement the insert path applies, so a legacy row and a
+	// new one can never disagree about what counts as a usable location.
+	probe := &Workout{Route: route, StartTime: time.Now()}
+	lat, lon, status := deriveWeatherTarget(probe)
+	if status != WeatherPending {
+		if err := r.MarkWeatherSkipped(ctx, workoutID); err != nil {
+			return 0, 0, false, err
+		}
+		return 0, 0, false, nil
+	}
+	if _, err := r.db.ExecContext(ctx,
+		`UPDATE workouts SET start_lat = ?, start_lon = ? WHERE id = ?`, lat, lon, workoutID); err != nil {
+		return 0, 0, false, fmt.Errorf("store start coordinate: %w", err)
+	}
+	return lat, lon, true, nil
+}
+
+// RequestWeatherBackfill queues this user's never-asked-about workouts.
+//
+// Status only — it does not try to work out which of them have a location,
+// because for rows that predate this feature that answer is inside a compressed
+// blob and finding it for a whole library in one request is exactly the kind of
+// work that times out. The background pass resolves each one as it reaches it,
+// via ResolveWeatherStart, and settles the ones that turn out to have no route.
+//
+// This is the only thing that moves rows out of WeatherNone in bulk, and it is
+// only ever called from an explicit user action. That is what keeps "turn the
+// setting on" from quietly meaning "send my entire location history somewhere".
+func (r *SQLiteRepository) RequestWeatherBackfill(ctx context.Context, userID int64) (int, error) {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE workouts SET weather_status = ?, weather_attempts = 0
+		 WHERE user_id = ? AND weather_status = ?`,
+		string(WeatherPending), userID, string(WeatherNone))
+	if err != nil {
+		return 0, fmt.Errorf("request weather backfill: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, nil
+	}
+	return int(n), nil
+}
+
+// RetryFailedWeather puts this user's failed lookups back in the queue.
+//
+// Failures are bounded by an attempt counter so that a workout the service
+// genuinely cannot answer for does not retry forever — but that cap is reached
+// by transient outages too, and once reached there was previously no way back
+// short of typing the conditions in by hand. This is that way back: it clears
+// the counter rather than raising the cap, so the same five-attempt budget
+// applies to the retry.
+//
+// Deliberately an explicit action. Retrying automatically would mean an
+// unreachable service is re-attempted every pass forever, which is precisely
+// what the cap exists to prevent.
+func (r *SQLiteRepository) RetryFailedWeather(ctx context.Context, userID int64) (int, error) {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE workouts SET weather_status = ?, weather_attempts = 0
+		 WHERE user_id = ? AND weather_status = ?`,
+		string(WeatherPending), userID, string(WeatherFailed))
+	if err != nil {
+		return 0, fmt.Errorf("retry failed weather: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, nil
+	}
+	return int(n), nil
+}
+
+// WeatherCounts tallies a user's workouts by weather status.
+//
+// One grouped query rather than a count per state: the settings page shows all
+// of them at once, and five round trips to render one card is the sort of thing
+// that is fine at ten workouts and not at ten thousand.
+//
+// The unchecked figure is deliberately an over-count — some of those rows will
+// turn out to have no route and be skipped. Establishing which would mean
+// decompressing the library to render a settings page, and "we will check 300
+// workouts" is an honest description of what the backfill does, where "300
+// workouts will get weather" would not be.
+func (r *SQLiteRepository) WeatherCounts(ctx context.Context, userID int64) (WeatherCounts, error) {
+	var out WeatherCounts
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT weather_status, COUNT(*) FROM workouts WHERE user_id = ? GROUP BY weather_status`,
+		userID)
+	if err != nil {
+		return out, fmt.Errorf("count weather: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var status string
+		var n int
+		if err := rows.Scan(&status, &n); err != nil {
+			return WeatherCounts{}, fmt.Errorf("scan weather count: %w", err)
+		}
+		switch WeatherStatus(status) {
+		case WeatherOK:
+			out.Recorded += n
+		case WeatherManual:
+			out.Recorded += n
+			out.Manual = n
+		case WeatherPending:
+			out.Scheduled = n
+		case WeatherFailed:
+			out.Failed = n
+		case WeatherSkipped:
+			out.Skipped = n
+		case WeatherNone:
+			out.Unchecked = n
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return WeatherCounts{}, fmt.Errorf("count weather: %w", err)
+	}
+	return out, nil
+}
+
 // DeleteAllForUser removes every workout a user owns, returning the ids that
 // were deleted so the caller can also drop the archived upload files, which
 // live on disk rather than in the database.
@@ -431,6 +727,84 @@ func boolToInt(b bool) int {
 	return 0
 }
 
+// weatherScan holds the weather columns between the row and the model.
+//
+// Shared by both scanners rather than repeated, because they drift: they take
+// positional arguments and there is nothing but care keeping their two
+// argument lists in step with one column set. One struct and one applyTo means
+// a mistake is a compile error in one place instead of a silent field shift in
+// one of two.
+type weatherScan struct {
+	status                                 string
+	temp, apparent, humidity, wind, precip float64
+	code                                   int
+}
+
+// applyTo attaches the reading to a workout, or does not.
+//
+// The gate: every weather column is NOT NULL DEFAULT 0, so a workout that was
+// never looked up scans as a perfectly plausible 0 °C, 0 % humidity, clear sky.
+// Only the status distinguishes that from a real winter morning, and this is
+// the single place that decision is made — a nil Weather is the model's way of
+// saying "we do not know", and no caller can accidentally read a default as a
+// measurement.
+func (wx weatherScan) applyTo(w *Workout) {
+	w.WeatherStatus = WeatherStatus(wx.status)
+	if !w.WeatherStatus.HasReading() {
+		return
+	}
+	w.Weather = &Weather{
+		TempC:     wx.temp,
+		ApparentC: wx.apparent,
+		Humidity:  wx.humidity,
+		WindKph:   wx.wind,
+		PrecipMm:  wx.precip,
+		Code:      wx.code,
+	}
+}
+
+// deriveWeatherTarget decides where a workout happened and whether a weather
+// lookup is worth queueing for it.
+//
+// Pure, and called from Create rather than from the service, so every insert
+// path is covered — upload, bulk import, auto-import, manual entry — without
+// each one having to remember. Deriving it in the service instead would mean
+// carrying two write-only coordinate fields on the Workout model just to hand
+// them down one layer.
+//
+// WeatherSkipped is permanent and is the honest answer for most of these: a
+// treadmill session is never going to acquire a location. Returning
+// WeatherPending for them instead would mean the background pass retried every
+// strength workout in the library forever, which in most libraries is most of
+// the rows.
+func deriveWeatherTarget(w *Workout) (lat, lon float64, status WeatherStatus) {
+	if len(w.Route) == 0 {
+		return 0, 0, WeatherSkipped
+	}
+	// Indoor by definition. A treadmill run carrying a stray GPS fix is
+	// indistinguishable from an outdoor one in this data, so this catches only
+	// the case the type already tells us about.
+	if w.Type == TypeStrength {
+		return 0, 0, WeatherSkipped
+	}
+	// No archive has tomorrow's weather. A clock-skewed device would otherwise
+	// burn its five attempts against a permanent error.
+	if w.StartTime.After(time.Now().Add(24 * time.Hour)) {
+		return 0, 0, WeatherSkipped
+	}
+	lat, lon = w.Route[0][0], w.Route[0][1]
+	if lat < -90 || lat > 90 || lon < -180 || lon > 180 {
+		return 0, 0, WeatherSkipped
+	}
+	// Null Island: what a GPS writes when it has no fix at all. A real workout
+	// there is possible and this rejects it, which is the right trade against
+	// storing tropical-Atlantic weather for someone's local park run.
+	if lat == 0 && lon == 0 {
+		return 0, 0, WeatherSkipped
+	}
+	return lat, lon, WeatherPending
+}
+
 // nullIfEmpty stores an empty string as SQL NULL, which is what keeps
 // non-de-duplicable rows out of the partial unique index on external_id.
 func nullIfEmpty(s string) any {
@@ -496,13 +870,16 @@ func scanWorkout(row interface{ Scan(...any) error }) (*Workout, error) {
 		source      string
 		visibility  string
 		createdAt   string
+		wx          weatherScan
 	)
 	if err := row.Scan(&w.ID, &w.UserID, &w.Name, &typ, &startTime, &w.Duration, &w.Distance,
 		&w.AvgHR, &w.MaxHR, &w.ElevationGain, &w.Calories, &w.Steps, &w.AvgPace, &w.AvgSpeed,
 		&s.route, &s.hr, &s.pace, &s.elev, &s.cadence, &w.Notes,
-		&calManual, &calReported, &stepManual, &source, &visibility, &w.RawFilename, &createdAt); err != nil {
+		&calManual, &calReported, &stepManual, &source, &visibility, &w.RawFilename, &createdAt,
+		&wx.status, &wx.temp, &wx.apparent, &wx.humidity, &wx.wind, &wx.precip, &wx.code); err != nil {
 		return nil, err
 	}
+	wx.applyTo(&w)
 	w.CaloriesManual = calManual != 0
 	w.CaloriesReported = calReported != 0
 	w.StepsManual = stepManual != 0
@@ -542,12 +919,15 @@ func scanWorkoutSummary(row interface{ Scan(...any) error }) (*Workout, error) {
 		source      string
 		visibility  string
 		createdAt   string
+		wx          weatherScan
 	)
 	if err := row.Scan(&w.ID, &w.UserID, &w.Name, &typ, &startTime, &w.Duration, &w.Distance,
 		&w.AvgHR, &w.MaxHR, &w.ElevationGain, &w.Calories, &w.Steps, &w.AvgPace, &w.AvgSpeed, &w.Notes,
-		&calManual, &calReported, &stepManual, &source, &visibility, &createdAt); err != nil {
+		&calManual, &calReported, &stepManual, &source, &visibility, &createdAt,
+		&wx.status, &wx.temp, &wx.apparent, &wx.humidity, &wx.wind, &wx.precip, &wx.code); err != nil {
 		return nil, err
 	}
+	wx.applyTo(&w)
 	w.CaloriesManual = calManual != 0
 	w.CaloriesReported = calReported != 0
 	w.StepsManual = stepManual != 0

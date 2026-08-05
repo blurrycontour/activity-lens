@@ -80,6 +80,15 @@ type UserPrefs struct {
 	// Notify holds the per-kind notification switches. Stored as opaque JSON
 	// so the settings package does not have to know what kinds exist.
 	Notify json.RawMessage `json:"notify,omitempty"`
+	// WeatherEnabled controls whether newly imported workouts get their
+	// historical conditions looked up from Open-Meteo.
+	//
+	// On by default, unlike most things that talk to a third party, because it
+	// only ever covers workouts imported from now on: nothing already in the
+	// library leaves this server without the separate, explicit backfill. The
+	// column default in 0022 has to agree with the Go default below, or a user
+	// who has never saved preferences disagrees with one who has.
+	WeatherEnabled bool `json:"weatherEnabled"`
 }
 
 // VAPID is the Web Push keypair identifying this server to browser push
@@ -201,22 +210,38 @@ func (s *Store) SaveStorage(ctx context.Context, v Storage) error {
 	return s.set(ctx, keyStorage, v)
 }
 
+// DefaultUserPrefs is what a user who has never saved preferences gets.
+//
+// Named rather than inline because these values have to agree with the column
+// defaults in the migrations — a user who has never saved and one who has saved
+// without changing anything must not end up with different settings — and an
+// agreement nobody can point at is one nobody checks.
+func DefaultUserPrefs() UserPrefs {
+	return UserPrefs{
+		CalorieMethod:  "heart-rate",
+		BodyWeightKg:   70,
+		Goals:          []Goal{},
+		WeatherEnabled: true,
+	}
+}
+
 // UserPreferences returns the calorie-estimation preferences for a user,
 // falling back to sensible defaults when the user has never saved any.
 func (s *Store) UserPreferences(ctx context.Context, userID int64) (UserPrefs, error) {
-	v := UserPrefs{CalorieMethod: "heart-rate", BodyWeightKg: 70, Goals: []Goal{}}
+	v := DefaultUserPrefs()
 	var (
 		goalsJSON   string
 		notifyJSON  string
 		legacyCount int
 		legacyType  string
 		legacyMinKm float64
+		weather     int
 	)
 	err := s.db.QueryRowContext(ctx,
 		`SELECT calorie_method, body_weight_kg, sex, birth_year, height_cm, max_hr, resting_hr, threshold_pace, ftp, step_length_cm,
-		        goals, notify_prefs, weekly_goal_count, weekly_goal_type, weekly_goal_min_km FROM user_prefs WHERE user_id = ?`, userID).
+		        goals, notify_prefs, weekly_goal_count, weekly_goal_type, weekly_goal_min_km, weather_enabled FROM user_prefs WHERE user_id = ?`, userID).
 		Scan(&v.CalorieMethod, &v.BodyWeightKg, &v.Sex, &v.BirthYear, &v.HeightCm, &v.MaxHR, &v.RestingHR, &v.ThresholdPace, &v.FTP, &v.StepLengthCm,
-			&goalsJSON, &notifyJSON, &legacyCount, &legacyType, &legacyMinKm)
+			&goalsJSON, &notifyJSON, &legacyCount, &legacyType, &legacyMinKm, &weather)
 	if errors.Is(err, sql.ErrNoRows) {
 		return v, nil
 	}
@@ -238,6 +263,7 @@ func (s *Store) UserPreferences(ctx context.Context, userID int64) (UserPrefs, e
 	if notifyJSON != "" {
 		v.Notify = json.RawMessage(notifyJSON)
 	}
+	v.WeatherEnabled = weather != 0
 	return v, nil
 }
 
@@ -252,8 +278,8 @@ func (s *Store) SaveUserPreferences(ctx context.Context, userID int64, v UserPre
 	}
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO user_prefs (user_id, calorie_method, body_weight_kg, sex, birth_year, height_cm, max_hr, resting_hr, threshold_pace, ftp, step_length_cm,
-		                         goals, notify_prefs, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		                         goals, notify_prefs, weather_enabled, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(user_id) DO UPDATE SET
 		   calorie_method = excluded.calorie_method,
 		   body_weight_kg = excluded.body_weight_kg,
@@ -267,9 +293,10 @@ func (s *Store) SaveUserPreferences(ctx context.Context, userID int64, v UserPre
 		   step_length_cm = excluded.step_length_cm,
 		   goals = excluded.goals,
 		   notify_prefs = excluded.notify_prefs,
+		   weather_enabled = excluded.weather_enabled,
 		   updated_at = excluded.updated_at`,
 		userID, v.CalorieMethod, v.BodyWeightKg, v.Sex, v.BirthYear, v.HeightCm, v.MaxHR, v.RestingHR, v.ThresholdPace, v.FTP, v.StepLengthCm,
-		string(goalsJSON), string(v.Notify), time.Now().UTC().Format(time.RFC3339))
+		string(goalsJSON), string(v.Notify), boolToInt(v.WeatherEnabled), time.Now().UTC().Format(time.RFC3339))
 	return err
 }
 
@@ -438,4 +465,53 @@ func splitNonEmpty(s string) []string {
 		}
 	}
 	return out
+}
+
+// WeatherEnabledUserIDs returns the users who have weather lookups switched on.
+//
+// One query rather than loading every user's preferences and filtering in Go:
+// the background pass asks this every few minutes, and on an instance where
+// nobody has imported anything it must cost almost nothing.
+//
+// The LEFT JOIN matters. A user who has never opened Settings has no user_prefs
+// row at all, and weather is on by default — so restricting to rows that exist
+// would silently exclude exactly the people who never changed anything, which
+// is most of them.
+func (s *Store) WeatherEnabledUserIDs(ctx context.Context, userIDs []int64) ([]int64, error) {
+	if len(userIDs) == 0 {
+		return nil, nil
+	}
+	out := make([]int64, 0, len(userIDs))
+	disabled := make(map[int64]bool)
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT user_id FROM user_prefs WHERE weather_enabled = 0`)
+	if err != nil {
+		return nil, fmt.Errorf("query weather preferences: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		disabled[id] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for _, id := range userIDs {
+		if !disabled[id] {
+			out = append(out, id)
+		}
+	}
+	return out, nil
+}
+
+// boolToInt stores a boolean as SQLite's INTEGER, matching how every other
+// flag in this schema is persisted.
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }

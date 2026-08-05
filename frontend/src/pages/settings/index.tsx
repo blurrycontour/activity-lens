@@ -1,6 +1,5 @@
 import PageHeader from '../../components/PageHeader'
 import AutoImportCard from '../../components/AutoImportCard'
-import { PreferencesProvider } from '../../context/PreferencesContext'
 import type { SettingsSection } from '../../lib/nav'
 import { sectionMeta } from './sections'
 import SettingsHub from './Hub'
@@ -11,6 +10,7 @@ import AppearanceSettings from './Appearance'
 import DashboardSettings from './DashboardPrefs'
 import GoalsSettings from './Goals'
 import NotificationSettings from './Notifications'
+import WeatherSettings from './Weather'
 import FeedbackSettings from './Feedback'
 import AppInfoSettings from './AppInfo'
 import ServerSettings from './Server'
@@ -31,9 +31,6 @@ interface SettingsProps {
  * is the one people already know from opening a workout, and desktop and mobile
  * share a single code path.
  */
-/** The categories backed by the server-side preferences record. */
-const NEEDS_PREFS: SettingsSection[] = ['body', 'goals', 'notifications']
-
 export default function Settings({ section, onOpen, onBack, accent, onAccentChange }: SettingsProps) {
   if (!section) return <SettingsHub onOpen={onOpen} />
 
@@ -48,6 +45,7 @@ export default function Settings({ section, onOpen, onBack, accent, onAccentChan
       {section === 'dashboard' && <DashboardSettings />}
       {section === 'goals' && <GoalsSettings />}
       {section === 'notifications' && <NotificationSettings />}
+      {section === 'weather' && <WeatherSettings />}
       {section === 'feedback' && <FeedbackSettings />}
       {section === 'autoimport' && <AutoImportCard />}
       {section === 'app' && <AppInfoSettings />}
@@ -59,11 +57,7 @@ export default function Settings({ section, onOpen, onBack, accent, onAccentChan
     <>
       <PageHeader title={meta?.label ?? 'Settings'} subtitle={meta?.sub} onBack={onBack} />
       <div className="page-content settings-page">
-        {/* Only the categories that read preferences pay for the fetch. The hub
-            and the local-only pages (appearance, dashboard) never ask. */}
-        {NEEDS_PREFS.includes(section)
-          ? <PreferencesProvider>{body}</PreferencesProvider>
-          : body}
+        {body}
       </div>
     </>
   )

@@ -16,6 +16,8 @@ import { downloadWorkoutGPX, downloadWorkoutOriginal, reportSaveFailure } from '
 import { useLocalStorage } from '../lib/useLocalStorage'
 import { DEFAULT_HR_ZONE_CHART, HR_ZONE_CHART_KEY, type HRZoneChart } from '../lib/dashboardConfig'
 import InfoTip from '../components/InfoTip'
+import WeatherCard from '../components/WeatherCard'
+import { usePreferences } from '../context/PreferencesContext'
 import { useIsMobile } from '../lib/useIsMobile'
 import { usePlayhead, useThrottledPlayhead } from '../lib/playhead'
 import { downsample, PLOT_POINTS } from '../lib/downsample'
@@ -42,6 +44,8 @@ interface WorkoutDetailProps {
   workout: Workout
   accent?: string
   onBack: () => void
+  /** Opens Settings, for the weather panel's "turn it on" link. */
+  onOpenSettings?: () => void
 }
 
 /** Small marker shown next to stat values that are derived from recorded
@@ -424,7 +428,7 @@ function preparePlot<T extends { t: number }>(data: T[], key: string): PlotSerie
   }
 }
 
-export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDetailProps) {
+export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSettings }: WorkoutDetailProps) {
   const { updateWorkout, removeWorkout } = useWorkouts()
   const { user } = useAuth()
   const [w, setW] = useState(w0)
@@ -438,6 +442,10 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
    * to `owner`, which the API sets on feed rows and never on your own.
    */
   const readOnly = w.isOwner === undefined ? w.owner !== undefined : !w.isOwner
+  // Undefined while preferences load, and on a server too old to send the
+  // field. Both mean "assume on", which matches the server default — the
+  // alternative is telling the user their lookups are off when they are not.
+  const { prefs } = usePreferences()
   const isMobile = useIsMobile()
   const color = TYPE_COLOR[w.type]
   const trailColor = accent || color
@@ -1245,6 +1253,16 @@ export default function WorkoutDetail({ workout: w0, accent, onBack }: WorkoutDe
             </MetricPanel>
           )}
         </div>
+
+        {/* Conditions. Rendered in every state, including "you have this
+            switched off" — see WeatherCard on why absence needs a voice. */}
+        <WeatherCard
+          workout={w}
+          isOwner={!readOnly}
+          enabled={prefs?.weatherEnabled !== false}
+          onSaved={setW}
+          onOpenSettings={() => onOpenSettings?.()}
+        />
 
         {/* Notes are stripped from every response to a non-owner, so a shared
             workout has none to show and no field to offer. */}

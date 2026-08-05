@@ -1025,6 +1025,170 @@ body {
   font-size: 11px;
 }
 
+/* ── Weather on a workout ── */
+
+.weather-card { margin-top: 16px; }
+.weather-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.weather-card-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+/* Five values on one line, each behind its own icon so the row can be scanned
+   rather than read. They wrap to a second line on a narrow phone. */
+.weather-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 16px;
+  margin-top: 10px;
+}
+.weather-metric {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-3);
+}
+/* The values are numbers, so they follow the numeric convention — sized to sit
+   with the stat figures elsewhere on the page rather than above them. */
+.weather-metric-value {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.weather-sub {
+  font-size: 11.5px;
+  color: var(--text-3);
+  margin-top: 3px;
+}
+/* Absence is a sentence, not a dash: each case has a different remedy and the
+   text is what carries it. */
+.weather-absent {
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.6;
+}
+
+/* Names an icon-only value for a screen reader without showing the label
+   twice. `clip-path` rather than `display: none`, which would hide it from
+   assistive tech as well and defeat the purpose. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* An inline action inside a sentence. A real button for keyboard and screen
+   readers; styled as the link it reads as. */
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--primary);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.link-button:hover { opacity: 0.85; }
+
+.weather-editor-note {
+  font-size: 11.5px;
+  color: var(--text-3);
+  line-height: 1.55;
+  margin-bottom: 14px;
+}
+.weather-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+.weather-field { display: flex; flex-direction: column; gap: 5px; }
+.weather-field-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-family: var(--font-mono);
+  color: var(--text-3);
+}
+/* The unit sits inside the field's box rather than after it, so a row of
+   inputs stays aligned however long the unit is. */
+.weather-field-input { position: relative; display: flex; align-items: center; }
+.weather-field-input .input { width: 100%; padding-right: 46px; }
+.weather-field-unit {
+  position: absolute;
+  right: 10px;
+  font-size: 11px;
+  color: var(--text-3);
+  pointer-events: none;
+}
+.weather-error { font-size: 12px; color: var(--danger); margin-top: 12px; }
+.weather-editor-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+/* Coverage figures on the weather settings page. A grid rather than a list so
+   the counts line up in a column and can be compared at a glance — which is the
+   only reason to show five numbers together. */
+.weather-tally {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+/* The template lives on the row, not the container: each row is its own
+   element so it can carry a tooltip, which means the container's children are
+   rows rather than cells. Identical templates line the columns up across rows
+   without the container needing to see the cells at all. */
+.weather-tally-row {
+  display: grid;
+  grid-template-columns: 15px 3ch 1fr;
+  align-items: center;
+  gap: 10px;
+}
+/* flex, so the icon's box is the icon rather than a line box with the font's
+   descender under it — which is what pushed it off centre. */
+.weather-tally-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-3);
+}
+.weather-tally-count {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  text-align: right;
+}
+.weather-tally-label {
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.weather-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
 /* ── First-run import introduction ── */
 
 /* Taller than it is wide on a phone, so the routes stay a readable column
@@ -1231,6 +1395,19 @@ body {
   scrollbar-width: none;
 }
 .tab-strip::-webkit-scrollbar { display: none; }
+/* The only on-screen sign that there are more tabs off the edge. A mask rather
+   than an overlay so it works over the strip's own background without needing
+   to know what colour that is, and so it can never sit above the buttons and
+   swallow a tap. The classes are set from measurement in TabStrip.tsx. */
+.tab-strip.fade-end {
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+}
+.tab-strip.fade-start {
+  mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent);
+}
+.tab-strip.fade-start.fade-end {
+  mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+}
 .tab-strip-item {
   display: inline-flex;
   align-items: center;

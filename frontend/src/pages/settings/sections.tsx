@@ -1,6 +1,6 @@
 import {
   User as UserIcon, ShieldCheck, HeartPulse, Palette, LayoutDashboard,
-  Target, Bell, FolderSync, Server, Smartphone, MessageSquare,
+  Target, Bell, CloudSun, FolderSync, Server, Smartphone, MessageSquare,
 } from 'lucide-react'
 import type { SettingsSection } from '../../lib/nav'
 
@@ -57,6 +57,11 @@ export const SETTINGS_META: SectionMeta[] = [
     id: 'notifications', label: 'Notifications', group: 'App',
     sub: 'What you hear about, and how',
     icon: <Bell size={16} />,
+  },
+  {
+    id: 'weather', label: 'Weather', group: 'App',
+    sub: 'Conditions recorded with each workout',
+    icon: <CloudSun size={16} />,
   },
   {
     id: 'feedback', label: 'Send feedback', group: 'App',
