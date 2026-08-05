@@ -168,6 +168,70 @@ type Workout struct {
 	// Owner is populated by the API layer on responses to someone other than
 	// the owner, and is nil on your own workouts.
 	Owner *OwnerRef `json:"owner,omitempty"`
+	// Weather holds the conditions this workout happened in, or nil when there
+	// are none to show. The pointer is what distinguishes "we do not know" from
+	// a genuine 0 °C, since every stored column is NOT NULL DEFAULT 0.
+	Weather *Weather `json:"weather,omitempty"`
+	// WeatherStatus is why Weather is nil, so the UI can say something more
+	// useful than nothing. Cleared for non-owners by Redact.
+	WeatherStatus WeatherStatus `json:"weatherStatus,omitempty"`
+}
+
+// WeatherStatus is the lifecycle of a workout's weather lookup. Each value is
+// documented in migrations/0022_workout_weather.sql.
+type WeatherStatus string
+
+const (
+	// WeatherNone is the default: never queued for a lookup. Every workout that
+	// predates this feature is here and stays here until the user explicitly
+	// asks for a backfill — turning the setting on must not retroactively send
+	// years of location history anywhere.
+	WeatherNone WeatherStatus = "none"
+	// WeatherPending is queued for the background pass.
+	WeatherPending WeatherStatus = "pending"
+	// WeatherOK means the values were fetched and are real.
+	WeatherOK WeatherStatus = "ok"
+	// WeatherManual means a person typed them in. A fetch must never overwrite
+	// this: hand-corrected numbers beat a 25 km grid average.
+	WeatherManual WeatherStatus = "manual"
+	// WeatherSkipped means this workout can never have weather — no route, a
+	// future start time, or an impossible coordinate.
+	WeatherSkipped WeatherStatus = "skipped"
+	// WeatherFailed means the lookup failed in a way that may succeed later.
+	WeatherFailed WeatherStatus = "failed"
+)
+
+// HasReading reports whether this status means there are values worth showing.
+func (s WeatherStatus) HasReading() bool {
+	return s == WeatherOK || s == WeatherManual
+}
+
+// Weather is the conditions over the span of one workout.
+//
+// Aggregated across every hour the workout touched rather than sampled at its
+// start: a four-hour hike that begins cold and ends in the sun is exactly the
+// case where temperature matters most, and its start hour describes none of it.
+// Means for the scalars, a total for rain, and the worst code seen.
+type Weather struct {
+	TempC     float64 `json:"tempC"`
+	ApparentC float64 `json:"apparentC"`
+	// Humidity is relative humidity, 0-100.
+	Humidity float64 `json:"humidity"`
+	WindKph  float64 `json:"windKph"`
+	// PrecipMm is the total that fell during the workout, not a rate.
+	PrecipMm float64 `json:"precipMm"`
+	// Code is a WMO weather code, driving the icon and the label.
+	Code int `json:"code"`
+}
+
+// WeatherTarget is the minimum needed to look one workout up: no route blob and
+// no timelines, which is the whole reason the start coordinate is denormalised
+// out of the route at insert.
+type WeatherTarget struct {
+	ID        string
+	StartTime time.Time
+	Duration  int
+	Lat, Lon  float64
 }
 
 // Redact clears the fields that belong to the owner alone. The service applies
@@ -182,6 +246,11 @@ func (w *Workout) Redact() {
 	// is never serialized, but clearing it here means no later code path can
 	// derive a "download original" affordance for someone who may not have it.
 	w.RawFilename = ""
+	// The reading itself stays — it is a property of the workout, and the route
+	// it came from is already visible. The status goes: "not fetched" or
+	// "failed" describes the owner's settings and their server, which is not
+	// something a viewer has any business inferring.
+	w.WeatherStatus = ""
 }
 
 // EquipmentTag is a minimal reference to a piece of equipment linked to a

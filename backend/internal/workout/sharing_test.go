@@ -22,6 +22,31 @@ func (unimplementedSharing) GetViewable(context.Context, int64, string) (*Workou
 func (unimplementedSharing) ImportWindow(context.Context, int64, Source, int) (time.Time, time.Time, error) {
 	panic("the import window is a SQL ordering; see importwindow_test.go")
 }
+
+// Weather storage is a set of column writes and a partial-index query, so it is
+// exercised against the real schema in weather_test.go rather than reimplemented
+// here — same reasoning as the sharing methods above.
+func (unimplementedSharing) ListPendingWeather(context.Context, []int64, int, int) ([]WeatherTarget, error) {
+	panic("weather selection is a SQL predicate; see weather_test.go")
+}
+func (unimplementedSharing) ResolveWeatherStart(context.Context, string) (float64, float64, bool, error) {
+	panic("weather selection is a SQL predicate; see weather_test.go")
+}
+func (unimplementedSharing) SetWeather(context.Context, string, WeatherStatus, Weather) error {
+	panic("weather storage is exercised against the real schema; see weather_test.go")
+}
+func (unimplementedSharing) MarkWeatherSkipped(context.Context, string) error {
+	panic("weather storage is exercised against the real schema; see weather_test.go")
+}
+func (unimplementedSharing) MarkWeatherFailed(context.Context, string) error {
+	panic("weather storage is exercised against the real schema; see weather_test.go")
+}
+func (unimplementedSharing) RequestWeatherBackfill(context.Context, int64) (int, error) {
+	panic("weather storage is exercised against the real schema; see weather_test.go")
+}
+func (unimplementedSharing) CountWeatherBackfillable(context.Context, int64) (int, error) {
+	panic("weather storage is exercised against the real schema; see weather_test.go")
+}
 func (unimplementedSharing) ListPublicSummary(context.Context, int64) ([]Workout, error) {
 	panic("sharing is only exercised against the real schema; see sharing_test.go")
 }
