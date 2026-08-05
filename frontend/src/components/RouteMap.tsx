@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as maplibregl from 'maplibre-gl'
-import 'maplibre-gl/dist/maplibre-gl.css'
+// NOTE: maplibre-gl.css is imported in main.tsx, not here — see the comment
+// there. It has to load before index.css, which overrides several of its rules.
 // The worker is a separate module MapLibre fetches at runtime, by a URL it
 // builds from a variable — which Vite cannot follow, so without an import here
 // the file is never emitted, the request falls through to the SPA handler, and

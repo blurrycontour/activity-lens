@@ -1691,7 +1691,12 @@ body {
 }
 
 /* The map fills its card; MapLibre needs an explicitly sized container. */
-.route-map-canvas { position: absolute; inset: 0; }
+/* Doubled class for specificity, deliberately. MapLibre puts .maplibregl-map on
+   this same element with `position: relative`, an exact specificity tie that
+   only stylesheet order breaks — and this rule collapsing the container to zero
+   height is a blank map rather than a cosmetic slip. Winning outright means it
+   cannot come back if the CSS ever loads in a different order again. */
+.route-map-canvas.route-map-canvas { position: absolute; inset: 0; }
 
 /* Why there is an outline instead of a map. Kept clear of the maximize button
    on the right, which shares this corner. */
