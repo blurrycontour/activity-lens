@@ -210,10 +210,25 @@ func (s *Store) SaveStorage(ctx context.Context, v Storage) error {
 	return s.set(ctx, keyStorage, v)
 }
 
+// DefaultUserPrefs is what a user who has never saved preferences gets.
+//
+// Named rather than inline because these values have to agree with the column
+// defaults in the migrations — a user who has never saved and one who has saved
+// without changing anything must not end up with different settings — and an
+// agreement nobody can point at is one nobody checks.
+func DefaultUserPrefs() UserPrefs {
+	return UserPrefs{
+		CalorieMethod:  "heart-rate",
+		BodyWeightKg:   70,
+		Goals:          []Goal{},
+		WeatherEnabled: true,
+	}
+}
+
 // UserPreferences returns the calorie-estimation preferences for a user,
 // falling back to sensible defaults when the user has never saved any.
 func (s *Store) UserPreferences(ctx context.Context, userID int64) (UserPrefs, error) {
-	v := UserPrefs{CalorieMethod: "heart-rate", BodyWeightKg: 70, Goals: []Goal{}, WeatherEnabled: true}
+	v := DefaultUserPrefs()
 	var (
 		goalsJSON   string
 		notifyJSON  string

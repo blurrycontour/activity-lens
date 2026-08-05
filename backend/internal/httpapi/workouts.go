@@ -635,33 +635,49 @@ func (s *Server) handleGetPreferences(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, prefs)
 }
 
+// savePrefsRequest is the PUT /api/preferences body.
+//
+// A named type rather than an anonymous one so a test can hold it up against
+// settings.UserPrefs. decodeJSON rejects unknown fields, and the client sends
+// back the whole record it was given — so a field that GET emits and this
+// struct has no name for is not ignored, it is a 400 on every save. That is how
+// the weather switch shipped broken: nothing here knew the word.
+type savePrefsRequest struct {
+	CalorieMethod string  `json:"calorieMethod"`
+	BodyWeightKg  float64 `json:"bodyWeightKg"`
+	Sex           string  `json:"sex"`
+	BirthYear     int     `json:"birthYear"`
+	HeightCm      int     `json:"heightCm"`
+	MaxHR         int     `json:"maxHr"`
+	RestingHR     int     `json:"restingHr"`
+	ThresholdPace string  `json:"thresholdPace"`
+	FTP           int     `json:"ftp"`
+	StepLengthCm  int     `json:"stepLengthCm"`
+
+	Goals []struct {
+		ID     string  `json:"id"`
+		Count  int     `json:"count"`
+		Period string  `json:"period"`
+		Type   string  `json:"type"`
+		MinKm  float64 `json:"minKm"`
+	} `json:"goals"`
+
+	Notify *struct {
+		Kinds map[string]bool `json:"kinds"`
+		Push  bool            `json:"push"`
+	} `json:"notify"`
+
+	// A pointer, unlike every other field here, because this one defaults to
+	// true rather than to its zero value. A plain bool would turn weather off
+	// for anyone whose client sends the record back without it, and silently
+	// disabling a feature is the worst way for that to fail. Absent means
+	// "leave it on".
+	WeatherEnabled *bool `json:"weatherEnabled"`
+}
+
 func (s *Server) handleSavePreferences(w http.ResponseWriter, r *http.Request) {
 	user := httpmw.UserFrom(r)
-	var req struct {
-		CalorieMethod string  `json:"calorieMethod"`
-		BodyWeightKg  float64 `json:"bodyWeightKg"`
-		Sex           string  `json:"sex"`
-		BirthYear     int     `json:"birthYear"`
-		HeightCm      int     `json:"heightCm"`
-		MaxHR         int     `json:"maxHr"`
-		RestingHR     int     `json:"restingHr"`
-		ThresholdPace string  `json:"thresholdPace"`
-		FTP           int     `json:"ftp"`
-		StepLengthCm  int     `json:"stepLengthCm"`
-
-		Goals []struct {
-			ID     string  `json:"id"`
-			Count  int     `json:"count"`
-			Period string  `json:"period"`
-			Type   string  `json:"type"`
-			MinKm  float64 `json:"minKm"`
-		} `json:"goals"`
-
-		Notify *struct {
-			Kinds map[string]bool `json:"kinds"`
-			Push  bool            `json:"push"`
-		} `json:"notify"`
-	}
+	var req savePrefsRequest
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -727,7 +743,8 @@ func (s *Server) handleSavePreferences(w http.ResponseWriter, r *http.Request) {
 		FTP:           clampNonNeg(req.FTP),
 		StepLengthCm:  clampStepLength(req.StepLengthCm),
 
-		Goals: goals,
+		Goals:          goals,
+		WeatherEnabled: req.WeatherEnabled == nil || *req.WeatherEnabled,
 	}
 	// Unknown kinds are dropped so a stale or hand-crafted client cannot write
 	// switches that nothing reads.
