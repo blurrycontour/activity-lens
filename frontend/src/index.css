@@ -1338,7 +1338,13 @@ body {
    (the sparkline), which roughly halves each card. */
 .stat-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  /* auto-fit, not auto-fill. auto-fill keeps the empty tracks that fit in the
+     row, so six cards on a wide screen were laid out as (say) eight equal
+     columns with two left blank — every card narrower than it needed to be, and
+     its label wrapping, while the space sat unused to the right. auto-fit
+     collapses the empty tracks so the cards that exist share the whole row.
+     Narrowing the window used to *widen* the cards, which is the giveaway. */
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 12px;
   margin-bottom: 16px;
 }
@@ -1369,7 +1375,7 @@ body {
 
 @media (max-width: 768px) {
   .stat-cards {
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
     gap: 8px;
     margin-bottom: 12px;
   }
@@ -1385,7 +1391,7 @@ body {
 
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
   gap: 16px 12px;
 }
 .stat-grid-3 {
