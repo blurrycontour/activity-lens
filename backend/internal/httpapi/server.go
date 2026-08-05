@@ -3,6 +3,7 @@ package httpapi
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/blurrycontour/activity-lens/backend/internal/config"
 	"github.com/blurrycontour/activity-lens/backend/internal/equipment"
@@ -41,6 +42,9 @@ type Server struct {
 	// disables the whole feature, which is what keeps every existing test's
 	// Server construction valid and gives a deployment a way to opt out.
 	weather weather.Fetcher
+	// weatherCooldownUntil pauses the weather pass after Open-Meteo tells us we
+	// have asked for too much. Touched only by the scheduler goroutine.
+	weatherCooldownUntil time.Time
 }
 
 // New constructs a Server and its auth middleware/OIDC handler.

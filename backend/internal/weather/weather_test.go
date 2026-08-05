@@ -242,3 +242,73 @@ func TestZeroDurationStillResolves(t *testing.T) {
 		t.Errorf("TempC = %v, want 12", got.TempC)
 	}
 }
+
+// Running out of quota is not a fact about the workout.
+//
+// Open-Meteo reports the per-minute limit as a 429 but the *daily* allowance as
+// a 400 whose only distinguishing feature is the sentence in the body. Read
+// literally that is a permanent rejection — and treating it as one marks every
+// workout touched during a busy day as impossible, forever, for a condition
+// that clears itself at midnight.
+func TestQuotaIsThrottledNotPermanent(t *testing.T) {
+	tests := []struct {
+		name   string
+		status int
+		body   string
+	}{
+		{
+			"the daily allowance, which arrives as a 400",
+			http.StatusBadRequest,
+			`{"error":true,"reason":"Daily API request limit exceeded. Please try again tomorrow."}`,
+		},
+		{
+			"the minutely limit, same shape",
+			http.StatusBadRequest,
+			`{"error":true,"reason":"Minutely API request limit exceeded."}`,
+		},
+		{
+			"an explicit 429",
+			http.StatusTooManyRequests,
+			`{"error":true,"reason":"Too many requests"}`,
+		},
+		{
+			"a limit reported inside a 200",
+			http.StatusOK,
+			`{"error":true,"reason":"Hourly API request limit exceeded."}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, _ := serveBody(t, tt.body, tt.status)
+			_, err := c.At(context.Background(), 51.5, -0.1,
+				time.Date(2023, 6, 1, 6, 0, 0, 0, time.UTC), time.Hour)
+			if err == nil {
+				t.Fatal("expected an error")
+			}
+			if !errors.Is(err, ErrThrottled) {
+				t.Errorf("err = %v, want ErrThrottled", err)
+			}
+			// The distinction that matters: throttled rows are left queued,
+			// permanent ones are settled and never retried.
+			if errors.Is(err, ErrPermanent) {
+				t.Error("a spent quota was classified as permanent; those workouts would never be retried")
+			}
+		})
+	}
+}
+
+// The other direction: a genuinely bad request must not be mistaken for a
+// quota problem, or the row is retried forever against an error that will
+// never clear.
+func TestBadRequestIsStillPermanent(t *testing.T) {
+	c, _ := serveBody(t, `{"error":true,"reason":"Parameter 'start_date' is out of allowed range"}`,
+		http.StatusBadRequest)
+	_, err := c.At(context.Background(), 51.5, -0.1,
+		time.Date(2023, 6, 1, 6, 0, 0, 0, time.UTC), time.Hour)
+	if !errors.Is(err, ErrPermanent) {
+		t.Errorf("err = %v, want ErrPermanent", err)
+	}
+	if errors.Is(err, ErrThrottled) {
+		t.Error("an unfixable request was classified as throttled; it would retry forever")
+	}
+}

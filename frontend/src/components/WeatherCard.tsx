@@ -151,7 +151,16 @@ function WeatherAbsence({ status, enabled, onOpenSettings }: {
         </p>
       )
     default:
-      return <p className="weather-absent">Looking this up — check back in a few minutes.</p>
+      // 'pending', and also where a throttled workout sits: when Open-Meteo is
+      // rate limiting us the row is deliberately left untouched, so it stays
+      // queued rather than being recorded as a failure that was never about
+      // this workout. "Scheduled" is true in both cases.
+      return (
+        <p className="weather-absent">
+          Scheduled — conditions will be filled in automatically. If the weather
+          service is busy this can take a little longer.
+        </p>
+      )
   }
 }
 

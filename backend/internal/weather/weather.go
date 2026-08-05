@@ -38,6 +38,16 @@ import (
 // and it cannot make that choice from an opaque error.
 var ErrPermanent = errors.New("weather: permanent failure")
 
+// ErrThrottled means the service is refusing requests for now — a per-minute
+// rate limit, or the free daily allowance being spent.
+//
+// Held apart from an ordinary retryable failure because it says nothing about
+// the workout being looked up. Counting it against that workout's attempts
+// would spend its retry budget on a queue that was never its fault: five busy
+// days and a perfectly ordinary run is marked permanently failed, having never
+// really been tried. The caller leaves the row alone and backs off instead.
+var ErrThrottled = errors.New("weather: throttled")
+
 const (
 	archiveBase  = "https://archive-api.open-meteo.com/v1/archive"
 	forecastBase = "https://api.open-meteo.com/v1/forecast"
@@ -175,28 +185,54 @@ func (c *Client) At(ctx context.Context, lat, lon float64, start time.Time, dur 
 		return Conditions{}, fmt.Errorf("read weather response: %w", err)
 	}
 
+	reason := describeError(body, resp.StatusCode)
 	switch {
 	case resp.StatusCode == http.StatusTooManyRequests:
-		// Retryable, and the one status where backing off is the entire remedy.
-		return Conditions{}, fmt.Errorf("weather: rate limited (%d)", resp.StatusCode)
+		return Conditions{}, fmt.Errorf("%w: %s", ErrThrottled, reason)
 	case resp.StatusCode >= 500:
 		return Conditions{}, fmt.Errorf("weather: server error (%d)", resp.StatusCode)
 	case resp.StatusCode >= 400:
-		// Open-Meteo explains itself in the body, and the reason is genuinely
-		// useful ("Parameter 'start_date' is out of allowed range"). Carrying it
-		// into the log is the difference between a fixable report and a mystery.
-		return Conditions{}, fmt.Errorf("%w: %s", ErrPermanent, describeError(body, resp.StatusCode))
+		// A spent daily allowance arrives here, not as a 429: Open-Meteo reports
+		// it as a 400 whose reason names the limit. Read literally that is a
+		// permanent rejection, and treating it as one would mark every workout
+		// touched during a busy day as impossible — forever, silently, and for a
+		// condition that clears itself at midnight.
+		if mentionsLimit(reason) {
+			return Conditions{}, fmt.Errorf("%w: %s", ErrThrottled, reason)
+		}
+		// Anything else genuinely is about this request: an out-of-range date, a
+		// malformed coordinate. The reason is worth carrying into the log — it
+		// is the difference between a fixable report and a mystery.
+		return Conditions{}, fmt.Errorf("%w: %s", ErrPermanent, reason)
 	}
 
 	var parsed hourlyResponse
 	if err := json.Unmarshal(body, &parsed); err != nil {
 		return Conditions{}, fmt.Errorf("%w: parse response: %v", ErrPermanent, err)
 	}
-	// A 200 can still carry an error object.
+	// A 200 can still carry an error object, and it can still be about quota.
 	if parsed.Error {
+		if mentionsLimit(parsed.Reason) {
+			return Conditions{}, fmt.Errorf("%w: %s", ErrThrottled, parsed.Reason)
+		}
 		return Conditions{}, fmt.Errorf("%w: %s", ErrPermanent, parsed.Reason)
 	}
 	return aggregate(parsed, start, end)
+}
+
+// mentionsLimit reports whether a rejection is about how much we have asked
+// for rather than what we asked for.
+//
+// Matched on the text because the status code does not distinguish them: the
+// per-minute limit is a 429, but the daily allowance is a 400 whose only
+// distinguishing feature is the sentence. Deliberately broad — several phrasings
+// exist ("Daily API request limit exceeded", "Minutely API request limit
+// exceeded", "Hourly ..."), and being wrong in this direction costs a retry
+// while being wrong in the other costs the workout permanently.
+func mentionsLimit(reason string) bool {
+	r := strings.ToLower(reason)
+	return strings.Contains(r, "limit") || strings.Contains(r, "quota") ||
+		strings.Contains(r, "too many requests")
 }
 
 // describeError pulls Open-Meteo's reason out of an error body, falling back to

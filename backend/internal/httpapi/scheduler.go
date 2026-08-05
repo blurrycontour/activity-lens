@@ -36,7 +36,22 @@ const (
 	// weatherMaxAttempts is where a row stops costing anything. Past this it
 	// stays 'failed', which the UI reads as "we tried", distinct from "we have
 	// not looked".
+	//
+	// Only genuine failures count towards it. Being throttled does not: that is
+	// a fact about the queue, not about the workout, and spending a workout's
+	// budget on it would permanently fail perfectly ordinary runs for having
+	// been imported on a busy day.
 	weatherMaxAttempts = 5
+
+	// weatherThrottleCooldown is how long to leave the service alone after it
+	// says we have asked for too much.
+	//
+	// One hour covers both shapes of limit without needing to tell them apart.
+	// A per-minute limit clears long before it elapses; a spent daily allowance
+	// clears at midnight, and probing hourly until then costs a couple of dozen
+	// requests a day — far less than the five-minute pass would, and far less
+	// than the cost of guessing the reset time wrong.
+	weatherThrottleCooldown = time.Hour
 )
 
 // StartScheduler runs the work that is driven by the clock rather than by a
@@ -82,6 +97,11 @@ func (s *Server) weatherPass(ctx context.Context) {
 	if s.weather == nil {
 		return
 	}
+	// Only the scheduler goroutine reads or writes this, and there is exactly
+	// one of it, so a plain field is enough.
+	if time.Now().Before(s.weatherCooldownUntil) {
+		return
+	}
 	users, err := s.auth.ListUsers(ctx)
 	if err != nil {
 		slog.Warn("weather pass: could not list users", "error", err)
@@ -121,9 +141,10 @@ func (s *Server) weatherPass(ctx context.Context) {
 			}
 		}
 		if !s.fetchOneWeather(ctx, t) {
-			// The service is down or throttling us. Working through the other
-			// twenty-four helps nobody and is exactly the behaviour a rate limit
-			// exists to discourage; the next tick picks up where this left off.
+			// The service is unwell. Working through the other twenty-four helps
+			// nobody and is exactly the behaviour a rate limit exists to
+			// discourage; the next eligible tick picks up where this left off,
+			// and the rows are still queued, so the page still says "scheduled".
 			return
 		}
 	}
@@ -149,6 +170,16 @@ func (s *Server) fetchOneWeather(ctx context.Context, t workout.WeatherTarget) (
 
 	conditions, err := s.weather(ctx, lat, lon, t.StartTime, time.Duration(t.Duration)*time.Second)
 	if err != nil {
+		if errors.Is(err, weather.ErrThrottled) {
+			// Deliberately nothing is written. The row keeps its 'pending'
+			// status and its attempt count, so it is picked up again later and
+			// the workout page goes on saying "scheduled" rather than reporting
+			// a failure that was never about this workout.
+			s.weatherCooldownUntil = time.Now().Add(weatherThrottleCooldown)
+			slog.Info("weather lookups paused: the service is rate limiting us",
+				"retry_after", weatherThrottleCooldown, "error", err)
+			return false
+		}
 		if errors.Is(err, weather.ErrPermanent) {
 			slog.Info("weather unavailable for a workout", "workout_id", t.ID, "error", err)
 			if err := s.workout.MarkWeatherSkipped(ctx, t.ID); err != nil {
