@@ -454,7 +454,6 @@ export default function RouteMap({
   const mapRef = useRef<maplibregl.Map | null>(null)
   const markerRef = useRef<maplibregl.Marker | null>(null)
   const popupRef = useRef<maplibregl.Popup | null>(null)
-  const [styleReady, setStyleReady] = useState(0)
   const glAvailable = useMemo(hasWebGL, [])
   // The workout arrives after the first render, so the map cannot be built
   // there — this is what the init effect waits for. Depending on the route
@@ -518,9 +517,6 @@ export default function RouteMap({
       scrub(t)
       setSelectedPoint(idx)
     })
-    // Fires on first load and again after every setStyle, which discards all
-    // custom sources and layers — so the track is (re)added from here.
-    map.on('styledata', () => setStyleReady(n => n + 1))
     // Attribution opens expanded even when compact, and on a phone that is a
     // bar of link text across the bottom of the map. Collapsed to the "i" it
     // already knows how to be; the class stays, so it is not re-expanded.
@@ -562,24 +558,21 @@ export default function RouteMap({
         paint: { 'line-color': ['get', 'color'], 'line-width': 4, 'line-opacity': 0.85 },
       })
     }
-    // Sources cannot be added before the style owning them exists, so a style
-    // that is still loading is waited for rather than bailed on.
+    // Drawn now if there is a style to draw into, and again after every style
+    // change — a layer switch throws away every source and layer the old style
+    // owned, the track among them.
     //
-    // Waited for via `styledata`, not `load`. `load` fires exactly once in a
-    // map's lifetime, so after a layer switch it has already been and gone and
-    // the handler below would never run — which is why the track vanished for
-    // good on every style change while the markers, being DOM elements the
-    // style never owned, stayed put. `styledata` fires for each new style, and
-    // can arrive before that style is complete, hence the re-check.
-    if (map.isStyleLoaded()) { draw(); return }
-    const onStyleData = () => {
-      if (!map.isStyleLoaded()) return
-      map.off('styledata', onStyleData)
-      draw()
-    }
-    map.on('styledata', onStyleData)
-    return () => { map.off('styledata', onStyleData) }
-  }, [routeGeoJSON, styleReady])
+    // `style.load` is the event for this: MapLibre fires it once the style has
+    // fully loaded *or changed*, which is exactly both cases. The two obvious
+    // neighbours are both wrong. `load` fires once in a map's lifetime, so
+    // after a switch it has already been and gone. `styledata` fires while a
+    // style is still loading, when sources cannot be added yet, and stops
+    // firing before isStyleLoaded() turns true — so waiting for that
+    // combination waits forever.
+    if (map.isStyleLoaded()) draw()
+    map.on('style.load', draw)
+    return () => { map.off('style.load', draw) }
+  }, [routeGeoJSON])
 
   // Start, finish and playback markers. Markers survive a style change, so
   // these are created once and only the moving one is updated.
