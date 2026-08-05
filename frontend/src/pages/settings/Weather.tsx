@@ -34,11 +34,6 @@ const ROWS: {
   hint: string
 }[] = [
   {
-    key: 'recorded', label: 'With conditions',
-    icon: <CloudSun size={15} />,
-    hint: 'Looked up, or entered by hand.',
-  },
-  {
     key: 'scheduled', label: 'Scheduled',
     icon: <Hourglass size={15} />,
     hint: 'Queued for the next pass. If the weather service is busy this can take longer.',
@@ -52,6 +47,11 @@ const ROWS: {
     key: 'unchecked', label: 'Never checked',
     icon: <CalendarClock size={15} />,
     hint: 'Imported before this feature existed. Only ever looked up if you ask.',
+  },
+  {
+    key: 'recorded', label: 'With conditions',
+    icon: <CloudSun size={15} />,
+    hint: 'Looked up, or entered by hand.',
   },
   {
     key: 'skipped', label: 'No location',

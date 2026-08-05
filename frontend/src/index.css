@@ -1149,13 +1149,26 @@ body {
    the counts line up in a column and can be compared at a glance — which is the
    only reason to show five numbers together. */
 .weather-tally {
-  display: grid;
-  grid-template-columns: auto auto 1fr;
-  align-items: center;
-  gap: 9px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
 }
+/* The template lives on the row, not the container: each row is its own
+   element so it can carry a tooltip, which means the container's children are
+   rows rather than cells. Identical templates line the columns up across rows
+   without the container needing to see the cells at all. */
+.weather-tally-row {
+  display: grid;
+  grid-template-columns: 15px 3ch 1fr;
+  align-items: center;
+  gap: 10px;
+}
+/* flex, so the icon's box is the icon rather than a line box with the font's
+   descender under it — which is what pushed it off centre. */
 .weather-tally-icon {
-  display: inline-flex;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: var(--text-3);
 }
 .weather-tally-count {
@@ -1164,7 +1177,6 @@ body {
   letter-spacing: -0.02em;
   color: var(--text);
   text-align: right;
-  min-width: 3ch;
 }
 .weather-tally-label {
   font-size: 12.5px;
