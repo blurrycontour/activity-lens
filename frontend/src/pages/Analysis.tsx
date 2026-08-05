@@ -814,7 +814,7 @@ export default function Analysis() {
         {/* ── Weather: does temperature move your pace or heart rate? ── */}
         {tab === 'weather' && (
           <ChartCard
-            title={`Temperature vs ${weatherMetric === 'pace' ? 'pace' : 'heart rate'}`}
+            title={`Temperature vs ${weatherMetric === 'pace' ? 'Pace' : 'Heart Rate'}`}
             icon={<CloudSun size={14} color="var(--primary)" />}
             description={`${weatherType} workouts, grouped into ${binWidth} °C bands.`}
             info="Each point on the line is the average across every workout in that temperature band, with the individual workouts shown faintly behind it. The band width adapts to the range of temperatures you actually train in, so a mild climate is still resolved finely. Bands with fewer than three workouts are left out — one workout is not an average, though it stays visible as a dot. This is observational: distance, terrain, sleep and training phase all move with the seasons too, so treat it as a tendency rather than a cause."
