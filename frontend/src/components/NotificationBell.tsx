@@ -285,8 +285,8 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
                   ? <img className="notif-avatar" src={apiURL(n.icon)} alt="" />
                   : <span className="notif-icon">{KIND_ICON[n.kind] ?? <Bell size={14} />}</span>}
                 <span style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
-                  <span className="notif-title">{n.title}</span>
-                  {n.body && <span className="notif-body">{n.body}</span>}
+                  <span className="notif-title notif-clamp-2">{n.title}</span>
+                  {n.body && <span className="notif-body notif-clamp-2">{n.body}</span>}
                   <span className="notif-time">{ago(n.createdAt)}</span>
                 </span>
                 <span

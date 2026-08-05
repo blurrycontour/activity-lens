@@ -1944,17 +1944,34 @@ body {
   background: var(--bg-3);
 }
 .notif-item.unread .notif-avatar { box-shadow: 0 0 0 2px var(--primary-dim); }
-.notif-title { display: block; font-size: 12.5px; font-weight: 600; line-height: 1.35; }
+/* Clamped too, so one unusually long title cannot make a single row taller
+   than the rest of the list put together. */
+.notif-title { font-size: 12.5px; font-weight: 600; line-height: 1.35; }
 .notif-item.unread .notif-title { color: var(--text); }
+/* Bounds a notification's title and body to a couple of lines each.
+   Applied to both the panel and the in-app banner, which had the same
+   single-line truncation and would otherwise drift apart. */
+.notif-clamp-2 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  /* Long unbroken tokens — a URL pasted into feedback — would otherwise push
+     the row wider than its container instead of wrapping. */
+  overflow-wrap: anywhere;
+}
+
+/* Two lines, then an ellipsis. A single nowrap line left roughly 45 characters
+   in a 340px panel, which several kinds overrun — an imported workout's name
+   and summary, and feedback, which sends a 140-character preview. Two lines
+   covers all of them and still keeps a row scannable; the panel is a preview,
+   and tapping it goes to the thing itself. */
 .notif-body {
-  display: block;
   margin-top: 2px;
   font-size: 11.5px;
   color: var(--text-3);
   line-height: 1.4;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .notif-time { display: block; margin-top: 3px; font-family: var(--font-mono); font-size: 10px; color: var(--text-3); }
 .notif-dismiss {
@@ -2093,20 +2110,15 @@ body {
   color: var(--primary);
 }
 .notif-banner-title {
-  display: block;
   font-size: 13px;
   font-weight: 600;
   line-height: 1.35;
 }
 .notif-banner-body {
-  display: block;
   margin-top: 2px;
   font-size: 11.5px;
   color: var(--text-3);
   line-height: 1.4;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 @media (max-width: 768px) {
   /* Full width on a phone, where a 340px card floating at the right edge
