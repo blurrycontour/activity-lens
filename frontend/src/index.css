@@ -1145,6 +1145,38 @@ body {
   margin-top: 16px;
 }
 
+/* Coverage figures on the weather settings page. A grid rather than a list so
+   the counts line up in a column and can be compared at a glance — which is the
+   only reason to show five numbers together. */
+.weather-tally {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: center;
+  gap: 9px 10px;
+}
+.weather-tally-icon {
+  display: inline-flex;
+  color: var(--text-3);
+}
+.weather-tally-count {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  text-align: right;
+  min-width: 3ch;
+}
+.weather-tally-label {
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.weather-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
 /* ── First-run import introduction ── */
 
 /* Taller than it is wide on a phone, so the routes stay a readable column

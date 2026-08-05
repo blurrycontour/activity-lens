@@ -484,10 +484,11 @@ export const api = {
     request<import('../data/workouts').Workout>(`/api/workouts/${id}/weather`, { method: 'DELETE' }),
   // How many workouts have never been checked — everything that predates the
   // feature, until the user asks.
-  weatherBackfillStatus: () =>
-    request<{ pending: number }>('/api/workouts/weather/backfill'),
+  weatherStatus: () => request<import('../data/workouts').WeatherCounts>('/api/workouts/weather/status'),
   requestWeatherBackfill: () =>
     request<{ queued: number }>('/api/workouts/weather/backfill', { method: 'POST' }),
+  retryFailedWeather: () =>
+    request<{ queued: number }>('/api/workouts/weather/retry', { method: 'POST' }),
 
   // --- User preferences ---
   getPreferences: () => request<UserPreferences>('/api/preferences'),

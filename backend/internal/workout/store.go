@@ -109,10 +109,13 @@ type Repository interface {
 	// out of WeatherNone in bulk, which is what keeps "turn the setting on" from
 	// silently meaning "send my whole location history somewhere".
 	RequestWeatherBackfill(ctx context.Context, userID int64) (int, error)
-	// CountWeatherBackfillable reports how many of this user's workouts have
-	// never been asked about, so the UI can offer the backfill with a number
-	// rather than a vague promise.
-	CountWeatherBackfillable(ctx context.Context, userID int64) (int, error)
+	// RetryFailedWeather re-queues this user's exhausted lookups, clearing the
+	// attempt counter. The only way out of WeatherFailed short of typing the
+	// conditions in by hand.
+	RetryFailedWeather(ctx context.Context, userID int64) (int, error)
+	// WeatherCounts tallies this user's workouts by status, so the UI can offer
+	// each action with a number rather than a vague promise.
+	WeatherCounts(ctx context.Context, userID int64) (WeatherCounts, error)
 }
 
 // SQLiteRepository implements Repository on top of *sql.DB (SQLite dialect).
@@ -553,22 +556,79 @@ func (r *SQLiteRepository) RequestWeatherBackfill(ctx context.Context, userID in
 	return int(n), nil
 }
 
-// CountWeatherBackfillable counts workouts that were never asked about, so the
-// offer can name a number.
+// RetryFailedWeather puts this user's failed lookups back in the queue.
 //
-// Deliberately an over-count: some of these will turn out to have no route and
-// be skipped. Establishing which would mean decompressing the library to render
-// a settings page, and "we will check 300 workouts" is an honest description of
-// what the backfill does, where "300 workouts will get weather" would not be.
-func (r *SQLiteRepository) CountWeatherBackfillable(ctx context.Context, userID int64) (int, error) {
-	var n int
-	err := r.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM workouts WHERE user_id = ? AND weather_status = ?`,
-		userID, string(WeatherNone)).Scan(&n)
+// Failures are bounded by an attempt counter so that a workout the service
+// genuinely cannot answer for does not retry forever — but that cap is reached
+// by transient outages too, and once reached there was previously no way back
+// short of typing the conditions in by hand. This is that way back: it clears
+// the counter rather than raising the cap, so the same five-attempt budget
+// applies to the retry.
+//
+// Deliberately an explicit action. Retrying automatically would mean an
+// unreachable service is re-attempted every pass forever, which is precisely
+// what the cap exists to prevent.
+func (r *SQLiteRepository) RetryFailedWeather(ctx context.Context, userID int64) (int, error) {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE workouts SET weather_status = ?, weather_attempts = 0
+		 WHERE user_id = ? AND weather_status = ?`,
+		string(WeatherPending), userID, string(WeatherFailed))
 	if err != nil {
-		return 0, fmt.Errorf("count weather backfillable: %w", err)
+		return 0, fmt.Errorf("retry failed weather: %w", err)
 	}
-	return n, nil
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, nil
+	}
+	return int(n), nil
+}
+
+// WeatherCounts tallies a user's workouts by weather status.
+//
+// One grouped query rather than a count per state: the settings page shows all
+// of them at once, and five round trips to render one card is the sort of thing
+// that is fine at ten workouts and not at ten thousand.
+//
+// The unchecked figure is deliberately an over-count — some of those rows will
+// turn out to have no route and be skipped. Establishing which would mean
+// decompressing the library to render a settings page, and "we will check 300
+// workouts" is an honest description of what the backfill does, where "300
+// workouts will get weather" would not be.
+func (r *SQLiteRepository) WeatherCounts(ctx context.Context, userID int64) (WeatherCounts, error) {
+	var out WeatherCounts
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT weather_status, COUNT(*) FROM workouts WHERE user_id = ? GROUP BY weather_status`,
+		userID)
+	if err != nil {
+		return out, fmt.Errorf("count weather: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var status string
+		var n int
+		if err := rows.Scan(&status, &n); err != nil {
+			return WeatherCounts{}, fmt.Errorf("scan weather count: %w", err)
+		}
+		switch WeatherStatus(status) {
+		case WeatherOK:
+			out.Recorded += n
+		case WeatherManual:
+			out.Recorded += n
+			out.Manual = n
+		case WeatherPending:
+			out.Scheduled = n
+		case WeatherFailed:
+			out.Failed = n
+		case WeatherSkipped:
+			out.Skipped = n
+		case WeatherNone:
+			out.Unchecked = n
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return WeatherCounts{}, fmt.Errorf("count weather: %w", err)
+	}
+	return out, nil
 }
 
 // DeleteAllForUser removes every workout a user owns, returning the ids that

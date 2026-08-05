@@ -354,9 +354,9 @@ func TestBackfillIsOptIn(t *testing.T) {
 	if got, err := repo.ListPendingWeather(ctx, []int64{1}, 5, 10); err != nil || len(got) != 0 {
 		t.Fatalf("a legacy workout was queued without being asked for: %d rows, err %v", len(got), err)
 	}
-	n, err := repo.CountWeatherBackfillable(ctx, 1)
-	if err != nil || n != 1 {
-		t.Fatalf("backfillable = %d, err %v, want 1", n, err)
+	counts, err := repo.WeatherCounts(ctx, 1)
+	if err != nil || counts.Unchecked != 1 {
+		t.Fatalf("unchecked = %d, err %v, want 1", counts.Unchecked, err)
 	}
 
 	queued, err := repo.RequestWeatherBackfill(ctx, 1)
@@ -404,5 +404,133 @@ func TestResolveWeatherStartSettlesRoutelessWorkouts(t *testing.T) {
 	}
 	if got.WeatherStatus != WeatherSkipped {
 		t.Errorf("status = %q, want skipped so it is never read again", got.WeatherStatus)
+	}
+}
+
+// The attempt cap is what stops an unanswerable workout being retried forever,
+// but a transient outage exhausts it just as surely — and until this existed
+// there was no way back except typing the conditions in by hand.
+func TestRetryFailedWeatherReopensExhaustedLookups(t *testing.T) {
+	repo := NewSQLiteRepository(newTestDB(t))
+	svc := NewService(repo)
+	ctx := context.Background()
+
+	wk, _, err := svc.CreateIdempotent(ctx, 1, outdoorInput("failed during an outage"))
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	for i := 0; i < 5; i++ {
+		if err := repo.MarkWeatherFailed(ctx, wk.ID); err != nil {
+			t.Fatalf("MarkWeatherFailed: %v", err)
+		}
+	}
+	if got, _ := repo.ListPendingWeather(ctx, []int64{1}, 5, 10); len(got) != 0 {
+		t.Fatalf("setup: expected the workout to be out of the queue, got %d", len(got))
+	}
+
+	n, err := repo.RetryFailedWeather(ctx, 1)
+	if err != nil || n != 1 {
+		t.Fatalf("RetryFailedWeather = %d, err %v, want 1", n, err)
+	}
+	// Clearing the counter rather than raising the cap is the point: the retry
+	// gets the same bounded budget, so a service that is genuinely down cannot
+	// be hammered indefinitely by one click.
+	got, err := repo.ListPendingWeather(ctx, []int64{1}, 5, 10)
+	if err != nil || len(got) != 1 {
+		t.Fatalf("after the retry: %d rows, err %v, want 1", len(got), err)
+	}
+}
+
+// Retrying must not disturb anything that is not a failure — least of all a
+// manual entry, which would be re-fetched and overwritten.
+func TestRetryFailedWeatherTouchesOnlyFailures(t *testing.T) {
+	repo := NewSQLiteRepository(newTestDB(t))
+	svc := NewService(repo)
+	ctx := context.Background()
+
+	typed, _, err := svc.CreateIdempotent(ctx, 1, outdoorInput("typed in by hand"))
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := svc.SetManualWeather(ctx, 1, typed.ID, Weather{TempC: 21, ApparentC: 21, Humidity: 50, WindKph: 5}); err != nil {
+		t.Fatalf("SetManualWeather: %v", err)
+	}
+	legacy, _, err := svc.CreateIdempotent(ctx, 1, outdoorInput("predates the feature"))
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := repo.db.ExecContext(ctx,
+		`UPDATE workouts SET weather_status = 'none' WHERE id = ?`, legacy.ID); err != nil {
+		t.Fatalf("simulate legacy row: %v", err)
+	}
+
+	if n, err := repo.RetryFailedWeather(ctx, 1); err != nil || n != 0 {
+		t.Fatalf("RetryFailedWeather = %d, err %v, want 0 — nothing here has failed", n, err)
+	}
+
+	got, err := repo.Get(ctx, 1, typed.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.WeatherStatus != WeatherManual {
+		t.Errorf("a hand-entered reading was re-queued: status = %q", got.WeatherStatus)
+	}
+	// A legacy row must stay opt-in: the retry button is about failures, not a
+	// second route into sending an untouched library to a third party.
+	after, err := repo.Get(ctx, 1, legacy.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if after.WeatherStatus != WeatherNone {
+		t.Errorf("retrying swept in a never-checked workout: status = %q", after.WeatherStatus)
+	}
+}
+
+// The settings page shows every number at once, so they have to agree with each
+// other and with what the queue will actually do.
+func TestWeatherCountsTalliesEachState(t *testing.T) {
+	repo := NewSQLiteRepository(newTestDB(t))
+	svc := NewService(repo)
+	ctx := context.Background()
+
+	mk := func(name string) *Workout {
+		wk, _, err := svc.CreateIdempotent(ctx, 1, outdoorInput(name))
+		if err != nil {
+			t.Fatalf("create %s: %v", name, err)
+		}
+		return wk
+	}
+	fetched := mk("fetched")
+	if err := repo.SetWeather(ctx, fetched.ID, WeatherOK, Weather{TempC: 12}); err != nil {
+		t.Fatalf("SetWeather: %v", err)
+	}
+	typed := mk("typed")
+	if err := svc.SetManualWeather(ctx, 1, typed.ID, Weather{TempC: 21, ApparentC: 21}); err != nil {
+		t.Fatalf("SetManualWeather: %v", err)
+	}
+	mk("still queued")
+	broken := mk("broken")
+	if err := repo.MarkWeatherFailed(ctx, broken.ID); err != nil {
+		t.Fatalf("MarkWeatherFailed: %v", err)
+	}
+	indoor := mk("indoor")
+	if err := repo.MarkWeatherSkipped(ctx, indoor.ID); err != nil {
+		t.Fatalf("MarkWeatherSkipped: %v", err)
+	}
+
+	got, err := repo.WeatherCounts(ctx, 1)
+	if err != nil {
+		t.Fatalf("WeatherCounts: %v", err)
+	}
+	// Recorded folds fetched and hand-entered together: from the outside a
+	// workout either has conditions on it or does not.
+	want := WeatherCounts{Recorded: 2, Manual: 1, Scheduled: 1, Failed: 1, Skipped: 1}
+	if got != want {
+		t.Errorf("counts = %+v, want %+v", got, want)
+	}
+
+	// Another user's library must not appear in these numbers.
+	if other, err := repo.WeatherCounts(ctx, 2); err != nil || other != (WeatherCounts{}) {
+		t.Errorf("counts for a user with no workouts = %+v, err %v", other, err)
 	}
 }

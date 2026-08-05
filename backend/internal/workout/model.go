@@ -234,6 +234,29 @@ type WeatherTarget struct {
 	Lat, Lon  float64
 }
 
+// WeatherCounts is a user's library tallied by weather status.
+//
+// Named by what each number means to a reader rather than by the status it came
+// from: "recorded" folds ok and manual together, because from the outside a
+// workout either has conditions on it or does not, and where they came from is
+// the workout page's business.
+type WeatherCounts struct {
+	// Recorded is every workout with conditions, however they got there.
+	Recorded int `json:"recorded"`
+	// Manual is the subset of Recorded that was typed in, and so is never
+	// touched by a lookup.
+	Manual int `json:"manual"`
+	// Scheduled is queued for the background pass — including anything held up
+	// by Open-Meteo rate limiting us, which does not count as a failure.
+	Scheduled int `json:"scheduled"`
+	// Failed exhausted its retries. Recoverable only by an explicit retry.
+	Failed int `json:"failed"`
+	// Skipped can never have weather: indoor, or no GPS.
+	Skipped int `json:"skipped"`
+	// Unchecked predates the feature and is only ever queued by a backfill.
+	Unchecked int `json:"unchecked"`
+}
+
 // Redact clears the fields that belong to the owner alone. The service applies
 // it to every workout returned to a user who does not own it, so redaction is
 // structural rather than something each API handler has to remember.

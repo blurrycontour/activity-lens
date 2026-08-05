@@ -1,40 +1,85 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { CalendarClock, CloudOff, CloudSun, Hourglass, Pencil, TriangleAlert } from 'lucide-react'
 import SettingsCard from '../../components/SettingsCard'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import { usePreferences } from '../../context/PreferencesContext'
+import { type WeatherCounts } from '../../data/workouts'
 import { api } from '../../lib/api'
 
 /**
  * Whether to look up the conditions each workout happened in.
  *
- * Two separate decisions live here, and keeping them separate is the point:
+ * Three separate decisions live here, and keeping them separate is the point:
  *
  *   the switch    covers workouts imported from now on
  *   the backfill  sends a coarse location and a timestamp for every run
  *                 already in the library
+ *   the retry     re-opens lookups that ran out of attempts
  *
- * The switch is on by default precisely because it is the narrow one. The
- * backfill is never implied by it — turning a setting on should not silently
- * mean "and send my last five years of movements somewhere", so it is an action
- * with its own confirmation and its own count.
+ * The switch is on by default precisely because it is the narrow one. The other
+ * two are never implied by it — turning a setting on should not silently mean
+ * "and send my last five years of movements somewhere" — so each is an action
+ * with its own count, and the backfill has its own confirmation.
+ *
+ * The coverage figures are what make those actions decidable. "Fetch weather for
+ * earlier workouts" is a leap of faith; "312 have conditions, 88 have never been
+ * checked" is a choice.
  */
+
+/** What each state means, said the way a person would ask about it. */
+const ROWS: {
+  key: keyof WeatherCounts
+  label: string
+  icon: React.ReactNode
+  hint: string
+}[] = [
+  {
+    key: 'recorded', label: 'With conditions',
+    icon: <CloudSun size={15} />,
+    hint: 'Looked up, or entered by hand.',
+  },
+  {
+    key: 'scheduled', label: 'Scheduled',
+    icon: <Hourglass size={15} />,
+    hint: 'Queued for the next pass. If the weather service is busy this can take longer.',
+  },
+  {
+    key: 'failed', label: "Couldn't be looked up",
+    icon: <TriangleAlert size={15} />,
+    hint: 'The service could not be reached enough times to give up on them.',
+  },
+  {
+    key: 'unchecked', label: 'Never checked',
+    icon: <CalendarClock size={15} />,
+    hint: 'Imported before this feature existed. Only ever looked up if you ask.',
+  },
+  {
+    key: 'skipped', label: 'No location',
+    icon: <CloudOff size={15} />,
+    hint: 'Indoor sessions and files recorded without GPS. Nothing about these is ever sent.',
+  },
+]
+
 export default function WeatherSettings() {
   const { prefs, save } = usePreferences()
   // Undefined on a server too old to send the field, which is the same as on.
   const enabled = prefs?.weatherEnabled !== false
 
-  const [backfillable, setBackfillable] = useState<number | null>(null)
+  const [counts, setCounts] = useState<WeatherCounts | null>(null)
   const [asking, setAsking] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
+  const [busy, setBusy] = useState<'backfill' | 'retry' | null>(null)
 
-  useEffect(() => {
-    let alive = true
-    api.weatherBackfillStatus()
-      .then(r => { if (alive) setBackfillable(r.pending) })
-      .catch(() => { /* the offer simply does not appear */ })
-    return () => { alive = false }
+  const refresh = useCallback(async () => {
+    try {
+      setCounts(await api.weatherStatus())
+    } catch {
+      // The card simply does not appear. A settings page that cannot save is
+      // worth an error; one that cannot count is not.
+    }
   }, [])
+
+  useEffect(() => { void refresh() }, [refresh])
 
   async function toggle(on: boolean) {
     setMsg(null)
@@ -43,28 +88,36 @@ export default function WeatherSettings() {
       // Asked here rather than assumed. Someone switching this on may well want
       // their history filled in — but that is the wider decision, and this is
       // the moment they are thinking about it.
-      if (on && (backfillable ?? 0) > 0) setAsking(true)
+      if (on && (counts?.unchecked ?? 0) > 0) setAsking(true)
     } catch {
       setMsg('Could not save that. Try again.')
     }
   }
 
-  async function backfill() {
+  async function run(kind: 'backfill' | 'retry') {
     setAsking(false)
-    setBusy(true)
+    setBusy(kind)
     setMsg(null)
     try {
-      const { queued } = await api.requestWeatherBackfill()
-      setBackfillable(0)
+      const { queued } = kind === 'backfill'
+        ? await api.requestWeatherBackfill()
+        : await api.retryFailedWeather()
       setMsg(queued > 0
         ? `${queued} workout${queued === 1 ? '' : 's'} queued. They fill in gradually over the next few hours.`
         : 'Nothing left to look up.')
+      // Re-read rather than adjusting the numbers here: the server decides what
+      // actually moved, and two places computing that is how they drift apart.
+      await refresh()
     } catch {
       setMsg('Could not queue those workouts. Try again.')
     } finally {
-      setBusy(false)
+      setBusy(null)
     }
   }
+
+  const total = counts
+    ? counts.recorded + counts.scheduled + counts.failed + counts.unchecked + counts.skipped
+    : 0
 
   return (
     <>
@@ -87,44 +140,84 @@ export default function WeatherSettings() {
         </span>
         <span className="field-hint">
           Turning this off stops new lookups. Conditions already recorded stay,
-          and still appear in Analysis.
+          and still appear on the workout and in Analysis.
         </span>
       </SettingsCard>
 
-      {/* Only offered when there is something to offer, and always with the
-          number — "we will check 300 workouts" is a decision someone can make,
-          where a bare "backfill" button is not. */}
-      {(backfillable ?? 0) > 0 && (
-        <SettingsCard title="Earlier workouts">
-          <span className="field-hint">
-            {backfillable} workout{backfillable === 1 ? ' has' : 's have'} never been
-            checked — everything imported before this feature existed. Looking them
-            up sends their start coordinates and times to Open-Meteo too.
-          </span>
-          <button
-            className="btn btn-primary"
-            style={{ alignSelf: 'flex-start', marginTop: 4 }}
-            disabled={busy}
-            onClick={() => setAsking(true)}
-          >
-            {busy ? 'Queueing…' : 'Fetch weather for these'}
-          </button>
+      {/* Shown whenever there is a library to describe, including when every
+          number is zero — "none of your workouts have conditions yet" is an
+          answer, and a card that vanishes leaves the question open. */}
+      {counts && total > 0 && (
+        <SettingsCard title="Your workouts">
+          <div className="weather-tally">
+            {ROWS.map(row => (
+              <div className="weather-tally-row" key={row.key} title={row.hint}>
+                <span className="weather-tally-icon">{row.icon}</span>
+                <span className="weather-tally-count">{counts[row.key]}</span>
+                <span className="weather-tally-label">{row.label}</span>
+              </div>
+            ))}
+          </div>
+
+          {counts.manual > 0 && (
+            <span className="field-hint" style={{ marginTop: 10 }}>
+              <Pencil size={11} style={{ verticalAlign: -1, marginRight: 4 }} />
+              {counts.manual} {counts.manual === 1 ? 'was' : 'were'} entered by hand.
+              A lookup never overwrites those.
+            </span>
+          )}
+
+          {/* One button per thing that is actually actionable, each named with
+              its number. A disabled "Fetch" over a zero would be furniture. */}
+          <div className="weather-actions">
+            {counts.unchecked > 0 && (
+              <button
+                className="btn btn-primary"
+                disabled={busy !== null}
+                onClick={() => setAsking(true)}
+              >
+                {busy === 'backfill' ? 'Queueing…' : `Fetch for ${counts.unchecked} never checked`}
+              </button>
+            )}
+            {counts.failed > 0 && (
+              <button
+                className="btn btn-ghost"
+                disabled={busy !== null}
+                onClick={() => void run('retry')}
+              >
+                {busy === 'retry' ? 'Queueing…' : `Retry ${counts.failed} that failed`}
+              </button>
+            )}
+          </div>
+
+          {msg && <p className="field-hint" style={{ marginTop: 10 }}>{msg}</p>}
         </SettingsCard>
       )}
 
-      {msg && <p className="field-hint" style={{ marginTop: 12 }}>{msg}</p>}
+      <SettingsCard title="About this data">
+        <span className="field-hint">
+          Conditions come from a reanalysis model on roughly a 25 km grid, so
+          they describe the area you were in rather than the exact road. A
+          coastal or valley route can be a couple of degrees out.
+        </span>
+        <span className="field-hint">
+          Each workout gets the average across the hours it spanned — not just
+          the hour it started — with rainfall totalled and the condition taken at
+          its worst. You can correct any of it by hand from the workout page.
+        </span>
+      </SettingsCard>
 
       {asking && (
         <ConfirmDialog
           title="Fetch weather for earlier workouts?"
           message={
-            `This sends the start location and time of ${backfillable ?? 0} earlier ` +
+            `This sends the start location and time of ${counts?.unchecked ?? 0} earlier ` +
             'workout(s) to Open-Meteo. They are looked up gradually in the ' +
             'background, so it may take a few hours to finish. New workouts are ' +
             'unaffected either way.'
           }
           confirmLabel="Fetch them"
-          onConfirm={() => void backfill()}
+          onConfirm={() => void run('backfill')}
           onCancel={() => setAsking(false)}
         />
       )}

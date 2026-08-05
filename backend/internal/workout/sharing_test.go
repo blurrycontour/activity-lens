@@ -44,7 +44,10 @@ func (unimplementedSharing) MarkWeatherFailed(context.Context, string) error {
 func (unimplementedSharing) RequestWeatherBackfill(context.Context, int64) (int, error) {
 	panic("weather storage is exercised against the real schema; see weather_test.go")
 }
-func (unimplementedSharing) CountWeatherBackfillable(context.Context, int64) (int, error) {
+func (unimplementedSharing) RetryFailedWeather(context.Context, int64) (int, error) {
+	panic("weather storage is exercised against the real schema; see weather_test.go")
+}
+func (unimplementedSharing) WeatherCounts(context.Context, int64) (WeatherCounts, error) {
 	panic("weather storage is exercised against the real schema; see weather_test.go")
 }
 func (unimplementedSharing) ListPublicSummary(context.Context, int64) ([]Workout, error) {

@@ -22,6 +22,26 @@ export interface Weather {
 }
 
 /**
+ * A library tallied by weather status, for the settings page.
+ *
+ * `recorded` folds looked-up and hand-entered together — from the outside a
+ * workout either has conditions on it or does not — with `manual` naming the
+ * subset that a lookup will never touch.
+ */
+export interface WeatherCounts {
+  recorded: number
+  manual: number
+  /** Queued, including anything held back by Open-Meteo rate limiting us. */
+  scheduled: number
+  /** Out of retries. Only an explicit retry moves these. */
+  failed: number
+  /** Indoor, or no GPS: can never have weather. */
+  skipped: number
+  /** Predates the feature; only ever queued by an explicit backfill. */
+  unchecked: number
+}
+
+/**
  * Why a workout has no weather.
  *
  * 'none'    never checked — everything that predates the feature, until the

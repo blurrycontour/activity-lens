@@ -201,9 +201,14 @@ func (s *Service) RequestWeatherBackfill(ctx context.Context, userID int64) (int
 	return s.repo.RequestWeatherBackfill(ctx, userID)
 }
 
-// WeatherBackfillable counts workouts that have never been checked.
-func (s *Service) WeatherBackfillable(ctx context.Context, userID int64) (int, error) {
-	return s.repo.CountWeatherBackfillable(ctx, userID)
+// RetryFailedWeather re-queues this user's exhausted lookups.
+func (s *Service) RetryFailedWeather(ctx context.Context, userID int64) (int, error) {
+	return s.repo.RetryFailedWeather(ctx, userID)
+}
+
+// WeatherCounts tallies this user's workouts by weather status.
+func (s *Service) WeatherCounts(ctx context.Context, userID int64) (WeatherCounts, error) {
+	return s.repo.WeatherCounts(ctx, userID)
 }
 
 // validateWeather rejects values that are not physically possible.

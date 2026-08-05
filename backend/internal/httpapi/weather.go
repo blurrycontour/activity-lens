@@ -86,18 +86,36 @@ func (s *Server) writeWorkoutAfterWeatherChange(w http.ResponseWriter, r *http.R
 	})
 }
 
-// handleWeatherBackfillStatus reports how many workouts have never been checked.
+// handleWeatherStatus reports the user's library tallied by weather status.
 //
-// This is what lets the UI offer the backfill with a number instead of a vague
-// promise — and, when it is zero, not offer it at all.
-func (s *Server) handleWeatherBackfillStatus(w http.ResponseWriter, r *http.Request) {
+// This is what lets the settings page offer each action with a number instead of
+// a vague promise — and, where a number is zero, say so rather than offering an
+// action that would do nothing.
+func (s *Server) handleWeatherStatus(w http.ResponseWriter, r *http.Request) {
 	user := httpmw.UserFrom(r)
-	n, err := s.workout.WeatherBackfillable(r.Context(), user.ID)
+	counts, err := s.workout.WeatherCounts(r.Context(), user.ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not count workouts")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"pending": n})
+	writeJSON(w, http.StatusOK, counts)
+}
+
+// handleRetryFailedWeather re-queues lookups that ran out of attempts.
+//
+// The attempt cap keeps an unanswerable workout from being retried forever, but
+// a transient outage exhausts it just as surely as a permanent one — and until
+// now that left the workout stuck with no way back except typing the conditions
+// in by hand. Clearing the counter rather than raising the cap means the retry
+// gets the same bounded budget as the first try.
+func (s *Server) handleRetryFailedWeather(w http.ResponseWriter, r *http.Request) {
+	user := httpmw.UserFrom(r)
+	n, err := s.workout.RetryFailedWeather(r.Context(), user.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not queue workouts")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"queued": n})
 }
 
 // handleRequestWeatherBackfill queues this user's older workouts for a lookup.
