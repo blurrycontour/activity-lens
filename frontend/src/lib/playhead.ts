@@ -52,40 +52,36 @@ export function usePlayhead(initial: number): Playhead {
 }
 
 /**
- * How often the playhead is published to React, in milliseconds.
+ * A React state copy of the playhead, published at most once per frame.
  *
- * 100ms is under the threshold where a chart cursor reads as stepping rather
- * than sliding, and it is a sixth of the work sixty frames a second would be.
- */
-const PUBLISH_MS = 100
-
-/**
- * A React state copy of the playhead, updated at a rate a chart can afford.
+ * Aligned to requestAnimationFrame rather than a fixed interval, and that is the
+ * important part: several playhead moves inside one frame collapse into a single
+ * render, and when the main thread is busy — the map is being panned, say — the
+ * browser fires fewer callbacks and this throttles itself. A fixed timer does
+ * the opposite, queueing renders the frame budget cannot pay for, which is what
+ * made panning collapse while the track played.
  *
  * Changes made while playback is stopped — a scrub, reset, jump to end — are
- * published immediately regardless, because there is no following frame to
- * carry them and a cursor that lags a deliberate action by a tenth of a second
- * looks broken rather than smooth.
+ * published immediately. There is no following frame to carry them, and a
+ * cursor that lags a deliberate action looks broken rather than smooth.
  */
 export function useThrottledPlayhead(playhead: Playhead, playing: boolean): number {
   const [value, setValue] = useState(playhead.value)
 
   useEffect(() => {
-    let last = 0
-    let timer: ReturnType<typeof setTimeout> | undefined
+    let frame = 0
     const unsubscribe = playhead.subscribe(t => {
-      if (timer) { clearTimeout(timer); timer = undefined }
-      const now = performance.now()
-      if (!playing || now - last >= PUBLISH_MS) {
-        last = now
+      if (!playing) {
+        if (frame) { cancelAnimationFrame(frame); frame = 0 }
         setValue(t)
         return
       }
-      // Trailing edge, so the last frame before a pause is not left unpublished
-      // and the charts do not stop a fraction short of where the marker is.
-      timer = setTimeout(() => { last = performance.now(); setValue(playhead.value) }, PUBLISH_MS - (now - last))
+      if (frame) return
+      // Reads the playhead again on the way out rather than closing over `t`,
+      // so a frame that coalesced several moves publishes the latest.
+      frame = requestAnimationFrame(() => { frame = 0; setValue(playhead.value) })
     })
-    return () => { unsubscribe(); if (timer) clearTimeout(timer) }
+    return () => { unsubscribe(); if (frame) cancelAnimationFrame(frame) }
   }, [playhead, playing])
 
   return value
