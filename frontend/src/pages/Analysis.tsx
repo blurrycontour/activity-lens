@@ -4,13 +4,14 @@ import { useWorkouts } from '../context/WorkoutsContext'
 import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
 import ChartCard, { EmptyPlot } from '../components/ChartCard'
+import TabStrip from '../components/TabStrip'
 import InfoTip from '../components/InfoTip'
 import { EdgeTick } from '../components/ChartAxis'
 import { useLocalStorage } from '../lib/useLocalStorage'
 import { filterByRange, rangeLabel, toDateKey } from '../lib/range'
 import { AXIS_TICK, GRID_PROPS, HOVER_FILL } from '../lib/chartColors'
 import {
-  binByTemperature, describeCorrelation, hasUsableWeather, temperatureCorrelation,
+  binByTemperature, binWidthFor, describeCorrelation, hasUsableWeather, temperatureCorrelation,
   type WeatherMetric,
 } from '../lib/weather'
 import { usePreferences } from '../context/PreferencesContext'
@@ -140,9 +141,15 @@ export default function Analysis() {
     () => inRange.filter(w => w.type === weatherType && hasUsableWeather(w, weatherMetric)),
     [inRange, weatherType, weatherMetric],
   )
-  const tempBins = useMemo(
-    () => binByTemperature(weatherPool, weatherMetric),
+  // Band width follows the spread actually present: a mild climate that never
+  // leaves 18–28 °C would get two bands at a fixed 5 °C, which is not a chart.
+  const binWidth = useMemo(
+    () => binWidthFor(weatherPool, weatherMetric),
     [weatherPool, weatherMetric],
+  )
+  const tempBins = useMemo(
+    () => binByTemperature(weatherPool, weatherMetric, binWidth),
+    [weatherPool, weatherMetric, binWidth],
   )
   const tempScatter = useMemo(
     () => weatherPool.map(w => ({
@@ -364,19 +371,9 @@ export default function Analysis() {
       </div>
 
       <div className="page-content">
-        <nav className="tab-strip" style={{ marginBottom: 20 }} aria-label="Analysis sections">
-          {TABS.map(t => (
-            <button
-              key={t.id}
-              className={`tab-strip-item${tab === t.id ? ' active' : ''}`}
-              onClick={() => setTab(t.id)}
-              aria-current={tab === t.id ? 'page' : undefined}
-            >
-              {t.icon}
-              {t.label}
-            </button>
-          ))}
-        </nav>
+        <div style={{ marginBottom: 20 }}>
+          <TabStrip items={TABS} value={tab} onChange={setTab} ariaLabel="Analysis sections" />
+        </div>
 
         {/* ── Records: what your best efforts look like ── */}
         {tab === 'records' && (
@@ -819,8 +816,8 @@ export default function Analysis() {
           <ChartCard
             title={`Temperature vs ${weatherMetric === 'pace' ? 'pace' : 'heart rate'}`}
             icon={<CloudSun size={14} color="var(--primary)" />}
-            description={`${weatherType} workouts, grouped into 5 °C bands.`}
-            info="Each point on the line is the average across every workout in that temperature band, with the individual workouts shown faintly behind it. Bands with fewer than three workouts are left out — one workout is not an average. This is observational: distance, terrain, sleep and training phase all move with the seasons too, so treat it as a tendency rather than a cause."
+            description={`${weatherType} workouts, grouped into ${binWidth} °C bands.`}
+            info="Each point on the line is the average across every workout in that temperature band, with the individual workouts shown faintly behind it. The band width adapts to the range of temperatures you actually train in, so a mild climate is still resolved finely. Bands with fewer than three workouts are left out — one workout is not an average, though it stays visible as a dot. This is observational: distance, terrain, sleep and training phase all move with the seasons too, so treat it as a tendency rather than a cause."
             actions={
               <Segmented
                 value={weatherMetric}
@@ -842,10 +839,10 @@ export default function Analysis() {
                 No weather recorded yet. New workouts get it automatically; to
                 include the ones you already have, use Settings → Weather.
               </EmptyPlot>
-            ) : tempBins.length === 0 ? (
+            ) : weatherPool.length === 0 ? (
               <EmptyPlot height={260}>
-                Not enough {weatherType.toLowerCase()} workouts with weather in this
-                period. Widen the range, or pick another activity.
+                No {weatherType.toLowerCase()} workouts with weather in this period.
+                Widen the range, or pick another activity.
               </EmptyPlot>
             ) : (
               <>
@@ -881,14 +878,19 @@ export default function Analysis() {
                     />
                     {/* The individual workouts, faint. The line alone would read
                         as a law; the spread behind it is the honest part. */}
-                    <Scatter data={tempScatter} dataKey="value" fill="var(--text-3)" opacity={0.35} isAnimationActive={false} />
-                    <Line
-                      data={tempBins.map(b => ({ temp: (b.from + b.to) / 2, value: b[weatherMetric], from: b.from, to: b.to, count: b.count }))}
-                      type="monotone" dataKey="value"
-                      stroke="var(--primary)" strokeWidth={2}
-                      dot={{ r: 3, fill: 'var(--primary)' }}
-                      isAnimationActive={false}
-                    />
+                    <Scatter data={tempScatter} dataKey="value" fill="var(--text-3)" opacity={0.45} isAnimationActive={false} />
+                    {/* Only once there are bands to draw. Below that the dots
+                        are the whole chart, which is the honest picture of a
+                        handful of workouts — better than no chart at all. */}
+                    {tempBins.length > 0 && (
+                      <Line
+                        data={tempBins.map(b => ({ temp: (b.from + b.to) / 2, value: b[weatherMetric], from: b.from, to: b.to, count: b.count }))}
+                        type="monotone" dataKey="value"
+                        stroke="var(--primary)" strokeWidth={2}
+                        dot={{ r: 3, fill: 'var(--primary)' }}
+                        isAnimationActive={false}
+                      />
+                    )}
                   </ComposedChart>
                 </ResponsiveContainer>
                 <p style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 10, lineHeight: 1.55 }}>

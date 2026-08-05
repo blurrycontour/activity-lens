@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { type Workout } from '../../data/workouts'
 import {
-  binByTemperature, describeCorrelation, describeWeather, pearson,
-  temperatureCorrelation, weatherLabel,
+  WEATHER_FIELDS, binByTemperature, binWidthFor, describeCorrelation,
+  formatWeatherValue, pearson, temperatureCorrelation, weatherLabel,
 } from '../weather'
 
 /**
@@ -39,7 +39,7 @@ describe('binByTemperature', () => {
   it('averages the workouts inside each bucket', () => {
     const bins = binByTemperature(
       [run(11, { avgPace: 300 }), run(12, { avgPace: 320 }), run(13, { avgPace: 340 })],
-      'pace',
+      'pace', 5,
     )
     expect(bins).toHaveLength(1)
     expect(bins[0].from).toBe(10)
@@ -50,27 +50,27 @@ describe('binByTemperature', () => {
   // A bucket of one is that workout, not an average. Drawn on the same line as
   // a bucket of forty, it invites reading one bad run as a law.
   it('drops buckets too small to be an average', () => {
-    const bins = binByTemperature([...Array(3)].map(() => run(12)).concat(run(28)), 'pace')
+    const bins = binByTemperature([...Array(3)].map(() => run(12)).concat(run(28)), 'pace', 5)
     expect(bins.map(b => b.from)).toEqual([10])
   })
 
   it('puts a workout in the bucket its temperature falls in', () => {
     const bins = binByTemperature(
       [run(15), run(16), run(17), run(14.9), run(14.8), run(14.7)],
-      'pace',
+      'pace', 5,
     )
     expect(bins.map(b => b.from)).toEqual([10, 15])
   })
 
   // Below freezing must not round towards zero into the wrong bucket.
   it('handles negative temperatures', () => {
-    const bins = binByTemperature([run(-2), run(-3), run(-4)], 'pace')
+    const bins = binByTemperature([run(-2), run(-3), run(-4)], 'pace', 5)
     expect(bins[0].from).toBe(-5)
     expect(bins[0].to).toBe(0)
   })
 
   it('ignores workouts with no weather', () => {
-    expect(binByTemperature([run(12, { weather: undefined })], 'pace')).toEqual([])
+    expect(binByTemperature([run(12, { weather: undefined })], 'pace', 5)).toEqual([])
   })
 
   // A strength session has a temperature but no pace; averaging its zero in
@@ -78,13 +78,13 @@ describe('binByTemperature', () => {
   it('ignores workouts with no value for the metric', () => {
     const bins = binByTemperature(
       [run(12), run(12), run(12), run(12, { avgPace: 0 })],
-      'pace',
+      'pace', 5,
     )
     expect(bins[0].count).toBe(3)
   })
 
   it('returns nothing rather than throwing on an empty library', () => {
-    expect(binByTemperature([], 'pace')).toEqual([])
+    expect(binByTemperature([], 'pace', 5)).toEqual([])
   })
 })
 
@@ -148,26 +148,62 @@ describe('describeCorrelation', () => {
   })
 })
 
-describe('describeWeather', () => {
-  it('leads with the temperature', () => {
-    expect(describeWeather({ tempC: 12.4, apparentC: 12, humidity: 0, windKph: 0, precipMm: 0, code: 0 }))
-      .toBe('12°C')
+// A fixed 5 °C band is two bars for someone who trains between 18 and 28 °C
+// all year, which is not a chart. Width has to follow the spread present.
+describe('binWidthFor', () => {
+  it('resolves a narrow range finely', () => {
+    expect(binWidthFor([run(18), run(22), run(26), run(28)], 'pace')).toBe(2)
+    expect(binWidthFor([run(19), run(20), run(21), run(22)], 'pace')).toBe(1)
   })
 
-  // "12°, feels 12°" is noise; the apparent temperature earns its place only
-  // when it disagrees.
-  it('mentions the apparent temperature only when it differs', () => {
-    const same = describeWeather({ tempC: 12, apparentC: 13, humidity: 0, windKph: 0, precipMm: 0, code: 0 })
-    expect(same).not.toMatch(/feels/)
-    const different = describeWeather({ tempC: 12, apparentC: 6, humidity: 0, windKph: 0, precipMm: 0, code: 0 })
-    expect(different).toMatch(/feels 6°/)
+  it('does not shatter a wide range into noise', () => {
+    expect(binWidthFor([run(-10), run(0), run(15), run(30)], 'pace')).toBe(5)
+    expect(binWidthFor([run(-20), run(0), run(30), run(60)], 'pace')).toBe(10)
   })
 
-  it('omits rain that did not fall', () => {
-    const dry = describeWeather({ tempC: 12, apparentC: 12, humidity: 60, windKph: 10, precipMm: 0, code: 0 })
-    expect(dry).not.toMatch(/mm/)
-    const wet = describeWeather({ tempC: 12, apparentC: 12, humidity: 60, windKph: 10, precipMm: 2.4, code: 61 })
-    expect(wet).toMatch(/2.4 mm/)
+  // Every candidate width divides its bounds evenly, so a band is always
+  // something a person can read off the axis.
+  it('only ever picks a round width', () => {
+    for (const temps of [[1, 2, 3], [1, 40], [5, 5.5], [-30, 50]]) {
+      expect([1, 2, 5, 10]).toContain(binWidthFor(temps.map(t => run(t)), 'pace'))
+    }
+  })
+
+  it('answers for an empty set rather than throwing', () => {
+    expect(binWidthFor([], 'pace')).toBe(10)
+    expect(binWidthFor([run(12, { weather: undefined })], 'pace')).toBe(10)
+  })
+
+  // The whole point of adapting: a set that produced two usable bands at a
+  // fixed 5 °C produces a real curve now.
+  it('turns a mild climate into a chart instead of two bars', () => {
+    const mild = [20, 20, 20, 21, 21, 21, 22, 22, 22, 23, 23, 23, 24, 24, 24].map(t => run(t))
+    expect(binByTemperature(mild, 'pace', 5)).toHaveLength(1)
+    expect(binByTemperature(mild, 'pace')).toHaveLength(5)
+  })
+})
+
+describe('formatWeatherValue', () => {
+  const field = (key: string) => WEATHER_FIELDS.find(f => f.key === key)!
+  const w = { tempC: 12.4, apparentC: 9.6, humidity: 68, windKph: 14.2, precipMm: 0, code: 0 }
+
+  it('rounds each value to the precision that field deserves', () => {
+    expect(formatWeatherValue(field('tempC'), w)).toBe('12 °C')
+    expect(formatWeatherValue(field('windKph'), w)).toBe('14 km/h')
+    // Rain is the one value where a tenth of a unit is the difference between
+    // a dry run and a wet one.
+    expect(formatWeatherValue(field('precipMm'), { ...w, precipMm: 0.4 })).toBe('0.4 mm')
+  })
+
+  // The panel previously dropped a rain of 0 and an apparent temperature that
+  // agreed with the air, leaving a reader unable to tell "none" from "unknown".
+  it('states a zero rather than leaving it out', () => {
+    expect(formatWeatherValue(field('precipMm'), w)).toBe('0.0 mm')
+    expect(formatWeatherValue(field('apparentC'), { ...w, apparentC: 12.4 })).toBe('12 °C')
+  })
+
+  it('keeps the percent sign tight against its number', () => {
+    expect(formatWeatherValue(field('humidity'), w)).toBe('68%')
   })
 })
 

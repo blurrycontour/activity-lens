@@ -1,7 +1,11 @@
 import { useState } from 'react'
-import { CloudOff, CloudSun, Pencil, RotateCcw } from 'lucide-react'
+import {
+  CloudOff, CloudRain, CloudSun, Droplets, Pencil, RotateCcw,
+  Thermometer, ThermometerSun, Wind,
+} from 'lucide-react'
 import { type Weather, type Workout } from '../data/workouts'
-import { describeWeather, weatherLabel } from '../lib/weather'
+import { WEATHER_FIELDS, type WeatherKey, formatWeatherValue, weatherLabel } from '../lib/weather'
+import Dropdown from './Dropdown'
 import { api } from '../lib/api'
 
 /**
@@ -90,15 +94,43 @@ export default function WeatherCard({ workout, isOwner, enabled, onSaved, onOpen
   )
 }
 
+/**
+ * An icon per field, kept here rather than in `lib/weather` so the list stays
+ * plain data that a test can read without pulling in React.
+ */
+const FIELD_ICONS: Record<WeatherKey, typeof Thermometer> = {
+  tempC: Thermometer,
+  apparentC: ThermometerSun,
+  humidity: Droplets,
+  windKph: Wind,
+  precipMm: CloudRain,
+}
+
 function WeatherReading({ weather, manual }: { weather: Weather; manual?: boolean }) {
   return (
     <>
-      <div className="weather-reading">{describeWeather(weather)}</div>
-      <div className="weather-sub">
+      <div className="weather-sub" style={{ marginTop: 0 }}>
         {weatherLabel(weather.code)}
         {/* Said plainly, because it changes what the number means: this one was
             not measured by the model, and will not be replaced by it. */}
         {manual && ' · entered by hand'}
+      </div>
+      {/* Every field, every time. The icon is what makes five values scannable;
+          the label stays as the tooltip and the accessible name, since an icon
+          alone is a guess. */}
+      <div className="weather-metrics">
+        {WEATHER_FIELDS.map(f => {
+          const Icon = FIELD_ICONS[f.key]
+          return (
+            <span className="weather-metric" key={f.key} title={f.label}>
+              <Icon size={14} aria-hidden />
+              <span className="weather-metric-value">
+                <span className="sr-only">{f.label}: </span>
+                {formatWeatherValue(f, weather)}
+              </span>
+            </span>
+          )
+        })}
       </div>
     </>
   )
@@ -164,15 +196,6 @@ function WeatherAbsence({ status, enabled, onOpenSettings }: {
   }
 }
 
-/** The fields a person can set. Kept to what is worth typing. */
-const FIELDS = [
-  { key: 'tempC', label: 'Temperature', unit: '°C', step: 0.1 },
-  { key: 'apparentC', label: 'Feels like', unit: '°C', step: 0.1 },
-  { key: 'humidity', label: 'Humidity', unit: '%', step: 1 },
-  { key: 'windKph', label: 'Wind', unit: 'km/h', step: 0.1 },
-  { key: 'precipMm', label: 'Rain', unit: 'mm', step: 0.1 },
-] as const
-
 /** WMO codes offered as a short list, since nobody knows the numbers. */
 const CONDITIONS = [
   { code: 0, label: 'Clear' },
@@ -221,7 +244,7 @@ function WeatherEditor({ workout, onCancel, onSaved }: {
       </p>
 
       <div className="weather-editor-grid">
-        {FIELDS.map(f => (
+        {WEATHER_FIELDS.map(f => (
           <label key={f.key} className="weather-field">
             <span className="weather-field-label">{f.label}</span>
             <span className="weather-field-input">
@@ -236,16 +259,18 @@ function WeatherEditor({ workout, onCancel, onSaved }: {
             </span>
           </label>
         ))}
-        <label className="weather-field">
+        <div className="weather-field">
           <span className="weather-field-label">Conditions</span>
-          <select
-            className="select"
+          {/* The app's dropdown, not a native select: a bare <select> is styled
+              by the OS and ignores the accent and light mode entirely. */}
+          <Dropdown
+            block
+            ariaLabel="Conditions"
             value={values.code}
-            onChange={e => setValues(v => ({ ...v, code: Number(e.target.value) }))}
-          >
-            {CONDITIONS.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
-          </select>
-        </label>
+            options={CONDITIONS.map(c => ({ value: c.code, label: c.label }))}
+            onChange={code => setValues(v => ({ ...v, code }))}
+          />
+        </div>
       </div>
 
       {error && <p className="weather-error">{error}</p>}

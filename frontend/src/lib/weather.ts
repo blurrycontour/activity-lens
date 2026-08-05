@@ -29,16 +29,42 @@ export function weatherLabel(code: number): string {
   return 'Thunderstorm'
 }
 
-/** A one-line summary for the workout page. */
-export function describeWeather(w: Weather): string {
-  const parts = [`${Math.round(w.tempC)}°C`]
-  // Only when it disagrees with the air temperature by enough to be worth
-  // saying — "12°, feels 12°" is noise.
-  if (Math.abs(w.apparentC - w.tempC) >= 2) parts.push(`feels ${Math.round(w.apparentC)}°`)
-  if (w.humidity > 0) parts.push(`${Math.round(w.humidity)}%`)
-  if (w.windKph >= 1) parts.push(`${Math.round(w.windKph)} km/h`)
-  if (w.precipMm >= 0.1) parts.push(`${w.precipMm.toFixed(1)} mm`)
-  return parts.join(' · ')
+/** The measured values, in the order they read best. */
+export type WeatherKey = 'tempC' | 'apparentC' | 'humidity' | 'windKph' | 'precipMm'
+
+export interface WeatherField {
+  key: WeatherKey
+  label: string
+  unit: string
+  /** Decimal places when displayed. */
+  digits: number
+  /** Increment for the manual editor's number input. */
+  step: number
+}
+
+/**
+ * One list, driving both the reading and the editor.
+ *
+ * They were two lists in different files, which is how a panel ends up showing
+ * four values while the editor offers five — the exact drift reported here.
+ */
+export const WEATHER_FIELDS: WeatherField[] = [
+  { key: 'tempC', label: 'Temperature', unit: '°C', digits: 0, step: 0.1 },
+  { key: 'apparentC', label: 'Feels like', unit: '°C', digits: 0, step: 0.1 },
+  { key: 'humidity', label: 'Humidity', unit: '%', digits: 0, step: 1 },
+  { key: 'windKph', label: 'Wind', unit: 'km/h', digits: 0, step: 0.1 },
+  { key: 'precipMm', label: 'Rain', unit: 'mm', digits: 1, step: 0.1 },
+]
+
+/**
+ * A field's value as shown, unit included.
+ *
+ * Every field is shown always, including a rain of 0 mm. "No rain" is a fact
+ * about the workout and the reason someone opened the panel; omitting it leaves
+ * a reader unable to tell it from a value we never had.
+ */
+export function formatWeatherValue(f: WeatherField, w: Weather): string {
+  return `${w[f.key].toFixed(f.digits)}${f.unit === '%' ? '' : ' '}${f.unit}`
 }
 
 /** Which metric the correlation is drawn against. */
@@ -57,8 +83,38 @@ export interface TempBin {
   count: number
 }
 
-/** Width of a temperature bucket, °C. */
-const BIN_C = 5
+/**
+ * Bucket widths on offer, coarsest last.
+ *
+ * A fixed 5 °C was wrong for a mild climate: somewhere that lives between 18
+ * and 28 °C all year gets two bands, which is not a chart. The width is picked
+ * from the spread actually present so that a narrow range is resolved finely
+ * and a wide one is not shattered into noise. Only round numbers, because the
+ * band label is something a person reads.
+ */
+const BIN_WIDTHS = [1, 2, 5, 10]
+
+/** Most bands worth drawing. Beyond this the line reads as scatter. */
+const MAX_BINS = 8
+
+/**
+ * The band width to use for a set of workouts.
+ *
+ * Exported because the caption has to name it — a chart whose bands silently
+ * change width between two viewings is worse than one that is always coarse.
+ */
+export function binWidthFor(workouts: Workout[], metric: WeatherMetric): number {
+  let min = Infinity, max = -Infinity
+  for (const w of workouts) {
+    if (!hasUsableWeather(w, metric)) continue
+    const t = w.weather!.tempC
+    if (t < min) min = t
+    if (t > max) max = t
+  }
+  if (min > max) return BIN_WIDTHS[BIN_WIDTHS.length - 1]
+  const span = max - min
+  return BIN_WIDTHS.find(width => span / width <= MAX_BINS) ?? BIN_WIDTHS[BIN_WIDTHS.length - 1]
+}
 
 /**
  * The smallest bucket worth drawing.
@@ -83,11 +139,11 @@ export function hasUsableWeather(w: Workout, metric: WeatherMetric): boolean {
  * mixing them produces a chart whose shape is the ratio of rides to runs at
  * each temperature rather than anything about temperature.
  */
-export function binByTemperature(workouts: Workout[], metric: WeatherMetric): TempBin[] {
+export function binByTemperature(workouts: Workout[], metric: WeatherMetric, width = binWidthFor(workouts, metric)): TempBin[] {
   const buckets = new Map<number, { pace: number; hr: number; count: number }>()
   for (const w of workouts) {
     if (!hasUsableWeather(w, metric)) continue
-    const from = Math.floor(w.weather!.tempC / BIN_C) * BIN_C
+    const from = Math.floor(w.weather!.tempC / width) * width
     const acc = buckets.get(from) ?? { pace: 0, hr: 0, count: 0 }
     acc.pace += w.avgPace
     acc.hr += w.avgHR
@@ -98,7 +154,7 @@ export function binByTemperature(workouts: Workout[], metric: WeatherMetric): Te
     .filter(([, acc]) => acc.count >= MIN_BIN_COUNT)
     .map(([from, acc]) => ({
       from,
-      to: from + BIN_C,
+      to: from + width,
       pace: acc.pace / acc.count,
       hr: acc.hr / acc.count,
       count: acc.count,
