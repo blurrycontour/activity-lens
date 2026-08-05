@@ -562,12 +562,23 @@ export default function RouteMap({
         paint: { 'line-color': ['get', 'color'], 'line-width': 4, 'line-opacity': 0.85 },
       })
     }
-    // Sources cannot be added before the style owning them exists. Bailing out
-    // when it does not yet — the previous behaviour — left the track missing
-    // for good if no further `styledata` event happened to re-run this.
+    // Sources cannot be added before the style owning them exists, so a style
+    // that is still loading is waited for rather than bailed on.
+    //
+    // Waited for via `styledata`, not `load`. `load` fires exactly once in a
+    // map's lifetime, so after a layer switch it has already been and gone and
+    // the handler below would never run — which is why the track vanished for
+    // good on every style change while the markers, being DOM elements the
+    // style never owned, stayed put. `styledata` fires for each new style, and
+    // can arrive before that style is complete, hence the re-check.
     if (map.isStyleLoaded()) { draw(); return }
-    map.once('load', draw)
-    return () => { map.off('load', draw) }
+    const onStyleData = () => {
+      if (!map.isStyleLoaded()) return
+      map.off('styledata', onStyleData)
+      draw()
+    }
+    map.on('styledata', onStyleData)
+    return () => { map.off('styledata', onStyleData) }
   }, [routeGeoJSON, styleReady])
 
   // Start, finish and playback markers. Markers survive a style change, so
