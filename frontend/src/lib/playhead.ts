@@ -52,14 +52,33 @@ export function usePlayhead(initial: number): Playhead {
 }
 
 /**
- * A React state copy of the playhead, published at most once per frame.
+ * How often the playhead is published to React, in milliseconds.
  *
- * Aligned to requestAnimationFrame rather than a fixed interval, and that is the
- * important part: several playhead moves inside one frame collapse into a single
- * render, and when the main thread is busy — the map is being panned, say — the
- * browser fires fewer callbacks and this throttles itself. A fixed timer does
- * the opposite, queueing renders the frame budget cannot pay for, which is what
- * made panning collapse while the track played.
+ * The one number that decides how the two halves of playback share the main
+ * thread. Every publish re-renders the charts; the map marker does not go
+ * through React at all, so it keeps 60fps regardless. Raising the rate buys a
+ * smoother chart cursor directly at the map's expense.
+ *
+ * 100ms is the rate the map was measured smooth at. The charts cost roughly an
+ * order of magnitude less per publish than they used to — see downsample.ts and
+ * hrZoneCounter — so there is headroom to trade some of it back if the cursor is
+ * worth it, but that is a trade to make deliberately and check, not to assume.
+ */
+const PUBLISH_MS = 100
+
+/**
+ * A React state copy of the playhead, published at a rate a chart can afford.
+ *
+ * Publishing on every animation frame instead — which this briefly did — reads
+ * like the obvious answer and is not. requestAnimationFrame has no backpressure
+ * that favours anyone: the browser keeps firing it at display rate however long
+ * the callbacks take, so a render that overruns the frame budget does not slow
+ * the publishing down, it just leaves no time for MapLibre to draw. The map
+ * stutters under a pan while the charts stay perfectly smooth, which is exactly
+ * backwards.
+ *
+ * So the rate is bounded by a clock, and rAF is used only to align the publish
+ * that is due with a frame boundary.
  *
  * Changes made while playback is stopped — a scrub, reset, jump to end — are
  * published immediately. There is no following frame to carry them, and a
@@ -69,19 +88,42 @@ export function useThrottledPlayhead(playhead: Playhead, playing: boolean): numb
   const [value, setValue] = useState(playhead.value)
 
   useEffect(() => {
+    let last = 0
     let frame = 0
+    let timer: ReturnType<typeof setTimeout> | undefined
+
+    const cancel = () => {
+      if (frame) { cancelAnimationFrame(frame); frame = 0 }
+      if (timer) { clearTimeout(timer); timer = undefined }
+    }
+    // Reads the playhead on the way out rather than closing over the value that
+    // scheduled this, so a publish that coalesced several moves carries the
+    // latest one.
+    const publish = () => {
+      frame = 0
+      last = performance.now()
+      setValue(playhead.value)
+    }
+
     const unsubscribe = playhead.subscribe(t => {
       if (!playing) {
-        if (frame) { cancelAnimationFrame(frame); frame = 0 }
+        cancel()
+        last = performance.now()
         setValue(t)
         return
       }
-      if (frame) return
-      // Reads the playhead again on the way out rather than closing over `t`,
-      // so a frame that coalesced several moves publishes the latest.
-      frame = requestAnimationFrame(() => { frame = 0; setValue(playhead.value) })
+      if (frame || timer) return
+      const due = PUBLISH_MS - (performance.now() - last)
+      if (due <= 0) {
+        frame = requestAnimationFrame(publish)
+        return
+      }
+      // Trailing edge, so the last moment before a pause is not left
+      // unpublished and the charts do not stop short of where the marker is.
+      timer = setTimeout(() => { timer = undefined; frame = requestAnimationFrame(publish) }, due)
     })
-    return () => { unsubscribe(); if (frame) cancelAnimationFrame(frame) }
+
+    return () => { unsubscribe(); cancel() }
   }, [playhead, playing])
 
   return value
