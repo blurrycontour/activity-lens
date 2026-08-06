@@ -15,10 +15,19 @@ const (
 	TypeHike     Type = "Hike"
 	TypeSwim     Type = "Swim"
 	TypeStrength Type = "Strength"
+	// TypeOther is where an import lands when the file declares no sport and
+	// its free text names none.
+	//
+	// Deliberately not something a person picks: it exists so that "we could not
+	// tell" has an honest answer. Before it, such a file became a Run, which put
+	// hikes into pace records they can never legitimately hold and into the
+	// temperature correlation as though they were the same activity — wrong in a
+	// way nothing on screen could reveal.
+	TypeOther Type = "Other"
 )
 
 var validTypes = map[Type]struct{}{
-	TypeRun: {}, TypeRide: {}, TypeHike: {}, TypeSwim: {}, TypeStrength: {},
+	TypeRun: {}, TypeRide: {}, TypeHike: {}, TypeSwim: {}, TypeStrength: {}, TypeOther: {},
 }
 
 // ValidType reports whether t is a known activity type.

@@ -156,3 +156,32 @@ func TestLongNotesAreTruncated(t *testing.T) {
 		t.Errorf("Type = %q, want Hike", in.Type)
 	}
 }
+
+// workout.TypeOther exists and ValidType accepts it, which makes the literal
+// string "Other" look like a declared sport to the default branch of matchType.
+// It is the opposite: a file saying "Other" is telling us it does not know, and
+// treating that as an answer stops the notes from ever being read.
+func TestOtherIsNotADeclaration(t *testing.T) {
+	for _, raw := range []string{"Other", "other", "OTHER", "unknown", ""} {
+		if got, ok := matchType(raw); ok {
+			t.Errorf("matchType(%q) = %q,true; want no match so the free text is consulted", raw, got)
+		}
+	}
+	// And it is still a type a workout can be, once nothing else answered.
+	if !workout.ValidType(workout.TypeOther) {
+		t.Error("Other is not a valid workout type")
+	}
+}
+
+// The end of the chain: a file that declares nothing and says nothing must not
+// become whatever the client happened to send, because the client sends a
+// default nobody chose.
+func TestUnclassifiableImportsLandInOther(t *testing.T) {
+	in, err := parseTCX(tcxDoc("Other", "Sunday morning"), workout.TypeOther)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if in.Type != workout.TypeOther {
+		t.Errorf("Type = %q, want Other", in.Type)
+	}
+}

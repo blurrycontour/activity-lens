@@ -69,6 +69,9 @@
   --hike: #f59e0b;
   --swim: #06b6d4;
   --strength: #a855f7;
+  /* Deliberately the one grey in the sport palette: Other is not a sport, it is
+     the absence of one. A workout that reads as unclassified is doing its job. */
+  --other: #94a3b8;
   /* Status colours. Separate from the activity-type palette above even where
      the hex matches (--hike is also amber): those track a sport, these track
      an outcome, and they are free to diverge. Never the accent — the accent is

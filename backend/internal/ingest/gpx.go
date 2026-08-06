@@ -107,6 +107,12 @@ func matchType(raw string) (workout.Type, bool) {
 		return workout.TypeSwim, true
 	case "strength", "strength_training", "workout", "gym", "weights":
 		return workout.TypeStrength, true
+	case "other", "unknown", "":
+		// Never a match, even though workout.TypeOther exists and ValidType
+		// accepts it below. A file saying "Other" is telling us it does not
+		// know, which is the cue to go and read its free text — treating it as
+		// an answer is what stops the Notes from ever being consulted.
+		return "", false
 	default:
 		if workout.ValidType(workout.Type(strings.TrimSpace(raw))) {
 			return workout.Type(strings.TrimSpace(raw)), true
