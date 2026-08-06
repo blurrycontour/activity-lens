@@ -9,14 +9,16 @@ import Field from './Field'
 import Dropdown, { type DropdownOption } from './Dropdown'
 
 /**
- * How often the backstop sweep runs.
+ * How often to check.
  *
- * Not how soon a file imports — Android starts the watch when a folder changes,
- * so that is a matter of seconds. This only catches what a change notification
- * cannot: a file that arrived while the phone was off, and folders whose
- * provider never announces its changes at all.
+ * This is the mechanism, not a fallback. Android can also start the app the
+ * moment a folder changes, but only when the folder's provider announces the
+ * change — which it does not for a file another app wrote straight to storage,
+ * the usual case here. Fifteen minutes is the shortest the OS allows.
  */
 const INTERVALS: DropdownOption<number>[] = [
+  { value: 15, label: 'Every 15 minutes' },
+  { value: 30, label: 'Every 30 minutes' },
   { value: 60, label: 'Hourly' },
   { value: 360, label: 'Every 6 hours' },
   { value: 1440, label: 'Daily' },
@@ -165,7 +167,8 @@ export default function AutoImportCard() {
             Import new files automatically
           </label>
           <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8, lineHeight: 1.5 }}>
-            Android wakes the app when a folder changes, usually within a minute. Needs a network.
+            Checks on a schedule, and sooner when Android notices the change itself. Needs a
+            network, and the phone decides the exact moment.
           </p>
 
           {status?.enabled && !status.batteryUnrestricted && (
@@ -184,15 +187,15 @@ export default function AutoImportCard() {
           )}
 
           <div style={{ marginTop: 14 }}>
-            <Field label="Also check every" hint="Catches anything a folder did not announce. This phone only.">
+            <Field label="Check every" hint="This phone only. Android may run it later to save battery.">
               <div style={{ maxWidth: 200 }}>
                 <Dropdown
                   block
-                  value={status?.intervalMinutes ?? 360}
+                  value={status?.intervalMinutes ?? 15}
                   options={INTERVALS}
                   disabled={busy || !status?.enabled}
                   onChange={v => void run('settings', () => setFolderSyncInterval(v))}
-                  ariaLabel="How often to sweep the folders"
+                  ariaLabel="How often to check the folders"
                 />
               </div>
             </Field>

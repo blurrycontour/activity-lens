@@ -55,7 +55,7 @@ const FolderSync = registerPlugin<FolderSyncPlugin>('FolderSync')
 
 /** Nothing to watch: the folder was never chosen, or has been forgotten. */
 const NO_FOLDER: FolderSyncStatus = {
-  folders: [], maxFolders: 8, enabled: false, intervalMinutes: 360,
+  folders: [], maxFolders: 8, enabled: false, intervalMinutes: 15,
   // Claimed true so an older APK, which cannot answer, does not show a warning
   // about a restriction nobody can check. The prompt would go nowhere.
   batteryUnrestricted: true,

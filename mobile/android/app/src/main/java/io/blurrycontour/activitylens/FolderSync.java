@@ -49,15 +49,18 @@ final class FolderSync {
     static final int MIN_INTERVAL_MINUTES = 15;
 
     /**
-     * How often the periodic scan runs now that it is only a safety net.
+     * How often the periodic scan runs.
      *
-     * The watch is event-driven — see FolderSyncWorker — so the schedule exists
-     * for the cases a content notification cannot cover: a file that appeared
-     * while the phone was off, and a provider that does not announce its
-     * changes at all. Six hours is chosen against those, not against how soon a
-     * file should import, which is no longer this number's job.
+     * Back to WorkManager's floor, and back to being the mechanism rather than a
+     * safety net. The content trigger added alongside it is an accelerator, not
+     * a replacement: it fires when a DocumentsProvider announces the change, and
+     * ExternalStorageProvider — which backs ordinary storage — does not announce
+     * files that another app wrote straight to the path rather than through the
+     * Storage Access Framework. That is the common case for a recording app's
+     * export directory, so a schedule long enough to lean on the trigger is a
+     * schedule that misses those files for hours.
      */
-    static final int DEFAULT_INTERVAL_MINUTES = 360;
+    static final int DEFAULT_INTERVAL_MINUTES = MIN_INTERVAL_MINUTES;
 
     /**
      * How many folders may be watched.
@@ -278,25 +281,25 @@ final class FolderSync {
     }
 
     /**
-     * Raises the old polling interval to the new backstop default, once.
+     * Undoes the interval a previous version stretched.
      *
-     * Before the content-trigger watch this number was the only thing that
-     * decided how soon a file imported, so anyone who cared set it to fifteen
-     * minutes. Left alone it would keep waking the phone ninety-six times a day
-     * to find nothing, for a timeliness the trigger now provides for free.
+     * That version treated the content trigger as the mechanism and the
+     * schedule as a safety net, and raised anyone's interval to six hours to
+     * match. The trigger turned out not to fire for files written outside the
+     * Storage Access Framework, which is most of them, so that setting means
+     * waiting up to six hours for an import that used to take fifteen minutes.
      *
-     * Only ever upwards, and only once: someone who deliberately picks a short
-     * backstop after the upgrade keeps it.
+     * Only reverses what that migration did — an interval it did not choose is
+     * left alone, because by then it is the user's.
      */
     private static void migrateBackstop(Context context) {
         SharedPreferences prefs = prefs(context);
-        if (prefs.getBoolean(KEY_BACKSTOP_MIGRATED, false)) {
+        if (!prefs.getBoolean(KEY_BACKSTOP_MIGRATED, false)) {
             return;
         }
-        int current = prefs.getInt(KEY_INTERVAL, DEFAULT_INTERVAL_MINUTES);
-        SharedPreferences.Editor edit = prefs.edit().putBoolean(KEY_BACKSTOP_MIGRATED, true);
-        if (current < DEFAULT_INTERVAL_MINUTES) {
-            edit.putInt(KEY_INTERVAL, DEFAULT_INTERVAL_MINUTES);
+        SharedPreferences.Editor edit = prefs.edit().remove(KEY_BACKSTOP_MIGRATED);
+        if (prefs.getInt(KEY_INTERVAL, DEFAULT_INTERVAL_MINUTES) == 360) {
+            edit.remove(KEY_INTERVAL);
         }
         edit.apply();
     }

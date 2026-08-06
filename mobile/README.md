@@ -623,30 +623,36 @@ nothing is recorded.
 
 | Job | Kind | Why |
 |---|---|---|
-| `folder-sync-watch` | one-shot, content trigger | the immediate path; a trigger is spent by firing, so `doWork` re-arms it every run, on the failure path too |
-| `folder-sync` | periodic, 6-hourly | what a change notification cannot cover |
+| `folder-sync` | periodic, 15 minutes | the mechanism |
+| `folder-sync-watch` | one-shot, content trigger | an accelerator, best-effort; a trigger is spent by firing, so `doWork` re-arms it every run, on the failure path too |
 | `folder-sync-catchup` | one-shot, on app start | see below |
+
+**The trigger is not the mechanism, and this was built the other way round
+first.** A trigger only fires if the `DocumentsProvider` calls `notifyChange`,
+and `ExternalStorageProvider` — which backs ordinary device storage — announces
+the documents *it* was asked to create through SAF. A recording app writing an
+export straight to its own directory does not go through SAF, so nothing is
+announced and nothing fires. Leaning on it and stretching the schedule to six
+hours meant files sat unimported until the app was next opened. The trigger is
+kept because it costs nothing and is immediate when it does fire; the schedule is
+what the feature is built on, and the schedule is short.
 
 One watch job carries a trigger per folder rather than a job each, since they all
 run the same scan and which URI fired is not worth knowing. Triggers are fixed
 when the job is armed, so adding or removing a folder re-arms it.
 
-`folder-sync-catchup` exists because opening the app *used* to sweep the folder
-by accident: WorkManager runs overdue periodic work when the process starts, and
-at a quarter-hourly schedule it almost always was overdue. Stretching the
-backstop to six hours removed that, and with it the thing that made the feature
-feel dependable — someone who suspects a file was missed opens the app to check,
-which is exactly when it should look. `KEEP`, so reopening queues one scan rather
-than a pile.
+`folder-sync-catchup` mostly duplicates what WorkManager does anyway — it runs
+overdue periodic work when the process starts — and exists for when it does not:
+someone who suspects a file was missed opens the app to check, and that is when
+it should look rather than up to fifteen minutes later. `KEEP`, so reopening
+queues one scan rather than a pile.
 
-The backstop is not belt-and-braces. A file that arrives while the phone is off
-produces no notification anyone is listening for, and a provider is under no
-obligation to call `notifyChange` at all — cloud-backed ones frequently do not.
-The trigger makes the common case immediate; the schedule is what makes "it will
-not be missed" true. Its interval used to be 15 minutes, which is also what
-decided how soon a file imported; `FolderSync.migrateBackstop` raises an existing
-short setting once, since that is now ninety-six wake-ups a day to answer a
-question the OS answers for free.
+`FolderSyncPlugin.load()` re-schedules **both** jobs on every app start. They
+used to be created only by `setEnabled` and `setInterval`, so they existed
+exactly as long as WorkManager's database said they did — a force stop, an OEM
+that clears jobs, or a restore onto a new phone left auto-import silently doing
+nothing behind a Settings screen that still said it was on. Both unique names use
+`UPDATE`/`REPLACE`, so re-scheduling is idempotent and the watch repairs itself.
 
 The trigger is registered with a 15-second settle delay and a 5-minute maximum,
 because a file being written arrives as a burst of notifications and the first

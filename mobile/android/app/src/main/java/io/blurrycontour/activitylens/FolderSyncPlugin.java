@@ -39,18 +39,27 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 public class FolderSyncPlugin extends Plugin {
 
     /**
-     * Re-arms the watch whenever the app starts.
+     * Puts the background jobs back whenever the app starts.
      *
-     * A content trigger cannot be persisted across a reboot the way an ordinary
-     * job can — JobScheduler refuses the combination — so WorkManager rebuilds
-     * it from its own database on boot. When that does not happen (a force stop,
-     * a restore onto a new phone, an OEM that clears jobs) the watch is simply
-     * gone, and nothing in the UI would say so. Re-arming here is idempotent and
-     * costs a database write on launch.
+     * Both of them, not just the trigger. Only setEnabled and setInterval used
+     * to schedule the periodic scan, so it existed exactly as long as
+     * WorkManager's database said it did — and a force stop, an OEM that clears
+     * jobs, or a restore onto a new phone leaves auto-import silently doing
+     * nothing with a Settings screen that still says it is on. Nothing checked,
+     * because nothing had a reason to. Re-scheduling here is idempotent
+     * (UPDATE / REPLACE on the same unique names) and costs a database write on
+     * launch, which buys a watch that repairs itself every time the app opens.
+     *
+     * A content trigger in particular cannot be persisted across a reboot the
+     * way an ordinary job can — JobScheduler refuses the combination — so
+     * WorkManager rebuilds it from its own database, and this covers the cases
+     * where it did not.
      */
     @Override
     public void load() {
-        FolderSyncWorker.arm(getContext());
+        if (FolderSync.enabled(getContext())) {
+            FolderSyncWorker.schedule(getContext());
+        }
         // Opening the app is a reason to look, and used to be one by accident.
         // See FolderSyncWorker.catchUp.
         FolderSyncWorker.catchUp(getContext());

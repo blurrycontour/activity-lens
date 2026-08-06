@@ -15,37 +15,42 @@ import androidx.work.WorkerParameters;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Runs the folder scan with the app closed — when a file appears, not on a
- * timer.
+ * Runs the folder scan with the app closed.
+ *
+ * Three jobs, and it is worth being exact about which one does the work:
+ *
+ *   1. the periodic scan, every fifteen minutes — the mechanism
+ *   2. the content-triggered watch — an accelerator, best-effort
+ *   3. the catch-up scan when the app is opened
  *
  * Android will watch a content URI on an app's behalf and start a job when it
  * changes: JobScheduler's trigger content URIs, which WorkManager exposes as
- * {@code addContentUriTrigger}. A DocumentsProvider calls notifyChange on a
- * directory's children URI whenever something is added to or removed from it, so
- * registering against that URI is the OS telling us about a new workout file
- * rather than us asking every fifteen minutes whether there is one. No
- * foreground service, no permanent notification, and the phone is not woken at
- * all on the days nothing is recorded.
+ * {@code addContentUriTrigger}. Registering against a folder's children URI
+ * therefore looks like the OS telling us about a new workout file rather than us
+ * asking every fifteen minutes whether there is one.
  *
- * Two jobs, because a trigger alone would quietly miss things:
+ * It is not a replacement for asking, and this was tried the other way round
+ * first. A trigger only fires if the DocumentsProvider calls notifyChange, and
+ * ExternalStorageProvider — which backs ordinary device storage — announces the
+ * documents *it* was asked to create through the Storage Access Framework. A
+ * recording app writing an export straight to its own directory does not go
+ * through SAF, so nothing is announced and nothing fires. Cloud-backed providers
+ * are worse. Leaning on the trigger and stretching the schedule to six hours
+ * meant files sat unimported until the app was next opened, which is the whole
+ * feature not working.
  *
- *   1. the watch — a one-shot with a content trigger, which re-arms itself each
- *      time it runs, since a trigger job is consumed by firing
- *   2. the backstop — a periodic scan, now six-hourly rather than quarter-hourly
+ * So the trigger is kept — it costs nothing, and when it does fire the import is
+ * immediate — but the schedule is what the feature is built on, and the schedule
+ * is short.
  *
- * The backstop is not belt-and-braces. A file that lands while the phone is off
- * generates no notification anyone is listening for, and a provider is under no
- * obligation to call notifyChange at all — cloud-backed ones frequently do not.
- * The trigger is what makes the common case immediate; the schedule is what
- * makes the feature honest about "it will not be missed".
- *
- * Neither escapes Doze. The OS still decides when to run these, and a phone with
- * the app battery-restricted will run them late or not at all — which is what
- * FolderSyncPlugin surfaces in Settings rather than leaving to be discovered.
+ * None of them escape Doze. The OS still decides when to run these, and a phone
+ * with the app battery-restricted will run them late or not at all — which is
+ * what FolderSyncPlugin surfaces in Settings rather than leaving to be
+ * discovered.
  */
 public class FolderSyncWorker extends Worker {
 
-    /** The periodic safety net. */
+    /** The periodic scan, which is what the feature actually runs on. */
     private static final String WORK_NAME = "folder-sync";
     /** The content-triggered watch, re-armed after every run. */
     private static final String WATCH_NAME = "folder-sync-watch";
@@ -57,7 +62,7 @@ public class FolderSyncWorker extends Worker {
      *
      * A file being written arrives as a burst of notifications, and starting on
      * the first one means reading a half-written GPX. Waiting for a gap costs a
-     * few seconds against a fifteen-minute floor, and the max delay is the
+     * few seconds against a fifteen-minute schedule, and the max delay is the
      * promise that a folder being written to continuously still gets scanned.
      */
     private static final long TRIGGER_SETTLE_SECONDS = 15;
@@ -94,12 +99,11 @@ public class FolderSyncWorker extends Worker {
     /**
      * Scans once, soon, because the app was opened.
      *
-     * Opening the app used to sweep the folder as a side effect: WorkManager
-     * runs overdue periodic work when the process starts, and the schedule was
-     * quarter-hourly, so it almost always was overdue. Stretching the backstop
-     * to six hours took that away, and with it the thing that made the feature
-     * feel dependable — someone who suspects a file was missed opens the app to
-     * check, which is exactly when it should look.
+     * WorkManager runs overdue periodic work when the process starts, so at a
+     * quarter-hourly schedule this mostly duplicates what would happen anyway.
+     * It is here for when it does not: someone who suspects a file was missed
+     * opens the app to check, and that is exactly when it should look rather
+     * than up to fifteen minutes later.
      *
      * KEEP, so repeatedly opening the app queues one scan rather than a pile of
      * them, and separate from the watch so it cannot disturb a pending trigger.
@@ -169,7 +173,8 @@ public class FolderSyncWorker extends Worker {
      *
      * KEEP rather than REPLACE would leave an old schedule running after the
      * folder changed; UPDATE is what makes "turn it off and on again" mean
-     * something.
+     * something — and what lets FolderSyncPlugin.load() call this on every app
+     * start to repair a schedule that has gone missing.
      */
     private static void scheduleBackstop(Context context) {
         Constraints constraints = new Constraints.Builder()
