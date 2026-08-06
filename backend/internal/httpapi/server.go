@@ -45,6 +45,13 @@ type Server struct {
 	// weatherCooldownUntil pauses the weather pass after Open-Meteo tells us we
 	// have asked for too much. Touched only by the scheduler goroutine.
 	weatherCooldownUntil time.Time
+	// lastWeatherPass paces nudged passes. Touched only by the scheduler.
+	lastWeatherPass time.Time
+	// weatherWake carries "something was just imported" from a request handler
+	// to the scheduler. One slot: a nudge is a fact, not a count, and a bulk
+	// import that sends five hundred of them should cost one wakeup. Nil when no
+	// scheduler is running, which NudgeWeather treats as "nothing to tell".
+	weatherWake chan struct{}
 }
 
 // New constructs a Server and its auth middleware/OIDC handler.
@@ -52,6 +59,7 @@ func New(cfg config.Config, authSvc *auth.Service, workoutSvc *workout.Service, 
 	s := &Server{cfg: cfg, auth: authSvc, workout: workoutSvc, equipment: equipmentSvc, settings: settingsStore, rawUploads: rawUploads, notify: notifySvc, feedback: feedbackSvc, build: build}
 	s.apk = loadBundledAPK(cfg.AndroidAPKDir)
 	s.nativeCodes = newNativeAuthCodes()
+	s.weatherWake = make(chan struct{}, 1)
 	s.mw = &httpmw.Middleware{
 		Auth:   authSvc,
 		Secure: s.secure,
