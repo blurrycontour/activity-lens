@@ -1,3 +1,4 @@
+import { Wand2 } from 'lucide-react'
 import { TYPE_COLOR, WORKOUT_TYPES, type WorkoutType } from '../data/workouts'
 import TypeIcon from './TypeIcon'
 import Dropdown, { type DropdownOption } from './Dropdown'
@@ -30,4 +31,35 @@ export default function SportDropdown({ value, onChange }: {
   // value it was given.
   const options = value === 'Other' ? [...OPTIONS, option('Other')] : OPTIONS
   return <Dropdown value={value} options={options} onChange={onChange} block ariaLabel="Sport type" />
+}
+
+/** The empty string is "let the file say", which is the default. */
+export type ImportSport = WorkoutType | ''
+
+const IMPORT_OPTIONS: DropdownOption<ImportSport>[] = [
+  {
+    value: '',
+    label: 'Detect from file',
+    glyph: <Wand2 size={14} color="var(--text-3)" aria-hidden />,
+  },
+  ...OPTIONS,
+]
+
+/**
+ * Picks the sport for files being imported, or leaves it to the file.
+ *
+ * Detection is the default because it is right far more often than not — the
+ * file usually knows — and because a picker that defaults to a sport quietly
+ * asserts that sport for every file dropped by someone who did not look at it.
+ * That is how every upload came to claim it was a Run.
+ *
+ * Choosing one overrules the file. Someone picking Hike for a TCX that declares
+ * Running has seen both and disagrees, and the point of the control is to save
+ * them the trip to the workout page afterwards.
+ */
+export function ImportSportDropdown({ value, onChange }: {
+  value: ImportSport
+  onChange: (v: ImportSport) => void
+}) {
+  return <Dropdown value={value} options={IMPORT_OPTIONS} onChange={onChange} block ariaLabel="Sport type" />
 }

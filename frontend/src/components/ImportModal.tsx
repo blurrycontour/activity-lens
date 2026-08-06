@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Upload, X, CheckCircle, FileText, AlertCircle, ArrowRight, Info, Loader2, FolderOpen, PencilLine, Plus } from 'lucide-react'
-import SportDropdown from './SportDropdown'
+import SportDropdown, { ImportSportDropdown, type ImportSport } from './SportDropdown'
 import Dropdown from './Dropdown'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { isNative } from '../lib/serverConfig'
@@ -104,6 +104,16 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
       .finally(() => setEquipmentLoading(false))
   }, [])
 
+  /**
+   * The sport for files being imported. Empty means "let the file say", which
+   * is the default and is right far more often than not.
+   *
+   * Separate from the manual form's `type`: that one has to be a sport, because
+   * a typed-in workout has no file to ask. Sharing the two is what made every
+   * upload arrive claiming to be a Run.
+   */
+  const [fileType, setFileType] = useState<ImportSport>('')
+
   // Manual form state
   const [form, setForm] = useState({
     name: '', type: 'Run' as WorkoutType, date: new Date().toISOString().split('T')[0],
@@ -194,6 +204,7 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
     setProgress({ done: 0, total: items.filter(i => i.status === 'ready').length })
     const result = await runImport(items, {
       equipmentIds: selectedEquipment,
+      type: fileType,
       onItemChange: () => setItems(prev => (prev ? [...prev] : prev)),
       onProgress: (done, total) => setProgress({ done, total }),
     })
@@ -210,12 +221,10 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
       let workout: Workout
       if (tab === 'file') {
         if (!file) return
-        // No type: the file tab has no sport picker, and sending form.type
-        // anyway meant every uploaded file carried a silent "it's a Run" the
-        // user was never asked for. The server reads the file's own declaration
-        // first and falls back to Other, which is the honest answer when a file
-        // says nothing.
-        const imported = await api.importWorkout(file, undefined, undefined, selectedEquipment)
+        // Empty unless the user picked one, in which case it overrules the
+        // file. Sending form.type here — the manual tab's field, defaulting to
+        // Run — is what made every upload silently claim to be a run.
+        const imported = await api.importWorkout(file, fileType || undefined, undefined, selectedEquipment)
         setDuplicate(imported.duplicate === true)
         workout = imported
       } else {
@@ -271,14 +280,14 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
     setPreviewBusy(true)
     setPreview(null)
     setError(null)
-    // Same as the import itself: the preview must show what will actually be
-    // stored, so it cannot pass a type the import will not.
-    api.previewWorkout(file)
+    // The same type the import will send, so the preview shows what will
+    // actually be stored rather than what the file alone would have said.
+    api.previewWorkout(file, fileType || undefined)
       .then(w => { if (active) setPreview(w) })
       .catch(err => { if (active) setError(err instanceof ApiError ? err.message : 'Could not read file') })
       .finally(() => { if (active) setPreviewBusy(false) })
     return () => { active = false }
-  }, [file, fileSupported, tab])
+  }, [file, fileSupported, tab, fileType])
 
   return (
     <>
@@ -364,6 +373,25 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
 
               {tab === 'file' ? (
                 <>
+                  {/* One control for both paths: the single-file panel and a
+                      fifty-file batch answer the same question, and asking it
+                      twice in two places is how they come to disagree. Hidden
+                      before a file is chosen, when there is nothing to describe,
+                      and once the import has run, when it is too late to matter. */}
+                  {(file || items !== null) && phase !== 'importing' && phase !== 'done' && (
+                    <div style={{ marginBottom: 12 }}>
+                      <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>
+                        Sport Type
+                      </label>
+                      <ImportSportDropdown value={fileType} onChange={setFileType} />
+                      <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 5, lineHeight: 1.5 }}>
+                        {fileType
+                          ? `Every file here will be saved as ${fileType}, whatever it says inside.`
+                          : 'Read from each file. Files that do not say are saved as Other.'}
+                      </p>
+                    </div>
+                  )}
+
                   {/* A batch replaces the single-file preview entirely: nobody
                       reviews fifty stat panels, so the useful view is which
                       files will import and which will not. */}

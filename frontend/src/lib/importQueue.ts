@@ -312,12 +312,14 @@ export async function runImport(
   items: ImportItem[],
   opts: {
     equipmentIds?: string[]
+    /** Sport chosen in the import window; empty means let each file say. */
+    type?: string
     signal?: AbortSignal
     onItemChange?: (item: ImportItem) => void
     onProgress?: (done: number, total: number) => void
   } = {},
 ): Promise<ImportRunResult> {
-  const { equipmentIds, signal, onItemChange, onProgress } = opts
+  const { equipmentIds, type, signal, onItemChange, onProgress } = opts
   const result: ImportRunResult = { imported: 0, duplicates: 0, failed: 0 }
   const queue = items.filter(it => it.status === 'ready')
   let done = 0
@@ -331,7 +333,7 @@ export async function runImport(
     item.status = 'importing'
     onItemChange?.(item)
     try {
-      const res = await api.importWorkout(item.file, undefined, undefined, equipmentIds, defer)
+      const res = await api.importWorkout(item.file, type || undefined, undefined, equipmentIds, defer)
       item.workout = res
       item.status = res.duplicate ? 'duplicate' : 'imported'
       if (res.duplicate) result.duplicates++

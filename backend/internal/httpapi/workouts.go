@@ -525,16 +525,21 @@ func (s *Server) parseWorkoutUpload(w http.ResponseWriter, r *http.Request, user
 		return workout.Input{}, nil, nil, false
 	}
 
-	// Other, not Run: this is what a file gets when it declares no sport and its
-	// free text names none, and claiming such a workout is a run is a guess that
-	// nothing on screen can reveal as wrong. A client that knows better still
-	// says so, and the file's own declaration outranks both.
-	defaultType := workout.TypeOther
-	if t := workout.Type(r.FormValue("type")); workout.ValidType(t) && t != workout.TypeOther {
-		defaultType = t
+	// A type sent with the upload is the user's own answer, chosen in the import
+	// window, so it outranks the file: someone who picks Hike for a TCX that
+	// declares Running has looked at both and disagrees, and overruling them
+	// would leave them editing the workout afterwards — the exact trip this is
+	// meant to save.
+	//
+	// Absent, the file decides, and Other is where it lands when the file
+	// declares no sport and its free text names none. Not Run: claiming such a
+	// workout is a run is a guess nothing on screen can reveal as wrong.
+	chosen := workout.Type(r.FormValue("type"))
+	if !workout.ValidType(chosen) || chosen == workout.TypeOther {
+		chosen = ""
 	}
 
-	in, err := ingest.Parse(header.Filename, data, defaultType)
+	in, err := ingest.Parse(header.Filename, data, workout.TypeOther)
 	if err != nil {
 		if errors.Is(err, ingest.ErrUnsupported) {
 			writeError(w, http.StatusUnsupportedMediaType, "unsupported file format (use .gpx or .tcx)")
@@ -542,6 +547,9 @@ func (s *Server) parseWorkoutUpload(w http.ResponseWriter, r *http.Request, user
 		}
 		writeError(w, http.StatusBadRequest, "could not parse file: "+err.Error())
 		return workout.Input{}, nil, nil, false
+	}
+	if chosen != "" {
+		in.Type = chosen
 	}
 	if name := r.FormValue("name"); name != "" {
 		in.Name = name
