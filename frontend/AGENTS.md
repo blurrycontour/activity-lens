@@ -1,4 +1,4 @@
-# figma-make-app
+# Activity Lens — frontend
 
 Frontend uses React + Vite. See **Styling** below before writing any CSS.
 

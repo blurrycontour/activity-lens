@@ -1,14 +1,13 @@
 <!doctype html>
-<html lang="<!-- figma:lang -->">
+<html lang="en">
   <head>
-    <!-- figma:head-start -->
     <meta charset="UTF-8" />
     <!-- viewport-fit=cover: the Android app draws edge to edge, behind the status
          and navigation bars, so the page background is what tints them. It is
          also what makes env(safe-area-inset-*) report real values instead of 0. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title><!-- figma:title --></title>
-    <!-- figma:head-end -->
+    <title>Activity Lens</title>
+    <meta name="description" content="A modern workout tracker for runs, rides, hikes and more." />
     <!-- The manifest link is injected by vite-plugin-pwa, which owns the
          manifest contents (see the VitePWA block in vite.config.ts). -->
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
@@ -23,9 +22,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black" />
   </head>
   <body>
-    <!-- figma:body-start -->
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    <!-- figma:body-end -->
   </body>
 </html>
