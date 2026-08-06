@@ -1,0 +1,21 @@
+# pnpm settings for the Android shell. (pnpm 10.16+ reads its own settings from
+# here rather than .npmrc, which now only carries npm's.)
+
+# Flat node_modules, the way npm lays it out.
+#
+# Capacitor writes the paths of its Android modules into the generated
+# android/capacitor.settings.gradle, which is committed. Under pnpm's default
+# symlinked layout those paths point into the content-addressed store and carry
+# the resolved version — and the peer resolution — in them:
+#
+#   ../node_modules/.pnpm/@capacitor+android@8.5.0_@capacitor+core@8.5.0/node_modules/@capacitor/android/capacitor
+#
+# So every Capacitor bump would rewrite a committed generated file with a path
+# valid for exactly one version, and Gradle, which reads that file, has no idea
+# any of that is happening. Hoisting keeps the path
+# `../node_modules/@capacitor/android/capacitor`, which is stable across bumps.
+#
+# Nothing is given up by it here: mobile/ installs build tooling, not a
+# dependency tree that ships. Strict resolution is worth keeping in frontend/,
+# which does.
+nodeLinker: hoisted

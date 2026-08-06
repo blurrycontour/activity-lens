@@ -46,7 +46,7 @@ for (const pkg of SHARED) {
     continue
   }
   if (native === null) {
-    problems.push(`${pkg}: not installed in mobile/ — run "npm install" here first`)
+    problems.push(`${pkg}: not installed in mobile/ — run "pnpm install" here first`)
     continue
   }
   if (web !== native) {

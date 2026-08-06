@@ -148,13 +148,13 @@ both files pin `@capacitor/core` and `@capacitor/preferences` **exactly** and
 `scripts/check-versions.mjs` fails the build if they drift. Dependabot updates
 them as one group for the same reason.
 
-`android/` is committed rather than generated on demand. `npx cap add android`
+`android/` is committed rather than generated on demand. `pnpm exec cap add android`
 copies a template that changes between Capacitor releases, so generating it in CI
 would mean the APK quietly changing without a commit saying so.
 
 ## Changes to the generated Android project
 
-Everything in `android/` came from `npx cap add android` except the following.
+Everything in `android/` came from `pnpm exec cap add android` except the following.
 Capacitor never overwrites these files, but an upgrade may change what its
 template would produce — this list is what to re-apply if the project is ever
 regenerated.

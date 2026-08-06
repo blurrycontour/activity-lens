@@ -104,11 +104,14 @@ VITE_APP_VERSION="$AL_VERSION" pnpm build
 # --- 2. Copy it into the Android project -------------------------------------
 echo "==> Syncing Capacitor"
 cd "$REPO_ROOT/mobile"
-npm ci
+# pnpm here too, not npm: one package manager for the repository. Both workspaces
+# are locked by a pnpm-lock.yaml, and a stray `npm ci` would need a
+# package-lock.json that no longer exists.
+pnpm install --frozen-lockfile
 # Refuses to continue if the Capacitor JavaScript in the bundle and the native
 # code about to be compiled came from different versions.
-npm run --silent check-versions
-npx cap sync android
+pnpm run --silent check-versions
+pnpm exec cap sync android
 
 # --- 3. Compile ---------------------------------------------------------------
 #
