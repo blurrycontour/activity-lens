@@ -1189,6 +1189,61 @@ body {
   margin-top: 14px;
 }
 
+/* ── Watched folders (auto import) ── */
+.folder-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.folder-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.folder-row-icon { color: var(--text-3); flex-shrink: 0; }
+/* min-width:0 on both, or a long folder name refuses to shrink and pushes the
+   remove button off the row instead of ellipsising. */
+.folder-row-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.folder-row-name {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.folder-row-status { font-size: 11px; color: var(--text-3); }
+.folder-row-status.bad { color: var(--danger); }
+/* Danger-coloured, because it undoes a choice the user made in a system picker
+   and re-making it means going back through that picker. Muted until hovered so
+   a list of folders does not read as a row of warnings. */
+.folder-row-remove {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.folder-row-remove:hover:not(:disabled),
+.folder-row-remove:focus-visible {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+.folder-row-remove:disabled { opacity: 0.4; cursor: default; }
+
 /* Something the user has to act on outside the app, said in place rather than
    as a message that scrolls past. Warning-tinted, not danger: nothing is broken,
    it is the OS default, and the feature still works — just later. */

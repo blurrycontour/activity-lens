@@ -9,20 +9,29 @@ interface FolderSyncPlugin {
   scanNow(options: { force: boolean }): Promise<ScanResult>
   setInterval(options: { minutes: number }): Promise<void>
   requestBatteryExemption(): Promise<{ batteryUnrestricted: boolean }>
-  disable(): Promise<void>
+  removeFolder(options: { uri: string }): Promise<void>
+}
+
+export interface WatchedFolder {
+  /** The tree URI, which identifies it — the label is not unique. */
+  uri: string
+  /** Display name, as the system picker gave it. */
+  label: string
+  /** Epoch millis of the last scan of this folder, or 0. */
+  lastScan: number
+  /** How that scan went, in a few words. */
+  lastResult?: string | null
+  /** False when it can no longer be read — an SD card pulled, a grant revoked. */
+  readable: boolean
 }
 
 export interface FolderSyncStatus {
-  /** Display name of the watched folder, or null when none is chosen. */
-  folder?: string | null
-  /** Whether the periodic scan is running. */
+  /** Every watched folder, in the order they were added. */
+  folders: WatchedFolder[]
+  /** How many may be watched at once. */
+  maxFolders: number
+  /** Whether the watch is running. */
   enabled: boolean
-  /** Epoch millis of the last scan, or 0. */
-  lastScan: number
-  /** How the last scan went, in a few words. */
-  lastResult?: string | null
-  /** False when the folder can no longer be read — an SD card pulled, a grant revoked. */
-  readable: boolean
   /** How often the backstop scan runs. Per device, never synced. */
   intervalMinutes: number
   /**
@@ -46,7 +55,7 @@ const FolderSync = registerPlugin<FolderSyncPlugin>('FolderSync')
 
 /** Nothing to watch: the folder was never chosen, or has been forgotten. */
 const NO_FOLDER: FolderSyncStatus = {
-  folder: null, enabled: false, lastScan: 0, readable: false, intervalMinutes: 360,
+  folders: [], maxFolders: 8, enabled: false, intervalMinutes: 360,
   // Claimed true so an older APK, which cannot answer, does not show a warning
   // about a restriction nobody can check. The prompt would go nowhere.
   batteryUnrestricted: true,
@@ -120,7 +129,13 @@ export async function requestBatteryExemption(): Promise<boolean> {
   }
 }
 
-/** Forgets the folder, hands the grant back, and stops the schedule. */
-export async function disableFolderSync(): Promise<void> {
-  await FolderSync.disable()
+/**
+ * Stops watching one folder and hands its grant back, leaving the others.
+ *
+ * There is no "stop watching everything" beside this. Removing the last folder
+ * turns the watch off natively, so a second control would be a second way to
+ * reach a state this one already reaches.
+ */
+export async function removeSyncFolder(uri: string): Promise<void> {
+  await FolderSync.removeFolder({ uri })
 }
