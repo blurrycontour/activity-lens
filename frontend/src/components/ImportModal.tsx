@@ -66,6 +66,47 @@ function parseDuration(v: string): number {
   return 0
 }
 
+/**
+ * What the file said, and what will actually be stored.
+ *
+ * The detection was already in the preview the server returned; it was simply
+ * never shown next to the control that overrides it, so picking a sport meant
+ * not knowing what you were overriding.
+ *
+ * Returns null while there is nothing to describe yet.
+ */
+export function detectionSummary(detected: string[], chosen: ImportSport): string | null {
+  if (detected.length === 0) return chosen
+    ? `Every file will be saved as ${chosen}, whatever it says inside.`
+    : null
+
+  // Counted rather than listed: a fifty-file archive is a distribution, not a
+  // sentence, and "12 Hike · 3 Run" is the shape of it.
+  const counts = new Map<string, number>()
+  for (const t of detected) counts.set(t, (counts.get(t) ?? 0) + 1)
+  const single = detected.length === 1
+  const parts = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([t, n]) => (single ? t : `${n} ${t}`))
+  const read = parts.join(' · ')
+
+  // Both halves, always: "importing as Ride" alone leaves the reader unable to
+  // tell whether the override was needed.
+  if (chosen) {
+    return single
+      ? `The file says ${read} — importing as ${chosen}.`
+      : `Files say ${read} — importing as ${chosen}.`
+  }
+  // Other is not a detection, it is the absence of one, and saying so is what
+  // tells someone the picker is worth using here.
+  if (counts.size === 1 && counts.has('Other')) {
+    return single
+      ? 'This file does not say what it is. Pick a sport, or it is saved as Other.'
+      : `None of these files say what they are. Pick a sport, or they are saved as Other.`
+  }
+  return `Detected ${read} from the file${single ? '' : 's'}.`
+}
+
 export default function ImportModal({ onClose, onViewWorkout, initialFiles }: ImportModalProps) {
   const { refresh } = useWorkouts()
   const [tab, setTab] = useState<Tab>('file')
@@ -113,6 +154,18 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
    * upload arrive claiming to be a Run.
    */
   const [fileType, setFileType] = useState<ImportSport>('')
+
+  /**
+   * What the files themselves say, from the previews already fetched.
+   *
+   * Both paths feed the same list, so the summary under the picker reads the
+   * same whether it is describing one file or fifty. Files that could not be
+   * read contribute nothing rather than a blank.
+   */
+  const detected = items !== null
+    ? items.filter(i => i.status === 'ready' || i.status === 'duplicate')
+      .map(i => i.preview?.type).filter((t): t is WorkoutType => !!t)
+    : preview?.type ? [preview.type] : []
 
   // Manual form state
   const [form, setForm] = useState({
@@ -280,14 +333,16 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
     setPreviewBusy(true)
     setPreview(null)
     setError(null)
-    // The same type the import will send, so the preview shows what will
-    // actually be stored rather than what the file alone would have said.
-    api.previewWorkout(file, fileType || undefined)
+    // Deliberately without the chosen type: this call is what the file says,
+    // and the picker needs that to stay visible so someone can see what they
+    // are overriding. Sending the override would make the preview echo the
+    // user's own choice back at them, and would refetch on every change of it.
+    api.previewWorkout(file)
       .then(w => { if (active) setPreview(w) })
       .catch(err => { if (active) setError(err instanceof ApiError ? err.message : 'Could not read file') })
       .finally(() => { if (active) setPreviewBusy(false) })
     return () => { active = false }
-  }, [file, fileSupported, tab, fileType])
+  }, [file, fileSupported, tab])
 
   return (
     <>
@@ -384,11 +439,11 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
                         Sport Type
                       </label>
                       <ImportSportDropdown value={fileType} onChange={setFileType} />
-                      <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 5, lineHeight: 1.5 }}>
-                        {fileType
-                          ? `Every file here will be saved as ${fileType}, whatever it says inside.`
-                          : 'Read from each file. Files that do not say are saved as Other.'}
-                      </p>
+                      {detectionSummary(detected, fileType) && (
+                        <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 5, lineHeight: 1.5 }}>
+                          {detectionSummary(detected, fileType)}
+                        </p>
+                      )}
                     </div>
                   )}
 
@@ -407,6 +462,7 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
                       }
                       progress={phase === 'preflight' || phase === 'importing' ? progress : undefined}
                       onRemove={phase === 'review' ? id => setItems(prev => prev?.filter(i => i.id !== id) ?? prev) : undefined}
+                      typeOverride={fileType || undefined}
                     />
                   ) : !file ? (
                     <div

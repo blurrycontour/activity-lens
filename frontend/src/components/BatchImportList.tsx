@@ -1,6 +1,6 @@
 import { CheckCircle, AlertCircle, Info, Loader2, FileText, X } from 'lucide-react'
 import { type ImportItem, type SkippedFile, type SkipReason } from '../lib/importQueue'
-import { fmtDist } from '../data/workouts'
+import { fmtDist, type WorkoutType } from '../data/workouts'
 
 /** Human wording for why a file will not be imported. */
 const SKIP_TEXT: Record<SkipReason, string> = {
@@ -32,10 +32,12 @@ function chipFor(item: ImportItem): { label: string; color: string; icon: React.
 }
 
 /** One line of parsed detail, so a row is identifiable beyond its filename. */
-function subtitle(item: ImportItem): string {
+function subtitle(item: ImportItem, typeOverride?: WorkoutType): string {
   const p = item.preview
   if (!p) return `${(item.file.size / 1024).toFixed(1)} KB`
-  const bits = [p.type, p.date]
+  // The sport that will actually be stored. Showing the detected one while a
+  // chosen sport overrules it would have every row contradict the import.
+  const bits = [typeOverride || p.type, p.date]
   if (p.distance > 0) bits.push(fmtDist(p.distance))
   return bits.filter(Boolean).join(' · ')
 }
@@ -56,6 +58,7 @@ export default function BatchImportList({
   busyLabel,
   progress,
   onRemove,
+  typeOverride,
 }: {
   items: ImportItem[]
   skipped: SkippedFile[]
@@ -63,6 +66,8 @@ export default function BatchImportList({
   busyLabel?: string
   progress?: { done: number; total: number }
   onRemove?: (id: string) => void
+  /** Sport chosen in the import window, which overrules what each file says. */
+  typeOverride?: WorkoutType
 }) {
   const pct = progress && progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0
 
@@ -110,7 +115,7 @@ export default function BatchImportList({
                   {item.preview?.name || item.file.name}
                 </div>
                 <div style={{ fontSize: 10, color: 'var(--text-3)', fontFamily: 'var(--font-mono)', marginTop: 1 }}>
-                  {subtitle(item)}
+                  {subtitle(item, typeOverride)}
                 </div>
               </div>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: chip.color, flexShrink: 0 }}>
