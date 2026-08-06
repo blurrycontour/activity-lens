@@ -9,7 +9,9 @@ Frontend uses React + Vite. See **Styling** below before writing any CSS.
 - `src/index.css` - Design tokens, shared component classes, and all responsive rules
 - `package.json` - Dependencies and scripts
 - `vite.config.ts` - Vite configuration
-- `.mise.toml` - Toolchain versions (Node.js, pnpm)
+
+Node is pinned by the build image (`node:22.21.1-alpine` in the root `Dockerfile`), not by a
+toolchain file. Config code runs as native ESM, so use `import.meta.dirname`, never `__dirname`.
 
 ## Styling
 
