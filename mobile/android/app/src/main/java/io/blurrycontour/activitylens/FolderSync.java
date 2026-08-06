@@ -3,6 +3,7 @@ package io.blurrycontour.activitylens;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.net.Uri;
+import android.provider.DocumentsContract;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -24,10 +25,21 @@ final class FolderSync {
     private static final String KEY_LAST_SCAN = "last_scan";
     private static final String KEY_LAST_RESULT = "last_result";
     private static final String KEY_INTERVAL = "interval_minutes";
+    private static final String KEY_BACKSTOP_MIGRATED = "backstop_migrated";
 
     /** WorkManager's own floor for a periodic job. Asking for less is ignored. */
     static final int MIN_INTERVAL_MINUTES = 15;
-    static final int DEFAULT_INTERVAL_MINUTES = 15;
+
+    /**
+     * How often the periodic scan runs now that it is only a safety net.
+     *
+     * The watch is event-driven — see FolderSyncWorker — so the schedule exists
+     * for the cases a content notification cannot cover: a file that appeared
+     * while the phone was off, and a provider that does not announce its
+     * changes at all. Six hours is chosen against those, not against how soon a
+     * file should import, which is no longer this number's job.
+     */
+    static final int DEFAULT_INTERVAL_MINUTES = 360;
 
     /**
      * How many file fingerprints to remember.
@@ -103,7 +115,53 @@ final class FolderSync {
 
     /** How often the periodic scan runs, in minutes. */
     static int intervalMinutes(Context context) {
+        migrateBackstop(context);
         return prefs(context).getInt(KEY_INTERVAL, DEFAULT_INTERVAL_MINUTES);
+    }
+
+    /**
+     * Raises the old polling interval to the new backstop default, once.
+     *
+     * Before the content-trigger watch this number was the only thing that
+     * decided how soon a file imported, so anyone who cared set it to fifteen
+     * minutes. Left alone it would keep waking the phone ninety-six times a day
+     * to find nothing, for a timeliness the trigger now provides for free.
+     *
+     * Only ever upwards, and only once: someone who deliberately picks a short
+     * backstop after the upgrade keeps it.
+     */
+    private static void migrateBackstop(Context context) {
+        SharedPreferences prefs = prefs(context);
+        if (prefs.getBoolean(KEY_BACKSTOP_MIGRATED, false)) {
+            return;
+        }
+        int current = prefs.getInt(KEY_INTERVAL, DEFAULT_INTERVAL_MINUTES);
+        SharedPreferences.Editor edit = prefs.edit().putBoolean(KEY_BACKSTOP_MIGRATED, true);
+        if (current < DEFAULT_INTERVAL_MINUTES) {
+            edit.putInt(KEY_INTERVAL, DEFAULT_INTERVAL_MINUTES);
+        }
+        edit.apply();
+    }
+
+    /**
+     * The URI whose contents Android can watch on the app's behalf.
+     *
+     * A tree URI names the grant, not the listing, and nothing notifies on it.
+     * The children URI is the one a DocumentsProvider calls notifyChange on when
+     * a file is added or removed, so it is the one worth registering a trigger
+     * against. Null when no folder is chosen, or when the stored URI is not a
+     * tree — an old preference, or one that has been tampered with.
+     */
+    static Uri childrenUri(Context context) {
+        Uri tree = tree(context);
+        if (tree == null) {
+            return null;
+        }
+        try {
+            return DocumentsContract.buildChildDocumentsUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree));
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     static void setIntervalMinutes(Context context, int minutes) {

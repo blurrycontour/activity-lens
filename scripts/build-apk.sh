@@ -73,8 +73,15 @@ load_build_env() {
 load_build_env
 
 # One named volume holding the builder's home directory: the Gradle cache, the
-# npm cache, and whatever corepack downloads. Gradle alone pulls several hundred
-# megabytes on a cold build, and without this every build would pull it again.
+# package caches, and whatever corepack downloads. Gradle alone pulls several
+# hundred megabytes on a cold build, and without this every build would pull it
+# again.
+#
+# pnpm's store has to be pointed at it explicitly — see PNPM_STORE_DIR on the
+# run below. pnpm otherwise picks a store on the same filesystem as the project,
+# so that it can hardlink into node_modules; here the project is a bind mount of
+# the working tree and this volume is not, so it wrote a 58 MB .pnpm-store into
+# the checkout instead. In the wrong place and not in the cache.
 # It is the only state that survives a build, so `docker volume rm` on it is a
 # complete reset.
 CACHE_VOLUME="activity-lens-android-home"
@@ -126,5 +133,6 @@ docker run --rm "${tty_flag[@]}" \
   "${mounts[@]}" \
   -e "AL_VERSION=${AL_VERSION:-}" \
   -e "AL_VERSION_CODE=${AL_VERSION_CODE:-}" \
+  -e PNPM_STORE_DIR=/home/builder/.pnpm-store \
   "${signing_env[@]}" \
   "$IMAGE" -lc "scripts/apk.sh $BUILD_TYPE"

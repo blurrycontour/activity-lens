@@ -1,7 +1,11 @@
 package io.blurrycontour.activitylens;
 
+import android.annotation.SuppressLint;
+import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
+import android.os.PowerManager;
+import android.provider.Settings;
 import androidx.activity.result.ActivityResult;
 import androidx.documentfile.provider.DocumentFile;
 import com.getcapacitor.JSObject;
@@ -29,6 +33,21 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 @CapacitorPlugin(name = "FolderSync")
 public class FolderSyncPlugin extends Plugin {
 
+    /**
+     * Re-arms the watch whenever the app starts.
+     *
+     * A content trigger cannot be persisted across a reboot the way an ordinary
+     * job can — JobScheduler refuses the combination — so WorkManager rebuilds
+     * it from its own database on boot. When that does not happen (a force stop,
+     * a restore onto a new phone, an OEM that clears jobs) the watch is simply
+     * gone, and nothing in the UI would say so. Re-arming here is idempotent and
+     * costs a database write on launch.
+     */
+    @Override
+    public void load() {
+        FolderSyncWorker.arm(getContext());
+    }
+
     /** Where things stand, for the Settings screen. */
     @PluginMethod
     public void getStatus(PluginCall call) {
@@ -44,7 +63,49 @@ public class FolderSyncPlugin extends Plugin {
         // so Settings can say so instead of showing a watch that quietly does
         // nothing.
         result.put("readable", tree != null && readable(tree));
+        // Whether Android will actually run the watch. Everything above can be
+        // configured perfectly and still import nothing on a phone that has the
+        // app battery-restricted, which is the single most common reason this
+        // feature "does not work" — and it is invisible from inside the app
+        // unless it is asked about and said out loud.
+        result.put("batteryUnrestricted", batteryUnrestricted());
         call.resolve(result);
+    }
+
+    private boolean batteryUnrestricted() {
+        PowerManager power = (PowerManager) getContext().getSystemService(Context.POWER_SERVICE);
+        return power != null && power.isIgnoringBatteryOptimizations(getContext().getPackageName());
+    }
+
+    /**
+     * Asks to be exempt from battery optimisation.
+     *
+     * The system dialog, not the settings list: the list leaves the user to find
+     * this app among every app on the phone, having been sent there for a reason
+     * they will have forgotten by the time they arrive. Declining is fine and
+     * changes nothing — the watch still runs, just whenever Android feels like
+     * it, which is the behaviour being complained about.
+     */
+    @PluginMethod
+    @SuppressLint("BatteryLife")
+    public void requestBatteryExemption(PluginCall call) {
+        if (batteryUnrestricted()) {
+            call.resolve(new JSObject().put("batteryUnrestricted", true));
+            return;
+        }
+        Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+        intent.setData(Uri.parse("package:" + getContext().getPackageName()));
+        startActivityForResult(call, intent, "batteryExemptionAnswered");
+    }
+
+    @ActivityCallback
+    private void batteryExemptionAnswered(PluginCall call, ActivityResult result) {
+        if (call == null) {
+            return;
+        }
+        // The result code says nothing useful — it is RESULT_CANCELED either
+        // way — so the state is read back rather than inferred.
+        call.resolve(new JSObject().put("batteryUnrestricted", batteryUnrestricted()));
     }
 
     private boolean readable(Uri tree) {

@@ -194,6 +194,15 @@
          moment the user enables push, not at launch. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Lets Settings offer the "always allow in the background" prompt for
+         auto-import directly, instead of sending the user to find this app in a
+         list of every app on the phone. Only declared so the system dialog can
+         be shown; the exemption is entirely the user's to grant or refuse, and
+         auto-import works either way — just later. Play restricts apps that ask
+         for this without cause; the app is distributed as an APK, and the cause
+         is a background import the OS otherwise defers indefinitely. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
     <!-- Saving an export to the Downloads folder, on Android 9 and older only.
          From Android 10 MediaStore does this with no permission, and the cap
          means newer phones never see the request. -->

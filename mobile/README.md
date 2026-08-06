@@ -590,7 +590,7 @@ Four classes, split by lifetime like the push code:
 | `FolderSyncPlugin` | the bridge: pick a folder, enable, scan now, stop |
 | `FolderSync` | what survives process death — the tree URI, the seen set |
 | `FolderScanner` | the scan itself, with no WebView anywhere |
-| `FolderSyncWorker` | runs the scan on a schedule with the app closed |
+| `FolderSyncWorker` | the two background jobs, both running with the app closed |
 
 **The folder picker is the permission.** Access comes from
 `ACTION_OPEN_DOCUMENT_TREE`: the user picks a directory and the app can read that
@@ -604,13 +604,46 @@ that quietly does nothing forever, which is the worst shape this bug could take.
 `disable()` hands the grant back, because the system caps how many an app may
 hold.
 
-**"Watching" means polling, honestly.** Android cannot wake an app when a file
-appears in a folder it does not own. The alternative is a foreground service with
-a permanent notification, which is not a fair trade for importing a workout a few
-minutes sooner. So `FolderSyncWorker` is a 15-minute periodic job — a floor, not
-a promise, since Doze and OS batching push it later — plus a "Scan now" button,
-which exists mostly so the feature can be verified without waiting a quarter of
-an hour.
+**Android does the watching.** JobScheduler will observe a content URI and start
+a job when it changes, which WorkManager exposes as `addContentUriTrigger`. A
+`DocumentsProvider` calls `notifyChange` on a directory's *children* URI when
+something is added to or removed from it — `FolderSync.childrenUri` builds it
+with `buildChildDocumentsUriUsingTree`, since the tree URI itself names the grant
+and nothing notifies on it. So a new workout file starts the scan directly. No
+foreground service, no permanent notification, and no wake-ups at all on the days
+nothing is recorded.
+
+`FolderSyncWorker` therefore runs two jobs:
+
+| Job | Kind | Why |
+|---|---|---|
+| `folder-sync-watch` | one-shot, content trigger | the immediate path; a trigger is spent by firing, so `doWork` re-arms it every run, on the failure path too |
+| `folder-sync` | periodic, 6-hourly | what a change notification cannot cover |
+
+The backstop is not belt-and-braces. A file that arrives while the phone is off
+produces no notification anyone is listening for, and a provider is under no
+obligation to call `notifyChange` at all — cloud-backed ones frequently do not.
+The trigger makes the common case immediate; the schedule is what makes "it will
+not be missed" true. Its interval used to be 15 minutes, which is also what
+decided how soon a file imported; `FolderSync.migrateBackstop` raises an existing
+short setting once, since that is now ninety-six wake-ups a day to answer a
+question the OS answers for free.
+
+The trigger is registered with a 15-second settle delay and a 5-minute maximum,
+because a file being written arrives as a burst of notifications and the first
+one points at a half-written GPX.
+
+**Neither escapes Doze.** The OS still decides when these run, and a phone with
+the app battery-restricted runs them late or not at all — which is the usual
+reason auto-import appears not to work, and is invisible from inside the app.
+`getStatus` reports `batteryUnrestricted` from `PowerManager` so Settings can say
+so, and `requestBatteryExemption` opens the system dialog. Declining is fine and
+changes nothing; the watch still runs, just whenever Android feels like it. A
+trigger cannot be persisted across a reboot the way an ordinary job can, so
+WorkManager rebuilds it from its own database — and `FolderSyncPlugin.load()`
+re-arms on every app start for the cases where it did not.
+
+"Scan now" remains, as the answer to "is this working?".
 
 **Each scan does as little as possible**, because it runs forever on a folder
 that mostly does not change:
@@ -624,7 +657,7 @@ that mostly does not change:
 
 Step 2 is the one that matters. Without it every scan would re-upload the whole
 folder; the server would deduplicate by content hash and nothing would break, but
-it would move the entire library over the network every fifteen minutes.
+it would move the entire library over the network on every scan.
 
 The seen-set is an optimisation and nothing more — the server's content hash is
 what actually prevents duplicate imports, so losing the set costs one scan's work

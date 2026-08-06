@@ -8,6 +8,7 @@ interface FolderSyncPlugin {
   setEnabled(options: { enabled: boolean }): Promise<void>
   scanNow(options: { force: boolean }): Promise<ScanResult>
   setInterval(options: { minutes: number }): Promise<void>
+  requestBatteryExemption(): Promise<{ batteryUnrestricted: boolean }>
   disable(): Promise<void>
 }
 
@@ -22,8 +23,16 @@ export interface FolderSyncStatus {
   lastResult?: string | null
   /** False when the folder can no longer be read — an SD card pulled, a grant revoked. */
   readable: boolean
-  /** How often the periodic scan runs. Per device, never synced. */
+  /** How often the backstop scan runs. Per device, never synced. */
   intervalMinutes: number
+  /**
+   * Whether Android will run the watch promptly, or defer it to save battery.
+   *
+   * False is not an error and not a misconfiguration — it is the default for
+   * every app. It is reported because it is the usual reason a correctly set up
+   * watch imports nothing for hours, and there is no way to tell from inside.
+   */
+  batteryUnrestricted: boolean
 }
 
 export interface ScanResult {
@@ -36,7 +45,12 @@ export interface ScanResult {
 const FolderSync = registerPlugin<FolderSyncPlugin>('FolderSync')
 
 /** Nothing to watch: the folder was never chosen, or has been forgotten. */
-const NO_FOLDER: FolderSyncStatus = { folder: null, enabled: false, lastScan: 0, readable: false, intervalMinutes: 15 }
+const NO_FOLDER: FolderSyncStatus = {
+  folder: null, enabled: false, lastScan: 0, readable: false, intervalMinutes: 360,
+  // Claimed true so an older APK, which cannot answer, does not show a warning
+  // about a restriction nobody can check. The prompt would go nowhere.
+  batteryUnrestricted: true,
+}
 
 export async function folderSyncStatus(): Promise<FolderSyncStatus> {
   if (!isNative()) return NO_FOLDER
@@ -79,9 +93,31 @@ export async function scanFolderNow(force = false): Promise<ScanResult> {
   return FolderSync.scanNow({ force })
 }
 
-/** How often the periodic scan runs. WorkManager will not go below 15 minutes. */
+/**
+ * How often the backstop scan runs. WorkManager will not go below 15 minutes.
+ *
+ * This is no longer what decides when a file imports — Android starts the watch
+ * when the folder changes — so it only covers what a change notification cannot:
+ * files that appeared while the phone was off, and folder providers that never
+ * announce their changes.
+ */
 export async function setFolderSyncInterval(minutes: number): Promise<void> {
   await FolderSync.setInterval({ minutes })
+}
+
+/**
+ * Opens the system prompt to exempt the app from battery optimisation.
+ *
+ * Resolves with the state afterwards, read back rather than inferred: the dialog
+ * reports the same result code whether it was accepted or dismissed.
+ */
+export async function requestBatteryExemption(): Promise<boolean> {
+  if (!isNative()) return true
+  try {
+    return (await FolderSync.requestBatteryExemption()).batteryUnrestricted
+  } catch {
+    return false
+  }
 }
 
 /** Forgets the folder, hands the grant back, and stops the schedule. */

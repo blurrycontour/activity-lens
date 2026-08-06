@@ -1189,6 +1189,20 @@ body {
   margin-top: 14px;
 }
 
+/* Something the user has to act on outside the app, said in place rather than
+   as a message that scrolls past. Warning-tinted, not danger: nothing is broken,
+   it is the OS default, and the feature still works — just later. */
+.autoimport-nudge {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 11px 12px;
+  border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent);
+  background: color-mix(in srgb, var(--warning) 9%, transparent);
+  border-radius: var(--radius);
+  color: var(--text-2);
+}
+
 /* ── First-run import introduction ── */
 
 /* Taller than it is wide on a phone, so the routes stay a readable column

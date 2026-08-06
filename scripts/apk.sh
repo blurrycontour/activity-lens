@@ -97,8 +97,22 @@ if ! command -v pnpm >/dev/null; then
   echo "to build in a container that already has the whole toolchain." >&2
   exit 1
 fi
+# A node_modules built somewhere else — on the host, by scripts/build-apk.sh's
+# caller — records a store path this environment does not have, and pnpm stops to
+# ask before rebuilding it. There is no terminal to ask, so it aborts. Answering
+# in advance is right for a build: the tree is disposable and the lockfile is the
+# thing being trusted. Passed per command rather than set in either
+# pnpm-workspace.yaml, because it is the container crossing a bind mount that
+# makes it necessary, and a developer deleting their own node_modules by hand
+# should still be asked first.
+PNPM_INSTALL=(pnpm install --frozen-lockfile --config.confirmModulesPurge=false)
+# Only the container sets this; a dev machine keeps its own global store.
+if [ -n "${PNPM_STORE_DIR:-}" ]; then
+  PNPM_INSTALL+=(--config.storeDir="$PNPM_STORE_DIR")
+fi
+
 cd "$REPO_ROOT/frontend"
-pnpm install --frozen-lockfile
+"${PNPM_INSTALL[@]}"
 VITE_APP_VERSION="$AL_VERSION" pnpm build
 
 # --- 2. Copy it into the Android project -------------------------------------
@@ -107,7 +121,7 @@ cd "$REPO_ROOT/mobile"
 # pnpm here too, not npm: one package manager for the repository. Both workspaces
 # are locked by a pnpm-lock.yaml, and a stray `npm ci` would need a
 # package-lock.json that no longer exists.
-pnpm install --frozen-lockfile
+"${PNPM_INSTALL[@]}"
 # Refuses to continue if the Capacitor JavaScript in the bundle and the native
 # code about to be compiled came from different versions.
 pnpm run --silent check-versions

@@ -1,21 +1,26 @@
 import { useEffect, useState } from 'react'
-import { FolderDown, FolderSearch, RefreshCw, RotateCcw } from 'lucide-react'
+import { BatteryWarning, FolderDown, FolderSearch, RefreshCw, RotateCcw } from 'lucide-react'
 import {
-  disableFolderSync, folderSyncStatus, pickSyncFolder, scanFolderNow, setFolderSyncEnabled,
-  setFolderSyncInterval, type FolderSyncStatus,
+  disableFolderSync, folderSyncStatus, pickSyncFolder, requestBatteryExemption, scanFolderNow,
+  setFolderSyncEnabled, setFolderSyncInterval, type FolderSyncStatus,
 } from '../lib/native/folderSync'
 import Field from './Field'
 import Dropdown, { type DropdownOption } from './Dropdown'
 
 /**
- * How often to look. Fifteen minutes is WorkManager's floor — anything shorter is
- * silently ignored by the OS — and the rest trade timeliness for battery.
+ * How often the backstop sweep runs.
+ *
+ * Not how soon a file imports — Android starts the watch when the folder
+ * changes, so that is a matter of seconds. This only catches what a change
+ * notification cannot: a file that arrived while the phone was off, and folders
+ * whose provider never announces its changes at all.
+ *
+ * The short intervals the old polling watch needed are gone. Quarter-hourly is
+ * ninety-six wake-ups a day to answer a question the OS now answers for free,
+ * and keeping the option would invite exactly that.
  */
 const INTERVALS = [
-  { minutes: 15, label: 'Every 15 minutes' },
-  { minutes: 30, label: 'Every 30 minutes' },
   { minutes: 60, label: 'Hourly' },
-  { minutes: 180, label: 'Every 3 hours' },
   { minutes: 360, label: 'Every 6 hours' },
   { minutes: 1440, label: 'Daily' },
 ]
@@ -90,6 +95,10 @@ export default function AutoImportCard() {
     })
   })
 
+  // Resolves with the state read back after the dialog, so `run` refreshing the
+  // status is what updates the UI — the same path every other action takes.
+  const allowBackground = () => run('settings', async () => { await requestBatteryExemption() })
+
   const watching = Boolean(status?.folder)
 
   return (
@@ -133,15 +142,31 @@ export default function AutoImportCard() {
             Check for new files automatically
           </label>
           <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8, lineHeight: 1.5 }}>
-            Only when the phone has a network, and Android decides exactly when — a file may
-            take a little longer to appear, but it will not be missed. You get a notification
-            when something is imported.
+            Android wakes the app when the folder changes, so a new file usually imports within
+            a minute. It needs a network, and the phone decides the exact moment. You get a
+            notification when something is imported.
           </p>
+
+          {status && status.enabled && !status.batteryUnrestricted && (
+            <div className="autoimport-nudge">
+              <BatteryWarning size={15} style={{ flexShrink: 0, color: 'var(--warning)' }} />
+              <div style={{ minWidth: 0 }}>
+                <p style={{ fontSize: 12, lineHeight: 1.5, marginBottom: 8 }}>
+                  Android is limiting this app in the background, so imports may be delayed by
+                  hours or wait until you next open the app. Allowing it to run in the
+                  background is what makes them arrive when the file does.
+                </p>
+                <button className="btn btn-ghost" disabled={busy} onClick={allowBackground}>
+                  Allow background activity
+                </button>
+              </div>
+            </div>
+          )}
 
           <div style={{ marginTop: 14 }}>
             <Field
-              label="How often"
-              hint="This phone only — it is not shared with your other devices."
+              label="Also check every"
+              hint="A sweep for anything the folder never announced — files that arrived while the phone was off, mostly. This phone only; it is not shared with your other devices."
             >
               <div style={{ maxWidth: 220 }}>
                 <Dropdown
@@ -150,7 +175,7 @@ export default function AutoImportCard() {
                   options={INTERVAL_OPTIONS}
                   disabled={busy || !status?.enabled}
                   onChange={v => void run('settings', () => setFolderSyncInterval(v))}
-                  ariaLabel="How often to check"
+                  ariaLabel="How often to sweep the folder"
                 />
               </div>
             </Field>

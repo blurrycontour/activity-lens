@@ -168,7 +168,11 @@ export default function WeatherSettings() {
           )}
 
           {/* One button per thing that is actually actionable, each named with
-              its number. A disabled "Fetch" over a zero would be furniture. */}
+              its number. A disabled "Fetch" over a zero would be furniture —
+              and so is the row itself once every workout has been looked up,
+              which is the steady state. Rendered unconditionally it kept its
+              margin and left a gap under the tally with nothing in it. */}
+          {(counts.unchecked > 0 || counts.failed > 0) && (
           <div className="weather-actions">
             {counts.unchecked > 0 && (
               <button
@@ -189,6 +193,7 @@ export default function WeatherSettings() {
               </button>
             )}
           </div>
+          )}
 
           {msg && <p className="field-hint" style={{ marginTop: 10 }}>{msg}</p>}
         </SettingsCard>
