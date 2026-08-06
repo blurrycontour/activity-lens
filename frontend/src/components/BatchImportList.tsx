@@ -1,6 +1,7 @@
 import { CheckCircle, AlertCircle, Info, Loader2, FileText, X } from 'lucide-react'
 import { type ImportItem, type SkippedFile, type SkipReason } from '../lib/importQueue'
 import { fmtDist, type WorkoutType } from '../data/workouts'
+import SportDropdown from './SportDropdown'
 
 /** Human wording for why a file will not be imported. */
 const SKIP_TEXT: Record<SkipReason, string> = {
@@ -31,13 +32,16 @@ function chipFor(item: ImportItem): { label: string; color: string; icon: React.
   }
 }
 
-/** One line of parsed detail, so a row is identifiable beyond its filename. */
-function subtitle(item: ImportItem, typeOverride?: WorkoutType): string {
+/**
+ * One line of parsed detail, so a row is identifiable beyond its filename.
+ *
+ * No sport here any more: it has its own control on the row, and printing it
+ * twice invites the two to disagree the moment one is changed.
+ */
+function subtitle(item: ImportItem): string {
   const p = item.preview
   if (!p) return `${(item.file.size / 1024).toFixed(1)} KB`
-  // The sport that will actually be stored. Showing the detected one while a
-  // chosen sport overrules it would have every row contradict the import.
-  const bits = [typeOverride || p.type, p.date]
+  const bits = [p.date]
   if (p.distance > 0) bits.push(fmtDist(p.distance))
   return bits.filter(Boolean).join(' · ')
 }
@@ -58,7 +62,7 @@ export default function BatchImportList({
   busyLabel,
   progress,
   onRemove,
-  typeOverride,
+  onTypeChange,
 }: {
   items: ImportItem[]
   skipped: SkippedFile[]
@@ -66,8 +70,8 @@ export default function BatchImportList({
   busyLabel?: string
   progress?: { done: number; total: number }
   onRemove?: (id: string) => void
-  /** Sport chosen in the import window, which overrules what each file says. */
-  typeOverride?: WorkoutType
+  /** Set the sport for one file. Omitted once the import is under way. */
+  onTypeChange?: (id: string, type: WorkoutType) => void
 }) {
   const pct = progress && progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0
 
@@ -100,33 +104,38 @@ export default function BatchImportList({
         {items.map((item, i) => {
           const chip = chipFor(item)
           const dimmed = item.status === 'duplicate' || item.status === 'error'
+          // Only a file that will actually be imported gets a sport control: a
+          // duplicate resolves to the workout already stored and an unreadable
+          // one to nothing, so on both the choice would have no effect.
+          const canSetType = onTypeChange && item.status === 'ready' && item.preview
           return (
             <div
               key={item.id}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px',
-                borderTop: i === 0 ? 'none' : '1px solid var(--border)',
-                opacity: dimmed ? 0.6 : 1,
-              }}
+              className="batch-row"
+              style={{ borderTop: i === 0 ? 'none' : '1px solid var(--border)', opacity: dimmed ? 0.6 : 1 }}
             >
-              <FileText size={15} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {item.preview?.name || item.file.name}
-                </div>
-                <div style={{ fontSize: 10, color: 'var(--text-3)', fontFamily: 'var(--font-mono)', marginTop: 1 }}>
-                  {subtitle(item, typeOverride)}
-                </div>
+              <FileText size={15} className="batch-row-icon" />
+              <div className="batch-row-main">
+                <div className="batch-row-name">{item.preview?.name || item.file.name}</div>
+                <div className="batch-row-meta">{subtitle(item)}</div>
               </div>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: chip.color, flexShrink: 0 }}>
+              {canSetType ? (
+                <div className="batch-row-sport">
+                  <SportDropdown
+                    value={item.type ?? item.preview!.type}
+                    onChange={t => onTypeChange(item.id, t)}
+                  />
+                </div>
+              ) : <span className="batch-row-sport" />}
+              <span className="batch-row-status" style={{ color: chip.color }}>
                 {chip.icon}
-                <span style={{ whiteSpace: 'nowrap' }}>{chip.label}</span>
+                <span>{chip.label}</span>
               </span>
-              {onRemove && !busyLabel && (
-                <button className="btn-icon" title="Remove from this import" onClick={() => onRemove(item.id)}>
+              {onRemove && !busyLabel ? (
+                <button className="btn-icon batch-row-remove" title="Remove from this import" onClick={() => onRemove(item.id)}>
                   <X size={13} />
                 </button>
-              )}
+              ) : <span className="batch-row-remove" />}
             </div>
           )
         })}
@@ -136,22 +145,22 @@ export default function BatchImportList({
         {skipped.map((s, i) => (
           <div
             key={`skip-${s.name}-${i}`}
+            className="batch-row"
             style={{
-              display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px',
               borderTop: items.length === 0 && i === 0 ? 'none' : '1px solid var(--border)',
               opacity: 0.55,
             }}
           >
-            <FileText size={15} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {s.name}
-              </div>
+            <FileText size={15} className="batch-row-icon" />
+            <div className="batch-row-main">
+              <div className="batch-row-name">{s.name}</div>
             </div>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--text-3)', flexShrink: 0 }}>
+            <span className="batch-row-sport" />
+            <span className="batch-row-status">
               <AlertCircle size={13} />
-              <span style={{ whiteSpace: 'nowrap' }}>{SKIP_TEXT[s.reason]}</span>
+              <span>{SKIP_TEXT[s.reason]}</span>
             </span>
+            <span className="batch-row-remove" />
           </div>
         ))}
       </div>

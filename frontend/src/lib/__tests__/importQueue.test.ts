@@ -137,6 +137,26 @@ describe('runImport', () => {
     expect(items[1].error).toBeTruthy()
   })
 
+  // The sport is chosen per file, not per batch: an export archive is a year of
+  // mixed activities, so one setting across all of them can only ever be right
+  // for the files that already agreed with it.
+  it('sends each file its own sport, and nothing for the ones left alone', async () => {
+    const importSpy = vi.spyOn(api, 'importWorkout').mockResolvedValue({} as never)
+    vi.spyOn(api, 'finalizeImport').mockResolvedValue(undefined)
+
+    const items = [item('a.gpx'), item('b.gpx'), item('c.gpx')]
+    items[0].type = 'Hike'
+    items[2].type = 'Swim'
+    await runImport(items)
+
+    const sent = new Map(importSpy.mock.calls.map(c => [(c[0] as File).name, c[1]]))
+    expect(sent.get('a.gpx')).toBe('Hike')
+    expect(sent.get('c.gpx')).toBe('Swim')
+    // Undefined, not an empty string: the server reads any type it is sent as
+    // the user overruling the file, so "unset" has to be absent from the form.
+    expect(sent.get('b.gpx')).toBeUndefined()
+  })
+
   // The gear and goal checks each re-read the whole library, so a batch defers
   // them and runs them once. Getting this wrong is invisible in the UI and only
   // shows up as an import that crawls.

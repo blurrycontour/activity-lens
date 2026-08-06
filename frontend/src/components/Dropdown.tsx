@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Check, ChevronDown } from 'lucide-react'
 
 export interface DropdownOption<T> {
@@ -46,11 +47,16 @@ interface DropdownProps<T extends string | number> {
  * middle — the sort of divergence that ends with three dropdowns that no longer
  * look alike.
  */
+/** Smallest the menu may be, so a short trigger still gets readable rows. */
+const MIN_MENU_WIDTH = 170
+
 export default function Dropdown<T extends string | number>({
   value, options, onChange, icon, block, disabled, ariaLabel, placeholder, dropUp,
 }: DropdownProps<T>) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const [box, setBox] = useState<{ left: number; top?: number; bottom?: number; width: number } | null>(null)
 
   // A control that becomes disabled while its menu is open would leave the menu
   // stranded with no way to dismiss it.
@@ -58,11 +64,53 @@ export default function Dropdown<T extends string | number>({
 
   useEffect(() => {
     function handle(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      const t = e.target as Node
+      // The menu is portalled out of this element, so it is not inside `ref` —
+      // testing only that would treat every click on an option as a click
+      // outside and close the menu before the option's own handler ran.
+      if (ref.current?.contains(t) || menuRef.current?.contains(t)) return
+      setOpen(false)
     }
     document.addEventListener('mousedown', handle)
     return () => document.removeEventListener('mousedown', handle)
   }, [])
+
+  /*
+   * The menu is positioned against the viewport and rendered into <body>.
+   *
+   * An absolutely-positioned menu is clipped by any ancestor that scrolls, and
+   * this control now lives inside one: the file list in a multi-file import is
+   * a 320px scroll box, and a six-option menu is taller than that, so every
+   * picker in it would open into a menu cut off halfway down.
+   *
+   * It also flips upwards on its own when there is no room below, which is what
+   * the explicit `dropUp` was for. That prop still wins where a caller knows
+   * better.
+   */
+  useLayoutEffect(() => {
+    if (!open || !ref.current) return
+    const r = ref.current.getBoundingClientRect()
+    const width = Math.max(r.width, MIN_MENU_WIDTH)
+    const below = window.innerHeight - r.bottom
+    const wantsUp = dropUp ?? (below < 240 && r.top > below)
+    setBox(wantsUp
+      ? { left: r.left, bottom: window.innerHeight - r.top + 4, width }
+      : { left: r.left, top: r.bottom + 4, width })
+  }, [open, dropUp])
+
+  // Anything that moves the trigger invalidates the position. Closing is both
+  // simpler and less surprising than having a menu chase its control across the
+  // screen, and matches what a native select does.
+  useEffect(() => {
+    if (!open) return
+    const close = () => setOpen(false)
+    window.addEventListener('scroll', close, true)
+    window.addEventListener('resize', close)
+    return () => {
+      window.removeEventListener('scroll', close, true)
+      window.removeEventListener('resize', close)
+    }
+  }, [open])
 
   // Escape closes it, like every other dismissible surface in the app.
   useEffect(() => {
@@ -104,8 +152,12 @@ export default function Dropdown<T extends string | number>({
         />
       </button>
 
-      {open && (
-        <div className="al-dropdown-menu" style={{ animation: 'fadeIn 0.12s ease' }}>
+      {open && box && createPortal(
+        <div
+          ref={menuRef}
+          className="al-dropdown-menu floating"
+          style={{ ...box, animation: 'fadeIn 0.12s ease' }}
+        >
           {options.map(o => (
             <button
               key={String(o.value)}
@@ -127,7 +179,8 @@ export default function Dropdown<T extends string | number>({
               )}
             </button>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )

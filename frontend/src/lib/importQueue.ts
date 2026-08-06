@@ -19,7 +19,7 @@
 
 import { unzip, gunzipSync } from 'fflate'
 import { api, ApiError } from './api'
-import { type Workout } from '../data/workouts'
+import { type Workout, type WorkoutType } from '../data/workouts'
 
 /** Extensions the importer can parse. Anything else is reported, not silently dropped. */
 export const WORKOUT_EXTENSIONS = ['gpx', 'tcx'] as const
@@ -221,6 +221,14 @@ export interface ImportItem {
   status: ImportStatus
   /** Parsed metrics, present once preflight has previewed the file. */
   preview?: Workout
+  /**
+   * Sport chosen for this file, overruling what the file itself says.
+   *
+   * Per file rather than per batch: an export archive is a year of mixed
+   * activities, and one setting across all of them can only ever be right for
+   * the files that already agreed with it. Absent means the file decides.
+   */
+  type?: WorkoutType
   /** The stored workout, once imported (or the existing one, if duplicate). */
   workout?: Workout
   /** Why this file failed, for the row that shows it. */
@@ -312,14 +320,12 @@ export async function runImport(
   items: ImportItem[],
   opts: {
     equipmentIds?: string[]
-    /** Sport chosen in the import window; empty means let each file say. */
-    type?: string
     signal?: AbortSignal
     onItemChange?: (item: ImportItem) => void
     onProgress?: (done: number, total: number) => void
   } = {},
 ): Promise<ImportRunResult> {
-  const { equipmentIds, type, signal, onItemChange, onProgress } = opts
+  const { equipmentIds, signal, onItemChange, onProgress } = opts
   const result: ImportRunResult = { imported: 0, duplicates: 0, failed: 0 }
   const queue = items.filter(it => it.status === 'ready')
   let done = 0
@@ -333,7 +339,7 @@ export async function runImport(
     item.status = 'importing'
     onItemChange?.(item)
     try {
-      const res = await api.importWorkout(item.file, type || undefined, undefined, equipmentIds, defer)
+      const res = await api.importWorkout(item.file, item.type, undefined, equipmentIds, defer)
       item.workout = res
       item.status = res.duplicate ? 'duplicate' : 'imported'
       if (res.duplicate) result.duplicates++

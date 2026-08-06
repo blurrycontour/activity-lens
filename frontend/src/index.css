@@ -1239,6 +1239,60 @@ body {
   color: var(--text-2);
 }
 
+/* ── One file in a multi-file import ── */
+
+/* A grid rather than a flex row, because the row has to reflow: each file
+   carries its own sport picker, and a picker plus a filename plus a status plus
+   a remove button do not fit across a phone. Media queries need a stylesheet,
+   which is why this row is the one part of the import modal not styled inline. */
+.batch-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+}
+.batch-row-icon { color: var(--text-3); flex-shrink: 0; }
+.batch-row-main { min-width: 0; }
+.batch-row-name {
+  font-size: 12px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.batch-row-meta {
+  font-size: 10px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  margin-top: 1px;
+}
+/* Wide enough for the longest sport plus its mark, so the column does not
+   jump as rows are set to different sports. */
+.batch-row-sport { width: 128px; }
+.batch-row-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  /* The picker drops to its own line and takes the full width; the status
+     keeps its place beside it rather than being pushed off the edge. */
+  .batch-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    row-gap: 8px;
+  }
+  .batch-row-icon { grid-area: 1 / 1; }
+  .batch-row-main { grid-area: 1 / 2; }
+  .batch-row-remove { grid-area: 1 / 3; justify-self: end; }
+  .batch-row-sport { grid-area: 2 / 1 / auto / 3; width: 100%; }
+  .batch-row-status { grid-area: 2 / 3; justify-self: end; }
+}
+
 /* ── First-run import introduction ── */
 
 /* Taller than it is wide on a phone, so the routes stay a readable column
@@ -1496,6 +1550,7 @@ body {
 .al-dropdown.block { display: block; width: 100%; }
 .al-dropdown.block .al-dropdown-trigger { width: 100%; min-width: 0; }
 .al-dropdown.block .al-dropdown-menu { left: 0; right: 0; min-width: 0; }
+.al-dropdown.block .al-dropdown-menu.floating { right: auto; }
 
 .al-dropdown-trigger:disabled {
   opacity: 0.55;
@@ -1532,9 +1587,17 @@ body {
   min-width: 170px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
-/* For a trigger near the bottom of its container — the map's shading picker —
-   where a menu dropping down would leave the container entirely. */
-.al-dropdown.drop-up .al-dropdown-menu { top: auto; bottom: calc(100% + 4px); }
+/* Rendered into <body> and positioned against the viewport, so a scrolling
+   ancestor cannot clip it. Every offset comes from the measurement in
+   Dropdown.tsx, which is why the absolute placement above is overridden whole
+   rather than adjusted. The z-index clears the modal it may be opened from. */
+.al-dropdown-menu.floating {
+  position: fixed;
+  top: auto;
+  bottom: auto;
+  right: auto;
+  z-index: 3000;
+}
 
 .al-dropdown-item {
   display: flex;

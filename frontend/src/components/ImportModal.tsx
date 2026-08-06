@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Upload, X, CheckCircle, FileText, AlertCircle, ArrowRight, Info, Loader2, FolderOpen, PencilLine, Plus } from 'lucide-react'
-import SportDropdown, { ImportSportDropdown, type ImportSport } from './SportDropdown'
+import SportDropdown from './SportDropdown'
 import Dropdown from './Dropdown'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { isNative } from '../lib/serverConfig'
@@ -66,47 +66,6 @@ function parseDuration(v: string): number {
   return 0
 }
 
-/**
- * What the file said, and what will actually be stored.
- *
- * The detection was already in the preview the server returned; it was simply
- * never shown next to the control that overrides it, so picking a sport meant
- * not knowing what you were overriding.
- *
- * Returns null while there is nothing to describe yet.
- */
-export function detectionSummary(detected: string[], chosen: ImportSport): string | null {
-  if (detected.length === 0) return chosen
-    ? `Every file will be saved as ${chosen}, whatever it says inside.`
-    : null
-
-  // Counted rather than listed: a fifty-file archive is a distribution, not a
-  // sentence, and "12 Hike · 3 Run" is the shape of it.
-  const counts = new Map<string, number>()
-  for (const t of detected) counts.set(t, (counts.get(t) ?? 0) + 1)
-  const single = detected.length === 1
-  const parts = [...counts.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .map(([t, n]) => (single ? t : `${n} ${t}`))
-  const read = parts.join(' · ')
-
-  // Both halves, always: "importing as Ride" alone leaves the reader unable to
-  // tell whether the override was needed.
-  if (chosen) {
-    return single
-      ? `The file says ${read} — importing as ${chosen}.`
-      : `Files say ${read} — importing as ${chosen}.`
-  }
-  // Other is not a detection, it is the absence of one, and saying so is what
-  // tells someone the picker is worth using here.
-  if (counts.size === 1 && counts.has('Other')) {
-    return single
-      ? 'This file does not say what it is. Pick a sport, or it is saved as Other.'
-      : `None of these files say what they are. Pick a sport, or they are saved as Other.`
-  }
-  return `Detected ${read} from the file${single ? '' : 's'}.`
-}
-
 export default function ImportModal({ onClose, onViewWorkout, initialFiles }: ImportModalProps) {
   const { refresh } = useWorkouts()
   const [tab, setTab] = useState<Tab>('file')
@@ -146,26 +105,18 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
   }, [])
 
   /**
-   * The sport for files being imported. Empty means "let the file say", which
-   * is the default and is right far more often than not.
+   * The sport for the single file being imported, once the user has changed it.
    *
-   * Separate from the manual form's `type`: that one has to be a sport, because
-   * a typed-in workout has no file to ask. Sharing the two is what made every
+   * Empty means "whatever the file said", which is what the preview shows. Kept
+   * separate from the manual form's `type`: that one has to be a sport, because
+   * a typed-in workout has no file to ask — sharing the two is what made every
    * upload arrive claiming to be a Run.
-   */
-  const [fileType, setFileType] = useState<ImportSport>('')
-
-  /**
-   * What the files themselves say, from the previews already fetched.
    *
-   * Both paths feed the same list, so the summary under the picker reads the
-   * same whether it is describing one file or fifty. Files that could not be
-   * read contribute nothing rather than a blank.
+   * A batch has no equivalent here. Each file carries its own choice, because
+   * an export archive is a year of mixed activities and one setting across all
+   * of them can only ever be right for the files that already agreed with it.
    */
-  const detected = items !== null
-    ? items.filter(i => i.status === 'ready' || i.status === 'duplicate')
-      .map(i => i.preview?.type).filter((t): t is WorkoutType => !!t)
-    : preview?.type ? [preview.type] : []
+  const [singleType, setSingleType] = useState<WorkoutType | ''>('')
 
   // Manual form state
   const [form, setForm] = useState({
@@ -186,6 +137,7 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
     if (selected.length === 0) return
     setError(null)
     setPreview(null)
+    setSingleType('')
     setFile(null)
     setItems([])
     setSkipped([])
@@ -257,7 +209,6 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
     setProgress({ done: 0, total: items.filter(i => i.status === 'ready').length })
     const result = await runImport(items, {
       equipmentIds: selectedEquipment,
-      type: fileType,
       onItemChange: () => setItems(prev => (prev ? [...prev] : prev)),
       onProgress: (done, total) => setProgress({ done, total }),
     })
@@ -277,7 +228,7 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
         // Empty unless the user picked one, in which case it overrules the
         // file. Sending form.type here — the manual tab's field, defaulting to
         // Run — is what made every upload silently claim to be a run.
-        const imported = await api.importWorkout(file, fileType || undefined, undefined, selectedEquipment)
+        const imported = await api.importWorkout(file, singleType || undefined, undefined, selectedEquipment)
         setDuplicate(imported.duplicate === true)
         workout = imported
       } else {
@@ -428,25 +379,6 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
 
               {tab === 'file' ? (
                 <>
-                  {/* One control for both paths: the single-file panel and a
-                      fifty-file batch answer the same question, and asking it
-                      twice in two places is how they come to disagree. Hidden
-                      before a file is chosen, when there is nothing to describe,
-                      and once the import has run, when it is too late to matter. */}
-                  {(file || items !== null) && phase !== 'importing' && phase !== 'done' && (
-                    <div style={{ marginBottom: 12 }}>
-                      <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>
-                        Sport Type
-                      </label>
-                      <ImportSportDropdown value={fileType} onChange={setFileType} />
-                      {detectionSummary(detected, fileType) && (
-                        <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 5, lineHeight: 1.5 }}>
-                          {detectionSummary(detected, fileType)}
-                        </p>
-                      )}
-                    </div>
-                  )}
-
                   {/* A batch replaces the single-file preview entirely: nobody
                       reviews fifty stat panels, so the useful view is which
                       files will import and which will not. */}
@@ -462,7 +394,9 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
                       }
                       progress={phase === 'preflight' || phase === 'importing' ? progress : undefined}
                       onRemove={phase === 'review' ? id => setItems(prev => prev?.filter(i => i.id !== id) ?? prev) : undefined}
-                      typeOverride={fileType || undefined}
+                      onTypeChange={phase === 'review'
+                        ? (id, type) => setItems(prev => prev?.map(i => (i.id === id ? { ...i, type } : i)) ?? prev)
+                        : undefined}
                     />
                   ) : !file ? (
                     <div
@@ -533,6 +467,29 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
                                   />
                                 </div>
                               ))}
+                            </div>
+                          )}
+                          {/* The sport sits with the other parsed values, as
+                              the one of them that can be corrected. Showing the
+                              detection here rather than beside a separate
+                              control means the value being changed and the
+                              value read from the file are the same thing. */}
+                          {preview && (
+                            <div style={{ marginBottom: 12 }}>
+                              <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>
+                                Sport
+                              </div>
+                              <div style={{ maxWidth: 200 }}>
+                                <SportDropdown
+                                  value={singleType || preview.type}
+                                  onChange={setSingleType}
+                                />
+                              </div>
+                              {preview.type === 'Other' && !singleType && (
+                                <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 5, lineHeight: 1.5 }}>
+                                  This file does not say what it is. Pick a sport, or it is saved as Other.
+                                </p>
+                              )}
                             </div>
                           )}
                           {preview && (
