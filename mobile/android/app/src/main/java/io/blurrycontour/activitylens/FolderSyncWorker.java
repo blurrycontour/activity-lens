@@ -49,6 +49,8 @@ public class FolderSyncWorker extends Worker {
     private static final String WORK_NAME = "folder-sync";
     /** The content-triggered watch, re-armed after every run. */
     private static final String WATCH_NAME = "folder-sync-watch";
+    /** The one-off sweep that runs because the app was opened. */
+    private static final String CATCH_UP_NAME = "folder-sync-catchup";
 
     /**
      * How long to let changes settle before running.
@@ -90,6 +92,32 @@ public class FolderSyncWorker extends Worker {
     }
 
     /**
+     * Scans once, soon, because the app was opened.
+     *
+     * Opening the app used to sweep the folder as a side effect: WorkManager
+     * runs overdue periodic work when the process starts, and the schedule was
+     * quarter-hourly, so it almost always was overdue. Stretching the backstop
+     * to six hours took that away, and with it the thing that made the feature
+     * feel dependable — someone who suspects a file was missed opens the app to
+     * check, which is exactly when it should look.
+     *
+     * KEEP, so repeatedly opening the app queues one scan rather than a pile of
+     * them, and separate from the watch so it cannot disturb a pending trigger.
+     */
+    static void catchUp(Context context) {
+        if (!FolderSync.enabled(context) || FolderSync.folders(context).isEmpty()) {
+            return;
+        }
+        Constraints constraints = new Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build();
+        OneTimeWorkRequest request = new OneTimeWorkRequest.Builder(FolderSyncWorker.class)
+            .setConstraints(constraints)
+            .build();
+        WorkManager.getInstance(context).enqueueUniqueWork(CATCH_UP_NAME, ExistingWorkPolicy.KEEP, request);
+    }
+
+    /**
      * Registers the content trigger.
      *
      * REPLACE, and called from inside doWork above: the work is finishing, so
@@ -106,21 +134,30 @@ public class FolderSyncWorker extends Worker {
         if (!FolderSync.enabled(context)) {
             return;
         }
-        Uri children = FolderSync.childrenUri(context);
-        if (children == null) {
-            return;
-        }
-        Constraints constraints = new Constraints.Builder()
+        Constraints.Builder builder = new Constraints.Builder()
             // No point waking up to upload with no network. WorkManager holds the
             // job until there is one rather than running it and failing.
             .setRequiredNetworkType(NetworkType.CONNECTED)
-            // true: descendants too, so a recorder that files workouts into
-            // dated subfolders is still noticed. The scan itself only reads the
-            // top level, but a new subfolder appearing is worth looking at.
-            .addContentUriTrigger(children, true)
             .setTriggerContentUpdateDelay(TRIGGER_SETTLE_SECONDS, TimeUnit.SECONDS)
-            .setTriggerContentMaxDelay(TRIGGER_MAX_DELAY_MINUTES, TimeUnit.MINUTES)
-            .build();
+            .setTriggerContentMaxDelay(TRIGGER_MAX_DELAY_MINUTES, TimeUnit.MINUTES);
+        // One job watching every folder, rather than a job each: they all run
+        // the same scan, and the scan reads all of them. Which URI fired is not
+        // worth knowing.
+        int watched = 0;
+        for (FolderSync.Folder folder : FolderSync.folders(context)) {
+            Uri children = FolderSync.childrenUri(folder.uri);
+            if (children != null) {
+                // false: the top level only, which is what the scan reads. A
+                // trigger on descendants would wake the app for changes in
+                // subfolders it then ignores.
+                builder.addContentUriTrigger(children, false);
+                watched++;
+            }
+        }
+        if (watched == 0) {
+            return;
+        }
+        Constraints constraints = builder.build();
         OneTimeWorkRequest request = new OneTimeWorkRequest.Builder(FolderSyncWorker.class)
             .setConstraints(constraints)
             .build();
@@ -146,7 +183,9 @@ public class FolderSyncWorker extends Worker {
     }
 
     static void cancel(Context context) {
-        WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME);
-        WorkManager.getInstance(context).cancelUniqueWork(WATCH_NAME);
+        WorkManager manager = WorkManager.getInstance(context);
+        manager.cancelUniqueWork(WORK_NAME);
+        manager.cancelUniqueWork(WATCH_NAME);
+        manager.cancelUniqueWork(CATCH_UP_NAME);
     }
 }

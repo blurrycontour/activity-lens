@@ -579,16 +579,22 @@ runs on the host with `./gradlew test`.
 
 ### Auto import (folder watching)
 
-Settings → Auto import watches one folder on the phone and imports any new
-workout files into the library, so a watch or a recording app that saves there
-needs no manual step.
+Settings → Auto import watches folders on the phone and imports any new workout
+files into the library, so a watch or a recording app that saves there needs no
+manual step.
+
+Up to `FolderSync.MAX_FOLDERS` of them, because a phone that records with more
+than one app has more than one export directory, and the alternative — picking a
+common ancestor — hands the app far more of the filesystem than it needs. Each
+folder keeps its own seen-set and its own last result; they are scanned
+independently, so one that has become unreadable does not stop the others.
 
 Four classes, split by lifetime like the push code:
 
 | File | What |
 |---|---|
-| `FolderSyncPlugin` | the bridge: pick a folder, enable, scan now, stop |
-| `FolderSync` | what survives process death — the tree URI, the seen set |
+| `FolderSyncPlugin` | the bridge: add a folder, remove one, enable, scan now |
+| `FolderSync` | what survives process death — the folder list, the seen sets |
 | `FolderScanner` | the scan itself, with no WebView anywhere |
 | `FolderSyncWorker` | the two background jobs, both running with the app closed |
 
@@ -619,6 +625,19 @@ nothing is recorded.
 |---|---|---|
 | `folder-sync-watch` | one-shot, content trigger | the immediate path; a trigger is spent by firing, so `doWork` re-arms it every run, on the failure path too |
 | `folder-sync` | periodic, 6-hourly | what a change notification cannot cover |
+| `folder-sync-catchup` | one-shot, on app start | see below |
+
+One watch job carries a trigger per folder rather than a job each, since they all
+run the same scan and which URI fired is not worth knowing. Triggers are fixed
+when the job is armed, so adding or removing a folder re-arms it.
+
+`folder-sync-catchup` exists because opening the app *used* to sweep the folder
+by accident: WorkManager runs overdue periodic work when the process starts, and
+at a quarter-hourly schedule it almost always was overdue. Stretching the
+backstop to six hours removed that, and with it the thing that made the feature
+feel dependable — someone who suspects a file was missed opens the app to check,
+which is exactly when it should look. `KEEP`, so reopening queues one scan rather
+than a pile.
 
 The backstop is not belt-and-braces. A file that arrives while the phone is off
 produces no notification anyone is listening for, and a provider is under no
