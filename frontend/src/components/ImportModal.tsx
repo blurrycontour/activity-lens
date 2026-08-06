@@ -210,7 +210,12 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
       let workout: Workout
       if (tab === 'file') {
         if (!file) return
-        const imported = await api.importWorkout(file, form.type, undefined, selectedEquipment)
+        // No type: the file tab has no sport picker, and sending form.type
+        // anyway meant every uploaded file carried a silent "it's a Run" the
+        // user was never asked for. The server reads the file's own declaration
+        // first and falls back to Other, which is the honest answer when a file
+        // says nothing.
+        const imported = await api.importWorkout(file, undefined, undefined, selectedEquipment)
         setDuplicate(imported.duplicate === true)
         workout = imported
       } else {
@@ -266,12 +271,14 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
     setPreviewBusy(true)
     setPreview(null)
     setError(null)
-    api.previewWorkout(file, form.type)
+    // Same as the import itself: the preview must show what will actually be
+    // stored, so it cannot pass a type the import will not.
+    api.previewWorkout(file)
       .then(w => { if (active) setPreview(w) })
       .catch(err => { if (active) setError(err instanceof ApiError ? err.message : 'Could not read file') })
       .finally(() => { if (active) setPreviewBusy(false) })
     return () => { active = false }
-  }, [file, fileSupported, tab, form.type])
+  }, [file, fileSupported, tab])
 
   return (
     <>

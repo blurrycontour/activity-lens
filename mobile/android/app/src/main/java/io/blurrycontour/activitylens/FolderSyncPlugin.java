@@ -8,6 +8,7 @@ import android.os.PowerManager;
 import android.provider.Settings;
 import androidx.activity.result.ActivityResult;
 import androidx.documentfile.provider.DocumentFile;
+import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -16,14 +17,18 @@ import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 /**
- * Auto-import: watching a folder for new workout files.
+ * Auto-import: watching folders for new workout files.
  *
- * The folder is chosen through the Storage Access Framework, which is the whole
+ * Folders are chosen through the Storage Access Framework, which is the whole
  * reason this is worth doing rather than asking for storage permission. The user
- * picks one directory in the system picker and the app is granted access to that
+ * picks a directory in the system picker and the app is granted access to that
  * directory alone — not to photos, not to documents, not to the rest of the
  * phone. There is no permission prompt because there is no permission: the act
  * of choosing *is* the grant.
+ *
+ * Several may be watched, because a phone that records with more than one app
+ * has more than one export directory. Picking a common ancestor instead would
+ * hand over far more of the filesystem than the feature needs.
  *
  * That grant is then persisted, so it survives reboots and app updates and the
  * background job can still read the folder weeks later. Without
@@ -34,35 +39,54 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 public class FolderSyncPlugin extends Plugin {
 
     /**
-     * Re-arms the watch whenever the app starts.
+     * Puts the background jobs back whenever the app starts.
      *
-     * A content trigger cannot be persisted across a reboot the way an ordinary
-     * job can — JobScheduler refuses the combination — so WorkManager rebuilds
-     * it from its own database on boot. When that does not happen (a force stop,
-     * a restore onto a new phone, an OEM that clears jobs) the watch is simply
-     * gone, and nothing in the UI would say so. Re-arming here is idempotent and
-     * costs a database write on launch.
+     * Both of them, not just the trigger. Only setEnabled and setInterval used
+     * to schedule the periodic scan, so it existed exactly as long as
+     * WorkManager's database said it did — and a force stop, an OEM that clears
+     * jobs, or a restore onto a new phone leaves auto-import silently doing
+     * nothing with a Settings screen that still says it is on. Nothing checked,
+     * because nothing had a reason to. Re-scheduling here is idempotent
+     * (UPDATE / REPLACE on the same unique names) and costs a database write on
+     * launch, which buys a watch that repairs itself every time the app opens.
+     *
+     * A content trigger in particular cannot be persisted across a reboot the
+     * way an ordinary job can — JobScheduler refuses the combination — so
+     * WorkManager rebuilds it from its own database, and this covers the cases
+     * where it did not.
      */
     @Override
     public void load() {
-        FolderSyncWorker.arm(getContext());
+        if (FolderSync.enabled(getContext())) {
+            FolderSyncWorker.schedule(getContext());
+        }
+        // Opening the app is a reason to look, and used to be one by accident.
+        // See FolderSyncWorker.catchUp.
+        FolderSyncWorker.catchUp(getContext());
     }
 
     /** Where things stand, for the Settings screen. */
     @PluginMethod
     public void getStatus(PluginCall call) {
         JSObject result = new JSObject();
-        Uri tree = FolderSync.tree(getContext());
-        result.put("folder", FolderSync.label(getContext()));
+        JSArray folders = new JSArray();
+        for (FolderSync.Folder folder : FolderSync.folders(getContext())) {
+            JSObject entry = new JSObject();
+            entry.put("uri", folder.uri.toString());
+            entry.put("label", folder.label);
+            entry.put("lastScan", folder.lastScan);
+            entry.put("lastResult", folder.lastResult);
+            // A folder can stop being readable without anyone touching this app:
+            // an SD card removed, or a cloud provider that revoked the grant.
+            // Reported so Settings can say so against that folder instead of
+            // showing a watch that quietly does nothing.
+            entry.put("readable", readable(folder.uri));
+            folders.put(entry);
+        }
+        result.put("folders", folders);
+        result.put("maxFolders", FolderSync.MAX_FOLDERS);
         result.put("enabled", FolderSync.enabled(getContext()));
-        result.put("lastScan", FolderSync.lastScan(getContext()));
-        result.put("lastResult", FolderSync.lastResult(getContext()));
         result.put("intervalMinutes", FolderSync.intervalMinutes(getContext()));
-        // A folder can stop being readable without anyone touching this app: an
-        // SD card removed, or a cloud provider that revoked the grant. Reported
-        // so Settings can say so instead of showing a watch that quietly does
-        // nothing.
-        result.put("readable", tree != null && readable(tree));
         // Whether Android will actually run the watch. Everything above can be
         // configured perfectly and still import nothing on a phone that has the
         // app battery-restricted, which is the single most common reason this
@@ -141,18 +165,62 @@ public class FolderSyncPlugin extends Plugin {
 
         DocumentFile dir = DocumentFile.fromTreeUri(getContext(), tree);
         String label = dir != null && dir.getName() != null ? dir.getName() : "Selected folder";
-        FolderSync.setFolder(getContext(), tree, label);
+        if (!FolderSync.addFolder(getContext(), tree, label)) {
+            // At the limit. The grant was taken a moment ago and is not going to
+            // be used, so it is handed straight back rather than held for
+            // nothing — the system caps how many an app may keep.
+            releaseGrant(tree);
+            call.reject("You can watch up to " + FolderSync.MAX_FOLDERS + " folders");
+            return;
+        }
 
         JSObject response = new JSObject();
         response.put("folder", label);
         call.resolve(response);
     }
 
+    /** Stops watching one folder, leaving the others alone. */
+    @PluginMethod
+    public void removeFolder(PluginCall call) {
+        String uri = call.getString("uri");
+        if (uri == null) {
+            call.reject("uri is required");
+            return;
+        }
+        Uri tree = Uri.parse(uri);
+        releaseGrant(tree);
+        FolderSync.removeFolder(getContext(), tree);
+        // The remaining folders are watched by one job whose triggers are fixed
+        // at the moment it was armed, so it has to be rebuilt without this one.
+        if (FolderSync.folders(getContext()).isEmpty()) {
+            FolderSync.setEnabled(getContext(), false);
+            FolderSyncWorker.cancel(getContext());
+        } else {
+            FolderSyncWorker.arm(getContext());
+        }
+        call.resolve();
+    }
+
+    /**
+     * Hands a folder's grant back.
+     *
+     * Not merely forgetting it: the system caps how many persisted grants an app
+     * may hold, and a user who picks a few folders over time should not silently
+     * exhaust it.
+     */
+    private void releaseGrant(Uri tree) {
+        try {
+            getContext().getContentResolver().releasePersistableUriPermission(tree, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        } catch (SecurityException e) {
+            // Already gone. Nothing to do.
+        }
+    }
+
     /** Turns the periodic scan on or off. */
     @PluginMethod
     public void setEnabled(PluginCall call) {
         boolean enabled = Boolean.TRUE.equals(call.getBoolean("enabled", false));
-        if (enabled && FolderSync.tree(getContext()) == null) {
+        if (enabled && FolderSync.folders(getContext()).isEmpty()) {
             call.reject("choose a folder first");
             return;
         }
@@ -210,22 +278,4 @@ public class FolderSyncPlugin extends Plugin {
         call.resolve();
     }
 
-    /** Forgets the folder and stops watching. */
-    @PluginMethod
-    public void disable(PluginCall call) {
-        Uri tree = FolderSync.tree(getContext());
-        if (tree != null) {
-            try {
-                // Handing the grant back rather than just forgetting it: the
-                // system caps how many an app may hold, and a user who picks a
-                // few folders over time should not silently exhaust it.
-                getContext().getContentResolver().releasePersistableUriPermission(tree, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            } catch (SecurityException e) {
-                // Already gone. Nothing to do.
-            }
-        }
-        FolderSyncWorker.cancel(getContext());
-        FolderSync.clear(getContext());
-        call.resolve();
-    }
 }

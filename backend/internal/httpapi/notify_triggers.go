@@ -85,6 +85,11 @@ func (s *Server) afterWorkoutRecorded(r *http.Request, userID int64) {
 	ctx := context.WithoutCancel(r.Context())
 	s.checkGearWear(ctx, userID)
 	s.checkGoals(ctx, userID)
+	// The import path only marks a workout as owed a lookup; this tells the
+	// scheduler not to wait for its next tick. Here rather than in the import
+	// handler for the same reason the goal checks are: a bulk import skips this
+	// per file and calls it once from finalize, so one nudge covers the batch.
+	s.NudgeWeather()
 }
 
 // checkGearWear notifies once per item when it passes its replace-at distance.

@@ -15,47 +15,67 @@ import androidx.work.WorkerParameters;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Runs the folder scan with the app closed — when a file appears, not on a
- * timer.
+ * Runs the folder scan with the app closed.
+ *
+ * Three jobs, and it is worth being exact about which one does the work:
+ *
+ *   1. the periodic scan, every fifteen minutes — the mechanism
+ *   2. the content-triggered watch — an accelerator, best-effort
+ *   3. the catch-up scan when the app is opened
  *
  * Android will watch a content URI on an app's behalf and start a job when it
  * changes: JobScheduler's trigger content URIs, which WorkManager exposes as
- * {@code addContentUriTrigger}. A DocumentsProvider calls notifyChange on a
- * directory's children URI whenever something is added to or removed from it, so
- * registering against that URI is the OS telling us about a new workout file
- * rather than us asking every fifteen minutes whether there is one. No
- * foreground service, no permanent notification, and the phone is not woken at
- * all on the days nothing is recorded.
+ * {@code addContentUriTrigger}. Registering against a folder's children URI
+ * therefore looks like the OS telling us about a new workout file rather than us
+ * asking every fifteen minutes whether there is one.
  *
- * Two jobs, because a trigger alone would quietly miss things:
+ * It is not a replacement for asking, and this was tried the other way round
+ * first. A trigger only fires if something calls notifyChange, and which app
+ * wrote the file decides whether anything does:
  *
- *   1. the watch — a one-shot with a content trigger, which re-arms itself each
- *      time it runs, since a trigger job is consumed by firing
- *   2. the backstop — a periodic scan, now six-hourly rather than quarter-hourly
+ *   - an exporter that goes through SAF (Gadgetbridge's auto-export, say) makes
+ *     ExternalStorageProvider announce the new document, and the folder's
+ *     children URI fires — import within seconds
+ *   - an exporter using ordinary file I/O never touches a DocumentsProvider, so
+ *     that URI is never notified at all
  *
- * The backstop is not belt-and-braces. A file that lands while the phone is off
- * generates no notification anyone is listening for, and a provider is under no
- * obligation to call notifyChange at all — cloud-backed ones frequently do not.
- * The trigger is what makes the common case immediate; the schedule is what
- * makes the feature honest about "it will not be missed".
+ * The second case was measured, not assumed. dumpsys jobscheduler showed the job
+ * registered with the correct children URI, "Doze whitelisted: true", and every
+ * constraint satisfied except CONTENT_TRIGGER — which stayed unmet while a watch
+ * app wrote exports into that very folder.
  *
- * Neither escapes Doze. The OS still decides when to run these, and a phone with
- * the app battery-restricted will run them late or not at all — which is what
- * FolderSyncPlugin surfaces in Settings rather than leaving to be discovered.
+ * A trigger on MediaStore.Files was tried next, on the theory that FUSE-backed
+ * shared storage means MediaProvider indexes a file when its writer closes it
+ * even when SAF saw nothing. It did not fire either, and it was reverted. Noted
+ * here so the idea is not had a second time: short of a foreground service —
+ * which needs a permanent notification and All-files access to be worth
+ * anything — there is no way to hear about these writers at all. They get the
+ * fifteen-minute scan, or an import the moment the app is opened.
+ *
+ * So the trigger is kept — it costs nothing, and when it does fire the import is
+ * immediate — but the schedule is what the feature is built on, and the schedule
+ * is short.
+ *
+ * None of them escape Doze. The OS still decides when to run these, and a phone
+ * with the app battery-restricted will run them late or not at all — which is
+ * what FolderSyncPlugin surfaces in Settings rather than leaving to be
+ * discovered.
  */
 public class FolderSyncWorker extends Worker {
 
-    /** The periodic safety net. */
+    /** The periodic scan, which is what the feature actually runs on. */
     private static final String WORK_NAME = "folder-sync";
     /** The content-triggered watch, re-armed after every run. */
     private static final String WATCH_NAME = "folder-sync-watch";
+    /** The one-off sweep that runs because the app was opened. */
+    private static final String CATCH_UP_NAME = "folder-sync-catchup";
 
     /**
      * How long to let changes settle before running.
      *
      * A file being written arrives as a burst of notifications, and starting on
      * the first one means reading a half-written GPX. Waiting for a gap costs a
-     * few seconds against a fifteen-minute floor, and the max delay is the
+     * few seconds against a fifteen-minute schedule, and the max delay is the
      * promise that a folder being written to continuously still gets scanned.
      */
     private static final long TRIGGER_SETTLE_SECONDS = 15;
@@ -90,6 +110,31 @@ public class FolderSyncWorker extends Worker {
     }
 
     /**
+     * Scans once, soon, because the app was opened.
+     *
+     * WorkManager runs overdue periodic work when the process starts, so at a
+     * quarter-hourly schedule this mostly duplicates what would happen anyway.
+     * It is here for when it does not: someone who suspects a file was missed
+     * opens the app to check, and that is exactly when it should look rather
+     * than up to fifteen minutes later.
+     *
+     * KEEP, so repeatedly opening the app queues one scan rather than a pile of
+     * them, and separate from the watch so it cannot disturb a pending trigger.
+     */
+    static void catchUp(Context context) {
+        if (!FolderSync.enabled(context) || FolderSync.folders(context).isEmpty()) {
+            return;
+        }
+        Constraints constraints = new Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build();
+        OneTimeWorkRequest request = new OneTimeWorkRequest.Builder(FolderSyncWorker.class)
+            .setConstraints(constraints)
+            .build();
+        WorkManager.getInstance(context).enqueueUniqueWork(CATCH_UP_NAME, ExistingWorkPolicy.KEEP, request);
+    }
+
+    /**
      * Registers the content trigger.
      *
      * REPLACE, and called from inside doWork above: the work is finishing, so
@@ -106,21 +151,30 @@ public class FolderSyncWorker extends Worker {
         if (!FolderSync.enabled(context)) {
             return;
         }
-        Uri children = FolderSync.childrenUri(context);
-        if (children == null) {
-            return;
-        }
-        Constraints constraints = new Constraints.Builder()
+        Constraints.Builder builder = new Constraints.Builder()
             // No point waking up to upload with no network. WorkManager holds the
             // job until there is one rather than running it and failing.
             .setRequiredNetworkType(NetworkType.CONNECTED)
-            // true: descendants too, so a recorder that files workouts into
-            // dated subfolders is still noticed. The scan itself only reads the
-            // top level, but a new subfolder appearing is worth looking at.
-            .addContentUriTrigger(children, true)
             .setTriggerContentUpdateDelay(TRIGGER_SETTLE_SECONDS, TimeUnit.SECONDS)
-            .setTriggerContentMaxDelay(TRIGGER_MAX_DELAY_MINUTES, TimeUnit.MINUTES)
-            .build();
+            .setTriggerContentMaxDelay(TRIGGER_MAX_DELAY_MINUTES, TimeUnit.MINUTES);
+        // One job watching every folder, rather than a job each: they all run
+        // the same scan, and the scan reads all of them. Which URI fired is not
+        // worth knowing.
+        int watched = 0;
+        for (FolderSync.Folder folder : FolderSync.folders(context)) {
+            Uri children = FolderSync.childrenUri(folder.uri);
+            if (children != null) {
+                // false: the top level only, which is what the scan reads. A
+                // trigger on descendants would wake the app for changes in
+                // subfolders it then ignores.
+                builder.addContentUriTrigger(children, false);
+                watched++;
+            }
+        }
+        if (watched == 0) {
+            return;
+        }
+        Constraints constraints = builder.build();
         OneTimeWorkRequest request = new OneTimeWorkRequest.Builder(FolderSyncWorker.class)
             .setConstraints(constraints)
             .build();
@@ -132,7 +186,8 @@ public class FolderSyncWorker extends Worker {
      *
      * KEEP rather than REPLACE would leave an old schedule running after the
      * folder changed; UPDATE is what makes "turn it off and on again" mean
-     * something.
+     * something — and what lets FolderSyncPlugin.load() call this on every app
+     * start to repair a schedule that has gone missing.
      */
     private static void scheduleBackstop(Context context) {
         Constraints constraints = new Constraints.Builder()
@@ -146,7 +201,9 @@ public class FolderSyncWorker extends Worker {
     }
 
     static void cancel(Context context) {
-        WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME);
-        WorkManager.getInstance(context).cancelUniqueWork(WATCH_NAME);
+        WorkManager manager = WorkManager.getInstance(context);
+        manager.cancelUniqueWork(WORK_NAME);
+        manager.cancelUniqueWork(WATCH_NAME);
+        manager.cancelUniqueWork(CATCH_UP_NAME);
     }
 }

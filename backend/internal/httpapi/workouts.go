@@ -525,8 +525,12 @@ func (s *Server) parseWorkoutUpload(w http.ResponseWriter, r *http.Request, user
 		return workout.Input{}, nil, nil, false
 	}
 
-	defaultType := workout.TypeRun
-	if t := workout.Type(r.FormValue("type")); workout.ValidType(t) {
+	// Other, not Run: this is what a file gets when it declares no sport and its
+	// free text names none, and claiming such a workout is a run is a guess that
+	// nothing on screen can reveal as wrong. A client that knows better still
+	// says so, and the file's own declaration outranks both.
+	defaultType := workout.TypeOther
+	if t := workout.Type(r.FormValue("type")); workout.ValidType(t) && t != workout.TypeOther {
 		defaultType = t
 	}
 

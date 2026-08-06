@@ -181,3 +181,80 @@ func TestPermanentFailureSettlesImmediately(t *testing.T) {
 		t.Errorf("status = %q, want skipped", got.WeatherStatus)
 	}
 }
+
+// A nudge is sent from a request handler, so the one thing it must never do is
+// make the person uploading a file wait — least of all when the scheduler is
+// busy inside a fifteen-second lookup and nothing is reading the channel.
+func TestNudgeWeatherNeverBlocksAnImport(t *testing.T) {
+	s := &Server{weatherWake: make(chan struct{}, 1)}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		// Stands in for a bulk import: far more nudges than the channel can hold,
+		// with nobody draining it.
+		for i := 0; i < 1000; i++ {
+			s.NudgeWeather()
+		}
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("NudgeWeather blocked; an import would have hung behind it")
+	}
+
+	// One slot, and one is all that is wanted: a nudge is a fact, not a count.
+	if len(s.weatherWake) != 1 {
+		t.Errorf("queued %d wakeups for one burst, want 1", len(s.weatherWake))
+	}
+}
+
+// Every Server built by hand in a test has a nil channel, and so does any
+// deployment running without the scheduler.
+func TestNudgeWeatherToleratesNoScheduler(t *testing.T) {
+	s := &Server{}
+	done := make(chan struct{})
+	go func() { defer close(done); s.NudgeWeather() }()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("NudgeWeather blocked on a nil channel instead of dropping the nudge")
+	}
+}
+
+// The pacing is what stops the nudge becoming a much faster ticker. At 25
+// lookups a pass, one pass every five seconds would be 18,000 requests an hour
+// against a free allowance of 5,000.
+func TestNudgedPassesStayInsideTheirBudget(t *testing.T) {
+	now := time.Now()
+
+	if got := nudgeDelay(now.Add(-10*time.Minute), now); got != weatherWakeDelay {
+		t.Errorf("after a long quiet spell delay = %v, want the plain debounce %v", got, weatherWakeDelay)
+	}
+	// A server that has never run a pass: the zero time is decades ago and must
+	// not be read as "a pass just happened".
+	if got := nudgeDelay(time.Time{}, now); got != weatherWakeDelay {
+		t.Errorf("at startup delay = %v, want %v", got, weatherWakeDelay)
+	}
+	// Just ran: wait out the rest of the gap rather than going again.
+	if got := nudgeDelay(now.Add(-time.Second), now); got < weatherMinGap-2*time.Second {
+		t.Errorf("straight after a pass delay = %v, want close to %v", got, weatherMinGap)
+	}
+	// Never shorter than the debounce, however recent the last pass — that is
+	// what collapses a bulk import into one wakeup.
+	for _, since := range []time.Duration{0, time.Second, 30 * time.Second, weatherMinGap, time.Hour} {
+		if got := nudgeDelay(now.Add(-since), now); got < weatherWakeDelay {
+			t.Errorf("nudgeDelay(%v ago) = %v, shorter than the debounce %v", since, got, weatherWakeDelay)
+		}
+	}
+}
+
+// Shutdown must not be held up by a pending nudge.
+func TestWaitForWeatherWindowGivesUpOnShutdown(t *testing.T) {
+	s := &Server{weatherWake: make(chan struct{}, 1)}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if s.waitForWeatherWindow(ctx) {
+		t.Error("a cancelled context still asked for a pass")
+	}
+}

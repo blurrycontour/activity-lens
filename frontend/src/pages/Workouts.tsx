@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
-import { fmtDuration, fmtDist, fmtPace, TYPE_COLOR, WORKOUT_TYPES, type WorkoutType, type Workout } from '../data/workouts'
+import { fmtDuration, fmtDist, fmtPace, TYPE_COLOR, ALL_WORKOUT_TYPES, type WorkoutType, type Workout } from '../data/workouts'
 import TypeIcon from '../components/TypeIcon'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useRefreshHandler } from '../context/RefreshContext'
@@ -158,7 +158,10 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
       onChange: v => setTypeFilter(v as WorkoutType | 'All'),
       options: [
         { value: 'All', label: 'All types', glyph: <Layers size={13} color="var(--text-3)" aria-hidden /> },
-        ...WORKOUT_TYPES.map(t => ({ value: t, label: t, glyph: <TypeIcon type={t} size={13} /> })),
+        // ALL_WORKOUT_TYPES rather than WORKOUT_TYPES: a filter has to be able
+        // to reach every workout, including the ones that could not be
+        // classified, and those are exactly the ones worth going and fixing.
+        ...ALL_WORKOUT_TYPES.map(t => ({ value: t, label: t, glyph: <TypeIcon type={t} size={13} /> })),
       ],
     },
     {

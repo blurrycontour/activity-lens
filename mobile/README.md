@@ -579,16 +579,22 @@ runs on the host with `./gradlew test`.
 
 ### Auto import (folder watching)
 
-Settings → Auto import watches one folder on the phone and imports any new
-workout files into the library, so a watch or a recording app that saves there
-needs no manual step.
+Settings → Auto import watches folders on the phone and imports any new workout
+files into the library, so a watch or a recording app that saves there needs no
+manual step.
+
+Up to `FolderSync.MAX_FOLDERS` of them, because a phone that records with more
+than one app has more than one export directory, and the alternative — picking a
+common ancestor — hands the app far more of the filesystem than it needs. Each
+folder keeps its own seen-set and its own last result; they are scanned
+independently, so one that has become unreadable does not stop the others.
 
 Four classes, split by lifetime like the push code:
 
 | File | What |
 |---|---|
-| `FolderSyncPlugin` | the bridge: pick a folder, enable, scan now, stop |
-| `FolderSync` | what survives process death — the tree URI, the seen set |
+| `FolderSyncPlugin` | the bridge: add a folder, remove one, enable, scan now |
+| `FolderSync` | what survives process death — the folder list, the seen sets |
 | `FolderScanner` | the scan itself, with no WebView anywhere |
 | `FolderSyncWorker` | the two background jobs, both running with the app closed |
 
@@ -617,17 +623,54 @@ nothing is recorded.
 
 | Job | Kind | Why |
 |---|---|---|
-| `folder-sync-watch` | one-shot, content trigger | the immediate path; a trigger is spent by firing, so `doWork` re-arms it every run, on the failure path too |
-| `folder-sync` | periodic, 6-hourly | what a change notification cannot cover |
+| `folder-sync` | periodic, 15 minutes | the mechanism |
+| `folder-sync-watch` | one-shot, content trigger | an accelerator, best-effort; a trigger is spent by firing, so `doWork` re-arms it every run, on the failure path too |
+| `folder-sync-catchup` | one-shot, on app start | see below |
 
-The backstop is not belt-and-braces. A file that arrives while the phone is off
-produces no notification anyone is listening for, and a provider is under no
-obligation to call `notifyChange` at all — cloud-backed ones frequently do not.
-The trigger makes the common case immediate; the schedule is what makes "it will
-not be missed" true. Its interval used to be 15 minutes, which is also what
-decided how soon a file imported; `FolderSync.migrateBackstop` raises an existing
-short setting once, since that is now ninety-six wake-ups a day to answer a
-question the OS answers for free.
+**The trigger is not the mechanism, and this was built the other way round
+first.** A trigger only fires if something calls `notifyChange`, and which app
+wrote the file decides whether anything does:
+
+- an exporter that goes through SAF — Gadgetbridge's auto-export, say — makes
+  `ExternalStorageProvider` announce the new document, the folder's children URI
+  fires, and the import happens within seconds
+- an exporter using ordinary file I/O never touches a `DocumentsProvider`, so
+  that URI is never notified at all
+
+The second case was measured rather than assumed. `dumpsys jobscheduler` showed
+the job registered with the correct children URI, `Doze whitelisted: true`, and
+every constraint satisfied except `CONTENT_TRIGGER` — which stayed unmet while a
+watch app wrote exports into that very folder.
+
+A trigger on `MediaStore.Files` was tried next, on the theory that FUSE-backed
+shared storage means MediaProvider indexes a file when its writer closes it even
+when SAF saw nothing. It did not fire either, and it was reverted — recorded here
+so the idea is not had a second time. Short of a foreground service, which needs
+a permanent notification and All-files access to be worth anything, there is no
+way to hear about these writers at all. They get the 15-minute scan, or an import
+the moment the app is opened.
+
+Leaning on the trigger and stretching the schedule to six hours meant files sat
+unimported until the app was next opened. The trigger is kept because it costs
+nothing and is immediate when it does fire; the schedule is what the feature is
+built on, and the schedule is short.
+
+One watch job carries a trigger per folder rather than a job each, since they all
+run the same scan and which URI fired is not worth knowing. Triggers are fixed
+when the job is armed, so adding or removing a folder re-arms it.
+
+`folder-sync-catchup` mostly duplicates what WorkManager does anyway — it runs
+overdue periodic work when the process starts — and exists for when it does not:
+someone who suspects a file was missed opens the app to check, and that is when
+it should look rather than up to fifteen minutes later. `KEEP`, so reopening
+queues one scan rather than a pile.
+
+`FolderSyncPlugin.load()` re-schedules **both** jobs on every app start. They
+used to be created only by `setEnabled` and `setInterval`, so they existed
+exactly as long as WorkManager's database said they did — a force stop, an OEM
+that clears jobs, or a restore onto a new phone left auto-import silently doing
+nothing behind a Settings screen that still said it was on. Both unique names use
+`UPDATE`/`REPLACE`, so re-scheduling is idempotent and the watch repairs itself.
 
 The trigger is registered with a 15-second settle delay and a 5-minute maximum,
 because a file being written arrives as a burst of notifications and the first

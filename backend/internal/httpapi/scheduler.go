@@ -52,6 +52,23 @@ const (
 	// requests a day — far less than the five-minute pass would, and far less
 	// than the cost of guessing the reset time wrong.
 	weatherThrottleCooldown = time.Hour
+
+	// weatherWakeDelay is how long a nudge waits before the pass runs.
+	//
+	// The delay is the point, not a cost: a bulk import nudges once per file,
+	// and waiting a few seconds collapses that burst into one pass instead of
+	// starting one and immediately being asked for another. Short enough that a
+	// single import still fills in while the user is looking at it.
+	weatherWakeDelay = 5 * time.Second
+
+	// weatherMinGap is the closest together two nudged passes may run.
+	//
+	// Without it a steady trickle of imports would turn the nudge into a much
+	// faster ticker, and the batch size stops being a budget: 25 lookups every
+	// five seconds is 18,000 an hour against a service whose free allowance is
+	// 5,000. The ticker remains the floor, so this only ever delays a pass that
+	// was already about to happen soon.
+	weatherMinGap = time.Minute
 )
 
 // StartScheduler runs the work that is driven by the clock rather than by a
@@ -73,7 +90,7 @@ func (s *Server) StartScheduler(ctx context.Context) {
 
 	// One pass at startup, so a restart does not skip that day's window.
 	s.sweep(ctx)
-	s.weatherPass(ctx)
+	s.runWeatherPass(ctx)
 	for {
 		select {
 		case <-ctx.Done():
@@ -81,9 +98,70 @@ func (s *Server) StartScheduler(ctx context.Context) {
 		case <-ticker.C:
 			s.sweep(ctx)
 		case <-weatherTicker.C:
-			s.weatherPass(ctx)
+			s.runWeatherPass(ctx)
+		case <-s.weatherWake:
+			// Something was just imported. Without this the workout waits for the
+			// next tick — up to five minutes of a page saying "scheduled" for a
+			// lookup that takes half a second.
+			if s.waitForWeatherWindow(ctx) {
+				s.runWeatherPass(ctx)
+			}
 		}
 	}
+}
+
+// NudgeWeather asks the scheduler to run a weather pass shortly.
+//
+// Safe to call from any goroutine and from a request handler: the send is
+// non-blocking onto a one-slot channel, so a nudge either lands or finds one
+// already waiting, and either way the caller is not delayed and cannot block.
+// A nil channel means no scheduler is running — the zero Server in tests — and
+// the nudge is simply dropped.
+func (s *Server) NudgeWeather() {
+	select {
+	case s.weatherWake <- struct{}{}:
+	default:
+	}
+}
+
+// nudgeDelay is how long a nudge arriving now should wait before its pass runs.
+//
+// Pure, and separate from the sleeping, so the pacing can be tested at every
+// interesting point without a test that actually waits a minute — which would
+// be slow enough to be skipped and timing-dependent enough to be flaky.
+func nudgeDelay(lastPass, now time.Time) time.Duration {
+	// A server that has never run a pass has a zero lastPass, which is decades
+	// ago and correctly reads as "no reason to wait beyond the debounce".
+	if since := now.Sub(lastPass); since < weatherMinGap {
+		return max(weatherWakeDelay, weatherMinGap-since)
+	}
+	return weatherWakeDelay
+}
+
+// waitForWeatherWindow pauses until a nudged pass may run, reporting whether it
+// should still happen. False only when the server is shutting down.
+func (s *Server) waitForWeatherWindow(ctx context.Context) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-time.After(nudgeDelay(s.lastWeatherPass, time.Now())):
+	}
+	// Anything that arrived while waiting is covered by the pass about to run.
+	// Leaving it queued would cost an immediate second pass that finds nothing —
+	// which is exactly the burst this delay exists to collapse.
+	select {
+	case <-s.weatherWake:
+	default:
+	}
+	return true
+}
+
+// runWeatherPass records when a pass happened, so the nudge can pace itself.
+// Only the scheduler goroutine touches lastWeatherPass, and there is exactly
+// one of it.
+func (s *Server) runWeatherPass(ctx context.Context) {
+	s.lastWeatherPass = time.Now()
+	s.weatherPass(ctx)
 }
 
 // weatherPass fills in the conditions for a bounded batch of workouts.

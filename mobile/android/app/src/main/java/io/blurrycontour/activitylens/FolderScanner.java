@@ -21,10 +21,10 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
- * Imports new workout files from the watched folder.
+ * Imports new workout files from the watched folders.
  *
  * This is the whole of auto-import. It runs with nothing else of the app alive —
- * from a WorkManager job on a schedule — so it cannot lean on the WebView, the
+ * from a WorkManager job — so it cannot lean on the WebView, the
  * import pipeline in importQueue.ts, or a signed-in page. What it can lean on is
  * the API, which is the same one the web app uses, and the session token the app
  * already stored.
@@ -81,6 +81,54 @@ final class FolderScanner {
     }
 
     /**
+     * Scans every watched folder and reports the total.
+     *
+     * Folders are independent: one that has become unreadable — an SD card
+     * pulled, a grant revoked — must not stop the others being imported, so a
+     * failure is recorded against that folder and the sweep carries on. The
+     * overall result is a failure only if nothing succeeded, because that is
+     * what decides whether WorkManager retries.
+     */
+    static Result scan(Context context, boolean force) {
+        List<FolderSync.Folder> folders = FolderSync.folders(context);
+        if (folders.isEmpty()) {
+            return new Result(false, 0, 0, "No folder chosen");
+        }
+        if (ServerConfig.baseURL(context) == null || ServerConfig.token(context) == null) {
+            // Signed out, or the app has never been configured. Not a failure
+            // worth retrying against — the next scan after signing in will work.
+            return new Result(false, 0, 0, "Not signed in");
+        }
+
+        int imported = 0;
+        int skipped = 0;
+        int failed = 0;
+        String firstProblem = null;
+        for (FolderSync.Folder folder : folders) {
+            Result one = scanFolder(context, folder, force);
+            imported += one.imported;
+            skipped += one.skipped;
+            if (!one.ok) {
+                failed++;
+                if (firstProblem == null) {
+                    firstProblem = one.message;
+                }
+            }
+        }
+
+        boolean ok = failed < folders.size();
+        String message;
+        if (imported > 0) {
+            message = imported + " imported";
+        } else if (firstProblem != null) {
+            message = firstProblem;
+        } else {
+            message = "Nothing new";
+        }
+        return new Result(ok, imported, skipped, message);
+    }
+
+    /**
      * @param force re-reads files this device has already dealt with.
      *
      * The normal scan skips anything it has seen, which is what keeps a
@@ -90,25 +138,19 @@ final class FolderScanner {
      * the server's content-hash check still keeps what is genuinely still there
      * from being imported twice.
      */
-    static Result scan(Context context, boolean force) {
-        Uri tree = FolderSync.tree(context);
-        if (tree == null) {
-            return new Result(false, 0, 0, "No folder chosen");
-        }
+    private static Result scanFolder(Context context, FolderSync.Folder folder, boolean force) {
+        Uri tree = folder.uri;
         String token = ServerConfig.token(context);
-        if (ServerConfig.baseURL(context) == null || token == null) {
-            // Signed out, or the app has never been configured. Not a failure
-            // worth retrying against — the next scan after signing in will work.
-            return new Result(false, 0, 0, "Not signed in");
-        }
 
         DocumentFile dir = DocumentFile.fromTreeUri(context, tree);
         if (dir == null || !dir.canRead()) {
-            return new Result(false, 0, 0, "Cannot read that folder any more");
+            String message = "Cannot read this folder any more";
+            FolderSync.recordScan(context, tree, message);
+            return new Result(false, 0, 0, message);
         }
 
         // Candidates: files we have never opened, in a format the server takes.
-        Set<String> seen = force ? new HashSet<>() : FolderSync.seen(context);
+        Set<String> seen = force ? new HashSet<>() : FolderSync.seen(context, tree);
         List<DocumentFile> candidates = new ArrayList<>();
         int skipped = 0;
         for (DocumentFile file : dir.listFiles()) {
@@ -129,7 +171,7 @@ final class FolderScanner {
             candidates.add(file);
         }
         if (candidates.isEmpty()) {
-            FolderSync.recordScan(context, "Nothing new");
+            FolderSync.recordScan(context, tree, "Nothing new");
             return new Result(true, 0, skipped, "Nothing new");
         }
 
@@ -172,20 +214,20 @@ final class FolderScanner {
                 }
             }
 
-            FolderSync.addSeen(context, processed);
+            FolderSync.addSeen(context, tree, processed);
             if (imported > 0) {
-                finalizeImport(context, token, imported);
+                finalizeImport(context, token, imported, folder.label);
             }
             String message = imported > 0 ? imported + " imported" : "Nothing new";
-            FolderSync.recordScan(context, message);
+            FolderSync.recordScan(context, tree, message);
             return new Result(true, imported, skipped, message);
         } catch (Exception e) {
             Log.w(TAG, "scan failed", e);
             // Whatever was genuinely dealt with is still recorded, so a failure
             // halfway through does not mean starting over.
-            FolderSync.addSeen(context, processed);
+            FolderSync.addSeen(context, tree, processed);
             String message = "Could not reach the server";
-            FolderSync.recordScan(context, message);
+            FolderSync.recordScan(context, tree, message);
             return new Result(false, 0, skipped, message);
         }
     }
@@ -349,7 +391,7 @@ final class FolderScanner {
     }
 
     /** Runs the deferred gear and goal checks, and asks for the notification. */
-    private static void finalizeImport(Context context, String token, int imported) {
+    private static void finalizeImport(Context context, String token, int imported, String label) {
         HttpURLConnection connection = null;
         try {
             JSONObject body = new JSONObject();
@@ -358,7 +400,6 @@ final class FolderScanner {
             // because a timestamp from this phone depends on its clock agreeing
             // with the server's, and on every installed version sending it.
             body.put("imported", imported);
-            String label = FolderSync.label(context);
             if (label != null) {
                 body.put("folder", label);
             }

@@ -1,6 +1,10 @@
-import { Bike, Dumbbell, Mountain, SportShoe, Waves, type LucideIcon } from 'lucide-react'
+import { Bike, CircleDashed, Dumbbell, Mountain, SportShoe, Waves, type LucideIcon } from 'lucide-react'
 
-export type WorkoutType = 'Run' | 'Ride' | 'Hike' | 'Swim' | 'Strength'
+/**
+ * `Other` is where an import lands when the file declares no sport and its free
+ * text names none. It is not something a person picks — see WORKOUT_TYPES.
+ */
+export type WorkoutType = 'Run' | 'Ride' | 'Hike' | 'Swim' | 'Strength' | 'Other'
 
 export interface HeartRatePoint { t: number; hr: number }
 export interface PacePoint { t: number; pace: number }
@@ -122,7 +126,18 @@ export interface Workout {
   hasOriginal?: boolean
 }
 
+/**
+ * The sports a person can choose.
+ *
+ * `Other` is absent on purpose. It exists so an import that could not be
+ * classified has an honest answer, and a bucket people can pick fills up with
+ * things that had a real one. It still renders everywhere a type is displayed —
+ * see TYPE_COLOR and TYPE_ICON, which cover every member of the union.
+ */
 export const WORKOUT_TYPES: WorkoutType[] = ['Run', 'Ride', 'Hike', 'Swim', 'Strength']
+
+/** Every type that can appear on a workout, including the unpickable one. */
+export const ALL_WORKOUT_TYPES: WorkoutType[] = [...WORKOUT_TYPES, 'Other']
 
 export function fmtDuration(s: number): string {
   const h = Math.floor(s / 3600)
@@ -151,6 +166,7 @@ export const TYPE_COLOR: Record<WorkoutType, string> = {
   Hike: 'var(--hike)',
   Swim: 'var(--swim)',
   Strength: 'var(--strength)',
+  Other: 'var(--other)',
 }
 
 /**
@@ -173,4 +189,6 @@ export const TYPE_ICON: Record<WorkoutType, LucideIcon> = {
   Hike: Mountain,
   Swim: Waves,
   Strength: Dumbbell,
+  // A dashed ring: a shape that reads as "unspecified" rather than as a sport.
+  Other: CircleDashed,
 }
