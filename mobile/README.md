@@ -627,14 +627,34 @@ nothing is recorded.
 | `folder-sync-watch` | one-shot, content trigger | an accelerator, best-effort; a trigger is spent by firing, so `doWork` re-arms it every run, on the failure path too |
 | `folder-sync-catchup` | one-shot, on app start | see below |
 
-**The trigger is not the mechanism, and this was built the other way round
-first.** A trigger only fires if the `DocumentsProvider` calls `notifyChange`,
-and `ExternalStorageProvider` — which backs ordinary device storage — announces
-the documents *it* was asked to create through SAF. A recording app writing an
-export straight to its own directory does not go through SAF, so nothing is
-announced and nothing fires. Leaning on it and stretching the schedule to six
-hours meant files sat unimported until the app was next opened. The trigger is
-kept because it costs nothing and is immediate when it does fire; the schedule is
+**The triggers are not the mechanism, and this was built the other way round
+first.** A trigger only fires if something calls `notifyChange`, and which app
+wrote the file decides whether anything does:
+
+- an exporter that goes through SAF — Gadgetbridge's auto-export, say — makes
+  `ExternalStorageProvider` announce the new document, the folder's children URI
+  fires, and the import happens within seconds
+- an exporter using ordinary file I/O never touches a `DocumentsProvider`, so
+  that URI is never notified at all
+
+The second case was confirmed on a phone rather than assumed. `dumpsys
+jobscheduler` showed the job registered with the correct children URI, `Doze
+whitelisted: true`, and every constraint satisfied except `CONTENT_TRIGGER`,
+which was never met while a watch app wrote exports into that very folder.
+
+`arm()` therefore also registers a trigger on `MediaStore.Files` with
+descendants. Shared storage is FUSE-backed on Android 11+, so MediaProvider
+indexes a file when its writer closes it even when SAF saw nothing — that is the
+only remaining way to hear about these writers without a foreground service. It
+needs no permission, because the system does the observing on the app's behalf.
+Its cost is that it fires for *every* file written anywhere on the device, which
+is what `MIN_SCAN_GAP_MS` in `doWork` exists for: a triggered scan that follows
+another within a minute re-arms and returns without listing anything. "Scan now"
+bypasses the gap entirely.
+
+Leaning on triggers and stretching the schedule to six hours meant files from the
+second kind of app sat unimported until the app was next opened. The triggers are
+kept because they cost nothing and are immediate when they fire; the schedule is
 what the feature is built on, and the schedule is short.
 
 One watch job carries a trigger per folder rather than a job each, since they all
