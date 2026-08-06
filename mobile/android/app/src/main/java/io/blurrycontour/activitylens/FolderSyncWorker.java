@@ -2,7 +2,6 @@ package io.blurrycontour.activitylens;
 
 import android.content.Context;
 import android.net.Uri;
-import android.provider.MediaStore;
 import androidx.annotation.NonNull;
 import androidx.work.Constraints;
 import androidx.work.ExistingPeriodicWorkPolicy;
@@ -31,24 +30,18 @@ import java.util.concurrent.TimeUnit;
  * asking every fifteen minutes whether there is one.
  *
  * It is not a replacement for asking, and this was tried the other way round
- * first. A trigger only fires if something calls notifyChange, and which app
- * wrote the file decides whether anything does:
+ * first. A trigger only fires if the DocumentsProvider calls notifyChange, and
+ * ExternalStorageProvider — which backs ordinary device storage — announces the
+ * documents *it* was asked to create through the Storage Access Framework. A
+ * recording app writing an export straight to its own directory does not go
+ * through SAF, so nothing is announced and nothing fires. Cloud-backed providers
+ * are worse. Leaning on the trigger and stretching the schedule to six hours
+ * meant files sat unimported until the app was next opened, which is the whole
+ * feature not working.
  *
- *   - an exporter that goes through SAF (Gadgetbridge, say) makes
- *     ExternalStorageProvider announce the new document, and the folder's
- *     children URI fires — import within seconds
- *   - an exporter using ordinary file I/O (Notify for Xiaomi) never touches a
- *     DocumentsProvider, so that URI is never notified at all. Confirmed on a
- *     phone rather than assumed: dumpsys showed the job registered with the
- *     right URI, every other constraint satisfied, and CONTENT_TRIGGER simply
- *     never met. The MediaStore trigger in arm() is the attempt to cover this
- *     case; whether it fires depends on MediaProvider indexing the write.
- *
- * Leaning on triggers and stretching the schedule to six hours meant files from
- * the second kind of app sat unimported until the app was next opened, which is
- * the whole feature not working. So the triggers are kept — they cost nothing,
- * and when one fires the import is immediate — but the schedule is what the
- * feature is built on, and the schedule is short.
+ * So the trigger is kept — it costs nothing, and when it does fire the import is
+ * immediate — but the schedule is what the feature is built on, and the schedule
+ * is short.
  *
  * None of them escape Doze. The OS still decides when to run these, and a phone
  * with the app battery-restricted will run them late or not at all — which is
@@ -75,15 +68,6 @@ public class FolderSyncWorker extends Worker {
     private static final long TRIGGER_SETTLE_SECONDS = 15;
     private static final long TRIGGER_MAX_DELAY_MINUTES = 5;
 
-    /**
-     * The closest together two triggered scans may run.
-     *
-     * Only applies to the background jobs — "Scan now" in Settings goes straight
-     * to FolderScanner and is never held back, because a user who presses it is
-     * asking a question and deserves an answer.
-     */
-    private static final long MIN_SCAN_GAP_MS = 60_000;
-
     public FolderSyncWorker(@NonNull Context context, @NonNull WorkerParameters params) {
         super(context, params);
     }
@@ -93,16 +77,6 @@ public class FolderSyncWorker extends Worker {
     public Result doWork() {
         Context context = getApplicationContext();
         if (!FolderSync.enabled(context)) {
-            return Result.success();
-        }
-        // The MediaStore trigger fires for any file written anywhere on the
-        // device, so a burst of photos or a large download would otherwise mean
-        // running this every twenty seconds to list a folder that has not
-        // changed. Re-armed regardless, so the next genuine change is still
-        // caught; only the scan is skipped.
-        long since = System.currentTimeMillis() - FolderSync.lastScanAt(context);
-        if (since >= 0 && since < MIN_SCAN_GAP_MS) {
-            arm(context);
             return Result.success();
         }
         FolderScanner.Result result = FolderScanner.scan(context);
@@ -187,21 +161,6 @@ public class FolderSyncWorker extends Worker {
         if (watched == 0) {
             return;
         }
-        // And MediaStore, which is the only way to hear about the writers SAF
-        // cannot see. An app exporting a file with ordinary file I/O never goes
-        // through a DocumentsProvider, so nothing is announced on the folder's
-        // children URI — a dumpsys of a phone doing exactly that showed the job
-        // registered correctly with CONTENT_TRIGGER simply never satisfied. What
-        // does happen on Android 11+ is that MediaProvider indexes the file when
-        // the writer closes it, because shared storage is FUSE-backed, and that
-        // notifies here.
-        //
-        // Descendants, because the notification arrives on the individual file's
-        // URI rather than on the collection. The cost is that this fires for
-        // every file written anywhere on the device, which is what the scan gap
-        // in doWork is for. No permission is involved: the observing is done by
-        // the system on the app's behalf, and the trigger carries no data.
-        builder.addContentUriTrigger(MediaStore.Files.getContentUri("external"), true);
         Constraints constraints = builder.build();
         OneTimeWorkRequest request = new OneTimeWorkRequest.Builder(FolderSyncWorker.class)
             .setConstraints(constraints)

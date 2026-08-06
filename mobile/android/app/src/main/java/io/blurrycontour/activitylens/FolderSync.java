@@ -234,15 +234,6 @@ final class FolderSync {
         prefs(context).edit().remove(SEEN_PREFIX + tree).apply();
     }
 
-    /** When any folder was last scanned, as epoch millis, or 0. */
-    static long lastScanAt(Context context) {
-        long latest = 0;
-        for (Folder f : folders(context)) {
-            latest = Math.max(latest, f.lastScan);
-        }
-        return latest;
-    }
-
     static void recordScan(Context context, Uri tree, String result) {
         List<Folder> folders = folders(context);
         for (int i = 0; i < folders.size(); i++) {
