@@ -628,14 +628,32 @@ nothing is recorded.
 | `folder-sync-catchup` | one-shot, on app start | see below |
 
 **The trigger is not the mechanism, and this was built the other way round
-first.** A trigger only fires if the `DocumentsProvider` calls `notifyChange`,
-and `ExternalStorageProvider` — which backs ordinary device storage — announces
-the documents *it* was asked to create through SAF. A recording app writing an
-export straight to its own directory does not go through SAF, so nothing is
-announced and nothing fires. Leaning on it and stretching the schedule to six
-hours meant files sat unimported until the app was next opened. The trigger is
-kept because it costs nothing and is immediate when it does fire; the schedule is
-what the feature is built on, and the schedule is short.
+first.** A trigger only fires if something calls `notifyChange`, and which app
+wrote the file decides whether anything does:
+
+- an exporter that goes through SAF — Gadgetbridge's auto-export, say — makes
+  `ExternalStorageProvider` announce the new document, the folder's children URI
+  fires, and the import happens within seconds
+- an exporter using ordinary file I/O never touches a `DocumentsProvider`, so
+  that URI is never notified at all
+
+The second case was measured rather than assumed. `dumpsys jobscheduler` showed
+the job registered with the correct children URI, `Doze whitelisted: true`, and
+every constraint satisfied except `CONTENT_TRIGGER` — which stayed unmet while a
+watch app wrote exports into that very folder.
+
+A trigger on `MediaStore.Files` was tried next, on the theory that FUSE-backed
+shared storage means MediaProvider indexes a file when its writer closes it even
+when SAF saw nothing. It did not fire either, and it was reverted — recorded here
+so the idea is not had a second time. Short of a foreground service, which needs
+a permanent notification and All-files access to be worth anything, there is no
+way to hear about these writers at all. They get the 15-minute scan, or an import
+the moment the app is opened.
+
+Leaning on the trigger and stretching the schedule to six hours meant files sat
+unimported until the app was next opened. The trigger is kept because it costs
+nothing and is immediate when it does fire; the schedule is what the feature is
+built on, and the schedule is short.
 
 One watch job carries a trigger per folder rather than a job each, since they all
 run the same scan and which URI fired is not worth knowing. Triggers are fixed

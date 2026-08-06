@@ -30,14 +30,27 @@ import java.util.concurrent.TimeUnit;
  * asking every fifteen minutes whether there is one.
  *
  * It is not a replacement for asking, and this was tried the other way round
- * first. A trigger only fires if the DocumentsProvider calls notifyChange, and
- * ExternalStorageProvider — which backs ordinary device storage — announces the
- * documents *it* was asked to create through the Storage Access Framework. A
- * recording app writing an export straight to its own directory does not go
- * through SAF, so nothing is announced and nothing fires. Cloud-backed providers
- * are worse. Leaning on the trigger and stretching the schedule to six hours
- * meant files sat unimported until the app was next opened, which is the whole
- * feature not working.
+ * first. A trigger only fires if something calls notifyChange, and which app
+ * wrote the file decides whether anything does:
+ *
+ *   - an exporter that goes through SAF (Gadgetbridge's auto-export, say) makes
+ *     ExternalStorageProvider announce the new document, and the folder's
+ *     children URI fires — import within seconds
+ *   - an exporter using ordinary file I/O never touches a DocumentsProvider, so
+ *     that URI is never notified at all
+ *
+ * The second case was measured, not assumed. dumpsys jobscheduler showed the job
+ * registered with the correct children URI, "Doze whitelisted: true", and every
+ * constraint satisfied except CONTENT_TRIGGER — which stayed unmet while a watch
+ * app wrote exports into that very folder.
+ *
+ * A trigger on MediaStore.Files was tried next, on the theory that FUSE-backed
+ * shared storage means MediaProvider indexes a file when its writer closes it
+ * even when SAF saw nothing. It did not fire either, and it was reverted. Noted
+ * here so the idea is not had a second time: short of a foreground service —
+ * which needs a permanent notification and All-files access to be worth
+ * anything — there is no way to hear about these writers at all. They get the
+ * fifteen-minute scan, or an import the moment the app is opened.
  *
  * So the trigger is kept — it costs nothing, and when it does fire the import is
  * immediate — but the schedule is what the feature is built on, and the schedule
