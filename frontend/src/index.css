@@ -1320,17 +1320,26 @@ body {
   background: var(--bg-3);
 }
 .map-page-gl { position: absolute; inset: 0; }
-/* Over everything including the bottom bar, and inside the safe area so the
-   controls stay clear of the notch and the gesture handle. */
+/* Full screen means over the bottom bar as well. The phone's tab bar is fixed
+   at z-index 50, and this used to sit at 100 — which is above it in theory and
+   was not in practice, so it is now on the same layer the app uses for
+   everything that takes over the screen, just below the modals that can open on
+   top of it. */
 .map-page-canvas.full {
   position: fixed;
   inset: 0;
-  z-index: 100;
+  z-index: 1100;
   height: auto;
   border: none;
   border-radius: 0;
-  padding-top: var(--safe-top);
-  padding-bottom: var(--safe-bottom);
+}
+/* A control floating over a map: the layer switcher, the expand button.
+   Absolutely positioned children measure from the border box, so padding on the
+   map cannot move them — which is why full screen sets the inset here instead. */
+.map-ctrl {
+  position: absolute;
+  top: 10px;
+  z-index: 500;
 }
 .map-page-expand {
   position: absolute;
@@ -1339,6 +1348,18 @@ body {
   z-index: 500;
   background: var(--bg-2);
   border: 1px solid var(--border);
+}
+/* Edge to edge, so the controls have to step around the hardware themselves.
+   Without this the two buttons sit underneath the status bar on a notched
+   phone — present, tappable, and completely invisible, which read as them
+   disappearing when the map was maximised. */
+.map-page-canvas.full .map-ctrl,
+.map-page-canvas.full .map-page-expand {
+  top: calc(10px + var(--safe-top));
+}
+.map-page-canvas.full .maplibregl-ctrl-bottom-left,
+.map-page-canvas.full .maplibregl-ctrl-bottom-right {
+  bottom: var(--safe-bottom);
 }
 .map-page-empty {
   position: absolute;
@@ -1407,6 +1428,22 @@ body {
   height: auto;
   border-radius: 12px;
   transition: opacity 0.15s;
+}
+/* Wraps rather than shrinks: two chips and a label do not fit one line on a
+   narrow phone, and a clipped "Activity type" reads as a bug. */
+.share-card-titles {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.share-card-titles-label {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+  margin-right: 2px;
 }
 .share-card-note { font-size: 12px; color: var(--text-3); line-height: 1.5; }
 .share-card-hint { font-size: 11px; color: var(--text-3); line-height: 1.5; }

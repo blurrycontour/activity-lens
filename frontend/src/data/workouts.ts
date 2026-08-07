@@ -63,6 +63,12 @@ export interface Workout {
   name: string
   type: WorkoutType
   date: string
+  /**
+   * The instant the workout began, RFC 3339 — `date` with the time of day still
+   * on it. Optional because a server older than this field simply omits it, and
+   * everything that wants a time of day has to cope with not having one.
+   */
+  startTime?: string
   duration: number // seconds
   distance: number // meters
   avgHR: number

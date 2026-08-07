@@ -51,28 +51,15 @@ type Mode = 'auto' | 'routes' | 'heat'
 /** Refetch no faster than this while a pan is in progress. */
 const PAN_DEBOUNCE = 400
 
-const VIEW_KEY = 'al_map_view'
-
-interface SavedView { lng: number; lat: number; zoom: number }
-
-/**
- * Where the map was left.
+/*
+ * The view is deliberately not remembered.
  *
- * Without this a reload dropped you at zoom 1.4 over the Atlantic looking at
- * nothing, because the first fetch has no viewport to ask about and the fit
- * only happens once. Restoring the position also means the first fetch asks
- * about somewhere real, which is the difference between a map that fills in and
- * one that appears empty.
+ * An earlier version persisted the centre and zoom, which meant arriving at the
+ * page put you wherever you last dragged to — often mid-ocean, at a zoom that
+ * showed nothing, with no clue that a "go back to my routes" control was what
+ * you needed. Opening the map fits it to the routes it just loaded, every time,
+ * so the page always starts by answering the question it exists to answer.
  */
-function readView(): SavedView | null {
-  try {
-    const v = JSON.parse(localStorage.getItem(VIEW_KEY) ?? 'null')
-    if (v && Number.isFinite(v.lng) && Number.isFinite(v.lat) && Number.isFinite(v.zoom)) return v
-  } catch {
-    // Corrupt or absent; fall back to fitting the data.
-  }
-  return null
-}
 
 export default function MapPage() {
   const [rangeDays, setRangeDays] = useLocalStorage<number>('al_map_range', 365)
@@ -175,15 +162,11 @@ export default function MapPage() {
   // ── The map ────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!node.current || mapRef.current || !glAvailable) return
-    const saved = readView()
-    // A saved position means there is nothing to fit to: the user already chose
-    // where they wanted to be looking.
-    if (saved) needsFit.current = false
     const map = new maplibregl.Map({
       container: node.current,
       style: MAP_LAYERS[layer].style,
-      center: saved ? [saved.lng, saved.lat] : [0, 20],
-      zoom: saved ? saved.zoom : 1.4,
+      center: [0, 20],
+      zoom: 1.4,
       attributionControl: { compact: true },
       pitchWithRotate: false,
       dragRotate: false,
@@ -196,8 +179,6 @@ export default function MapPage() {
     // repeatedly, and each one is a request.
     let timer: ReturnType<typeof setTimeout> | undefined
     const onMove = () => {
-      const c = map.getCenter()
-      localStorage.setItem(VIEW_KEY, JSON.stringify({ lng: c.lng, lat: c.lat, zoom: map.getZoom() }))
       clearTimeout(timer)
       // Through a ref: this handler is bound once, and the direct reference
       // would have kept fetching with the range that was selected when the map
@@ -212,6 +193,18 @@ export default function MapPage() {
     const apply = () => applyRef.current()
     map.on('load', apply)
     map.on('styledata', apply)
+    // MapLibre builds the compact attribution *expanded* and only folds it away
+    // on the first interaction with the map, so a page that is looked at before
+    // it is touched wears a bar of tile credits across its corner. Removing the
+    // class is exactly what MapLibre's own minimise does. It is a documented
+    // stylesheet class rather than a private method, and the worst outcome if it
+    // is ever renamed is the attribution staying open — which is where it starts
+    // anyway.
+    map.on('load', () => {
+      map.getContainer()
+        .querySelector('.maplibregl-ctrl-attrib')
+        ?.classList.remove('maplibregl-compact-show')
+    })
     return () => {
       clearTimeout(timer)
       map.remove()

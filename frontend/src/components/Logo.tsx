@@ -9,7 +9,10 @@
 
 // Geometry is hand-tuned and must stay identical to public/logo.svg, which the
 // icon generator rasterises the PNGs from. Change one, change the other.
-const PULSE_PATH = 'M 380 256 H 319 L 287 360 L 224 151 L 193 256 H 130'
+// Exported so the share card can stroke the same mark onto a canvas. Canvas
+// cannot read `var(--primary)`, so it takes a literal colour and the geometry
+// from here rather than keeping a third copy.
+export const PULSE_PATH = 'M 380 256 H 319 L 287 360 L 224 151 L 193 256 H 130'
 
 interface LogoProps {
   size?: number

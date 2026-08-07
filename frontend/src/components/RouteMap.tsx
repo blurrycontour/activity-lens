@@ -125,9 +125,12 @@ export function LayerSwitcher({ layer, onChange, offsetRight = 46 }: {
 
   return (
     <div
-      className="options-menu-wrap"
+      className="options-menu-wrap map-ctrl"
       ref={ref}
-      style={{ position: 'absolute', top: 10, right: offsetRight, zIndex: 500 }}
+      // Only the horizontal offset is a prop; the top and the stacking come
+      // from .map-ctrl so that a full-screen map can push every control clear
+      // of the status bar in one rule instead of fighting inline styles.
+      style={{ right: offsetRight }}
     >
       <button
         className="btn-icon"

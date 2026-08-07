@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { type Workout } from '../../data/workouts'
-import { cardDate, cardFilename, cardStats, projectRoute } from '../shareCard'
+import { cardDate, cardFilename, cardStats, cardWhen, projectRoute } from '../shareCard'
 
 const BOX = { x: 0, y: 0, w: 100, h: 100 }
 
@@ -69,15 +69,43 @@ function workout(over: Partial<Workout> = {}): Workout {
 }
 
 describe('cardStats', () => {
-  it('shows the four figures', () => {
+  // The order is the grid's reading order — time and distance on the first row,
+  // the two sport-dependent figures on the second — and the card lays the tiles
+  // out by index, so reordering here silently reorders the card.
+  it('shows the four figures in grid order', () => {
     expect(cardStats(workout()).map(s => s.value))
-      .toEqual(['5.00 km', '30:00', '5:00 /km', '145 bpm'])
+      .toEqual(['30:00', '5.00 km', '145 bpm', '5:00 /km'])
   })
 
   // A dash, not a zero. "0:00 /km" is a number, and a reader takes it for one.
   it('marks a missing figure as absent rather than as zero', () => {
     const s = cardStats(workout({ avgPace: 0, avgHR: 0, distance: 0 }))
-    expect(s.map(x => x.value)).toEqual(['—', '30:00', '—', '—'])
+    expect(s.map(x => x.value)).toEqual(['30:00', '—', '—', '—'])
+  })
+
+  it('gives every figure an icon to draw', () => {
+    expect(cardStats(workout()).every(s => typeof s.icon === 'object' || typeof s.icon === 'function')).toBe(true)
+  })
+})
+
+/*
+ * The time of day is optional all the way from the database up, and a card that
+ * printed "00:00" for a workout that never recorded one would be stating
+ * something false rather than omitting something unknown.
+ */
+describe('cardWhen', () => {
+  it('appends the time when there is one', () => {
+    const s = cardWhen(workout({ startTime: '2025-07-12T07:42:00Z' }))
+    expect(s.startsWith(cardDate('2025-07-12'))).toBe(true)
+    expect(s).toContain('·')
+  })
+
+  it('is the date alone when the server sent no start time', () => {
+    expect(cardWhen(workout())).toBe(cardDate('2025-07-12'))
+  })
+
+  it('ignores a start time it cannot parse', () => {
+    expect(cardWhen(workout({ startTime: 'nonsense' }))).toBe(cardDate('2025-07-12'))
   })
 })
 

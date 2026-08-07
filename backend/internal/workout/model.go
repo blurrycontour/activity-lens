@@ -120,12 +120,15 @@ type CadencePoint struct {
 // Workout is the domain model. The JSON tags produce exactly the shape the
 // frontend expects.
 type Workout struct {
-	ID             string    `json:"id"`
-	UserID         int64     `json:"-"`
-	Name           string    `json:"name"`
-	Type           Type      `json:"type"`
-	Date           string    `json:"date"` // YYYY-MM-DD (derived from StartTime)
-	StartTime      time.Time `json:"-"`
+	ID     string `json:"id"`
+	UserID int64  `json:"-"`
+	Name   string `json:"name"`
+	Type   Type   `json:"type"`
+	Date   string `json:"date"` // YYYY-MM-DD (derived from StartTime)
+	// StartTime is the instant the workout began. Date is the same moment
+	// truncated, and is what most of the UI wants; this is here because a few
+	// places — the share card's header — need the time of day as well.
+	StartTime      time.Time `json:"startTime"`
 	Duration       int       `json:"duration"` // seconds
 	Distance       float64   `json:"distance"` // meters
 	AvgHR          int       `json:"avgHR"`

@@ -3,7 +3,7 @@ import { Download, Loader2, Share2, X } from 'lucide-react'
 import { type Workout } from '../data/workouts'
 import {
   CARD_H, CARD_W, cardFilename, drawShareCard, encodeCard, themeFromDocument,
-  type CardFormat,
+  type CardFormat, type CardTitleMode,
 } from '../lib/shareCard'
 import { reportSaveFailure, shareFile } from '../lib/download'
 import { isNative } from '../lib/serverConfig'
@@ -25,16 +25,22 @@ export default function ShareCardDialog({ workout, onClose }: {
   const [ready, setReady] = useState(false)
   const [busy, setBusy] = useState<CardFormat | 'share' | null>(null)
   const [note, setNote] = useState<string | null>(null)
+  // The sport by default: it is what a stranger needs to read the rest of the
+  // card, and a device-generated name like "Afternoon Run 3" says less than the
+  // word "Run" does. A name someone actually chose is worth showing, hence the
+  // toggle rather than a decision made for them.
+  const [titleMode, setTitleMode] = useState<CardTitleMode>('type')
 
   useEffect(() => {
     let alive = true
     const canvas = canvasRef.current
     if (!canvas) return
-    drawShareCard(canvas, workout, themeFromDocument())
+    setReady(false)
+    drawShareCard(canvas, workout, themeFromDocument(), { titleMode })
       .then(() => { if (alive) setReady(true) })
       .catch(() => { if (alive) setNote('Could not draw the card.') })
     return () => { alive = false }
-  }, [workout])
+  }, [workout, titleMode])
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
@@ -95,6 +101,25 @@ export default function ShareCardDialog({ workout, onClose }: {
               aria-label={`Share card for ${workout.name}`}
             />
             {!ready && <Loader2 size={20} className="spin" style={{ position: 'absolute' }} />}
+          </div>
+
+          {/* Redraws rather than swapping a caption: the title changes the width
+              of the headline, and the preview is meant to be the file. */}
+          <div className="share-card-titles" role="group" aria-label="Card title">
+            <span className="share-card-titles-label">Title</span>
+            {([
+              { id: 'type' as CardTitleMode, label: 'Activity type' },
+              { id: 'name' as CardTitleMode, label: 'Workout name' },
+            ]).map(o => (
+              <button
+                key={o.id}
+                className={`chip${titleMode === o.id ? ' active' : ''}`}
+                aria-pressed={titleMode === o.id}
+                onClick={() => setTitleMode(o.id)}
+              >
+                {o.label}
+              </button>
+            ))}
           </div>
 
           {note && <p className="share-card-note">{note}</p>}
