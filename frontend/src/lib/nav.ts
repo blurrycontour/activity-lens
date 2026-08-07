@@ -10,14 +10,29 @@ export type Page =
   | 'admin'
 
 /**
- * The primary pages, in the order both the sidebar and the mobile bottom bar
- * show them. Mobile swipe navigation walks this list cyclically, so swiping
- * right on the first page wraps around to the last.
+ * The primary pages, in order. Mobile swipe navigation walks this list
+ * cyclically, so swiping right on the first page wraps around to the last.
  */
 export const MOBILE_PAGES: Page[] = ['dashboard', 'workouts', 'analysis', 'consistency', 'map', 'equipment']
 
 /** Sidebar order on desktop: the mobile set plus Help. */
 export const DESKTOP_PAGES: Page[] = [...MOBILE_PAGES, 'help']
+
+/**
+ * What the phone's bottom bar shows, beside a "More" button.
+ *
+ * Four, not six. A tab bar is thumb-sized targets and readable labels, and both
+ * shrink as items are added — six across a phone leaves each one narrower than
+ * the finger meant to hit it, and the labels start eliding. Four plus More is
+ * the shape every platform's guidelines land on for the same reason.
+ *
+ * Everything still reachable: the rest live behind More, and swipe navigation
+ * walks all of MOBILE_PAGES regardless.
+ */
+export const BOTTOM_BAR_PAGES: Page[] = ['dashboard', 'workouts', 'analysis', 'consistency']
+
+/** The pages behind "More" on a phone. */
+export const MORE_PAGES: Page[] = ['map', 'equipment', 'help']
 
 /** Every page that owns a route, including the ones reached from the user menu. */
 export const PAGES: Page[] = [...DESKTOP_PAGES, 'settings', 'admin']

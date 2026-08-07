@@ -19,19 +19,20 @@ interface PageHeaderProps {
  */
 export default function PageHeader({ title, subtitle, onBack, actions }: PageHeaderProps) {
   return (
-    <div className="page-header" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+    <div className="page-header">
       {onBack && (
-        <button className="btn-icon" onClick={onBack} aria-label="Back" style={{ flexShrink: 0 }}>
+        <button className="btn-icon page-header-back" onClick={onBack} aria-label="Back">
           <ArrowLeft size={18} />
         </button>
       )}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <h1 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>{title}</h1>
-        {subtitle && (
-          <p style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 4 }}>{subtitle}</p>
-        )}
+      <div className="page-header-text">
+        <h1 className="page-header-title">{title}</h1>
+        {subtitle && <p className="page-header-sub">{subtitle}</p>}
       </div>
-      {actions}
+      {/* Wrapped so the phone layout can drop it onto its own line. Filters
+          sharing a row with the title left the subtitle a few characters wide
+          and hyphenating, which is what a header is meant to prevent. */}
+      {actions && <div className="page-header-actions">{actions}</div>}
     </div>
   )
 }

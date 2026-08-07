@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Settings, Shield, LogOut, X, Info, ArrowUpCircle, HelpCircle } from 'lucide-react'
+import { Settings, Shield, LogOut, X, Info, ArrowUpCircle } from 'lucide-react'
 import AboutDialog from './AboutDialog'
 import { applyPendingUpdate, useUpdatePending } from '../lib/appUpdate'
 import { avatarUrl } from './UserAvatar'
@@ -11,14 +11,11 @@ interface UserMenuProps {
   /** Opens the Profile section of Settings, from the header. */
   onProfile: () => void
   onAdmin: () => void
-  onHelp: () => void
   onLogout: () => void | Promise<void>
-  /** Help lives in the sidebar on desktop, so it only appears here on mobile. */
-  isMobile: boolean
   user: ApiUser
 }
 
-export default function UserMenu({ onClose, onSettings, onProfile, onAdmin, onHelp, onLogout, isMobile, user }: UserMenuProps) {
+export default function UserMenu({ onClose, onSettings, onProfile, onAdmin, onLogout, user }: UserMenuProps) {
   const ref = useRef<HTMLDivElement>(null)
   const [showAbout, setShowAbout] = useState(false)
   // Dismissing the update toast should not lose the update; this is where it
@@ -40,10 +37,6 @@ export default function UserMenu({ onClose, onSettings, onProfile, onAdmin, onHe
     // there is one door into everything configurable rather than two.
     { icon: <Settings size={15} />, label: 'Settings', sub: 'Profile, security and preferences', action: () => { onClose(); onSettings() } },
     ...(user.isAdmin ? [{ icon: <Shield size={15} />, label: 'Admin', sub: 'Users, email, SSO, storage', action: () => { onClose(); onAdmin() } }] : []),
-    // The bottom bar has no room for a Help tab and the sidebar it lives in on
-    // desktop is not there, so on a phone this menu is where it belongs —
-    // rather than as a third icon competing in the top bar.
-    ...(isMobile ? [{ icon: <HelpCircle size={15} />, label: 'Help', sub: 'How Activity Lens works', action: () => { onClose(); onHelp() } }] : []),
     { icon: <Info size={15} />, label: 'About', sub: 'Version & app info', action: () => setShowAbout(true) },
     ...(updatePending
       // Closed first: on web this reloads and the menu goes with the page, but

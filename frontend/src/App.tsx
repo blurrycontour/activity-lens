@@ -540,9 +540,7 @@ export default function App() {
           onSettings={() => navigate('settings')}
           onProfile={() => openSection('settings', 'profile')}
           onAdmin={() => navigate('admin')}
-          onHelp={() => navigate('help')}
           onLogout={logout}
-          isMobile={isMobile}
           user={user}
         />
       )}

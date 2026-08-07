@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseLocation, pathForPage, SETTINGS_SECTIONS, ADMIN_SECTIONS } from '../nav'
+import { ADMIN_SECTIONS, BOTTOM_BAR_PAGES, DESKTOP_PAGES, MOBILE_PAGES, MORE_PAGES, SETTINGS_SECTIONS, parseLocation, pathForPage } from '../nav'
 
 describe('pathForPage', () => {
   it('maps the dashboard to the root', () => {
@@ -63,5 +63,40 @@ describe('parseLocation', () => {
   it('falls back to the dashboard for anything unknown', () => {
     expect(parseLocation('/nope')).toMatchObject({ page: 'dashboard', section: null })
     expect(parseLocation('/')).toMatchObject({ page: 'dashboard', section: null })
+  })
+})
+
+/*
+ * The phone's tab bar. Six items across a phone left each one narrower than the
+ * finger meant to hit it and started eliding the labels, so four sit in the bar
+ * and the rest live behind More.
+ */
+describe('the phone tab bar', () => {
+  it('keeps the bar to four tabs plus More', () => {
+    expect(BOTTOM_BAR_PAGES).toHaveLength(4)
+  })
+
+  // The failure this guards against is a page that exists, has a route, and
+  // cannot be reached by tapping anything.
+  it('leaves no page unreachable', () => {
+    const reachable = new Set([...BOTTOM_BAR_PAGES, ...MORE_PAGES])
+    for (const page of DESKTOP_PAGES) {
+      expect(reachable.has(page), `${page} is in the sidebar but not on the phone`).toBe(true)
+    }
+  })
+
+  it('never shows the same page twice', () => {
+    const all = [...BOTTOM_BAR_PAGES, ...MORE_PAGES]
+    expect(new Set(all).size).toBe(all.length)
+  })
+
+  // Swipe navigation is the other way around the app, and it walks its own
+  // list — every page it can land on has to be somewhere in the bar too, or a
+  // swipe leaves the bar highlighting nothing.
+  it('accounts for every page a swipe can reach', () => {
+    const reachable = new Set([...BOTTOM_BAR_PAGES, ...MORE_PAGES])
+    for (const page of MOBILE_PAGES) {
+      expect(reachable.has(page), `a swipe reaches ${page}, which the bar does not show`).toBe(true)
+    }
   })
 })

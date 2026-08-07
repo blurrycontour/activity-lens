@@ -141,16 +141,21 @@ const SANS = "'Inter Variable', 'Inter', ui-sans-serif, system-ui, sans-serif"
 const MONO = "'DM Mono', ui-monospace, monospace"
 
 /**
- * Draws the card. Returns the canvas so the caller can preview it and encode it
- * in whichever format they want.
+ * Draws the card onto a canvas the caller owns.
+ *
+ * Takes the element rather than creating one, so React can render it and this
+ * only paints. Returning a detached canvas for the caller to splice into the
+ * DOM was the first design, and it crashed the page: the element it replaced
+ * belonged to React, which then tried to remove a node that was no longer its
+ * child. Anything that owns DOM React also renders will find that eventually.
  */
-export async function drawShareCard(workout: Workout, theme: CardTheme): Promise<HTMLCanvasElement> {
+export async function drawShareCard(canvas: HTMLCanvasElement, workout: Workout, theme: CardTheme): Promise<void> {
   await ready()
-  const canvas = document.createElement('canvas')
   canvas.width = CARD_W
   canvas.height = CARD_H
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('Could not draw the card')
+  ctx.clearRect(0, 0, CARD_W, CARD_H)
 
   ctx.fillStyle = theme.bg
   ctx.fillRect(0, 0, CARD_W, CARD_H)
@@ -255,8 +260,6 @@ export async function drawShareCard(workout: Workout, theme: CardTheme): Promise
   ctx.fillStyle = theme.muted
   ctx.font = `500 22px ${SANS}`
   ctx.fillText('Activity Lens', PAD, CARD_H - 48)
-
-  return canvas
 }
 
 export type CardFormat = 'png' | 'jpeg'

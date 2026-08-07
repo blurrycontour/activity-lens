@@ -21,25 +21,17 @@ export default function ShareCardDialog({ workout, onClose }: {
   workout: Workout
   onClose: () => void
 }) {
-  const holder = useRef<HTMLDivElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
   const [ready, setReady] = useState(false)
   const [busy, setBusy] = useState<CardFormat | 'share' | null>(null)
   const [note, setNote] = useState<string | null>(null)
 
   useEffect(() => {
     let alive = true
-    drawShareCard(workout, themeFromDocument())
-      .then(canvas => {
-        if (!alive || !holder.current) return
-        canvasRef.current = canvas
-        canvas.style.width = '100%'
-        canvas.style.height = 'auto'
-        canvas.style.display = 'block'
-        canvas.style.borderRadius = '12px'
-        holder.current.replaceChildren(canvas)
-        setReady(true)
-      })
+    const canvas = canvasRef.current
+    if (!canvas) return
+    drawShareCard(canvas, workout, themeFromDocument())
+      .then(() => { if (alive) setReady(true) })
       .catch(() => { if (alive) setNote('Could not draw the card.') })
     return () => { alive = false }
   }, [workout])
@@ -88,12 +80,17 @@ export default function ShareCardDialog({ workout, onClose }: {
 
         {/* Sized by aspect ratio rather than by the canvas, so the dialog does
             not resize when the image lands. */}
-        <div
-          className="share-card-preview"
-          ref={holder}
-          style={{ aspectRatio: `${CARD_W} / ${CARD_H}` }}
-        >
-          {!ready && <Loader2 size={20} className="spin" />}
+        <div className="share-card-preview" style={{ aspectRatio: `${CARD_W} / ${CARD_H}` }}>
+          {/* Always mounted, so the effect has something to draw on and React
+              keeps ownership of every node in here. Hidden until it has been
+              painted rather than swapped in afterwards. */}
+          <canvas
+            ref={canvasRef}
+            className="share-card-canvas"
+            style={{ opacity: ready ? 1 : 0 }}
+            aria-label={`Share card for ${workout.name}`}
+          />
+          {!ready && <Loader2 size={20} className="spin" style={{ position: 'absolute' }} />}
         </div>
 
         {note && <p className="share-card-note">{note}</p>}

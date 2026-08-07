@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as maplibregl from 'maplibre-gl'
-import { Flame, Loader2, Route as RouteIcon } from 'lucide-react'
+import { Flame, Loader2, Maximize2, Minimize2, Route as RouteIcon } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
@@ -51,6 +51,29 @@ type Mode = 'auto' | 'routes' | 'heat'
 /** Refetch no faster than this while a pan is in progress. */
 const PAN_DEBOUNCE = 400
 
+const VIEW_KEY = 'al_map_view'
+
+interface SavedView { lng: number; lat: number; zoom: number }
+
+/**
+ * Where the map was left.
+ *
+ * Without this a reload dropped you at zoom 1.4 over the Atlantic looking at
+ * nothing, because the first fetch has no viewport to ask about and the fit
+ * only happens once. Restoring the position also means the first fetch asks
+ * about somewhere real, which is the difference between a map that fills in and
+ * one that appears empty.
+ */
+function readView(): SavedView | null {
+  try {
+    const v = JSON.parse(localStorage.getItem(VIEW_KEY) ?? 'null')
+    if (v && Number.isFinite(v.lng) && Number.isFinite(v.lat) && Number.isFinite(v.zoom)) return v
+  } catch {
+    // Corrupt or absent; fall back to fitting the data.
+  }
+  return null
+}
+
 export default function MapPage() {
   const [rangeDays, setRangeDays] = useLocalStorage<number>('al_map_range', 365)
   const [typeFilter, setTypeFilter] = useLocalStorage<WorkoutType | 'All'>('al_map_type', 'All')
@@ -66,6 +89,7 @@ export default function MapPage() {
   const [capped, setCapped] = useState(false)
   const [preparing, setPreparing] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  const [full, setFull] = useState(false)
 
   const node = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
@@ -108,6 +132,11 @@ export default function MapPage() {
     }
   }, [from])
 
+  // The map's listeners are bound once and would otherwise hold the first
+  // render's callbacks forever.
+  const loadRef = useRef(load)
+  loadRef.current = load
+
   useEffect(() => { setLoading(true); void load() }, [load])
 
   // The backfill runs in the background on the server, so a first visit on a
@@ -119,6 +148,24 @@ export default function MapPage() {
     return () => clearTimeout(t)
   }, [preparing, load])
 
+  // Fullscreen is a CSS class rather than the Fullscreen API: the API is
+  // unreliable inside an Android WebView and on iOS Safari, and this has to
+  // work in the app as well as the browser. Escape leaves, like every other
+  // dismissible surface here.
+  useEffect(() => {
+    if (!full) return
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setFull(false) }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [full])
+
+  // The container changed size under the canvas, which MapLibre cannot detect
+  // on its own. Deferred a frame so the new layout has been applied.
+  useEffect(() => {
+    const id = requestAnimationFrame(() => mapRef.current?.resize())
+    return () => cancelAnimationFrame(id)
+  }, [full])
+
   const shown = useMemo(
     () => typeFilter === 'All' ? tracks : tracks.filter(t => t.type === typeFilter),
     [tracks, typeFilter],
@@ -128,11 +175,15 @@ export default function MapPage() {
   // ── The map ────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!node.current || mapRef.current || !glAvailable) return
+    const saved = readView()
+    // A saved position means there is nothing to fit to: the user already chose
+    // where they wanted to be looking.
+    if (saved) needsFit.current = false
     const map = new maplibregl.Map({
       container: node.current,
       style: MAP_LAYERS[layer].style,
-      center: [0, 20],
-      zoom: 1.4,
+      center: saved ? [saved.lng, saved.lat] : [0, 20],
+      zoom: saved ? saved.zoom : 1.4,
       attributionControl: { compact: true },
       pitchWithRotate: false,
       dragRotate: false,
@@ -145,18 +196,30 @@ export default function MapPage() {
     // repeatedly, and each one is a request.
     let timer: ReturnType<typeof setTimeout> | undefined
     const onMove = () => {
+      const c = map.getCenter()
+      localStorage.setItem(VIEW_KEY, JSON.stringify({ lng: c.lng, lat: c.lat, zoom: map.getZoom() }))
       clearTimeout(timer)
-      timer = setTimeout(() => { void load() }, PAN_DEBOUNCE)
+      // Through a ref: this handler is bound once, and the direct reference
+      // would have kept fetching with the range that was selected when the map
+      // was built.
+      timer = setTimeout(() => { void loadRef.current() }, PAN_DEBOUNCE)
     }
     map.on('moveend', onMove)
+    // Both, and via a ref for the same reason. `load` covers the first style;
+    // `styledata` covers a base-layer switch, which discards every source and
+    // layer and needs them put back. Whichever arrives, the data is applied
+    // from what is current rather than from what was current at binding time.
+    const apply = () => applyRef.current()
+    map.on('load', apply)
+    map.on('styledata', apply)
     return () => {
       clearTimeout(timer)
       map.remove()
       mapRef.current = null
     }
-    // Built once. The style is swapped in place below and the loader is read
-    // through a ref, so neither belongs in here — rebuilding the map on either
-    // would throw away the user's position.
+    // Built once. Everything that changes afterwards reaches it through a ref
+    // or its own effect; rebuilding the map would throw away the user's
+    // position, which is the bug this whole block exists to avoid.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [glAvailable])
 
@@ -176,8 +239,8 @@ export default function MapPage() {
     [],
   )
 
-  /** Redraws the data layers. Safe to call before the style has loaded. */
-  const draw = useCallback(() => {
+  /** Puts the current data on the map. A no-op until the style is ready. */
+  const applyData = useCallback(() => {
     const map = mapRef.current
     if (!map || !map.isStyleLoaded()) return
 
@@ -209,18 +272,38 @@ export default function MapPage() {
     set('tracks', lines)
     set('track-points', points)
 
+    // A dark casing under the coloured line, which is how every printed map
+    // separates a route from the roads beneath it. Without it the amber used
+    // for Hike is very nearly the colour a basemap paints a main road, and the
+    // track disappears into the street it is running along.
+    if (!map.getLayer('tracks-casing')) {
+      map.addLayer({
+        id: 'tracks-casing',
+        type: 'line',
+        source: 'tracks',
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: {
+          'line-color': 'rgba(0,0,0,0.55)',
+          // Always wider than the line above it by roughly two pixels, at every
+          // zoom, or the casing vanishes where it is needed most.
+          'line-width': ['interpolate', ['linear'], ['zoom'], 6, 2.6, 12, 5, 16, 7.5],
+          'line-opacity': 0.5,
+        },
+      })
+    }
     if (!map.getLayer('tracks-line')) {
       map.addLayer({
         id: 'tracks-line',
         type: 'line',
         source: 'tracks',
         layout: { 'line-join': 'round', 'line-cap': 'round' },
-        // Thin and translucent, so a road run twice a week reads as brighter
-        // than one run once — the overlap does the work a heatmap would.
+        // Fully opaque, unlike the first version: overlap-as-brightness reads
+        // nicely on a plain background and turns to mud over a street map. The
+        // heatmap is what answers "how often", and it does it properly.
         paint: {
           'line-color': ['get', 'color'],
           'line-width': ['interpolate', ['linear'], ['zoom'], 6, 1, 12, 2.5, 16, 4],
-          'line-opacity': 0.6,
+          'line-opacity': 0.95,
         },
       })
     }
@@ -248,7 +331,9 @@ export default function MapPage() {
         },
       })
     }
-    map.setLayoutProperty('tracks-line', 'visibility', heat ? 'none' : 'visible')
+    for (const id of ['tracks-casing', 'tracks-line']) {
+      map.setLayoutProperty(id, 'visibility', heat ? 'none' : 'visible')
+    }
     map.setLayoutProperty('tracks-heat', 'visibility', heat ? 'visible' : 'none')
 
     // Fitted once, to the first thing that comes back. Doing it on every load
@@ -264,15 +349,14 @@ export default function MapPage() {
     }
   }, [shown, heat, colorFor])
 
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map) return
-    draw()
-    // styledata fires after a base-layer switch too, which is what re-adds the
-    // sources the switch discarded.
-    map.on('styledata', draw)
-    return () => { map.off('styledata', draw) }
-  }, [draw])
+  const applyRef = useRef(applyData)
+  applyRef.current = applyData
+
+  // Data changed: apply it if the style is ready, and rely on the map's own
+  // `load`/`styledata` listeners if it is not. Between the two, there is no
+  // ordering in which the tracks arrive and never get drawn — which is what
+  // left a reloaded page showing an empty world.
+  useEffect(() => { applyData() }, [applyData])
 
   const scope = rangeLabel(rangeDays)
 
@@ -280,7 +364,7 @@ export default function MapPage() {
     <>
       <PageHeader
         title="Map"
-        subtitle={`Every route you have recorded · ${scope}`}
+        subtitle="Every route you have recorded"
         actions={
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <TypeDropdown value={typeFilter} onChange={setTypeFilter} />
@@ -294,7 +378,7 @@ export default function MapPage() {
           <span className="map-page-count">
             {loading
               ? <><Loader2 size={12} className="spin" /> Loading…</>
-              : `${shown.length} route${shown.length === 1 ? '' : 's'}`}
+              : `${shown.length} route${shown.length === 1 ? '' : 's'} · ${scope}`}
             {capped && !loading && ' (showing the most recent — zoom in for the rest)'}
           </span>
 
@@ -326,7 +410,7 @@ export default function MapPage() {
         )}
         {error && <p className="map-page-note error">{error}</p>}
 
-        <div className="map-page-canvas">
+        <div className={`map-page-canvas${full ? ' full' : ''}`}>
           {glAvailable
             ? <div ref={node} className="map-page-gl" />
             : (
@@ -334,7 +418,19 @@ export default function MapPage() {
                 This browser has no WebGL, so the map cannot be drawn here.
               </div>
             )}
-          {glAvailable && <LayerSwitcher layer={layer} onChange={setLayer} offsetRight={10} />}
+          {glAvailable && (
+            <>
+              <LayerSwitcher layer={layer} onChange={setLayer} offsetRight={46} />
+              <button
+                className="btn-icon map-page-expand"
+                onClick={() => setFull(f => !f)}
+                title={full ? 'Exit full screen' : 'Full screen'}
+                aria-label={full ? 'Exit full screen' : 'Full screen'}
+              >
+                {full ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+              </button>
+            </>
+          )}
           {!loading && shown.length === 0 && !error && (
             <div className="map-page-empty overlay-note">
               No routes in this view. Try a wider date range, or zoom out.

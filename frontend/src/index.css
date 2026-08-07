@@ -909,7 +909,18 @@ body {
 .stat-chip .value { font-size: 18px; font-weight: 700; font-family: var(--font-mono); color: var(--text); letter-spacing: -0.03em; }
 .stat-chip .unit  { font-size: 12px; color: var(--text-2); font-weight: 400; }
 
-.page-header { padding: 24px 24px 16px; border-bottom: 1px solid var(--border); }
+.page-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 24px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.page-header-back { flex-shrink: 0; }
+.page-header-text { flex: 1; min-width: 0; }
+.page-header-title { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
+.page-header-sub { font-size: 13px; color: var(--text-3); margin-top: 4px; }
+.page-header-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .page-content { padding: 24px; }
 /* Pages whose header already carries the filters (Workouts, Equipment) sit
    tighter against it. Only the vertical padding is narrowed so the mobile
@@ -1239,6 +1250,43 @@ body {
   color: var(--text-2);
 }
 
+/* The pages that do not fit the phone's tab bar. A sheet anchored above the
+   bar rather than a dropdown: it is thumb-reachable there, and it cannot be
+   mistaken for part of the page behind it. */
+.more-sheet {
+  position: fixed;
+  left: 8px;
+  right: 8px;
+  bottom: calc(64px + var(--safe-bottom) + 8px);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  background: var(--bg-2);
+  border: 1px solid var(--border-strong);
+  border-radius: calc(var(--radius) * 2);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  animation: fadeIn 0.12s ease;
+}
+.more-sheet-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  /* Comfortably over the 44px minimum touch target, which is the reason these
+     moved out of the tab bar in the first place. */
+  padding: 13px 14px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius);
+  color: var(--text-2);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+}
+.more-sheet-item.active { color: var(--primary); background: var(--primary-dim); }
+
 /* ── The all-workouts map ── */
 
 .map-page {
@@ -1288,6 +1336,26 @@ body {
   background: var(--bg-3);
 }
 .map-page-gl { position: absolute; inset: 0; }
+/* Over everything including the bottom bar, and inside the safe area so the
+   controls stay clear of the notch and the gesture handle. */
+.map-page-canvas.full {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  height: auto;
+  border: none;
+  border-radius: 0;
+  padding-top: var(--safe-top);
+  padding-bottom: var(--safe-bottom);
+}
+.map-page-expand {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 500;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+}
 .map-page-empty {
   position: absolute;
   inset: 0;
@@ -1306,8 +1374,13 @@ body {
 }
 
 @media (max-width: 768px) {
-  /* Less chrome above it on a phone, and the bottom nav below. */
-  .map-page-canvas { height: calc(100vh - 300px); min-height: 340px; }
+  /* Taller than the desktop proportion, not shorter: a phone's viewport is the
+     scarcer one, so the map takes everything the header, the filter row and the
+     bottom bar are not using. dvh rather than vh so the browser's collapsing
+     address bar does not leave a strip of dead space under it. */
+  .map-page-canvas { height: calc(100dvh - 250px); min-height: 420px; }
+  /* Full screen means full screen — the safe-area padding is the only inset. */
+  .map-page-canvas.full { min-height: 0; }
 }
 
 /* ── Share card ── */
@@ -1339,7 +1412,16 @@ body {
   color: var(--text-3);
   max-height: 60vh;
 }
-.share-card-preview canvas { max-height: 60vh; width: auto !important; }
+.share-card-preview { position: relative; }
+.share-card-canvas {
+  display: block;
+  max-width: 100%;
+  max-height: 60vh;
+  width: auto;
+  height: auto;
+  border-radius: 12px;
+  transition: opacity 0.15s;
+}
 .share-card-note { font-size: 12px; color: var(--text-3); line-height: 1.5; }
 .share-card-hint { font-size: 11px; color: var(--text-3); line-height: 1.5; }
 /* The primary action takes the room; the two format buttons sit at their own
@@ -3050,7 +3132,11 @@ body {
   }
 
   .page-content { padding: 16px; }
-  .page-header { padding: 16px; }
+  .page-header { padding: 16px; flex-wrap: wrap; }
+  /* Controls take the full width below the title rather than competing with it
+     for a phone's worth of room. */
+  .page-header-actions { width: 100%; }
+  .page-header-sub { font-size: 12px; }
 
   .bottom-bar {
     display: flex;
