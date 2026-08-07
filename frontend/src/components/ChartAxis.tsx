@@ -38,8 +38,13 @@ export function denseXAxis(fontSize = 10) {
  * Horizontal room for the plot itself.
  *
  * A phone has ~360px to spend and the axis furniture was taking 76px of it, so
- * on the narrow layout the outer gutters shrink and the y axis keeps only what
- * its tick text and rotated label actually need.
+ * on the narrow layout the outer gutters shrink.
+ *
+ * The y axis is not sized here — give it `width="auto"` and Recharts measures
+ * the widest tick label and the rotated axis label for real, then leaves a gap
+ * between them. A hand-picked width cannot do that: it has to be guessed
+ * against the longest tick text a chart might produce, so it is either wasteful
+ * for "0–160" or too tight for "5:40".
  */
 export function useChartSpace() {
   const mobile = useIsMobile()
@@ -51,7 +56,5 @@ export function useChartSpace() {
       left: mobile ? 0 : 8,
       bottom,
     }),
-    /** Y axis width, including the rotated label. Never below the text it holds. */
-    yWidth: (width: number) => (mobile ? Math.max(38, width - 12) : width),
   }
 }

@@ -368,7 +368,7 @@ export default function Consistency() {
             <BarChart data={dayOfWeek} margin={space.margin(18, 4)}>
               <CartesianGrid {...GRID_PROPS} />
               <XAxis dataKey="label" tick={{ ...AXIS_TICK, fontSize: 11 }} axisLine={false} tickLine={false} label={xLabel('Day of week')} />
-              <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={space.yWidth(52)} unit={m.axisLabel || undefined} label={yLabel(measure === 'count' ? 'Activities' : 'Duration (hours)')} />
+              <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" unit={m.axisLabel || undefined} label={yLabel(measure === 'count' ? 'Activities' : 'Duration (hours)')} />
               <Tooltip
                 cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
                 content={({ active, payload, label }) => {
@@ -409,7 +409,7 @@ export default function Consistency() {
               <BarChart data={yoyData} margin={space.margin(18)} barCategoryGap="18%" barGap={2}>
                 <CartesianGrid {...GRID_PROPS} />
                 <XAxis dataKey="month" tick={AXIS_TICK} axisLine={false} tickLine={false} label={xLabel('Month')} />
-                <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={space.yWidth(52)} unit={m.axisLabel || undefined} label={yLabel(measure === 'count' ? 'Activities' : 'Duration (hours)')} />
+                <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" unit={m.axisLabel || undefined} label={yLabel(measure === 'count' ? 'Activities' : 'Duration (hours)')} />
                 <Tooltip
                   cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
                   content={({ active, payload, label }) => {
@@ -449,7 +449,7 @@ export default function Consistency() {
               <BarChart data={wowData} margin={space.margin(18)} barCategoryGap="18%" barGap={2}>
                 <CartesianGrid {...GRID_PROPS} />
                 <XAxis dataKey="day" tick={AXIS_TICK} axisLine={false} tickLine={false} label={xLabel('Day of week')} />
-                <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={space.yWidth(52)} label={yLabel(measure === 'count' ? 'Activities' : 'Duration (hours)')} />
+                <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" label={yLabel(measure === 'count' ? 'Activities' : 'Duration (hours)')} />
                 <Tooltip
                   cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
                   content={({ active, payload, label }) => {
@@ -499,7 +499,7 @@ export default function Consistency() {
               <LineChart data={cumulativeData} margin={space.margin(18)}>
                 <CartesianGrid {...GRID_PROPS} />
                 <XAxis dataKey="month" tick={AXIS_TICK} axisLine={false} tickLine={false} label={xLabel('Month')} />
-                <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={space.yWidth(56)} label={yLabel('Cumulative distance (km)')} />
+                <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" label={yLabel('Cumulative distance (km)')} />
                 <Tooltip
                   content={({ active, payload, label }) => {
                     if (!active || !payload?.length) return null

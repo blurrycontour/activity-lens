@@ -422,7 +422,7 @@ export default function Analysis() {
                     <CartesianGrid {...GRID_PROPS} />
                     <XAxis dataKey="type" tick={{ ...AXIS_TICK, fontSize: 11 }} axisLine={false} tickLine={false} label={xLabel('Activity type')} />
                     <YAxis
-                      tick={AXIS_TICK} axisLine={false} tickLine={false} width={space.yWidth(52)}
+                      tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto"
                       tickFormatter={v => v >= 1000 ? `${Math.round(v / 1000)}k` : `${v}`}
                       label={yLabel('Calories (kcal)')}
                     />
@@ -506,7 +506,7 @@ export default function Analysis() {
                   <LineChart data={seriesWithMA} margin={space.margin(18)}>
                     <CartesianGrid {...GRID_PROPS} />
                     <XAxis dataKey="dateLabel" {...denseXAxis()} label={xLabel('Activity date')} />
-                    <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={space.yWidth(52)} label={yLabel('Selected metrics')} />
+                    <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" label={yLabel('Selected metrics')} />
                     <Tooltip
                       content={({ active, payload, label }) => {
                         if (!active || !payload?.length) return null
@@ -557,7 +557,7 @@ export default function Analysis() {
                   <ComposedChart data={volume} margin={space.margin(18, 4)}>
                     <CartesianGrid {...GRID_PROPS} />
                     <XAxis dataKey="label" {...denseXAxis(9)} label={xLabel(volumeBucket === 'week' ? 'Week starting' : 'Month')} />
-                    <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={space.yWidth(52)} label={yLabel(volumeMeasure === 'distance' ? 'Distance (km)' : 'Time (hours)')} />
+                    <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" label={yLabel(volumeMeasure === 'distance' ? 'Distance (km)' : 'Time (hours)')} />
                     <Tooltip
                       cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
                       content={({ active, payload }) => {
@@ -599,7 +599,7 @@ export default function Analysis() {
                     <LineChart data={efficiency.rows} margin={space.margin(18, 4)}>
                       <CartesianGrid {...GRID_PROPS} />
                       <XAxis dataKey="dateLabel" {...denseXAxis(9)} label={xLabel('Activity date')} />
-                      <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={space.yWidth(52)} domain={['dataMin - 1', 'dataMax + 1']} label={yLabel('bpm per km/h')} />
+                      <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" domain={['dataMin - 1', 'dataMax + 1']} label={yLabel('bpm per km/h')} />
                       <Tooltip
                         content={({ active, payload }) => {
                           if (!active || !payload?.length) return null
@@ -633,7 +633,7 @@ export default function Analysis() {
                     <LineChart data={efficiency.rows} margin={space.margin(18, 4)}>
                       <CartesianGrid {...GRID_PROPS} />
                       <XAxis dataKey="dateLabel" {...denseXAxis(9)} label={xLabel('Activity date')} />
-                      <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={space.yWidth(56)} reversed domain={['dataMin - 15', 'dataMax + 15']} tickFormatter={v => fmtPace(v)} label={yLabel('Adjusted pace (min/km)')} />
+                      <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" reversed domain={['dataMin - 15', 'dataMax + 15']} tickFormatter={v => fmtPace(v)} label={yLabel('Adjusted pace (min/km)')} />
                       <Tooltip
                         content={({ active, payload }) => {
                           if (!active || !payload?.length) return null
@@ -672,7 +672,7 @@ export default function Analysis() {
                           with " bpm" appended to each value the labels grew wide
                           enough to be clipped by the plot area. */}
                       <XAxis type="number" dataKey="pace" name="Pace" domain={['dataMin - 20', 'dataMax + 20']} tick={AXIS_TICK} axisLine={false} tickLine={false} reversed tickFormatter={v => fmtPace(v)} label={xLabel('Pace (min/km) — faster →')} />
-                      <YAxis type="number" dataKey="hr" name="HR" domain={['dataMin - 5', 'dataMax + 5']} width={space.yWidth(48)} tick={AXIS_TICK} axisLine={false} tickLine={false} label={yLabel('Avg HR (bpm)')} />
+                      <YAxis type="number" dataKey="hr" name="HR" domain={['dataMin - 5', 'dataMax + 5']} width="auto" tick={AXIS_TICK} axisLine={false} tickLine={false} label={yLabel('Avg HR (bpm)')} />
                       <ZAxis type="number" dataKey="distKm" range={[40, 220]} name="Distance" />
                       <Tooltip
                         cursor={{ strokeDasharray: '3 3', stroke: 'var(--border-strong)' }}
@@ -715,7 +715,7 @@ export default function Analysis() {
                     <ScatterChart margin={space.margin(18)}>
                       <CartesianGrid {...GRID_PROPS} vertical />
                       <XAxis type="number" dataKey="km" name="Distance" domain={['dataMin - 1', 'dataMax + 1']} tick={AXIS_TICK} axisLine={false} tickLine={false} label={xLabel('Distance (km)')} />
-                      <YAxis type="number" dataKey="pace" name="Pace" domain={['dataMin - 20', 'dataMax + 20']} width={space.yWidth(56)} tick={AXIS_TICK} axisLine={false} tickLine={false} reversed tickFormatter={v => fmtPace(v)} label={yLabel('Pace (min/km)')} />
+                      <YAxis type="number" dataKey="pace" name="Pace" domain={['dataMin - 20', 'dataMax + 20']} width="auto" tick={AXIS_TICK} axisLine={false} tickLine={false} reversed tickFormatter={v => fmtPace(v)} label={yLabel('Pace (min/km)')} />
                       {/* Elevation can legitimately be 0, so the range starts at
                           a visible minimum rather than collapsing to a dot. */}
                       <ZAxis type="number" dataKey="elev" range={[40, 220]} name="Elevation" />
@@ -762,7 +762,7 @@ export default function Analysis() {
                 <BarChart data={trainingLoad} margin={space.margin(18, 4)}>
                   <CartesianGrid {...GRID_PROPS} />
                   <XAxis dataKey="date" {...denseXAxis(9)} label={xLabel('Date')} />
-                  <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={space.yWidth(48)} label={yLabel('Load (TSS-equivalent)')} />
+                  <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" label={yLabel('Load (TSS-equivalent)')} />
                   <Tooltip
                     cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
                     content={({ active, payload }) => {
@@ -794,7 +794,7 @@ export default function Analysis() {
                 <LineChart data={acwr} margin={space.margin(18, 4)}>
                   <CartesianGrid {...GRID_PROPS} />
                   <XAxis dataKey="date" {...denseXAxis(9)} label={xLabel('Date')} />
-                  <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={space.yWidth(48)} domain={[0, (max: number) => Math.max(2, Math.ceil(max * 10) / 10)]} label={yLabel('Acute : chronic ratio')} />
+                  <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" domain={[0, (max: number) => Math.max(2, Math.ceil(max * 10) / 10)]} label={yLabel('Acute : chronic ratio')} />
                   <ReferenceArea y1={0.8} y2={1.3} fill="var(--success)" fillOpacity={0.1} />
                   <ReferenceLine y={1.5} stroke="var(--danger)" strokeDasharray="4 4" strokeOpacity={0.6} />
                   <Tooltip
@@ -863,7 +863,7 @@ export default function Analysis() {
                     />
                     <YAxis
                       type="number" dataKey="value"
-                      tick={AXIS_TICK} axisLine={false} tickLine={false} width={space.yWidth(52)}
+                      tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto"
                       tickFormatter={v => weatherMetric === 'pace' ? fmtPace(v) : String(Math.round(v))}
                       label={yLabel(weatherMetric === 'pace' ? 'Pace (/km)' : 'Avg HR (bpm)')}
                     />
