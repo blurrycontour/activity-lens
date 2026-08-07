@@ -3,6 +3,7 @@ export type Page =
   | 'workouts'
   | 'analysis'
   | 'consistency'
+  | 'map'
   | 'equipment'
   | 'help'
   | 'settings'
@@ -13,7 +14,7 @@ export type Page =
  * show them. Mobile swipe navigation walks this list cyclically, so swiping
  * right on the first page wraps around to the last.
  */
-export const MOBILE_PAGES: Page[] = ['dashboard', 'workouts', 'analysis', 'consistency', 'equipment']
+export const MOBILE_PAGES: Page[] = ['dashboard', 'workouts', 'analysis', 'consistency', 'map', 'equipment']
 
 /** Sidebar order on desktop: the mobile set plus Help. */
 export const DESKTOP_PAGES: Page[] = [...MOBILE_PAGES, 'help']

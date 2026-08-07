@@ -50,6 +50,18 @@ func (unimplementedSharing) RetryFailedWeather(context.Context, int64) (int, err
 func (unimplementedSharing) WeatherCounts(context.Context, int64) (WeatherCounts, error) {
 	panic("weather storage is exercised against the real schema; see weather_test.go")
 }
+func (unimplementedSharing) ListTracks(context.Context, int64, TrackQuery) ([]Track, error) {
+	panic("track storage is exercised against the real schema; see tracks_test.go")
+}
+func (unimplementedSharing) ListMissingTracks(context.Context, int) ([]TrackBackfill, error) {
+	panic("track storage is exercised against the real schema; see tracks_test.go")
+}
+func (unimplementedSharing) SetTrack(context.Context, string, []LatLng) error {
+	panic("track storage is exercised against the real schema; see tracks_test.go")
+}
+func (unimplementedSharing) CountMissingTracks(context.Context, int64) (int, error) {
+	panic("track storage is exercised against the real schema; see tracks_test.go")
+}
 func (unimplementedSharing) ListPublicSummary(context.Context, int64) ([]Workout, error) {
 	panic("sharing is only exercised against the real schema; see sharing_test.go")
 }

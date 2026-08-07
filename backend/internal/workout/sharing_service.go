@@ -233,3 +233,23 @@ func validateWeather(w Weather) error {
 	}
 	return nil
 }
+
+// Tracks returns simplified routes for the overview map.
+func (s *Service) Tracks(ctx context.Context, userID int64, q TrackQuery) ([]Track, error) {
+	return s.repo.ListTracks(ctx, userID, q)
+}
+
+// MissingTracks returns workouts still owed a simplified route.
+func (s *Service) MissingTracks(ctx context.Context, limit int) ([]TrackBackfill, error) {
+	return s.repo.ListMissingTracks(ctx, limit)
+}
+
+// StoreTrack simplifies and stores one workout's route.
+func (s *Service) StoreTrack(ctx context.Context, workoutID string, route []LatLng) error {
+	return s.repo.SetTrack(ctx, workoutID, route)
+}
+
+// TracksPending reports how many of a user's workouts have yet to be prepared.
+func (s *Service) TracksPending(ctx context.Context, userID int64) (int, error) {
+	return s.repo.CountMissingTracks(ctx, userID)
+}

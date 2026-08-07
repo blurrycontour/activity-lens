@@ -169,6 +169,7 @@ func (s *Server) apiRoutes() http.Handler {
 	mux.Handle("DELETE /api/workouts/{id}/weather", s.authedCSRF(s.handleClearWorkoutWeather))
 	// How many older workouts have never been checked, and the action that
 	// queues them. Four segments, so neither collides with /api/workouts/{id}.
+	mux.Handle("GET /api/workouts/tracks", s.authed(s.handleWorkoutTracks))
 	mux.Handle("GET /api/workouts/weather/status", s.authed(s.handleWeatherStatus))
 	mux.Handle("POST /api/workouts/weather/backfill", s.authedCSRF(s.handleRequestWeatherBackfill))
 	mux.Handle("POST /api/workouts/weather/retry", s.authedCSRF(s.handleRetryFailedWeather))

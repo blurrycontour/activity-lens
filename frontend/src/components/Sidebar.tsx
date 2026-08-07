@@ -1,5 +1,5 @@
 import { useRef, useCallback } from 'react'
-import { LayoutDashboard, Dumbbell, CalendarCheck, BarChart2, HelpCircle, Plus, Watch, Tag } from 'lucide-react'
+import { LayoutDashboard, Dumbbell, CalendarCheck, BarChart2, HelpCircle, Map as MapIcon, Plus, Watch, Tag } from 'lucide-react'
 import { DESKTOP_PAGES, type Page } from '../lib/nav'
 
 interface SidebarProps {
@@ -19,6 +19,7 @@ export const PAGE_META: Partial<Record<Page, { label: string; icon: (size: numbe
   workouts: { label: 'Workouts', icon: s => <Dumbbell size={s} /> },
   analysis: { label: 'Analysis', icon: s => <BarChart2 size={s} /> },
   consistency: { label: 'Consistency', icon: s => <CalendarCheck size={s} /> },
+  map: { label: 'Map', icon: s => <MapIcon size={s} /> },
   equipment: { label: 'Equipment', icon: s => <Watch size={s} /> },
   help: { label: 'Help', icon: s => <HelpCircle size={s} /> },
 }

@@ -388,6 +388,17 @@ export function filenameFromDisposition(header: string | null): string {
   return /filename="([^"]*)"/i.exec(header)?.[1] ?? ''
 }
 
+/** One workout as the overview map draws it: a simplified route and a label. */
+export interface Track {
+  id: string
+  name: string
+  type: import('../data/workouts').WorkoutType
+  date: string
+  /** [lat, lon], simplified server-side to about 80 points. */
+  points: Array<[number, number]>
+  meters: number
+}
+
 export const api = {
   // --- Auth ---
   authConfig: () => request<AuthFeatures>('/api/auth/config'),
@@ -484,6 +495,18 @@ export const api = {
     request<import('../data/workouts').Workout>(`/api/workouts/${id}/weather`, { method: 'DELETE' }),
   // How many workouts have never been checked — everything that predates the
   // feature, until the user asks.
+  workoutTracks: (opts: { from?: string; to?: string; bbox?: [number, number, number, number] } = {}) => {
+    const q = new URLSearchParams()
+    if (opts.from) q.set('from', opts.from)
+    if (opts.to) q.set('to', opts.to)
+    // Rounded: a map emits bounds to fifteen decimal places, and a pan of half
+    // a metre should hit the same cache entry rather than a new URL.
+    if (opts.bbox) q.set('bbox', opts.bbox.map(n => n.toFixed(4)).join(','))
+    const qs = q.toString()
+    return request<{ tracks: Track[]; capped: boolean; preparing: number }>(
+      `/api/workouts/tracks${qs ? `?${qs}` : ''}`,
+    )
+  },
   weatherStatus: () => request<import('../data/workouts').WeatherCounts>('/api/workouts/weather/status'),
   requestWeatherBackfill: () =>
     request<{ queued: number }>('/api/workouts/weather/backfill', { method: 'POST' }),

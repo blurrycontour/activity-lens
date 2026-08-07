@@ -69,6 +69,14 @@ const (
 	// 5,000. The ticker remains the floor, so this only ever delays a pass that
 	// was already about to happen soon.
 	weatherMinGap = time.Minute
+
+	// trackBatch is how many legacy workouts get a simplified route per pass.
+	//
+	// Far larger than the weather batch, and it can be: this is local work with
+	// no service to be polite to. It is still bounded, because each row means
+	// decompressing a full route, and doing a whole library at once on a
+	// self-hosted box competes with the requests people are waiting on.
+	trackBatch = 200
 )
 
 // StartScheduler runs the work that is driven by the clock rather than by a
@@ -91,6 +99,7 @@ func (s *Server) StartScheduler(ctx context.Context) {
 	// One pass at startup, so a restart does not skip that day's window.
 	s.sweep(ctx)
 	s.runWeatherPass(ctx)
+	s.trackPass(ctx)
 	for {
 		select {
 		case <-ctx.Done():
@@ -99,6 +108,10 @@ func (s *Server) StartScheduler(ctx context.Context) {
 			s.sweep(ctx)
 		case <-weatherTicker.C:
 			s.runWeatherPass(ctx)
+			// Shares the weather tick rather than adding a third: it is local
+			// work that drains and then costs one indexed query that matches
+			// nothing, which is the same bargain the notification sweep makes.
+			s.trackPass(ctx)
 		case <-s.weatherWake:
 			// Something was just imported. Without this the workout waits for the
 			// next tick — up to five minutes of a page saying "scheduled" for a
@@ -305,4 +318,36 @@ func (s *Server) sweep(ctx context.Context) {
 	} else if n > 0 {
 		slog.Info("pruned stale push subscriptions", "count", n)
 	}
+}
+
+// trackPass gives simplified routes to workouts that predate the overview map.
+//
+// Everything imported since carries one already, written at insert while the
+// route was in memory. This is only for the library that was there first, and
+// it empties itself: the partial index it queries shrinks to nothing, after
+// which the pass is one query that matches no rows.
+func (s *Server) trackPass(ctx context.Context) {
+	pending, err := s.workout.MissingTracks(ctx, trackBatch)
+	if err != nil {
+		slog.Warn("track pass: could not list workouts", "error", err)
+		return
+	}
+	if len(pending) == 0 {
+		return
+	}
+	for _, item := range pending {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		// Settles the row either way. A workout with no usable route is stored
+		// as looked-at-and-empty rather than left pending, or the pass would
+		// pick the same rows up forever and never reach the rest.
+		if err := s.workout.StoreTrack(ctx, item.ID, item.Route); err != nil {
+			slog.Warn("track pass: could not store track", "workout_id", item.ID, "error", err)
+			return
+		}
+	}
+	slog.Info("prepared workouts for the map", "count", len(pending))
 }

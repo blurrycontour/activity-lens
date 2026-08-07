@@ -41,9 +41,9 @@ function nearestRouteIndex(route: Array<[number, number]>, lat: number, lng: num
   return best
 }
 
-type MapLayerId = 'street' | 'topo' | 'satellite'
+export type MapLayerId = 'street' | 'topo' | 'satellite'
 
-const MAP_LAYER_KEY = 'al_map_layer'
+export const MAP_LAYER_KEY = 'al_map_layer'
 /** Start and finish pins, as plain elements for a MapLibre marker. */
 function pinElement(html: string, cls = 'route-pin'): HTMLElement {
   const el = document.createElement('div')
@@ -79,7 +79,7 @@ function rasterStyle(tiles: string[], attribution: string, maxzoom: number): map
  * stay raster because there is no vector equivalent — aerial imagery is
  * photographs, and OpenTopoMap's relief shading is baked into its tiles.
  */
-const MAP_LAYERS: Record<MapLayerId, { label: string; style: string | maplibregl.StyleSpecification; maxZoom: number }> = {
+export const MAP_LAYERS: Record<MapLayerId, { label: string; style: string | maplibregl.StyleSpecification; maxZoom: number }> = {
   street: {
     label: 'Street',
     style: cachedURL('https://tiles.openfreemap.org/styles/liberty'),
@@ -105,7 +105,7 @@ const MAP_LAYERS: Record<MapLayerId, { label: string; style: string | maplibregl
   },
 }
 
-function LayerSwitcher({ layer, onChange, offsetRight = 46 }: {
+export function LayerSwitcher({ layer, onChange, offsetRight = 46 }: {
   layer: MapLayerId
   onChange: (l: MapLayerId) => void
   /** Distance from the right edge, so this sits beside the maximize button when
@@ -169,7 +169,7 @@ export type Shading = 'accent' | 'hr' | 'pace' | 'elevation' | 'cadence'
  * creating a throwaway context per render is not free.
  */
 let webglAnswer: boolean | null = null
-function hasWebGL(): boolean {
+export function hasWebGL(): boolean {
   if (webglAnswer !== null) return webglAnswer
   try {
     const canvas = document.createElement('canvas')

@@ -116,6 +116,18 @@ type Repository interface {
 	// WeatherCounts tallies this user's workouts by status, so the UI can offer
 	// each action with a number rather than a vague promise.
 	WeatherCounts(ctx context.Context, userID int64) (WeatherCounts, error)
+
+	// ListTracks returns simplified routes for the overview map, filtered by
+	// viewport and date range in SQL so a pan never decompresses a library.
+	ListTracks(ctx context.Context, userID int64, q TrackQuery) ([]Track, error)
+	// ListMissingTracks returns workouts that predate this feature, with their
+	// routes, for the background pass to simplify. Same materialise-before-you-
+	// write rule as ListPendingWeather.
+	ListMissingTracks(ctx context.Context, limit int) ([]TrackBackfill, error)
+	// SetTrack stores a simplified route and its bounding box.
+	SetTrack(ctx context.Context, workoutID string, route []LatLng) error
+	// CountMissingTracks reports how much of the backfill is left.
+	CountMissingTracks(ctx context.Context, userID int64) (int, error)
 }
 
 // SQLiteRepository implements Repository on top of *sql.DB (SQLite dialect).
@@ -170,15 +182,24 @@ func (r *SQLiteRepository) Create(ctx context.Context, w *Workout) error {
 	// vicinity: Update deliberately never mentions them, so no edit or
 	// recalculation can wipe a reading. See SetWeather and friends below.
 	lat, lon, weatherStatus := deriveWeatherTarget(w)
+	// The simplified track for the overview map, derived here for the same
+	// reason: the route is in memory at exactly this moment and nowhere else
+	// without decompressing it again.
+	track, box, err := trackFor(w.Route)
+	if err != nil {
+		return err
+	}
 	_, err = r.db.ExecContext(ctx, `INSERT INTO workouts (`+insertCols+`, created_at, updated_at,
-		start_lat, start_lon, weather_status)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		start_lat, start_lon, weather_status,
+		track, track_points, bbox_min_lat, bbox_max_lat, bbox_min_lon, bbox_max_lon)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		w.ID, w.UserID, w.Name, string(w.Type), w.StartTime.UTC().Format(time.RFC3339),
 		w.Duration, w.Distance, w.AvgHR, w.MaxHR, w.ElevationGain, w.Calories, w.Steps,
 		w.AvgPace, w.AvgSpeed, s.route, s.hr, s.pace, s.elev, s.cadence, w.Notes,
 		boolToInt(w.CaloriesManual), boolToInt(w.CaloriesReported), boolToInt(w.StepsManual),
 		string(w.Source), nullIfEmpty(w.ExternalID), nullIfEmpty(w.ContentHash), now, now,
-		lat, lon, string(weatherStatus))
+		lat, lon, string(weatherStatus),
+		track.blob, track.points, box.MinLat, box.MaxLat, box.MinLon, box.MaxLon)
 	if err != nil {
 		if isUniqueViolation(err) {
 			return ErrDuplicate
@@ -972,4 +993,219 @@ func unmarshalInto(data []byte, v any) error {
 		return fmt.Errorf("unmarshal series: %w", err)
 	}
 	return nil
+}
+
+// ── The overview map ────────────────────────────────────────────────────────
+
+// trackBlob is a simplified route ready for the database, with the point count
+// that says whether there is one at all.
+type trackBlob struct {
+	blob   []byte
+	points int
+}
+
+// marshalTrack simplifies a route and encodes it the same way the full one is.
+//
+// The point count is stored beside the blob and is the only thing that
+// distinguishes "not computed yet" from "computed, and there was no route" —
+// both of which leave a zero bounding box, which is itself a real place in the
+// Gulf of Guinea.
+func marshalTrack(route []LatLng) (trackBlob, error) {
+	if !RouteBounds(route).Ok() {
+		// Indoor, or no GPS. Recorded as a settled zero rather than left null,
+		// so the backfill does not pick it up again on every pass.
+		return trackBlob{points: 0}, nil
+	}
+	simplified := SimplifyRoute(route)
+	data, err := json.Marshal(simplified)
+	if err != nil {
+		return trackBlob{}, fmt.Errorf("marshal track: %w", err)
+	}
+	blob, err := gzipBytes(data)
+	if err != nil {
+		return trackBlob{}, err
+	}
+	return trackBlob{blob: blob, points: len(simplified)}, nil
+}
+
+// noRouteBounds marks a workout as looked-at and mapless.
+//
+// Out of range for a real coordinate, so it can never match a viewport, and
+// non-zero, so the backfill can tell it apart from a row that has never been
+// computed. Those two are the same value otherwise — the migration defaults
+// every box to zero, and zero is also a real place in the Gulf of Guinea.
+//
+// A nullable column would say this more plainly, but every other column here is
+// NOT NULL DEFAULT and mixing the two conventions is worse than one sentinel
+// named in one place.
+var noRouteBounds = Bounds{MinLat: -999, MaxLat: -999, MinLon: -999, MaxLon: -999}
+
+// trackFor prepares a route for storage: the simplified blob, and a box that
+// distinguishes "no route" from "not computed yet" whichever path wrote it.
+func trackFor(route []LatLng) (trackBlob, Bounds, error) {
+	track, err := marshalTrack(route)
+	if err != nil {
+		return trackBlob{}, Bounds{}, err
+	}
+	box := RouteBounds(route)
+	if !box.Ok() {
+		box = noRouteBounds
+	}
+	return track, box, nil
+}
+
+// Track is one workout as the overview map draws it.
+type Track struct {
+	ID     string    `json:"id"`
+	Name   string    `json:"name"`
+	Type   Type      `json:"type"`
+	Date   string    `json:"date"`
+	Points []LatLng  `json:"points"`
+	Meters float64   `json:"meters"`
+	Start  time.Time `json:"-"`
+}
+
+// TrackQuery bounds what the map asks for.
+type TrackQuery struct {
+	// Box is the visible area. Zero bounds mean "wherever they are", which is
+	// what the first load asks before it knows where to look.
+	Box Bounds
+	// From and To bound start_time; zero means unbounded.
+	From, To time.Time
+	// Limit caps the answer. The map draws what it is given and says when it
+	// was capped — an unbounded query is the one thing that cannot be made to
+	// stay fast as a library grows.
+	Limit int
+}
+
+// ListTracks returns the simplified routes the map should draw.
+//
+// Never touches the full route blob: that is the whole point of storing a
+// simplified copy. The rows it reads are the small ones, and the bounding-box
+// test happens in SQL so a pan over a city does not decompress a library.
+func (r *SQLiteRepository) ListTracks(ctx context.Context, userID int64, q TrackQuery) ([]Track, error) {
+	where := []string{"user_id = ?", "track_points > 0"}
+	args := []any{userID}
+	if !q.From.IsZero() {
+		where = append(where, "start_time >= ?")
+		args = append(args, q.From.UTC().Format(time.RFC3339))
+	}
+	if !q.To.IsZero() {
+		where = append(where, "start_time <= ?")
+		args = append(args, q.To.UTC().Format(time.RFC3339))
+	}
+	if q.Box.Ok() {
+		// Rectangle overlap, not containment: a route running off the side of
+		// the screen is still on the screen, and testing containment would make
+		// long rides vanish as you zoom in on them.
+		where = append(where,
+			"bbox_min_lat <= ? AND bbox_max_lat >= ? AND bbox_min_lon <= ? AND bbox_max_lon >= ?")
+		args = append(args, q.Box.MaxLat, q.Box.MinLat, q.Box.MaxLon, q.Box.MinLon)
+	}
+	limit := q.Limit
+	if limit <= 0 {
+		limit = 2000
+	}
+	args = append(args, limit)
+
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, name, type, start_time, distance, track FROM workouts
+		 WHERE `+strings.Join(where, " AND ")+`
+		 ORDER BY start_time DESC LIMIT ?`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list tracks: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]Track, 0, 64)
+	for rows.Next() {
+		var t Track
+		var startTime string
+		var blob []byte
+		if err := rows.Scan(&t.ID, &t.Name, &t.Type, &startTime, &t.Meters, &blob); err != nil {
+			return nil, fmt.Errorf("scan track: %w", err)
+		}
+		if err := unmarshalInto(blob, &t.Points); err != nil {
+			// One unreadable blob is not a reason to return no map.
+			continue
+		}
+		if len(t.Points) < 2 {
+			continue
+		}
+		if ts, err := time.Parse(time.RFC3339, startTime); err == nil {
+			t.Start = ts
+			t.Date = ts.Format("2006-01-02")
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+// TrackBackfill is a workout still owed a simplified route.
+type TrackBackfill struct {
+	ID    string
+	Route []LatLng
+}
+
+// ListMissingTracks returns workouts that predate this feature, with their full
+// routes decompressed ready to simplify.
+//
+// Bounded by limit and materialised before returning, for the same reason
+// ListPendingWeather is: the pool holds one connection, so an open cursor plus
+// the UPDATE that follows is a deadlock that takes the process with it.
+func (r *SQLiteRepository) ListMissingTracks(ctx context.Context, limit int) ([]TrackBackfill, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, route FROM workouts WHERE track_points = 0 AND bbox_min_lat = 0 AND bbox_max_lat = 0
+		 LIMIT ?`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list missing tracks: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]TrackBackfill, 0, limit)
+	for rows.Next() {
+		var item TrackBackfill
+		var blob []byte
+		if err := rows.Scan(&item.ID, &blob); err != nil {
+			return nil, fmt.Errorf("scan missing track: %w", err)
+		}
+		// An unreadable route still gets returned, with no points: SetTrack
+		// then settles it to a computed zero so it leaves the queue rather than
+		// being retried on every pass forever.
+		_ = unmarshalInto(blob, &item.Route)
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
+
+// SetTrack stores a simplified route and its bounding box. A workout with no
+// usable route is settled rather than left queued; see trackFor.
+func (r *SQLiteRepository) SetTrack(ctx context.Context, workoutID string, route []LatLng) error {
+	track, box, err := trackFor(route)
+	if err != nil {
+		return err
+	}
+	_, err = r.db.ExecContext(ctx,
+		`UPDATE workouts SET track = ?, track_points = ?,
+		 bbox_min_lat = ?, bbox_max_lat = ?, bbox_min_lon = ?, bbox_max_lon = ?
+		 WHERE id = ?`,
+		track.blob, track.points, box.MinLat, box.MaxLat, box.MinLon, box.MaxLon, workoutID)
+	if err != nil {
+		return fmt.Errorf("set track: %w", err)
+	}
+	return nil
+}
+
+// CountMissingTracks reports how much of the backfill is left, so the map can
+// say "still preparing" rather than quietly showing half a library.
+func (r *SQLiteRepository) CountMissingTracks(ctx context.Context, userID int64) (int, error) {
+	var n int
+	err := r.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM workouts
+		 WHERE user_id = ? AND track_points = 0 AND bbox_min_lat = 0 AND bbox_max_lat = 0`,
+		userID).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("count missing tracks: %w", err)
+	}
+	return n, nil
 }

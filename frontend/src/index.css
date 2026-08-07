@@ -1239,6 +1239,77 @@ body {
   color: var(--text-2);
 }
 
+/* ── The all-workouts map ── */
+
+.map-page {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.map-page-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.map-page-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+}
+.map-mode { display: flex; gap: 6px; }
+.map-mode .chip { display: inline-flex; align-items: center; gap: 5px; }
+.map-page-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+.map-page-note.error { color: var(--danger); }
+
+/* The map takes what is left of the viewport rather than a fixed height: this
+   page exists to be looked at, and a short box in a tall empty page is the one
+   layout that wastes the reason for having it. The floor keeps it usable when
+   the filters wrap onto two lines on a phone. */
+.map-page-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 420px;
+  height: calc(100vh - 260px);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) * 1.5);
+  overflow: hidden;
+  background: var(--bg-3);
+}
+.map-page-gl { position: absolute; inset: 0; }
+.map-page-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-3);
+}
+/* Sits over the map without swallowing a drag through it. */
+.map-page-empty.overlay-note {
+  pointer-events: none;
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+}
+
+@media (max-width: 768px) {
+  /* Less chrome above it on a phone, and the bottom nav below. */
+  .map-page-canvas { height: calc(100vh - 300px); min-height: 340px; }
+}
+
 /* ── Share card ── */
 
 /* Narrower than the other modals: the card is portrait, and a wide box around a

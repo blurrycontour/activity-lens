@@ -20,6 +20,7 @@ import Consistency from './pages/Consistency'
 import Analysis from './pages/Analysis'
 import Equipment from './pages/Equipment'
 import Help from './pages/Help'
+import MapPage from './pages/MapPage'
 import Settings from './pages/settings'
 import Admin from './pages/admin'
 import Login from './pages/Login'
@@ -361,7 +362,7 @@ export default function App() {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return
       if (gPressed) {
         gPressed = false
-        const map: Record<string, Page> = { d: 'dashboard', w: 'workouts', a: 'analysis', c: 'consistency', e: 'equipment' }
+        const map: Record<string, Page> = { d: 'dashboard', w: 'workouts', a: 'analysis', c: 'consistency', m: 'map', e: 'equipment' }
         if (map[e.key]) { navigate(map[e.key]); return }
       }
       if (e.key === 'g') { gPressed = true; setTimeout(() => { gPressed = false }, 1000); return }
@@ -499,6 +500,8 @@ export default function App() {
           <Workouts onSelect={selectWorkout} onImport={() => setShowImport(true)} />
         ) : page === 'analysis' ? (
           <Analysis />
+        ) : page === 'map' ? (
+          <MapPage />
         ) : page === 'consistency' ? (
           <Consistency />
         ) : page === 'equipment' ? (
