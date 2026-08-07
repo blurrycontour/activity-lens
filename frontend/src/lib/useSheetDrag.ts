@@ -48,8 +48,13 @@ export default function useSheetDrag(onClose: () => void, scrollRef?: RefObject<
   function onTouchEnd() {
     if (startY.current < 0) return
     startY.current = -1
-    if (dragRef.current > DISMISS_PX) onClose()
-    else setDistance(0)
+    const dismiss = dragRef.current > DISMISS_PX
+    // Reset before closing, not instead of it. A sheet whose owner unmounts on
+    // close takes this state with it, but one that merely hides — the More
+    // sheet is a flag on a component that stays mounted — keeps it, and opened
+    // next time already pushed down by however far it was swiped away.
+    setDistance(0)
+    if (dismiss) onClose()
   }
 
   return {
