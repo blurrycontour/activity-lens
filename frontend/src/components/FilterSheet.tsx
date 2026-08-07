@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { X } from 'lucide-react'
+import useSheetDrag from '../lib/useSheetDrag'
 
 /** One selectable value within a group. */
 export interface FilterOption<T> {
@@ -26,9 +27,6 @@ export interface FilterGroup {
   /* eslint-enable @typescript-eslint/no-explicit-any */
 }
 
-/** Downward drag, in px, past which releasing dismisses the sheet. */
-const DISMISS_PX = 90
-
 interface FilterSheetProps {
   groups: FilterGroup[]
   onClose: () => void
@@ -43,12 +41,8 @@ interface FilterSheetProps {
  * and the page header collapses to a single row.
  */
 export default function FilterSheet({ groups, onClose, onReset }: FilterSheetProps) {
-  // How far the sheet has been dragged down, in px. State drives the transform;
-  // the ref is what touchend reads, since a state update may not have applied.
-  const [drag, setDrag] = useState(0)
-  const dragRef = useRef(0)
-  const startY = useRef(0)
   const bodyRef = useRef<HTMLDivElement>(null)
+  const sheet = useSheetDrag(onClose, bodyRef)
 
   // A sheet is a modal surface, so Escape should dismiss it like any other.
   useEffect(() => {
@@ -56,36 +50,6 @@ export default function FilterSheet({ groups, onClose, onReset }: FilterSheetPro
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
-
-  function setDragDistance(px: number) {
-    dragRef.current = px
-    setDrag(px)
-  }
-
-  function onTouchStart(e: React.TouchEvent) {
-    // Dragging from the option list should scroll it, not move the sheet —
-    // unless it is already at the top, where there is nothing left to scroll.
-    if (bodyRef.current?.contains(e.target as Node) && bodyRef.current.scrollTop > 0) {
-      startY.current = -1
-      return
-    }
-    startY.current = e.touches[0].clientY
-  }
-
-  function onTouchMove(e: React.TouchEvent) {
-    if (startY.current < 0) return
-    // Only downward travel moves the sheet; pulling up does nothing, so it
-    // cannot be dragged taller than it is.
-    const dy = Math.max(0, e.touches[0].clientY - startY.current)
-    setDragDistance(dy)
-  }
-
-  function onTouchEnd() {
-    if (startY.current < 0) return
-    startY.current = -1
-    if (dragRef.current > DISMISS_PX) onClose()
-    else setDragDistance(0)
-  }
 
   return (
     <>
@@ -95,15 +59,8 @@ export default function FilterSheet({ groups, onClose, onReset }: FilterSheetPro
         role="dialog"
         aria-label="Filters"
         aria-modal="true"
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
-        onTouchCancel={onTouchEnd}
-        style={{
-          transform: drag > 0 ? `translateY(${drag}px)` : undefined,
-          // Track the finger 1:1 while dragging; ease back on release.
-          transition: drag > 0 ? 'none' : undefined,
-        }}
+        {...sheet.handlers}
+        style={sheet.style}
       >
         <div className="sheet-grab" aria-hidden="true" />
         <div className="sheet-head">

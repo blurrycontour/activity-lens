@@ -78,6 +78,9 @@ export default function MapPage() {
   const [preparing, setPreparing] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [full, setFull] = useState(false)
+  // Whether the first request has come back, however it went. The map waits for
+  // it so that it can be built already looking at the right place.
+  const [answered, setAnswered] = useState(false)
 
   /*
    * The map's container, created here and never rendered by React.
@@ -138,6 +141,9 @@ export default function MapPage() {
       setError('Could not load your routes.')
     } finally {
       setLoading(false)
+      // The map is not built until this has happened once, so that it can open
+      // already framed on the routes. See the build effect.
+      setAnswered(true)
     }
   }, [from])
 
@@ -219,6 +225,18 @@ export default function MapPage() {
   )
   const heat = mode === 'heat' || (mode === 'auto' && shown.length > HEATMAP_FROM)
 
+  // Read once, when the map is built, without making the routes a dependency of
+  // building it.
+  const shownRef = useRef(shown)
+  shownRef.current = shown
+
+  /** The box around the routes, or null when there are none to frame. */
+  const routeBounds = useCallback(() => {
+    const b = new maplibregl.LngLatBounds()
+    for (const t of shownRef.current) for (const [lat, lon] of t.points) b.extend([lon, lat])
+    return b.isEmpty() ? null : b
+  }, [])
+
   // ── The map ────────────────────────────────────────────────────────────────
   // Torn down when the page goes away, and only then. Keeping this out of the
   // effect below is what lets that one re-run as the container moves without
@@ -230,17 +248,28 @@ export default function MapPage() {
   }, [])
 
   useEffect(() => {
-    if (!host || !glAvailable) return
+    // Waiting for the first response before building anything is what stops the
+    // map opening on the whole world and then jumping. Framing it afterwards
+    // with fitBounds is a camera move, and a camera move is visible however
+    // short it is; passing the box to the constructor means the first frame it
+    // ever draws is already the right one — and the tiles it fetches are the
+    // ones you wanted, rather than a set of zoom-1 world tiles nobody sees.
+    if (!host || !glAvailable || !answered) return
     // Moves the container if it already exists elsewhere; appendChild on a node
     // that has a parent is a move, not a copy, so the map comes with it.
     host.appendChild(holder)
 
     if (!mapRef.current) {
+      const bounds = routeBounds()
+      if (bounds) needsFit.current = false
       const map = new maplibregl.Map({
         container: holder,
         style: MAP_LAYERS[layer].style,
-        center: [0, 20],
-        zoom: 1.4,
+        // A library with no routes in range has nothing to frame, so it opens
+        // on the world as before — there is nothing to jump to.
+        ...(bounds
+          ? { bounds, fitBoundsOptions: { padding: 48, maxZoom: 14 } }
+          : { center: [0, 20] as [number, number], zoom: 1.4 }),
         attributionControl: { compact: true },
         pitchWithRotate: false,
         dragRotate: false,
@@ -288,7 +317,7 @@ export default function MapPage() {
     // `layer` is read only when the map is first built; changing it afterwards
     // goes through setStyle in its own effect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [glAvailable, host, holder])
+  }, [glAvailable, host, holder, answered, routeBounds])
 
   // Switching base layer replaces the style, which drops every source and layer
   // with it; the data effect below re-adds them when the new style settles.
@@ -490,6 +519,13 @@ export default function MapPage() {
             </button>
           )}
         </>
+      )}
+      {/* Nothing is built until the routes are known, so the panel would
+          otherwise be a blank rectangle for as long as that takes. */}
+      {glAvailable && !answered && (
+        <div className="map-page-empty">
+          <Loader2 size={18} className="spin" />
+        </div>
       )}
       {!loading && shown.length === 0 && !error && (
         <div className="map-page-empty overlay-note">
