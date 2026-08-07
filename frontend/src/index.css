@@ -1239,6 +1239,47 @@ body {
   color: var(--text-2);
 }
 
+/* ── Share card ── */
+
+/* Narrower than the other modals: the card is portrait, and a wide box around a
+   tall image is mostly empty space. Capped by height as well, so the preview
+   stays whole on a short phone in landscape rather than scrolling. */
+.share-card-modal {
+  max-width: 380px;
+  width: calc(100vw - 32px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.share-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.share-card-title { font-size: 15px; font-weight: 600; }
+.share-card-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  color: var(--text-3);
+  max-height: 60vh;
+}
+.share-card-preview canvas { max-height: 60vh; width: auto !important; }
+.share-card-note { font-size: 12px; color: var(--text-3); line-height: 1.5; }
+.share-card-hint { font-size: 11px; color: var(--text-3); line-height: 1.5; }
+/* The primary action takes the room; the two format buttons sit at their own
+   width beside it, and all three stay on one line down to a small phone. */
+.share-card-actions {
+  display: flex;
+  gap: 8px;
+}
+.share-card-actions .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.share-card-actions .btn-primary { flex: 1; }
+
 /* ── Theme picker (Settings → Appearance) ── */
 
 /* Three abreast on a desktop, stacked on a phone: the hint under each label is

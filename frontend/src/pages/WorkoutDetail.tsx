@@ -7,7 +7,7 @@ import Dropdown from '../components/Dropdown'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ReferenceDot, BarChart, Bar } from 'recharts'
 import {
   ArrowLeft, Heart, Mountain, Zap, Clock, TrendingUp, Navigation, Download, Pencil, Trash2, Gauge,
-  Check, X as XIcon, Play, Pause, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, AlertTriangle, Activity, Share2, Lock, FileDown, Plus,
+  Check, X as XIcon, Play, Pause, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, AlertTriangle, Activity, Share2, Lock, FileDown, Plus, Image as ImageIcon,
 } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useAuth } from '../context/AuthContext'
@@ -39,6 +39,7 @@ const RouteMap = lazy(() => import('../components/RouteMap'))
 import useDismissOnBack from '../lib/useDismissOnBack'
 import UserAvatar, { avatarUrl, userLabel } from '../components/UserAvatar'
 import ShareDialog from '../components/ShareDialog'
+import ShareCardDialog from '../components/ShareCardDialog'
 
 interface WorkoutDetailProps {
   workout: Workout
@@ -79,7 +80,7 @@ function StatChip({ icon, label, value, calculated, manual }: { icon?: React.Rea
   )
 }
 
-function OptionsMenu({ onEdit, onExport, onDownloadOriginal, onShare, onRecalculate, onDelete, deleting }: { onEdit: () => void; onExport: () => void; onDownloadOriginal?: () => void; onShare?: () => void; onRecalculate: () => void; onDelete: () => void; deleting: boolean }) {
+function OptionsMenu({ onEdit, onExport, onDownloadOriginal, onShare, onShareCard, onRecalculate, onDelete, deleting }: { onEdit: () => void; onExport: () => void; onDownloadOriginal?: () => void; onShare?: () => void; onShareCard: () => void; onRecalculate: () => void; onDelete: () => void; deleting: boolean }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -109,6 +110,12 @@ function OptionsMenu({ onEdit, onExport, onDownloadOriginal, onShare, onRecalcul
               <Share2 size={14} /> Share
             </button>
           )}
+          {/* Always offered, unlike Share above: that one publishes a link and
+              needs the workout to be shareable, this one makes a picture out of
+              what is already on screen and needs nothing from the server. */}
+          <button className="options-menu-item" onClick={() => { setOpen(false); onShareCard() }}>
+            <ImageIcon size={14} /> Share card
+          </button>
           <button className="options-menu-item" onClick={() => { setOpen(false); onExport() }}>
             <Download size={14} /> Export GPX
           </button>
@@ -433,6 +440,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
   const { user } = useAuth()
   const [w, setW] = useState(w0)
   const [sharing, setSharing] = useState(false)
+  const [cardOpen, setCardOpen] = useState(false)
   /**
    * Whether this workout belongs to someone else — it was made public or
    * shared directly with us. Everything stays visible (map, charts, splits);
@@ -1037,6 +1045,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
                 onExport={() => void downloadWorkoutGPX(w).catch(reportSaveFailure)}
                 onDownloadOriginal={w.hasOriginal ? downloadOriginal : undefined}
                 onShare={() => setSharing(true)}
+                onShareCard={() => setCardOpen(true)}
                 onRecalculate={() => { setRecalcErr(null); setConfirmRecalc(true) }}
                 onDelete={() => setConfirmDelete(true)}
                 deleting={deleting}
@@ -1350,6 +1359,10 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
 
       {sharing && (
         <ShareDialog workout={w} onClose={() => setSharing(false)} />
+      )}
+
+      {cardOpen && (
+        <ShareCardDialog workout={w} onClose={() => setCardOpen(false)} />
       )}
 
       {expanded === 'map' && (

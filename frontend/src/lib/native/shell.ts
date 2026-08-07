@@ -4,6 +4,7 @@ import { isNative } from '../serverConfig'
 /** Implemented by mobile/android/.../ShellPlugin.java. */
 interface ShellPlugin {
   saveFile(options: { filename: string; mime: string; base64: string }): Promise<{ path: string }>
+  shareFile(options: { filename: string; mime: string; base64: string; title?: string; text?: string }): Promise<void>
   toast(options: { message: string }): Promise<void>
 }
 
@@ -54,4 +55,24 @@ export async function saveFileNative(filename: string, blob: Blob): Promise<stri
     base64,
   })
   return path
+}
+
+/**
+ * Hands a file to the Android share sheet. Native only.
+ *
+ * Separate from saveFileNative because the two answer different questions:
+ * saving is "keep this", sharing is "send this to someone", and a user who
+ * meant the second is not served by a file appearing in Downloads for them to
+ * go and find. On the web `navigator.share` does this job; the Android WebView
+ * does not implement it, which is the whole reason for the plugin method.
+ */
+export async function shareFileNative(filename: string, blob: Blob, opts: { title?: string; text?: string } = {}): Promise<void> {
+  if (!isNative()) throw new Error('not running natively')
+  const base64 = await toBase64(blob)
+  await Shell.shareFile({
+    filename,
+    mime: blob.type || 'application/octet-stream',
+    base64,
+    ...opts,
+  })
 }

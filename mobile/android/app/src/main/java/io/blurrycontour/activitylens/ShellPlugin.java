@@ -3,6 +3,7 @@ package io.blurrycontour.activitylens;
 import android.Manifest;
 import android.content.ContentResolver;
 import android.content.ContentValues;
+import android.content.Intent;
 import android.media.MediaScannerConnection;
 import android.net.Uri;
 import android.os.Build;
@@ -17,6 +18,7 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
+import androidx.core.content.FileProvider;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.OutputStream;
@@ -65,6 +67,80 @@ public class ShellPlugin extends Plugin {
         }
         getActivity().runOnUiThread(() -> android.widget.Toast.makeText(getContext(), message, android.widget.Toast.LENGTH_LONG).show());
         call.resolve();
+    }
+
+    /**
+     * Hands a file to the Android share sheet.
+     *
+     * Distinct from saveFile, and both are needed: saving answers "keep this",
+     * sharing answers "send this to someone", and a user who wanted the second
+     * is not served by a file appearing in Downloads for them to go and find.
+     *
+     * The bytes go to the cache directory rather than anywhere durable — the
+     * receiving app copies what it needs, and a share card is a thing you send
+     * rather than a thing you keep. Android clears that directory itself, so
+     * nothing here has to remember to.
+     *
+     * navigator.share exists in a browser and does this for free; the Android
+     * WebView does not implement it, which is why this is here at all.
+     */
+    @PluginMethod
+    public void shareFile(PluginCall call) {
+        String filename = call.getString("filename");
+        String base64 = call.getString("base64");
+        if (filename == null || filename.isEmpty() || base64 == null) {
+            call.reject("filename and base64 are required");
+            return;
+        }
+        String mime = call.getString("mime", "application/octet-stream");
+        byte[] bytes;
+        try {
+            bytes = Base64.decode(base64, Base64.DEFAULT);
+        } catch (IllegalArgumentException e) {
+            call.reject("file contents were not valid base64");
+            return;
+        }
+
+        try {
+            // A fixed subdirectory, so repeated shares reuse it rather than
+            // filling the cache with one directory each.
+            File dir = new File(getContext().getCacheDir(), "shared");
+            if (!dir.exists() && !dir.mkdirs()) {
+                call.reject("could not prepare the file for sharing");
+                return;
+            }
+            File out = new File(dir, filename);
+            try (FileOutputStream stream = new FileOutputStream(out)) {
+                stream.write(bytes);
+            }
+
+            // A file:// URI would throw FileUriExposedException on anything
+            // since Android 7; the provider is already declared in the manifest
+            // for exactly this.
+            Uri uri = FileProvider.getUriForFile(
+                getContext(),
+                getContext().getPackageName() + ".fileprovider",
+                out
+            );
+
+            Intent send = new Intent(Intent.ACTION_SEND);
+            send.setType(mime);
+            send.putExtra(Intent.EXTRA_STREAM, uri);
+            String text = call.getString("text");
+            if (text != null && !text.isEmpty()) {
+                send.putExtra(Intent.EXTRA_TEXT, text);
+            }
+            // Without this the receiving app has no permission to read the URI
+            // it was just handed, and the share silently produces nothing.
+            send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+            Intent chooser = Intent.createChooser(send, call.getString("title", "Share"));
+            chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            getActivity().startActivity(chooser);
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("could not share the file: " + e.getMessage(), e);
+        }
     }
 
     /**

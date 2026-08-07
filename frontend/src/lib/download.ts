@@ -8,7 +8,7 @@
 
 import { type Workout } from '../data/workouts'
 import { api } from './api'
-import { nativeToast, saveFileNative } from './native/shell'
+import { nativeToast, saveFileNative, shareFileNative } from './native/shell'
 import { isNative } from './serverConfig'
 
 /** Escapes text for inclusion in XML character data or an attribute value. */
@@ -70,6 +70,41 @@ export async function saveFile(filename: string, blob: Blob): Promise<void> {
   a.download = filename
   a.click()
   URL.revokeObjectURL(url)
+}
+
+/**
+ * Offers a file to whatever the platform uses for sending things to people.
+ *
+ * Three routes, in order of how much they respect the intent: the Android share
+ * sheet, the Web Share API where the browser has one that takes files, and a
+ * plain download where it does not. The last is a real fallback rather than a
+ * failure — a desktop browser with no share sheet has a downloads folder and an
+ * email client, and the file is what the user actually wanted.
+ *
+ * Returns whether it truly shared, so the caller can say "saved" rather than
+ * implying it went somewhere.
+ */
+export async function shareFile(filename: string, blob: Blob, opts: { title?: string; text?: string } = {}): Promise<boolean> {
+  if (isNative()) {
+    await shareFileNative(filename, blob, opts)
+    return true
+  }
+  const file = new File([blob], filename, { type: blob.type })
+  // canShare({ files }) is the only reliable test: several browsers expose
+  // navigator.share while refusing anything but a URL, and calling it with a
+  // file there throws rather than degrading.
+  if (navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: opts.title, text: opts.text })
+      return true
+    } catch (err) {
+      // The user dismissing the sheet is not an error, and must not fall
+      // through to downloading a file they just declined to send.
+      if (err instanceof DOMException && err.name === 'AbortError') return true
+    }
+  }
+  await saveFile(filename, blob)
+  return false
 }
 
 /** Exports a workout's route as a GPX file. */
