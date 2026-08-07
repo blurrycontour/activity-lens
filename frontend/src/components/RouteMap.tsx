@@ -20,6 +20,7 @@ import { hrZoneColor } from '../lib/hrZones'
 import { fmtDist, fmtDuration, fmtPace, type Workout } from '../data/workouts'
 import type { Playhead } from '../lib/playhead'
 import { cachedURL, installTileCache } from '../lib/tileCache'
+import { FINISH_FLAG_D, FINISH_POLE_D } from '../lib/mapMarkers'
 
 maplibregl.setWorkerUrl(maplibreWorkerUrl)
 // Registered alongside the worker, before any map is built, because the style
@@ -53,7 +54,7 @@ function pinElement(html: string, cls = 'route-pin'): HTMLElement {
 }
 
 const START_SVG = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-label="Start"><circle cx="12" cy="12" r="7" fill="var(--success)" stroke="#fff" stroke-width="2.5"/></svg>'
-const FINISH_SVG = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-label="Finish"><path d="M6 21V4" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><path d="M6 5h11l-2.2 3.3L17 12H6z" fill="var(--danger)" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>'
+const FINISH_SVG = `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-label="Finish"><path d="${FINISH_POLE_D}" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><path d="${FINISH_FLAG_D}" fill="var(--danger)" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>`
 
 
 /**
@@ -127,6 +128,9 @@ export function LayerSwitcher({ layer, onChange, offsetRight = 46 }: {
     <div
       className="options-menu-wrap"
       ref={ref}
+      // Inline, and not a class: .options-menu-wrap sets `position: relative`
+      // further down the stylesheet, so a class here loses to it and the
+      // switcher drops back into the flow and out of sight.
       style={{ position: 'absolute', top: 10, right: offsetRight, zIndex: 500 }}
     >
       <button

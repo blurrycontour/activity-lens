@@ -24,13 +24,18 @@ const SLOP = 8
 /** One full rotation of the spinner, in ms. Also the minimum time it stays up. */
 const SPIN_MS = 900
 /**
- * Surfaces that float above the page: bottom sheets, modals and their
- * backdrops. They render inline in the component tree, so despite being
- * positioned fixed they are still DOM descendants of the scroll container —
- * without this, dragging a sheet down to dismiss it bubbles here and is read as
- * a pull on the page behind it.
+ * Surfaces that own their own vertical drag.
+ *
+ * Bottom sheets, modals and their backdrops render inline in the component
+ * tree, so despite being positioned fixed they are still DOM descendants of the
+ * scroll container — without this, dragging a sheet down to dismiss it bubbles
+ * here and is read as a pull on the page behind it.
+ *
+ * A map is the same problem with a worse symptom: panning south is the most
+ * ordinary thing anyone does on the map page, and every one of those drags was
+ * arming the refresh indicator and dragging it down the screen.
  */
-const OVERLAY_SELECTOR = '.sheet, .modal, .modal-box, .overlay'
+const NO_PULL_SELECTOR = '.sheet, .modal, .modal-box, .overlay, .maplibregl-map'
 
 /**
  * Maps raw finger travel to indicator travel. Two slopes: responsive up to the
@@ -108,8 +113,8 @@ export default function PullToRefresh({ scrollEl, enabled, onRefresh }: PullToRe
         active = false
         return
       }
-      // A drag that starts on a sheet or modal belongs to that surface.
-      if (e.target instanceof Element && e.target.closest(OVERLAY_SELECTOR)) {
+      // A drag that starts on a sheet, a modal or a map belongs to that surface.
+      if (e.target instanceof Element && e.target.closest(NO_PULL_SELECTOR)) {
         active = false
         return
       }

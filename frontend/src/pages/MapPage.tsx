@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as maplibregl from 'maplibre-gl'
-import { Flame, Loader2, Maximize2, Minimize2, Route as RouteIcon } from 'lucide-react'
+import { Flame, Loader2, Maximize2, Route as RouteIcon } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
+import ExpandModal from '../components/ExpandModal'
 import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
 import { LayerSwitcher, MAP_LAYERS, MAP_LAYER_KEY, hasWebGL, type MapLayerId } from '../components/RouteMap'
@@ -51,28 +52,15 @@ type Mode = 'auto' | 'routes' | 'heat'
 /** Refetch no faster than this while a pan is in progress. */
 const PAN_DEBOUNCE = 400
 
-const VIEW_KEY = 'al_map_view'
-
-interface SavedView { lng: number; lat: number; zoom: number }
-
-/**
- * Where the map was left.
+/*
+ * The view is deliberately not remembered.
  *
- * Without this a reload dropped you at zoom 1.4 over the Atlantic looking at
- * nothing, because the first fetch has no viewport to ask about and the fit
- * only happens once. Restoring the position also means the first fetch asks
- * about somewhere real, which is the difference between a map that fills in and
- * one that appears empty.
+ * An earlier version persisted the centre and zoom, which meant arriving at the
+ * page put you wherever you last dragged to — often mid-ocean, at a zoom that
+ * showed nothing, with no clue that a "go back to my routes" control was what
+ * you needed. Opening the map fits it to the routes it just loaded, every time,
+ * so the page always starts by answering the question it exists to answer.
  */
-function readView(): SavedView | null {
-  try {
-    const v = JSON.parse(localStorage.getItem(VIEW_KEY) ?? 'null')
-    if (v && Number.isFinite(v.lng) && Number.isFinite(v.lat) && Number.isFinite(v.zoom)) return v
-  } catch {
-    // Corrupt or absent; fall back to fitting the data.
-  }
-  return null
-}
 
 export default function MapPage() {
   const [rangeDays, setRangeDays] = useLocalStorage<number>('al_map_range', 365)
@@ -91,12 +79,33 @@ export default function MapPage() {
   const [error, setError] = useState<string | null>(null)
   const [full, setFull] = useState(false)
 
-  const node = useRef<HTMLDivElement>(null)
+  /*
+   * The map's container, created here and never rendered by React.
+   *
+   * Maximizing moves it from the page into the modal. If React owned the
+   * element, that would be an unmount and a remount — a brand new MapLibre
+   * instance every time, which means a blank panel, the style, glyphs and
+   * sprite fetched again, and every visible tile re-decoded and re-uploaded to
+   * the GPU. Moving the element itself keeps the live map, its WebGL context
+   * and everything it has already downloaded, so maximizing is instant.
+   *
+   * `host` is the React-rendered box it currently lives in, and is state rather
+   * than a ref because the effect below has to run when it changes.
+   */
+  const [holder] = useState(() => {
+    const el = document.createElement('div')
+    el.className = 'map-page-gl'
+    return el
+  })
+  const [host, setHost] = useState<HTMLDivElement | null>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const glAvailable = useMemo(hasWebGL, [])
   // True until the first response has been fitted; the map opens on nothing in
   // particular and should move to where the workouts are exactly once.
   const needsFit = useRef(true)
+  // The pan debounce, held across the effect that binds it so the teardown
+  // below can clear it.
+  const panTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   const from = useMemo(() => {
     if (rangeDays <= 0) return undefined
@@ -148,10 +157,10 @@ export default function MapPage() {
     return () => clearTimeout(t)
   }, [preparing, load])
 
-  // Fullscreen is a CSS class rather than the Fullscreen API: the API is
-  // unreliable inside an Android WebView and on iOS Safari, and this has to
-  // work in the app as well as the browser. Escape leaves, like every other
-  // dismissible surface here.
+  // Not the Fullscreen API: it is unreliable inside an Android WebView and on
+  // iOS Safari, and this has to work in the app as well as the browser. The
+  // modal handles the back gesture and the close button; Escape is here so a
+  // keyboard has the same way out as every other dismissible surface.
   useEffect(() => {
     if (!full) return
     function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setFull(false) }
@@ -159,12 +168,50 @@ export default function MapPage() {
     return () => document.removeEventListener('keydown', onKey)
   }, [full])
 
+  /*
+   * The map runs to the bottom of the viewport, measured rather than computed.
+   *
+   * `100dvh` minus a constant was the obvious version and it was wrong at half
+   * the sizes it met: the header wraps onto a second line on a narrow phone,
+   * the filter row wraps independently of it, and the bottom bar exists on some
+   * widths and not others. Measuring the gap between the top of the map and the
+   * bottom of the scroll container is the only version that survives all of
+   * them, and it is one read per resize.
+   */
+  const canvasEl = useRef<HTMLDivElement>(null)
+  const [mapH, setMapH] = useState<number>()
+  useEffect(() => {
+    const el = canvasEl.current
+    if (!el) return
+    const measure = () => {
+      const scroller = el.closest('.main-content')
+      if (!scroller) return
+      const style = getComputedStyle(scroller)
+      // clientHeight includes the padding the bottom bar sits behind, so it has
+      // to come back off; the page's own bottom gutter comes off as well.
+      const usable = scroller.getBoundingClientRect().top + scroller.clientHeight
+        - parseFloat(style.paddingBottom || '0')
+      const gutter = parseFloat(getComputedStyle(el.parentElement ?? el).paddingBottom || '0')
+      const next = Math.round(usable - el.getBoundingClientRect().top - gutter)
+      // Only on a real change: this sets a height inside an element the
+      // observer is watching, and echoing it back would be an endless loop.
+      setMapH(prev => (prev != null && Math.abs(prev - next) < 2 ? prev : next))
+    }
+    measure()
+    // The header and the filter row are what move; watching them covers a
+    // rotation, a wrap, and the browser's address bar collapsing on scroll.
+    const ro = new ResizeObserver(measure)
+    if (el.parentElement) ro.observe(el.parentElement)
+    window.addEventListener('resize', measure)
+    return () => { ro.disconnect(); window.removeEventListener('resize', measure) }
+  }, [])
+
   // The container changed size under the canvas, which MapLibre cannot detect
   // on its own. Deferred a frame so the new layout has been applied.
   useEffect(() => {
     const id = requestAnimationFrame(() => mapRef.current?.resize())
     return () => cancelAnimationFrame(id)
-  }, [full])
+  }, [mapH])
 
   const shown = useMemo(
     () => typeFilter === 'All' ? tracks : tracks.filter(t => t.type === typeFilter),
@@ -173,55 +220,75 @@ export default function MapPage() {
   const heat = mode === 'heat' || (mode === 'auto' && shown.length > HEATMAP_FROM)
 
   // ── The map ────────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!node.current || mapRef.current || !glAvailable) return
-    const saved = readView()
-    // A saved position means there is nothing to fit to: the user already chose
-    // where they wanted to be looking.
-    if (saved) needsFit.current = false
-    const map = new maplibregl.Map({
-      container: node.current,
-      style: MAP_LAYERS[layer].style,
-      center: saved ? [saved.lng, saved.lat] : [0, 20],
-      zoom: saved ? saved.zoom : 1.4,
-      attributionControl: { compact: true },
-      pitchWithRotate: false,
-      dragRotate: false,
-    })
-    map.touchZoomRotate.disableRotation()
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right')
-    mapRef.current = map
+  // Torn down when the page goes away, and only then. Keeping this out of the
+  // effect below is what lets that one re-run as the container moves without
+  // destroying the map each time.
+  useEffect(() => () => {
+    clearTimeout(panTimer.current)
+    mapRef.current?.remove()
+    mapRef.current = null
+  }, [])
 
-    // Debounced, because a drag fires moveend once but a pinch-zoom fires it
-    // repeatedly, and each one is a request.
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const onMove = () => {
-      const c = map.getCenter()
-      localStorage.setItem(VIEW_KEY, JSON.stringify({ lng: c.lng, lat: c.lat, zoom: map.getZoom() }))
-      clearTimeout(timer)
-      // Through a ref: this handler is bound once, and the direct reference
-      // would have kept fetching with the range that was selected when the map
-      // was built.
-      timer = setTimeout(() => { void loadRef.current() }, PAN_DEBOUNCE)
+  useEffect(() => {
+    if (!host || !glAvailable) return
+    // Moves the container if it already exists elsewhere; appendChild on a node
+    // that has a parent is a move, not a copy, so the map comes with it.
+    host.appendChild(holder)
+
+    if (!mapRef.current) {
+      const map = new maplibregl.Map({
+        container: holder,
+        style: MAP_LAYERS[layer].style,
+        center: [0, 20],
+        zoom: 1.4,
+        attributionControl: { compact: true },
+        pitchWithRotate: false,
+        dragRotate: false,
+      })
+      map.touchZoomRotate.disableRotation()
+      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right')
+      mapRef.current = map
+
+      // Debounced, because a drag fires moveend once but a pinch-zoom fires it
+      // repeatedly, and each one is a request.
+      const onMove = () => {
+        clearTimeout(panTimer.current)
+        // Through a ref: this handler is bound once, and the direct reference
+        // would have kept fetching with the range that was selected when the
+        // map was built.
+        panTimer.current = setTimeout(() => { void loadRef.current() }, PAN_DEBOUNCE)
+      }
+      map.on('moveend', onMove)
+      // Three, and via a ref for the same reason. `load` covers the first
+      // style; `styledata` and `idle` cover a base-layer switch, which discards
+      // every source and layer and needs them put back. Whichever arrives, the
+      // data is applied from what is current rather than from what was current
+      // at binding time.
+      const apply = () => applyRef.current()
+      map.on('load', apply)
+      map.on('styledata', apply)
+      // MapLibre builds the compact attribution *expanded* and only folds it
+      // away on the first interaction with the map, so a page that is looked at
+      // before it is touched wears a bar of tile credits across its corner.
+      // Removing the class is exactly what MapLibre's own minimise does. It is
+      // a documented stylesheet class rather than a private method, and the
+      // worst outcome if it is ever renamed is the attribution staying open —
+      // which is where it starts anyway.
+      map.on('load', () => {
+        map.getContainer()
+          .querySelector('.maplibregl-ctrl-attrib')
+          ?.classList.remove('maplibregl-compact-show')
+      })
     }
-    map.on('moveend', onMove)
-    // Both, and via a ref for the same reason. `load` covers the first style;
-    // `styledata` covers a base-layer switch, which discards every source and
-    // layer and needs them put back. Whichever arrives, the data is applied
-    // from what is current rather than from what was current at binding time.
-    const apply = () => applyRef.current()
-    map.on('load', apply)
-    map.on('styledata', apply)
-    return () => {
-      clearTimeout(timer)
-      map.remove()
-      mapRef.current = null
-    }
-    // Built once. Everything that changes afterwards reaches it through a ref
-    // or its own effect; rebuilding the map would throw away the user's
-    // position, which is the bug this whole block exists to avoid.
+
+    // The box around it changed size, which MapLibre cannot detect on its own.
+    // Deferred a frame so the new layout has been applied.
+    const id = requestAnimationFrame(() => mapRef.current?.resize())
+    return () => cancelAnimationFrame(id)
+    // `layer` is read only when the map is first built; changing it afterwards
+    // goes through setStyle in its own effect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [glAvailable])
+  }, [glAvailable, host, holder])
 
   // Switching base layer replaces the style, which drops every source and layer
   // with it; the data effect below re-adds them when the new style settles.
@@ -239,10 +306,38 @@ export default function MapPage() {
     [],
   )
 
-  /** Puts the current data on the map. A no-op until the style is ready. */
+  // Set while an apply is waiting for a style to finish installing, so a burst
+  // of styledata events queues one retry rather than dozens.
+  const waitingForStyle = useRef(false)
+
+  /**
+   * Puts the current data on the map.
+   *
+   * Sources and layers cannot be added to a style that is still installing, and
+   * switching the base layer throws every one of them away — so this has to run
+   * again afterwards, and the event that says "afterwards" is not reliable on
+   * its own. `styledata` fires several times during a switch, sometimes while
+   * `isStyleLoaded()` is still false, and the last one is not guaranteed to
+   * come after it turns true. That is how switching to Satellite and back left
+   * the routes gone until something else happened to redraw them.
+   *
+   * So a refusal here is not the end of it: `idle` fires once the map has
+   * finished loading and rendering everything it is going to, which is the one
+   * moment the style is certainly ready, and the apply is retried from there.
+   */
   const applyData = useCallback(() => {
     const map = mapRef.current
-    if (!map || !map.isStyleLoaded()) return
+    if (!map) return
+    if (!map.isStyleLoaded()) {
+      if (!waitingForStyle.current) {
+        waitingForStyle.current = true
+        map.once('idle', () => {
+          waitingForStyle.current = false
+          applyRef.current()
+        })
+      }
+      return
+    }
 
     const lines = {
       type: 'FeatureCollection' as const,
@@ -360,6 +455,50 @@ export default function MapPage() {
 
   const scope = rangeLabel(rangeDays)
 
+  /*
+   * The map's controls and the box the map lives in, rendered in exactly one
+   * place at a time: in the page, or inside the modal that maximizing opens.
+   * The map itself is not in here — it is moved between the two, see `holder`.
+   *
+   * The alternative was leaving it in the page and making it cover the screen
+   * with `position: fixed`, which is what the first version did and why the
+   * bottom bar sat on top of it: the swipe pager is a stacking context, so no
+   * z-index from in here can escape the page.
+   */
+  const mapPanel = (
+    <>
+      {glAvailable
+        ? <div ref={setHost} className="map-page-host" />
+        : (
+          <div className="map-page-empty">
+            This browser has no WebGL, so the map cannot be drawn here.
+          </div>
+        )}
+      {glAvailable && (
+        <>
+          {/* Takes the corner to itself when maximized: the modal's own header
+              carries the close button there, so nothing sits beside it. */}
+          <LayerSwitcher layer={layer} onChange={setLayer} offsetRight={full ? 10 : 46} />
+          {!full && (
+            <button
+              className="btn-icon map-page-expand"
+              onClick={() => setFull(true)}
+              title="Full screen"
+              aria-label="Full screen"
+            >
+              <Maximize2 size={14} />
+            </button>
+          )}
+        </>
+      )}
+      {!loading && shown.length === 0 && !error && (
+        <div className="map-page-empty overlay-note">
+          No routes in this view. Try a wider date range, or zoom out.
+        </div>
+      )}
+    </>
+  )
+
   return (
     <>
       <PageHeader
@@ -410,34 +549,16 @@ export default function MapPage() {
         )}
         {error && <p className="map-page-note error">{error}</p>}
 
-        <div className={`map-page-canvas${full ? ' full' : ''}`}>
-          {glAvailable
-            ? <div ref={node} className="map-page-gl" />
-            : (
-              <div className="map-page-empty">
-                This browser has no WebGL, so the map cannot be drawn here.
-              </div>
-            )}
-          {glAvailable && (
-            <>
-              <LayerSwitcher layer={layer} onChange={setLayer} offsetRight={46} />
-              <button
-                className="btn-icon map-page-expand"
-                onClick={() => setFull(f => !f)}
-                title={full ? 'Exit full screen' : 'Full screen'}
-                aria-label={full ? 'Exit full screen' : 'Full screen'}
-              >
-                {full ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-              </button>
-            </>
-          )}
-          {!loading && shown.length === 0 && !error && (
-            <div className="map-page-empty overlay-note">
-              No routes in this view. Try a wider date range, or zoom out.
-            </div>
-          )}
+        <div ref={canvasEl} className="map-page-canvas" style={{ height: mapH }}>
+          {!full && mapPanel}
         </div>
       </div>
+
+      {full && (
+        <ExpandModal title="Map" variant="map" onClose={() => setFull(false)}>
+          <div className="modal-immersive-map">{mapPanel}</div>
+        </ExpandModal>
+      )}
     </>
   )
 }

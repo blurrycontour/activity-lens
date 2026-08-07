@@ -36,7 +36,7 @@ import type { Shading } from '../components/RouteMap'
  * better trade than a slower first paint on every page in the app.
  */
 const RouteMap = lazy(() => import('../components/RouteMap'))
-import useDismissOnBack from '../lib/useDismissOnBack'
+import ExpandModal from '../components/ExpandModal'
 import UserAvatar, { avatarUrl, userLabel } from '../components/UserAvatar'
 import ShareDialog from '../components/ShareDialog'
 import ShareCardDialog from '../components/ShareCardDialog'
@@ -361,45 +361,6 @@ function HRZoneTooltip({ active, payload }: { active?: boolean; payload?: any[] 
   )
 }
 
-function ExpandModal({ title, onClose, children, variant }: {
-  title: string
-  onClose: () => void
-  children: React.ReactNode
-  /**
-   * 'map' drops the card's padding and lets the content run to the edges. On a
-   * phone that is the difference between a map in a box inside a scrolling page
-   * and a map you can actually read a route on.
-   */
-  variant?: 'map'
-}) {
-  useDismissOnBack(true, onClose)
-
-  const map = variant === 'map'
-  // Portalled to the body, and not merely fixed-positioned. It renders from
-  // deep inside the scrolling main content, whose ancestors carry the transform
-  // that drives pull-to-refresh — and a transform makes a fixed child position
-  // and stack against *it*, so the modal's z-index stopped applying to the app
-  // chrome and the top and bottom bars sat on top of it.
-  return createPortal(
-    <>
-      <div className="overlay" onClick={onClose} />
-      <div className={`modal modal-expand${map ? ' modal-immersive' : ''}`}>
-        <div className={`modal-box modal-box-expand${map ? ' modal-box-immersive' : ''}`}>
-          <div className={map ? 'modal-immersive-head' : 'modal-expand-head'}>
-            <h3 style={{ fontSize: 15, fontWeight: 700 }}>{title}</h3>
-            <button className="btn-icon" onClick={onClose} title="Close" aria-label="Close"><XIcon size={18} /></button>
-          </div>
-          {map ? children : (
-            <div className="modal-expand-body">
-              <div className="modal-expand-inner">{children}</div>
-            </div>
-          )}
-        </div>
-      </div>
-    </>,
-    document.body,
-  )
-}
 
 /**
  * A series prepared for plotting: reduced to a drawable number of points, with
@@ -898,6 +859,36 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
     ? avatarUrl(w.owner)
     : user ? avatarUrl(user) : undefined
 
+  /*
+   * The route map is mounted once and moved, not rendered in two places.
+   *
+   * Expanding it used to mount a second RouteMap inside the modal, which is a
+   * second MapLibre instance: a blank panel, the style, glyphs and sprite
+   * fetched again, and every visible tile decoded and uploaded to the GPU from
+   * scratch — a second of white on every expand, and two live WebGL contexts
+   * while it was open.
+   *
+   * A portal is what makes moving it possible. React cannot hand a rendered
+   * element to a new parent, but it can keep rendering into a DOM node we own,
+   * and that node can be moved anywhere. So the map's React position never
+   * changes — it is never unmounted — while its container hops between the card
+   * and the modal.
+   */
+  const [mapHolder] = useState(() => {
+    const el = document.createElement('div')
+    el.style.height = '100%'
+    return el
+  })
+  const [cardHost, setCardHost] = useState<HTMLDivElement | null>(null)
+  const [modalHost, setModalHost] = useState<HTMLDivElement | null>(null)
+  useEffect(() => {
+    // appendChild on a node that already has a parent is a move.
+    const target = expanded === 'map' ? modalHost : cardHost
+    target?.appendChild(mapHolder)
+    // MapLibre observes its own container, so the new size is picked up without
+    // being told.
+  }, [expanded, cardHost, modalHost, mapHolder])
+
   function mapCard(height: number | string, maximizeButton?: React.ReactNode) {
     return (
       // The fallback matches the frame the map will fill, so its arrival does
@@ -1070,19 +1061,9 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             squeezed. */}
         <div className="detail-top">
           <div className="card" style={{ padding: 0, overflow: 'hidden', position: 'relative', background: 'var(--bg-3)', display: 'flex', flexDirection: 'column', minHeight: 280 }}>
-            <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-              {mapCard('100%', (
-                <button
-                  className="btn-icon"
-                  onClick={() => setExpanded('map')}
-                  title="Expand map"
-                  aria-label="Expand map"
-                  style={{ position: 'absolute', top: 10, right: 10, zIndex: 500, background: 'var(--bg-2)', border: '1px solid var(--border)' }}
-                >
-                  <Maximize2 size={14} />
-                </button>
-              ))}
-            </div>
+            {/* Empty on purpose: the map is portalled into a node this hosts.
+                See mapHolder. */}
+            <div ref={setCardHost} style={{ flex: 1, minHeight: 0, position: 'relative' }} />
           </div>
 
           {/* Summary: every headline + derived stat grouped by category.
@@ -1357,6 +1338,23 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
         )}
       </div>
 
+      {/* Rendered once, wherever mapHolder currently is. The maximize button is
+          dropped while it is open — the modal's own header closes it. */}
+      {createPortal(
+        mapCard('100%', expanded === 'map' ? undefined : (
+          <button
+            className="btn-icon"
+            onClick={() => setExpanded('map')}
+            title="Expand map"
+            aria-label="Expand map"
+            style={{ position: 'absolute', top: 10, right: 10, zIndex: 500, background: 'var(--bg-2)', border: '1px solid var(--border)' }}
+          >
+            <Maximize2 size={14} />
+          </button>
+        )),
+        mapHolder,
+      )}
+
       {sharing && (
         <ShareDialog workout={w} onClose={() => setSharing(false)} />
       )}
@@ -1367,9 +1365,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
 
       {expanded === 'map' && (
         <ExpandModal title="Route" onClose={() => setExpanded(null)} variant="map">
-          <div className="modal-immersive-map">
-            {mapCard('100%')}
-          </div>
+          <div ref={setModalHost} className="modal-immersive-map" />
           <div className="modal-immersive-foot">
             <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onEnd={handleEnd} onScrub={handleScrub} />
           </div>
