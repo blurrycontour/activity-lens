@@ -96,6 +96,7 @@ environment variable.
 | [Deployment](docs/deployment.md) | Reverse proxy, HTTPS, backups, upgrades, PWA install |
 | [Architecture](docs/architecture.md) | How it fits together, and the decisions worth knowing before changing it |
 | [Development](docs/development.md) | Running locally, tests, migrations, project layout |
+| [UI design](docs/ui-design.md) | Tokens, layout and chart conventions — read before changing any UI |
 | [Android app](mobile/README.md) | Building an APK, signing it, and how the native app differs |
 
 ## Screenshots
