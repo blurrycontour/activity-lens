@@ -72,50 +72,55 @@ export default function ShareCardDialog({ workout, onClose }: {
   return (
     <>
       <div className="overlay" onClick={onClose} />
-      <div className="modal-box share-card-modal" role="dialog" aria-modal="true" aria-label="Share card">
-        <div className="share-card-head">
-          <h3 className="share-card-title">Share card</h3>
-          <button className="btn-icon" onClick={onClose} aria-label="Close"><X size={16} /></button>
-        </div>
+      {/* The .modal wrapper is what carries the z-index and the centring —
+          .modal-box on its own is an unpositioned div, so it rendered beneath
+          the overlay and the dialog was a blur with nothing in it. */}
+      <div className="modal">
+        <div className="modal-box share-card-modal" role="dialog" aria-modal="true" aria-label="Share card">
+          <div className="share-card-head">
+            <h3 className="share-card-title">Share card</h3>
+            <button className="btn-icon" onClick={onClose} aria-label="Close"><X size={16} /></button>
+          </div>
 
-        {/* Sized by aspect ratio rather than by the canvas, so the dialog does
-            not resize when the image lands. */}
-        <div className="share-card-preview" style={{ aspectRatio: `${CARD_W} / ${CARD_H}` }}>
-          {/* Always mounted, so the effect has something to draw on and React
-              keeps ownership of every node in here. Hidden until it has been
-              painted rather than swapped in afterwards. */}
-          <canvas
-            ref={canvasRef}
-            className="share-card-canvas"
-            style={{ opacity: ready ? 1 : 0 }}
-            aria-label={`Share card for ${workout.name}`}
-          />
-          {!ready && <Loader2 size={20} className="spin" style={{ position: 'absolute' }} />}
-        </div>
+          {/* Sized by aspect ratio rather than by the canvas, so the dialog does
+              not resize when the image lands. */}
+          <div className="share-card-preview" style={{ aspectRatio: `${CARD_W} / ${CARD_H}` }}>
+            {/* Always mounted, so the effect has something to draw on and React
+                keeps ownership of every node in here. Hidden until it has been
+                painted rather than swapped in afterwards. */}
+            <canvas
+              ref={canvasRef}
+              className="share-card-canvas"
+              style={{ opacity: ready ? 1 : 0 }}
+              aria-label={`Share card for ${workout.name}`}
+            />
+            {!ready && <Loader2 size={20} className="spin" style={{ position: 'absolute' }} />}
+          </div>
 
-        {note && <p className="share-card-note">{note}</p>}
+          {note && <p className="share-card-note">{note}</p>}
 
-        <div className="share-card-actions">
-          <button className="btn btn-primary" disabled={!ready || busy !== null} onClick={() => void run('share')}>
-            {busy === 'share'
-              ? <><Loader2 size={14} className="spin" /> Preparing…</>
-              : <><Share2 size={14} /> Share</>}
-          </button>
-          {/* Both formats offered rather than one chosen for the user: PNG is
-              the better image, JPEG is what some older upload forms accept. */}
-          <button className="btn btn-ghost" disabled={!ready || busy !== null} onClick={() => void run('png')}>
-            <Download size={14} /> PNG
-          </button>
-          <button className="btn btn-ghost" disabled={!ready || busy !== null} onClick={() => void run('jpeg')}>
-            <Download size={14} /> JPEG
-          </button>
+          <div className="share-card-actions">
+            <button className="btn btn-primary" disabled={!ready || busy !== null} onClick={() => void run('share')}>
+              {busy === 'share'
+                ? <><Loader2 size={14} className="spin" /> Preparing…</>
+                : <><Share2 size={14} /> Share</>}
+            </button>
+            {/* Both formats offered rather than one chosen for the user: PNG is
+                the better image, JPEG is what some older upload forms accept. */}
+            <button className="btn btn-ghost" disabled={!ready || busy !== null} onClick={() => void run('png')}>
+              <Download size={14} /> PNG
+            </button>
+            <button className="btn btn-ghost" disabled={!ready || busy !== null} onClick={() => void run('jpeg')}>
+              <Download size={14} /> JPEG
+            </button>
+          </div>
+          {!isNative() && (
+            <p className="share-card-hint">
+              Sharing uses your browser's share sheet where it has one, and saves
+              the image where it does not.
+            </p>
+          )}
         </div>
-        {!isNative() && (
-          <p className="share-card-hint">
-            Sharing uses your browser's share sheet where it has one, and saves
-            the image where it does not.
-          </p>
-        )}
       </div>
     </>
   )

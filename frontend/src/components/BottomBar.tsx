@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { MoreHorizontal } from 'lucide-react'
+import { MoreHorizontal, X } from 'lucide-react'
 import { BOTTOM_BAR_PAGES, MORE_PAGES, type Page } from '../lib/nav'
 import { PAGE_META } from './Sidebar'
 
@@ -27,24 +27,35 @@ export default function BottomBar({ currentPage, onNavigate }: BottomBarProps) {
 
   return (
     <>
+      {/* The app's own bottom sheet, not a bespoke panel: it already has the
+          grab handle, the safe-area padding, the entry animation and — the part
+          that matters — a z-index that clears the overlay. A hand-rolled one at
+          z-index 60 sat behind the blur and showed nothing at all. */}
       {open && (
         <>
           <div className="overlay" onClick={() => setOpen(false)} />
-          <div className="more-sheet" role="dialog" aria-modal="true" aria-label="More pages">
-            {MORE_PAGES.map(page => {
-              const meta = PAGE_META[page]
-              if (!meta) return null
-              return (
-                <button
-                  key={page}
-                  className={`more-sheet-item${currentPage === page ? ' active' : ''}`}
-                  onClick={() => { setOpen(false); onNavigate(page) }}
-                >
-                  {meta.icon(19)}
-                  <span>{meta.label}</span>
-                </button>
-              )
-            })}
+          <div className="sheet" role="dialog" aria-modal="true" aria-label="More pages">
+            <div className="sheet-grab" aria-hidden="true" />
+            <div className="sheet-head">
+              <h3 style={{ fontSize: 15, fontWeight: 700, flex: 1 }}>More</h3>
+              <button className="btn-icon" onClick={() => setOpen(false)} aria-label="Close"><X size={16} /></button>
+            </div>
+            <div className="sheet-body">
+              {MORE_PAGES.map(page => {
+                const meta = PAGE_META[page]
+                if (!meta) return null
+                return (
+                  <button
+                    key={page}
+                    className={`more-item${currentPage === page ? ' active' : ''}`}
+                    onClick={() => { setOpen(false); onNavigate(page) }}
+                  >
+                    {meta.icon(19)}
+                    <span>{meta.label}</span>
+                  </button>
+                )
+              })}
+            </div>
           </div>
         </>
       )}

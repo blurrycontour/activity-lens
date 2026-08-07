@@ -909,13 +909,12 @@ body {
 .stat-chip .value { font-size: 18px; font-weight: 700; font-family: var(--font-mono); color: var(--text); letter-spacing: -0.03em; }
 .stat-chip .unit  { font-size: 12px; color: var(--text-2); font-weight: 400; }
 
-.page-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 24px 24px 16px;
-  border-bottom: 1px solid var(--border);
-}
+.page-header { padding: 24px 24px 16px; border-bottom: 1px solid var(--border); }
+/* Only the PageHeader component's own layout. Five pages hand-roll this markup
+   with their own inline flex rules under the same .page-header class, so
+   putting the layout there moved their controls about — most visibly the
+   workout page, whose options button landed against the title. */
+.page-header-row { display: flex; align-items: center; gap: 12px; }
 .page-header-back { flex-shrink: 0; }
 .page-header-text { flex: 1; min-width: 0; }
 .page-header-title { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
@@ -1250,32 +1249,16 @@ body {
   color: var(--text-2);
 }
 
-/* The pages that do not fit the phone's tab bar. A sheet anchored above the
-   bar rather than a dropdown: it is thumb-reachable there, and it cannot be
-   mistaken for part of the page behind it. */
-.more-sheet {
-  position: fixed;
-  left: 8px;
-  right: 8px;
-  bottom: calc(64px + var(--safe-bottom) + 8px);
-  z-index: 60;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 6px;
-  background: var(--bg-2);
-  border: 1px solid var(--border-strong);
-  border-radius: calc(var(--radius) * 2);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-  animation: fadeIn 0.12s ease;
-}
-.more-sheet-item {
+/* Rows inside the "More" sheet. The sheet itself is the shared .sheet
+   primitive; only the row styling is new. */
+.more-item {
   display: flex;
   align-items: center;
   gap: 12px;
-  /* Comfortably over the 44px minimum touch target, which is the reason these
-     moved out of the tab bar in the first place. */
-  padding: 13px 14px;
+  width: 100%;
+  /* Comfortably over the 44px minimum touch target, which is why these moved
+     out of the tab bar in the first place. */
+  padding: 14px 10px;
   border: none;
   background: transparent;
   border-radius: var(--radius);
@@ -1285,7 +1268,8 @@ body {
   cursor: pointer;
   text-align: left;
 }
-.more-sheet-item.active { color: var(--primary); background: var(--primary-dim); }
+.more-item + .more-item { border-top: 1px solid var(--border); border-radius: 0; }
+.more-item.active { color: var(--primary); }
 
 /* ── The all-workouts map ── */
 
@@ -1389,8 +1373,10 @@ body {
    tall image is mostly empty space. Capped by height as well, so the preview
    stays whole on a short phone in landscape rather than scrolling. */
 .share-card-modal {
+  /* Narrower than the 520px default: the card is portrait, and a wide box
+     around a tall image is mostly empty space. Width comes from .modal-box,
+     which already accounts for .modal's own padding. */
   max-width: 380px;
-  width: calc(100vw - 32px);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -3132,11 +3118,13 @@ body {
   }
 
   .page-content { padding: 16px; }
-  .page-header { padding: 16px; flex-wrap: wrap; }
+  .page-header { padding: 16px; }
   /* Controls take the full width below the title rather than competing with it
-     for a phone's worth of room. */
-  .page-header-actions { width: 100%; }
-  .page-header-sub { font-size: 12px; }
+     for a phone's worth of room. Scoped to the component's own row, so the
+     pages that hand-roll this header keep the layout they had. */
+  .page-header-row { flex-wrap: wrap; }
+  .page-header-row .page-header-actions { width: 100%; }
+  .page-header-row .page-header-sub { font-size: 12px; }
 
   .bottom-bar {
     display: flex;

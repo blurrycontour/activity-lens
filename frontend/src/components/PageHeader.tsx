@@ -19,7 +19,7 @@ interface PageHeaderProps {
  */
 export default function PageHeader({ title, subtitle, onBack, actions }: PageHeaderProps) {
   return (
-    <div className="page-header">
+    <div className="page-header page-header-row">
       {onBack && (
         <button className="btn-icon page-header-back" onClick={onBack} aria-label="Back">
           <ArrowLeft size={18} />
