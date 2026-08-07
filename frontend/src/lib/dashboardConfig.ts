@@ -2,6 +2,8 @@
 // window. Persisted client-side in localStorage (a pure UI concern) and shared
 // between the Dashboard and Settings pages via the useLocalStorage hook.
 
+import { RANGE_OPTIONS } from './range'
+
 export type StatCardId = 'distance' | 'time' | 'elevation' | 'calories' | 'avgHr' | 'activities'
 
 export interface DashboardConfig {
@@ -22,7 +24,18 @@ export const STAT_CARDS: { id: StatCardId; label: string }[] = [
   { id: 'activities', label: 'Activities' },
 ]
 
-export { RANGE_OPTIONS as WINDOW_OPTIONS } from './range'
+/**
+ * Periods the dashboard totals can cover: the shared ranges plus a fortnight.
+ *
+ * Two weeks is worth having here and nowhere else — it is the span a training
+ * block is judged over, and the dashboard is the only place asking "how am I
+ * doing lately". The filter dropdowns elsewhere stay as they are; a longer
+ * list of near-identical options costs more there than it gains.
+ */
+const FORTNIGHT = { value: 14, label: 'Last 14 days', short: '14d' }
+export const WINDOW_OPTIONS = RANGE_OPTIONS.flatMap(
+  o => (o.value === 30 ? [FORTNIGHT, o] : [o]),
+)
 
 /** How the workout page draws the heart-rate zone breakdown. */
 export type HRZoneChart = 'histogram' | 'pie'

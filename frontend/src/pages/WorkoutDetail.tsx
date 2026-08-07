@@ -38,6 +38,7 @@ import type { Shading } from '../components/RouteMap'
 const RouteMap = lazy(() => import('../components/RouteMap'))
 import ExpandModal from '../components/ExpandModal'
 import UserAvatar, { avatarUrl, userLabel } from '../components/UserAvatar'
+import MenuButton from '../components/MenuButton'
 import ShareDialog from '../components/ShareDialog'
 import ShareCardDialog from '../components/ShareCardDialog'
 
@@ -81,57 +82,39 @@ function StatChip({ icon, label, value, calculated, manual }: { icon?: React.Rea
 }
 
 function OptionsMenu({ onEdit, onExport, onDownloadOriginal, onShare, onShareCard, onRecalculate, onDelete, deleting }: { onEdit: () => void; onExport: () => void; onDownloadOriginal?: () => void; onShare?: () => void; onShareCard: () => void; onRecalculate: () => void; onDelete: () => void; deleting: boolean }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    function handle(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handle)
-    return () => document.removeEventListener('mousedown', handle)
-  }, [])
-
   return (
-    <div className="options-menu-wrap" ref={ref}>
-      <button className="btn-icon" onClick={() => setOpen(o => !o)} title="Workout options">
-        <MoreVertical size={18} />
+    <MenuButton icon={<MoreVertical size={18} />} label="Workout options">
+      <button className="options-menu-item" onClick={onEdit}>
+        <Pencil size={14} /> Edit workout
       </button>
-      {open && (
-        <div className="options-menu" style={{ animation: 'fadeIn 0.12s ease' }}>
-          <button className="options-menu-item" onClick={() => { setOpen(false); onEdit() }}>
-            <Pencil size={14} /> Edit workout
-          </button>
-          <button className="options-menu-item" onClick={() => { setOpen(false); onRecalculate() }}>
-            <RotateCcw size={14} /> Recalculate
-          </button>
-          {onShare && (
-            <button className="options-menu-item" onClick={() => { setOpen(false); onShare() }}>
-              <Share2 size={14} /> Share
-            </button>
-          )}
-          {/* Always offered, unlike Share above: that one publishes a link and
-              needs the workout to be shareable, this one makes a picture out of
-              what is already on screen and needs nothing from the server. */}
-          <button className="options-menu-item" onClick={() => { setOpen(false); onShareCard() }}>
-            <ImageIcon size={14} /> Share card
-          </button>
-          <button className="options-menu-item" onClick={() => { setOpen(false); onExport() }}>
-            <Download size={14} /> Export GPX
-          </button>
-          {/* Only when an original was actually archived. "Export GPX" above is
-              rebuilt from the parsed data; this is the file as imported. */}
-          {onDownloadOriginal && (
-            <button className="options-menu-item" onClick={() => { setOpen(false); onDownloadOriginal() }}>
-              <FileDown size={14} /> Download original
-            </button>
-          )}
-          <button className="options-menu-item danger" onClick={() => { setOpen(false); onDelete() }} disabled={deleting}>
-            <Trash2 size={14} /> {deleting ? 'Deleting…' : 'Delete workout'}
-          </button>
-        </div>
+      <button className="options-menu-item" onClick={onRecalculate}>
+        <RotateCcw size={14} /> Recalculate
+      </button>
+      {onShare && (
+        <button className="options-menu-item" onClick={onShare}>
+          <Share2 size={14} /> Share
+        </button>
       )}
-    </div>
+      {/* Always offered, unlike Share above: that one publishes a link and
+          needs the workout to be shareable, this one makes a picture out of
+          what is already on screen and needs nothing from the server. */}
+      <button className="options-menu-item" onClick={onShareCard}>
+        <ImageIcon size={14} /> Share card
+      </button>
+      <button className="options-menu-item" onClick={onExport}>
+        <Download size={14} /> Export GPX
+      </button>
+      {/* Only when an original was actually archived. "Export GPX" above is
+          rebuilt from the parsed data; this is the file as imported. */}
+      {onDownloadOriginal && (
+        <button className="options-menu-item" onClick={onDownloadOriginal}>
+          <FileDown size={14} /> Download original
+        </button>
+      )}
+      <button className="options-menu-item danger" onClick={onDelete} disabled={deleting}>
+        <Trash2 size={14} /> {deleting ? 'Deleting…' : 'Delete workout'}
+      </button>
+    </MenuButton>
   )
 }
 

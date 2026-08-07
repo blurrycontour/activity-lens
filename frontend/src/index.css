@@ -1675,6 +1675,60 @@ body {
   margin-bottom: 12px;
 }
 
+/* ── Dashboard: activities that open the workout ──
+   Buttons, not divs with handlers, so they are reachable by keyboard and
+   announced as controls. They keep the surrounding card's look — the affordance
+   is the hover, not a border. */
+.dash-workout-row,
+.latest-activity-link {
+  display: flex;
+  width: 100%;
+  background: none;
+  border: none;
+  border-radius: var(--radius);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.dash-workout-row {
+  align-items: center;
+  gap: 12px;
+  padding: 10px 6px;
+  /* The rule belongs to the row above it, so the last one has none. */
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+}
+.dash-workout-row:last-child { border-bottom: none; }
+.dash-workout-row:hover,
+.latest-activity-link:hover { background: var(--bg-3); }
+.dash-workout-row:focus-visible,
+.latest-activity-link:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+
+.latest-activity-link {
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  margin: 2px 0 16px -6px;
+  width: calc(100% + 12px);
+}
+.latest-activity-name { font-size: 15px; font-weight: 700; }
+.latest-activity-date { font-size: 12px; color: var(--text-3); }
+
+/* Foot of a list that loads more as it is scrolled. Not a button — reaching it
+   is what loads the next page — so it reads as a status line, not an action. */
+.load-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 18px 0;
+  font-size: 12px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+}
+
 /* Key for marks coloured by activity type. Sits under the plot, recessive
    enough to read as an annotation rather than a control. */
 .type-legend {
@@ -2961,7 +3015,9 @@ body {
   border-color: color-mix(in srgb, var(--row-accent) 25%, transparent);
   transform: translateX(2px);
 }
-/* Type stripe down the leading edge. */
+/* Type stripe down the leading edge. Carries its own radius rather than
+   relying on the row's clipping, so the rule below can lift that clipping
+   without the stripe growing square corners. */
 .workout-row::before {
   content: '';
   position: absolute;
@@ -2969,8 +3025,12 @@ body {
   top: 0;
   bottom: 0;
   width: 3px;
+  border-radius: 12px 0 0 12px;
   background: var(--row-accent);
 }
+/* The row's `overflow: hidden` would also clip a menu opened inside it, which
+   is where the share options live — so it is lifted for as long as one is up. */
+.workout-row:has(.options-menu) { overflow: visible; }
 .workout-row-icon {
   width: 44px;
   height: 44px;

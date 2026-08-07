@@ -3,12 +3,14 @@ import { fmtDuration, fmtDist, fmtPace, TYPE_COLOR, ALL_WORKOUT_TYPES, type Work
 import TypeIcon from '../components/TypeIcon'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useRefreshHandler } from '../context/RefreshContext'
-import { Search, Clock, Mountain, Flame, Download, Plus, Grid2X2, List, Navigation, Library, Inbox, Globe, Users, Share2, SlidersHorizontal, X, Trash2, Check, LoaderCircle, Handshake, Layers } from 'lucide-react'
+import { Search, Clock, Mountain, Flame, Download, Plus, Grid2X2, List, Navigation, Library, Inbox, Globe, Users, Share2, SlidersHorizontal, X, Trash2, Check, LoaderCircle, Handshake, Layers, Image as ImageIcon } from 'lucide-react'
 import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
 import SortDropdown, { SORT_OPTIONS, type SortKey } from '../components/SortDropdown'
 import FilterSheet, { type FilterGroup } from '../components/FilterSheet'
+import MenuButton from '../components/MenuButton'
 import ShareDialog from '../components/ShareDialog'
+import ShareCardDialog from '../components/ShareCardDialog'
 import UserAvatar, { userLabel } from '../components/UserAvatar'
 import SourceMark from '../components/SourceMark'
 import ConfirmDialog from '../components/ConfirmDialog'
@@ -25,6 +27,10 @@ import {
 } from '../lib/workoutFilters'
 
 const FILTERS_KEY = 'workouts.filters'
+const SHOWN_KEY = 'workouts.shown'
+
+/** Cards rendered per page, and how many more each time the end comes into view. */
+const PAGE_SIZE = 20
 
 interface WorkoutsProps {
   onSelect: (w: Workout) => void
@@ -52,9 +58,28 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
   // search box they typed into an hour ago.
   const [filters, setFilters] = useSessionState<WorkoutFilters>(FILTERS_KEY, DEFAULT_FILTERS)
   const { scope, search, typeFilter, sortBy, rangeDays, sharedOnly, originFilter, since } = filters
+  /**
+   * How much of the filtered list is rendered. A library runs to thousands of
+   * workouts and every card draws a sparkline, so the whole thing is a slow
+   * first paint for a list nobody scrolls to the bottom of.
+   *
+   * Sessioned like the filters, and for the same reason: opening a workout
+   * unmounts this page, and a count that reset to 20 on the way back would
+   * strand the restored scroll position past the end of the list.
+   */
+  const [paging, setPaging] = useSessionState(SHOWN_KEY, { shown: PAGE_SIZE })
+  const showMore = useCallback(
+    () => setPaging(p => ({ shown: p.shown + PAGE_SIZE })),
+    [setPaging],
+  )
   const patch = useCallback(
-    (next: Partial<WorkoutFilters>) => setFilters(prev => ({ ...prev, ...next })),
-    [setFilters],
+    (next: Partial<WorkoutFilters>) => {
+      // Every filter change funnels through here, so this is the one place that
+      // has to put the list back to the first page.
+      setPaging({ shown: PAGE_SIZE })
+      setFilters(prev => ({ ...prev, ...next }))
+    },
+    [setFilters, setPaging],
   )
   const setScope = (v: Scope) => patch({ scope: v })
   const setSearch = (v: string) => patch({ search: v })
@@ -63,6 +88,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
   const setRangeDays = (v: number) => patch({ rangeDays: v })
   const setSharedOnly = (v: boolean) => patch({ sharedOnly: v })
   const [sharing, setSharing] = useState<Workout | null>(null)
+  const [cardFor, setCardFor] = useState<Workout | null>(null)
   const [feeds, setFeeds] = useState<Partial<Record<Scope, Workout[]>>>({})
   const [feedError, setFeedError] = useState<string | null>(null)
   const [showFilters, setShowFilters] = useState(false)
@@ -198,6 +224,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
     setTypeFilter('All')
     setSortBy('date-desc')
     setRangeDays(0)
+    setPaging({ shown: PAGE_SIZE })
     setFilters({ ...DEFAULT_FILTERS, scope })
   }
 
@@ -286,6 +313,31 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
     () => applyWorkoutFilters(source ?? [], filters),
     [source, filters],
   )
+  const visible = useMemo(() => filtered.slice(0, paging.shown), [filtered, paging.shown])
+  const hasMore = filtered.length > visible.length
+
+  /**
+   * Loads the next page when the end of the list comes within a screen or so.
+   *
+   * Re-created whenever the count changes, deliberately: a fresh observer
+   * reports the current intersection immediately, so a page that lands entirely
+   * above the fold keeps loading until the end is genuinely below it. Watching
+   * only for a crossing would stall there until the user nudged the scroll.
+   */
+  const endOfList = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    const el = endOfList.current
+    if (!el || !hasMore) return
+    const io = new IntersectionObserver(
+      entries => { if (entries.some(e => e.isIntersecting)) showMore() },
+      // Enough to load before the end is reached, not so much that a first page
+      // taller than the viewport counts as "near the end" and loads a second
+      // one before anything has been scrolled.
+      { rootMargin: '300px' },
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [hasMore, showMore, paging.shown])
 
   return (
     <div>
@@ -412,7 +464,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
           </div>
         ) : (
           <div className={view === 'grid' ? 'workout-grid' : 'workout-list'}>
-            {filtered.map(w => (
+            {visible.map(w => (
               <WorkoutCard
                 key={w.id}
                 workout={w}
@@ -426,14 +478,17 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
                 aside={scope === 'mine'
                   ? (
                     <>
-                      <button
-                        className="btn-icon"
-                        title="Share"
-                        onClick={e => { e.stopPropagation(); setSharing(w) }}
-                        style={{ opacity: 0.6 }}
-                      >
-                        <Share2 size={15} />
-                      </button>
+                      {/* Both ways of sharing, the same pair the detail page
+                          offers. A link needs the server and the workout to be
+                          shareable; a card is made from what is already here. */}
+                      <MenuButton icon={<Share2 size={15} />} label="Share">
+                        <button className="options-menu-item" onClick={() => setSharing(w)}>
+                          <Share2 size={14} /> Share link
+                        </button>
+                        <button className="options-menu-item" onClick={() => setCardFor(w)}>
+                          <ImageIcon size={14} /> Share card
+                        </button>
+                      </MenuButton>
                       <button
                         className="btn-icon card-export-btn"
                         title="Export as GPX"
@@ -457,6 +512,12 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
                   : undefined}
               />
             ))}
+          </div>
+        )}
+        {hasMore && (
+          <div ref={endOfList} className="load-more">
+            <LoaderCircle size={14} className="spin" />
+            {filtered.length - visible.length} more
           </div>
         )}
       </div>
@@ -487,6 +548,8 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
           onChange={() => { void refresh() }}
         />
       )}
+
+      {cardFor && <ShareCardDialog workout={cardFor} onClose={() => setCardFor(null)} />}
 
       {confirmDelete && (
         <ConfirmDialog

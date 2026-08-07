@@ -2,7 +2,7 @@ import { useIsMobile } from './lib/useIsMobile'
 import NotificationBanner, { type BannerNotification } from './components/NotificationBanner'
 import { consumeOpenedParam, markNotificationOpened, PUSH_EVENT } from './lib/notifications'
 import UpdateToast from './components/UpdateToast'
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
 import TopBar, { type ThemeMode } from './components/TopBar'
 import Sidebar from './components/Sidebar'
 import BottomBar from './components/BottomBar'
@@ -405,11 +405,38 @@ export default function App() {
   // Pull-to-refresh reloads the data each page registered, never the document.
   const { refresh } = useRefresh()
 
+  /**
+   * Where the page under any workout detail was scrolled to.
+   *
+   * Captured on every scroll rather than read when a workout opens: by the
+   * time an effect could run, the list has already been replaced and the
+   * container has clamped its scrollTop to the shorter content.
+   */
+  const listScroll = useRef(0)
+  const onMainScroll = useCallback(() => {
+    if (!selectedWorkout && mainEl) listScroll.current = mainEl.scrollTop
+  }, [selectedWorkout, mainEl])
+
   // Start each page at the top. Without this a swipe from a scrolled page
   // animates the next one in already scrolled down, which reads as a glitch.
   useEffect(() => {
+    listScroll.current = 0
     mainEl?.scrollTo({ top: 0 })
   }, [page, mainEl])
+
+  /**
+   * Opening a workout is not a page change — the detail replaces the list
+   * inside the same scrolling <main> — so the effect above never fired for it.
+   * The detail opened at whatever offset the list had been left at, and coming
+   * back put the list wherever the detail had been scrolled to.
+   *
+   * useLayoutEffect so the restored offset is painted with the list rather than
+   * a frame after it, which reads as a jump.
+   */
+  useLayoutEffect(() => {
+    if (!mainEl) return
+    mainEl.scrollTo({ top: selectedWorkout ? 0 : listScroll.current })
+  }, [selectedWorkout, mainEl])
 
   const layoutClass = [
     'app-layout',
@@ -483,7 +510,7 @@ export default function App() {
         isMobile={isMobile}
       />
 
-      <main className="main-content" ref={mainRef}>
+      <main className="main-content" ref={mainRef} onScroll={onMainScroll}>
         <PullToRefresh scrollEl={mainEl} enabled={gesturesEnabled} onRefresh={refresh} />
         <SwipePager page={page} swipe={swipe}>
         {selectedWorkout ? (
@@ -495,7 +522,7 @@ export default function App() {
             onOpenSettings={() => navigate('settings')}
           />
         ) : page === 'dashboard' ? (
-          <Dashboard />
+          <Dashboard onSelect={selectWorkout} />
         ) : page === 'workouts' ? (
           <Workouts onSelect={selectWorkout} onImport={() => setShowImport(true)} />
         ) : page === 'analysis' ? (
