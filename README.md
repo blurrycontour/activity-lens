@@ -2,7 +2,7 @@
 
 # <img src="frontend/public/logo.svg" width="64" valign="middle" alt="Activity Lens logo" /> Activity Lens
 
-**A self-hosted home for your training history.**
+**A self-hosted haven for your training history.**
 
 Import runs, rides, hikes and swims from `.gpx` or `.tcx` files, then see what the
 numbers actually say — trends, consistency, training load, gear wear and personal
