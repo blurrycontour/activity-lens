@@ -1,5 +1,4 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { type Workout, type WorkoutType, fmtDuration, fmtDist, fmtPace, TYPE_COLOR } from '../data/workouts'
 import TypeIcon from '../components/TypeIcon'
 import SportDropdown from '../components/SportDropdown'
@@ -36,7 +35,7 @@ import type { Shading } from '../components/RouteMap'
  * better trade than a slower first paint on every page in the app.
  */
 const RouteMap = lazy(() => import('../components/RouteMap'))
-import useDismissOnBack from '../lib/useDismissOnBack'
+import ExpandModal from '../components/ExpandModal'
 import UserAvatar, { avatarUrl, userLabel } from '../components/UserAvatar'
 import ShareDialog from '../components/ShareDialog'
 import ShareCardDialog from '../components/ShareCardDialog'
@@ -361,45 +360,6 @@ function HRZoneTooltip({ active, payload }: { active?: boolean; payload?: any[] 
   )
 }
 
-function ExpandModal({ title, onClose, children, variant }: {
-  title: string
-  onClose: () => void
-  children: React.ReactNode
-  /**
-   * 'map' drops the card's padding and lets the content run to the edges. On a
-   * phone that is the difference between a map in a box inside a scrolling page
-   * and a map you can actually read a route on.
-   */
-  variant?: 'map'
-}) {
-  useDismissOnBack(true, onClose)
-
-  const map = variant === 'map'
-  // Portalled to the body, and not merely fixed-positioned. It renders from
-  // deep inside the scrolling main content, whose ancestors carry the transform
-  // that drives pull-to-refresh — and a transform makes a fixed child position
-  // and stack against *it*, so the modal's z-index stopped applying to the app
-  // chrome and the top and bottom bars sat on top of it.
-  return createPortal(
-    <>
-      <div className="overlay" onClick={onClose} />
-      <div className={`modal modal-expand${map ? ' modal-immersive' : ''}`}>
-        <div className={`modal-box modal-box-expand${map ? ' modal-box-immersive' : ''}`}>
-          <div className={map ? 'modal-immersive-head' : 'modal-expand-head'}>
-            <h3 style={{ fontSize: 15, fontWeight: 700 }}>{title}</h3>
-            <button className="btn-icon" onClick={onClose} title="Close" aria-label="Close"><XIcon size={18} /></button>
-          </div>
-          {map ? children : (
-            <div className="modal-expand-body">
-              <div className="modal-expand-inner">{children}</div>
-            </div>
-          )}
-        </div>
-      </div>
-    </>,
-    document.body,
-  )
-}
 
 /**
  * A series prepared for plotting: reduced to a drawable number of points, with

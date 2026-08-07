@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as maplibregl from 'maplibre-gl'
-import { Flame, Loader2, Maximize2, Minimize2, Route as RouteIcon } from 'lucide-react'
+import { Flame, Loader2, Maximize2, Route as RouteIcon } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
+import ExpandModal from '../components/ExpandModal'
 import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
 import { LayerSwitcher, MAP_LAYERS, MAP_LAYER_KEY, hasWebGL, type MapLayerId } from '../components/RouteMap'
@@ -78,12 +79,18 @@ export default function MapPage() {
   const [error, setError] = useState<string | null>(null)
   const [full, setFull] = useState(false)
 
-  const node = useRef<HTMLDivElement>(null)
+  // Held in state, not a ref: maximizing moves the map's container from the
+  // page into the modal, which is a different element, and the effect that
+  // builds the map has to notice. A ref's identity never changes, so it cannot.
+  const [node, setNode] = useState<HTMLDivElement | null>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const glAvailable = useMemo(hasWebGL, [])
   // True until the first response has been fitted; the map opens on nothing in
   // particular and should move to where the workouts are exactly once.
   const needsFit = useRef(true)
+  // Where the map is looking, carried across the rebuild that maximizing
+  // causes. Not persisted — see above.
+  const view = useRef<{ center: maplibregl.LngLat; zoom: number } | null>(null)
 
   const from = useMemo(() => {
     if (rangeDays <= 0) return undefined
@@ -135,10 +142,10 @@ export default function MapPage() {
     return () => clearTimeout(t)
   }, [preparing, load])
 
-  // Fullscreen is a CSS class rather than the Fullscreen API: the API is
-  // unreliable inside an Android WebView and on iOS Safari, and this has to
-  // work in the app as well as the browser. Escape leaves, like every other
-  // dismissible surface here.
+  // Not the Fullscreen API: it is unreliable inside an Android WebView and on
+  // iOS Safari, and this has to work in the app as well as the browser. The
+  // modal handles the back gesture and the close button; Escape is here so a
+  // keyboard has the same way out as every other dismissible surface.
   useEffect(() => {
     if (!full) return
     function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setFull(false) }
@@ -146,12 +153,50 @@ export default function MapPage() {
     return () => document.removeEventListener('keydown', onKey)
   }, [full])
 
+  /*
+   * The map runs to the bottom of the viewport, measured rather than computed.
+   *
+   * `100dvh` minus a constant was the obvious version and it was wrong at half
+   * the sizes it met: the header wraps onto a second line on a narrow phone,
+   * the filter row wraps independently of it, and the bottom bar exists on some
+   * widths and not others. Measuring the gap between the top of the map and the
+   * bottom of the scroll container is the only version that survives all of
+   * them, and it is one read per resize.
+   */
+  const canvasEl = useRef<HTMLDivElement>(null)
+  const [mapH, setMapH] = useState<number>()
+  useEffect(() => {
+    const el = canvasEl.current
+    if (!el) return
+    const measure = () => {
+      const scroller = el.closest('.main-content')
+      if (!scroller) return
+      const style = getComputedStyle(scroller)
+      // clientHeight includes the padding the bottom bar sits behind, so it has
+      // to come back off; the page's own bottom gutter comes off as well.
+      const usable = scroller.getBoundingClientRect().top + scroller.clientHeight
+        - parseFloat(style.paddingBottom || '0')
+      const gutter = parseFloat(getComputedStyle(el.parentElement ?? el).paddingBottom || '0')
+      const next = Math.round(usable - el.getBoundingClientRect().top - gutter)
+      // Only on a real change: this sets a height inside an element the
+      // observer is watching, and echoing it back would be an endless loop.
+      setMapH(prev => (prev != null && Math.abs(prev - next) < 2 ? prev : next))
+    }
+    measure()
+    // The header and the filter row are what move; watching them covers a
+    // rotation, a wrap, and the browser's address bar collapsing on scroll.
+    const ro = new ResizeObserver(measure)
+    if (el.parentElement) ro.observe(el.parentElement)
+    window.addEventListener('resize', measure)
+    return () => { ro.disconnect(); window.removeEventListener('resize', measure) }
+  }, [])
+
   // The container changed size under the canvas, which MapLibre cannot detect
   // on its own. Deferred a frame so the new layout has been applied.
   useEffect(() => {
     const id = requestAnimationFrame(() => mapRef.current?.resize())
     return () => cancelAnimationFrame(id)
-  }, [full])
+  }, [mapH])
 
   const shown = useMemo(
     () => typeFilter === 'All' ? tracks : tracks.filter(t => t.type === typeFilter),
@@ -161,12 +206,15 @@ export default function MapPage() {
 
   // ── The map ────────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!node.current || mapRef.current || !glAvailable) return
+    if (!node || !glAvailable) return
+    const saved = view.current
     const map = new maplibregl.Map({
-      container: node.current,
+      container: node,
       style: MAP_LAYERS[layer].style,
-      center: [0, 20],
-      zoom: 1.4,
+      // Where it was left, but only across a maximize — `view` starts empty on
+      // every visit, so arriving at the page still fits to the routes.
+      center: saved ? saved.center : [0, 20],
+      zoom: saved ? saved.zoom : 1.4,
       attributionControl: { compact: true },
       pitchWithRotate: false,
       dragRotate: false,
@@ -179,6 +227,7 @@ export default function MapPage() {
     // repeatedly, and each one is a request.
     let timer: ReturnType<typeof setTimeout> | undefined
     const onMove = () => {
+      view.current = { center: map.getCenter(), zoom: map.getZoom() }
       clearTimeout(timer)
       // Through a ref: this handler is bound once, and the direct reference
       // would have kept fetching with the range that was selected when the map
@@ -210,11 +259,13 @@ export default function MapPage() {
       map.remove()
       mapRef.current = null
     }
-    // Built once. Everything that changes afterwards reaches it through a ref
-    // or its own effect; rebuilding the map would throw away the user's
-    // position, which is the bug this whole block exists to avoid.
+    // Rebuilt only when the container element itself changes, which is once per
+    // maximize and never otherwise. Everything else — the range, the filter,
+    // the base layer, the data — reaches the existing map through a ref or its
+    // own effect, because rebuilding for those would throw away the position
+    // the user had panned to.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [glAvailable])
+  }, [glAvailable, node])
 
   // Switching base layer replaces the style, which drops every source and layer
   // with it; the data effect below re-adds them when the new style settles.
@@ -338,6 +389,10 @@ export default function MapPage() {
       if (!b.isEmpty()) {
         needsFit.current = false
         map.fitBounds(b, { padding: 48, animate: false, maxZoom: 14 })
+        // Recorded here as well as on moveend: the fit happens once, and if a
+        // maximize came before the user had panned anywhere there would be no
+        // position to rebuild at and the new map would open on an empty world.
+        view.current = { center: map.getCenter(), zoom: map.getZoom() }
       }
     }
   }, [shown, heat, colorFor])
@@ -352,6 +407,51 @@ export default function MapPage() {
   useEffect(() => { applyData() }, [applyData])
 
   const scope = rangeLabel(rangeDays)
+
+  /*
+   * The map and its controls, rendered in exactly one place at a time: in the
+   * page, or inside the modal that maximizing opens. Moving it costs a rebuild
+   * of the MapLibre instance — React cannot hand the same element to a new
+   * parent — which is what `view` above exists to paper over.
+   *
+   * The alternative was leaving it in the page and making it cover the screen
+   * with `position: fixed`, which is what the first version did and why the
+   * bottom bar sat on top of it: the swipe pager is a stacking context, so no
+   * z-index from in here can escape the page.
+   */
+  const mapPanel = (
+    <>
+      {glAvailable
+        ? <div ref={setNode} className="map-page-gl" />
+        : (
+          <div className="map-page-empty">
+            This browser has no WebGL, so the map cannot be drawn here.
+          </div>
+        )}
+      {glAvailable && (
+        <>
+          {/* Takes the corner to itself when maximized: the modal's own header
+              carries the close button there, so nothing sits beside it. */}
+          <LayerSwitcher layer={layer} onChange={setLayer} offsetRight={full ? 10 : 46} />
+          {!full && (
+            <button
+              className="btn-icon map-page-expand"
+              onClick={() => setFull(true)}
+              title="Full screen"
+              aria-label="Full screen"
+            >
+              <Maximize2 size={14} />
+            </button>
+          )}
+        </>
+      )}
+      {!loading && shown.length === 0 && !error && (
+        <div className="map-page-empty overlay-note">
+          No routes in this view. Try a wider date range, or zoom out.
+        </div>
+      )}
+    </>
+  )
 
   return (
     <>
@@ -403,34 +503,16 @@ export default function MapPage() {
         )}
         {error && <p className="map-page-note error">{error}</p>}
 
-        <div className={`map-page-canvas${full ? ' full' : ''}`}>
-          {glAvailable
-            ? <div ref={node} className="map-page-gl" />
-            : (
-              <div className="map-page-empty">
-                This browser has no WebGL, so the map cannot be drawn here.
-              </div>
-            )}
-          {glAvailable && (
-            <>
-              <LayerSwitcher layer={layer} onChange={setLayer} offsetRight={46} />
-              <button
-                className="btn-icon map-page-expand"
-                onClick={() => setFull(f => !f)}
-                title={full ? 'Exit full screen' : 'Full screen'}
-                aria-label={full ? 'Exit full screen' : 'Full screen'}
-              >
-                {full ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-              </button>
-            </>
-          )}
-          {!loading && shown.length === 0 && !error && (
-            <div className="map-page-empty overlay-note">
-              No routes in this view. Try a wider date range, or zoom out.
-            </div>
-          )}
+        <div ref={canvasEl} className="map-page-canvas" style={{ height: mapH }}>
+          {!full && mapPanel}
         </div>
       </div>
+
+      {full && (
+        <ExpandModal title="Map" variant="map" onClose={() => setFull(false)}>
+          <div className="modal-immersive-map">{mapPanel}</div>
+        </ExpandModal>
+      )}
     </>
   )
 }

@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client'
 import { Clock, Gauge, Heart, Navigation, type LucideIcon } from 'lucide-react'
 import { fmtDist, fmtDuration, fmtPace, TYPE_COLOR, TYPE_ICON, type Workout } from '../data/workouts'
 import { PULSE_PATH } from '../components/Logo'
+import { FINISH_ANCHOR, FINISH_BOX, FINISH_FLAG_D, FINISH_POLE_D } from './mapMarkers'
 
 /**
  * Draws a workout as a shareable image.
@@ -49,6 +50,8 @@ export interface CardTheme {
   muted: string
   accent: string
   border: string
+  /** The finish flag, which is the app's danger red on the workout map too. */
+  danger: string
 }
 
 /** Whether the headline is the workout's name or simply the sport. */
@@ -91,6 +94,7 @@ export function themeFromDocument(el: HTMLElement = document.documentElement): C
     muted: v('--text-3', '#8b93a1'),
     accent: v('--primary', '#00e87a'),
     border: v('--border', '#272b33'),
+    danger: v('--danger', '#ef4444'),
   }
 }
 
@@ -263,6 +267,33 @@ async function iconImage(icon: LucideIcon, color: string, px: number): Promise<H
   }
 }
 
+/**
+ * The finish flag, planted with its pole's foot on the last fix.
+ *
+ * The same geometry the workout map hands MapLibre, so the card ends the route
+ * the way the app does. A second dot in a different colour was the first
+ * version and it read as a waypoint rather than as the end.
+ */
+function drawFinishFlag(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, fill: string) {
+  const k = size / FINISH_BOX
+  ctx.save()
+  ctx.translate(x - FINISH_ANCHOR[0] * k, y - FINISH_ANCHOR[1] * k)
+  ctx.scale(k, k)
+  ctx.lineJoin = 'round'
+  ctx.lineCap = 'round'
+  // White throughout, as on the map: the card's route can pass under the flag,
+  // and an outline is what keeps it legible when it does.
+  ctx.strokeStyle = '#fff'
+  ctx.lineWidth = 2.5
+  ctx.stroke(new Path2D(FINISH_POLE_D))
+  const flag = new Path2D(FINISH_FLAG_D)
+  ctx.fillStyle = fill
+  ctx.fill(flag)
+  ctx.lineWidth = 1.5
+  ctx.stroke(flag)
+  ctx.restore()
+}
+
 /** Strokes the app's mark. Geometry comes from Logo.tsx, which owns it. */
 function drawLogo(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, color: string) {
   ctx.save()
@@ -380,17 +411,17 @@ export async function drawShareCard(
     ctx.stroke()
 
     // Start and finish, so the direction of a loop is readable.
-    const dot = (p: [number, number], fill: string) => {
-      ctx.beginPath()
-      ctx.arc(p[0], p[1], 13, 0, Math.PI * 2)
-      ctx.fillStyle = fill
-      ctx.fill()
-      ctx.lineWidth = 5
-      ctx.strokeStyle = theme.panel
-      ctx.stroke()
-    }
-    dot(pts[0], theme.accent)
-    dot(pts[pts.length - 1], theme.text)
+    const start = pts[0]
+    ctx.beginPath()
+    ctx.arc(start[0], start[1], 13, 0, Math.PI * 2)
+    ctx.fillStyle = theme.accent
+    ctx.fill()
+    ctx.lineWidth = 5
+    ctx.strokeStyle = theme.panel
+    ctx.stroke()
+
+    const end = pts[pts.length - 1]
+    drawFinishFlag(ctx, end[0], end[1], 54, theme.danger)
   } else {
     // No GPS: say so rather than leaving an empty panel that reads as a
     // rendering failure.

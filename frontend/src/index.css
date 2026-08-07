@@ -1305,42 +1305,23 @@ body {
 }
 .map-page-note.error { color: var(--danger); }
 
-/* The map takes what is left of the viewport rather than a fixed height: this
-   page exists to be looked at, and a short box in a tall empty page is the one
-   layout that wastes the reason for having it. The floor keeps it usable when
-   the filters wrap onto two lines on a phone. */
+/* The map runs to the bottom of the viewport. The height itself is measured in
+   MapPage rather than written here as `100dvh` minus a guess at the chrome:
+   the header wraps onto a second line at some widths and not others, and every
+   version of that arithmetic was wrong at one size or another. */
 .map-page-canvas {
   position: relative;
-  flex: 1;
-  min-height: 420px;
-  height: calc(100vh - 260px);
+  min-height: 260px;
   border: 1px solid var(--border);
   border-radius: calc(var(--radius) * 1.5);
   overflow: hidden;
   background: var(--bg-3);
 }
+/* Maximized, the map moves into an ExpandModal, which is portalled out of the
+   page — see MapPage. No rule here could have lifted it above the bottom bar:
+   the page renders inside the swipe pager, which is a stacking context, so a
+   z-index of 1100 on a fixed child still loses to a tab bar at 50. */
 .map-page-gl { position: absolute; inset: 0; }
-/* Full screen means over the bottom bar as well. The phone's tab bar is fixed
-   at z-index 50, and this used to sit at 100 — which is above it in theory and
-   was not in practice, so it is now on the same layer the app uses for
-   everything that takes over the screen, just below the modals that can open on
-   top of it. */
-.map-page-canvas.full {
-  position: fixed;
-  inset: 0;
-  z-index: 1100;
-  height: auto;
-  border: none;
-  border-radius: 0;
-}
-/* A control floating over a map: the layer switcher, the expand button.
-   Absolutely positioned children measure from the border box, so padding on the
-   map cannot move them — which is why full screen sets the inset here instead. */
-.map-ctrl {
-  position: absolute;
-  top: 10px;
-  z-index: 500;
-}
 .map-page-expand {
   position: absolute;
   top: 10px;
@@ -1348,18 +1329,6 @@ body {
   z-index: 500;
   background: var(--bg-2);
   border: 1px solid var(--border);
-}
-/* Edge to edge, so the controls have to step around the hardware themselves.
-   Without this the two buttons sit underneath the status bar on a notched
-   phone — present, tappable, and completely invisible, which read as them
-   disappearing when the map was maximised. */
-.map-page-canvas.full .map-ctrl,
-.map-page-canvas.full .map-page-expand {
-  top: calc(10px + var(--safe-top));
-}
-.map-page-canvas.full .maplibregl-ctrl-bottom-left,
-.map-page-canvas.full .maplibregl-ctrl-bottom-right {
-  bottom: var(--safe-bottom);
 }
 .map-page-empty {
   position: absolute;
@@ -1379,13 +1348,10 @@ body {
 }
 
 @media (max-width: 768px) {
-  /* Taller than the desktop proportion, not shorter: a phone's viewport is the
-     scarcer one, so the map takes everything the header, the filter row and the
-     bottom bar are not using. dvh rather than vh so the browser's collapsing
-     address bar does not leave a strip of dead space under it. */
-  .map-page-canvas { height: calc(100dvh - 250px); min-height: 420px; }
-  /* Full screen means full screen — the safe-area padding is the only inset. */
-  .map-page-canvas.full { min-height: 0; }
+  /* A phone's viewport is the scarcer one, so the floor is lower here: a map
+     240px tall is still a map, and a taller minimum would push the filters off
+     the top on a small screen in landscape. */
+  .map-page-canvas { min-height: 240px; }
 }
 
 /* ── Share card ── */
