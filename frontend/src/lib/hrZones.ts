@@ -7,7 +7,21 @@
  * cannot drift apart.
  */
 
-export const HR_ZONE_COLORS = ['#60a5fa', '#34d399', '#fbbf24', 'var(--danger)', '#a855f7']
+/**
+ * The zone palette. Literal colours, every one of them, and that is a
+ * requirement rather than a style choice.
+ *
+ * These are handed to MapLibre as a `line-color` paint value when the track is
+ * shaded by heart rate, and MapLibre parses colours itself — it has no DOM to
+ * resolve a CSS custom property against. Zone 4 was `var(--danger)`, which the
+ * charts and the SVG fallback resolved happily while the map silently drew that
+ * zone black. See the test in hrZones.test.ts.
+ *
+ * Fixed across light and dark, like the other four: a zone is a fact about the
+ * effort, not an outcome the theme should restate. `#ef4444` is the dark-theme
+ * `--danger` it used to borrow.
+ */
+export const HR_ZONE_COLORS = ['#60a5fa', '#34d399', '#fbbf24', '#ef4444', '#a855f7']
 export const HR_ZONE_LABELS = ['Zone 1 (<60%)', 'Zone 2 (60-70%)', 'Zone 3 (70-80%)', 'Zone 4 (80-90%)', 'Zone 5 (90-100%)']
 export const HR_ZONE_SHORT = ['Z1', 'Z2', 'Z3', 'Z4', 'Z5']
 

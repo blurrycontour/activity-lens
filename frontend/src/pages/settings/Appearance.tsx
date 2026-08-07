@@ -1,17 +1,35 @@
-import { Check } from 'lucide-react'
+import { Check, Monitor, Moon, Sun } from 'lucide-react'
 import { ACCENTS, applyAccent } from '../../lib/theme'
 import { useLocalStorage } from '../../lib/useLocalStorage'
 import { DEFAULT_HR_ZONE_CHART, HR_ZONE_CHART_KEY, type HRZoneChart } from '../../lib/dashboardConfig'
 import SettingsCard from '../../components/SettingsCard'
 import Field from '../../components/Field'
 
+import type { ThemeMode } from '../../components/TopBar'
+
 interface AppearanceProps {
   accent: string
   onAccentChange: (a: string) => void
+  themeMode: ThemeMode
+  onThemeChange: (m: ThemeMode) => void
 }
 
-/** Accent colour, chart style and units. */
-export default function AppearanceSettings({ accent, onAccentChange }: AppearanceProps) {
+/**
+ * The three themes, named rather than cycled.
+ *
+ * The top bar's button cycles dark → light → system, which is quick once you
+ * know the order and opaque until then — there is no way to see what the
+ * options are, or to go straight to one. Here they are laid out, which is what
+ * a settings page is for.
+ */
+const THEMES: { id: ThemeMode; label: string; hint: string; icon: React.ReactNode }[] = [
+  { id: 'dark', label: 'Dark', hint: 'Always dark', icon: <Moon size={16} /> },
+  { id: 'light', label: 'Light', hint: 'Always light', icon: <Sun size={16} /> },
+  { id: 'system', label: 'System', hint: 'Follows your device', icon: <Monitor size={16} /> },
+]
+
+/** Theme, accent colour and chart style. */
+export default function AppearanceSettings({ accent, onAccentChange, themeMode, onThemeChange }: AppearanceProps) {
   const [hrZoneChart, setHrZoneChart] = useLocalStorage<HRZoneChart>(HR_ZONE_CHART_KEY, DEFAULT_HR_ZONE_CHART)
 
   function pick(value: string) {
@@ -21,6 +39,27 @@ export default function AppearanceSettings({ accent, onAccentChange }: Appearanc
 
   return (
     <>
+      <SettingsCard title="Theme" description="Also on the top bar, which cycles through these in order.">
+        <div className="theme-choices">
+          {THEMES.map(t => {
+            const on = themeMode === t.id
+            return (
+              <button
+                key={t.id}
+                className={`theme-choice${on ? ' active' : ''}`}
+                aria-pressed={on}
+                onClick={() => onThemeChange(t.id)}
+              >
+                {t.icon}
+                <span className="theme-choice-label">{t.label}</span>
+                <span className="theme-choice-hint">{t.hint}</span>
+                {on && <Check size={13} className="theme-choice-tick" />}
+              </button>
+            )
+          })}
+        </div>
+      </SettingsCard>
+
       <SettingsCard title="Accent colour" description="Used for highlights, active states and charts.">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8 }}>
           {ACCENTS.map(a => {

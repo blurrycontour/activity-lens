@@ -510,6 +510,8 @@ export default function App() {
             onBack={() => openSection('settings', null)}
             accent={accent}
             onAccentChange={setAccent}
+            themeMode={themeMode}
+            onThemeChange={setThemeMode}
           />
         ) : page === 'admin' ? (
           <Admin

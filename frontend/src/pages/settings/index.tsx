@@ -1,6 +1,7 @@
 import PageHeader from '../../components/PageHeader'
 import AutoImportCard from '../../components/AutoImportCard'
 import type { SettingsSection } from '../../lib/nav'
+import type { ThemeMode } from '../../components/TopBar'
 import { sectionMeta } from './sections'
 import SettingsHub from './Hub'
 import ProfileSettings from './Profile'
@@ -22,6 +23,8 @@ interface SettingsProps {
   onBack: () => void
   accent: string
   onAccentChange: (a: string) => void
+  themeMode: ThemeMode
+  onThemeChange: (m: ThemeMode) => void
 }
 
 /**
@@ -31,7 +34,7 @@ interface SettingsProps {
  * is the one people already know from opening a workout, and desktop and mobile
  * share a single code path.
  */
-export default function Settings({ section, onOpen, onBack, accent, onAccentChange }: SettingsProps) {
+export default function Settings({ section, onOpen, onBack, accent, onAccentChange, themeMode, onThemeChange }: SettingsProps) {
   if (!section) return <SettingsHub onOpen={onOpen} />
 
   const meta = sectionMeta(section)
@@ -41,7 +44,14 @@ export default function Settings({ section, onOpen, onBack, accent, onAccentChan
       {section === 'profile' && <ProfileSettings />}
       {section === 'security' && <SecuritySettings />}
       {section === 'body' && <BodySettings />}
-      {section === 'appearance' && <AppearanceSettings accent={accent} onAccentChange={onAccentChange} />}
+      {section === 'appearance' && (
+        <AppearanceSettings
+          accent={accent}
+          onAccentChange={onAccentChange}
+          themeMode={themeMode}
+          onThemeChange={onThemeChange}
+        />
+      )}
       {section === 'dashboard' && <DashboardSettings />}
       {section === 'goals' && <GoalsSettings />}
       {section === 'notifications' && <NotificationSettings />}
