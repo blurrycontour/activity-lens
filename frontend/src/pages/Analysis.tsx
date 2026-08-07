@@ -6,7 +6,8 @@ import RangeDropdown from '../components/RangeDropdown'
 import ChartCard, { EmptyPlot } from '../components/ChartCard'
 import TabStrip from '../components/TabStrip'
 import InfoTip from '../components/InfoTip'
-import { EdgeTick } from '../components/ChartAxis'
+import { denseXAxis, useChartSpace } from '../components/ChartAxis'
+import TypeLegend from '../components/TypeLegend'
 import { useLocalStorage } from '../lib/useLocalStorage'
 import { filterByRange, rangeLabel, toDateKey } from '../lib/range'
 import { AXIS_TICK, GRID_PROPS, HOVER_FILL } from '../lib/chartColors'
@@ -79,11 +80,6 @@ function yLabel(value: string) {
   }
 }
 
-/** Keeps roughly eight date labels on an axis however long the range is. */
-function tickInterval(n: number): number {
-  return Math.max(0, Math.ceil(n / 8) - 1)
-}
-
 /** Two-option segmented control used by the volume chart's toggles. */
 function Segmented<T extends string>({ value, onChange, options }: {
   value: T
@@ -120,6 +116,7 @@ export default function Analysis() {
   const [volumeMeasure, setVolumeMeasure] = useLocalStorage<'distance' | 'time'>('al_tl_vol', 'distance')
   const [weatherMetric, setWeatherMetric] = useLocalStorage<WeatherMetric>('al_an_wx_metric', 'pace')
   const { prefs } = usePreferences()
+  const space = useChartSpace()
 
   // One filter pair governs the whole page, so a question only has to be asked
   // once rather than re-scoped on every tab.
@@ -263,6 +260,7 @@ export default function Analysis() {
       hr: w.avgHR,
       pace: Math.round(w.avgPace),
       distKm: Math.round(w.distance / 100) / 10,
+      type: w.type,
       name: w.name,
       date: w.date,
     })),
@@ -276,6 +274,7 @@ export default function Analysis() {
       // separate visually from the slow-because-tired ones.
       elev: Math.round(w.elevationGain),
       hr: w.avgHR,
+      type: w.type,
       name: w.name,
       date: w.date,
     })),
@@ -419,11 +418,11 @@ export default function Analysis() {
                 <EmptyPlot height={220}>No activities in the {rangeLabel(rangeDays)}</EmptyPlot>
               ) : (
                 <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={calByType} margin={{ top: 4, right: 16, left: 8, bottom: 18 }}>
+                  <BarChart data={calByType} margin={space.margin(18, 4)}>
                     <CartesianGrid {...GRID_PROPS} />
                     <XAxis dataKey="type" tick={{ ...AXIS_TICK, fontSize: 11 }} axisLine={false} tickLine={false} label={xLabel('Activity type')} />
                     <YAxis
-                      tick={AXIS_TICK} axisLine={false} tickLine={false} width={52}
+                      tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto"
                       tickFormatter={v => v >= 1000 ? `${Math.round(v / 1000)}k` : `${v}`}
                       label={yLabel('Calories (kcal)')}
                     />
@@ -504,12 +503,10 @@ export default function Analysis() {
                 <EmptyPlot height={300}>No activities in the {scope}</EmptyPlot>
               ) : (
                 <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={seriesWithMA} margin={{ top: 8, right: 16, left: 8, bottom: 18 }}>
+                  <LineChart data={seriesWithMA} margin={space.margin(18)}>
                     <CartesianGrid {...GRID_PROPS} />
-                    {/* EdgeTick anchors the first and last labels inward; with the
-                        default centred anchor the final date ran off the plot. */}
-                    <XAxis dataKey="dateLabel" tick={<EdgeTick />} axisLine={false} tickLine={false} interval={tickInterval(series.length)} label={xLabel('Activity date')} />
-                    <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={52} label={yLabel('Selected metrics')} />
+                    <XAxis dataKey="dateLabel" {...denseXAxis()} label={xLabel('Activity date')} />
+                    <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" label={yLabel('Selected metrics')} />
                     <Tooltip
                       content={({ active, payload, label }) => {
                         if (!active || !payload?.length) return null
@@ -557,10 +554,10 @@ export default function Analysis() {
                 <EmptyPlot height={220}>No activities in the {scope}</EmptyPlot>
               ) : (
                 <ResponsiveContainer width="100%" height={220}>
-                  <ComposedChart data={volume} margin={{ top: 4, right: 16, left: 8, bottom: 18 }}>
+                  <ComposedChart data={volume} margin={space.margin(18, 4)}>
                     <CartesianGrid {...GRID_PROPS} />
-                    <XAxis dataKey="label" tick={<EdgeTick fontSize={9} />} axisLine={false} tickLine={false} interval={tickInterval(volume.length)} label={xLabel(volumeBucket === 'week' ? 'Week starting' : 'Month')} />
-                    <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={52} label={yLabel(volumeMeasure === 'distance' ? 'Distance (km)' : 'Time (hours)')} />
+                    <XAxis dataKey="label" {...denseXAxis(9)} label={xLabel(volumeBucket === 'week' ? 'Week starting' : 'Month')} />
+                    <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" label={yLabel(volumeMeasure === 'distance' ? 'Distance (km)' : 'Time (hours)')} />
                     <Tooltip
                       cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
                       content={({ active, payload }) => {
@@ -599,10 +596,10 @@ export default function Analysis() {
                   <EmptyPlot height={220}>Needs activities with both heart rate and speed</EmptyPlot>
                 ) : (
                   <ResponsiveContainer width="100%" height={220}>
-                    <LineChart data={efficiency.rows} margin={{ top: 4, right: 16, left: 8, bottom: 18 }}>
+                    <LineChart data={efficiency.rows} margin={space.margin(18, 4)}>
                       <CartesianGrid {...GRID_PROPS} />
-                      <XAxis dataKey="dateLabel" tick={<EdgeTick fontSize={9} />} axisLine={false} tickLine={false} interval={tickInterval(efficiency.rows.length)} label={xLabel('Activity date')} />
-                      <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={52} domain={['dataMin - 1', 'dataMax + 1']} label={yLabel('bpm per km/h')} />
+                      <XAxis dataKey="dateLabel" {...denseXAxis(9)} label={xLabel('Activity date')} />
+                      <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" domain={['dataMin - 1', 'dataMax + 1']} label={yLabel('bpm per km/h')} />
                       <Tooltip
                         content={({ active, payload }) => {
                           if (!active || !payload?.length) return null
@@ -633,10 +630,10 @@ export default function Analysis() {
                   <EmptyPlot height={220}>Needs activities with both heart rate and pace</EmptyPlot>
                 ) : (
                   <ResponsiveContainer width="100%" height={220}>
-                    <LineChart data={efficiency.rows} margin={{ top: 4, right: 16, left: 8, bottom: 18 }}>
+                    <LineChart data={efficiency.rows} margin={space.margin(18, 4)}>
                       <CartesianGrid {...GRID_PROPS} />
-                      <XAxis dataKey="dateLabel" tick={<EdgeTick fontSize={9} />} axisLine={false} tickLine={false} interval={tickInterval(efficiency.rows.length)} label={xLabel('Activity date')} />
-                      <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={56} reversed domain={['dataMin - 15', 'dataMax + 15']} tickFormatter={v => fmtPace(v)} label={yLabel('Adjusted pace (min/km)')} />
+                      <XAxis dataKey="dateLabel" {...denseXAxis(9)} label={xLabel('Activity date')} />
+                      <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" reversed domain={['dataMin - 15', 'dataMax + 15']} tickFormatter={v => fmtPace(v)} label={yLabel('Adjusted pace (min/km)')} />
                       <Tooltip
                         content={({ active, payload }) => {
                           if (!active || !payload?.length) return null
@@ -662,20 +659,20 @@ export default function Analysis() {
               <ChartCard
                 title="HR vs Pace"
                 icon={<Target size={14} color="var(--primary)" />}
-                description="Lower HR at faster pace = improved aerobic efficiency. Marker size is distance."
+                description="Lower HR at faster pace = improved aerobic efficiency. Marker size is distance, colour is activity type."
                 info="Every activity plotted by its average pace and average heart rate, with marker area scaled to distance. As fitness improves the cloud drifts down and to the right — faster for fewer beats. Points high and left are hard efforts or bad days; large markers sitting low are your strongest long runs."
               >
                 {hrPaceData.length === 0 ? (
                   <EmptyPlot height={240}>No activities with pace and heart rate in the {rangeLabel(rangeDays)}</EmptyPlot>
                 ) : (
                   <ResponsiveContainer width="100%" height={240}>
-                    <ScatterChart margin={{ top: 8, right: 16, left: 8, bottom: 18 }}>
+                    <ScatterChart margin={space.margin(18)}>
                       <CartesianGrid {...GRID_PROPS} vertical />
                       {/* Units live in the axis labels rather than on every tick:
                           with " bpm" appended to each value the labels grew wide
                           enough to be clipped by the plot area. */}
                       <XAxis type="number" dataKey="pace" name="Pace" domain={['dataMin - 20', 'dataMax + 20']} tick={AXIS_TICK} axisLine={false} tickLine={false} reversed tickFormatter={v => fmtPace(v)} label={xLabel('Pace (min/km) — faster →')} />
-                      <YAxis type="number" dataKey="hr" name="HR" domain={['dataMin - 5', 'dataMax + 5']} width={48} tick={AXIS_TICK} axisLine={false} tickLine={false} label={yLabel('Avg HR (bpm)')} />
+                      <YAxis type="number" dataKey="hr" name="HR" domain={['dataMin - 5', 'dataMax + 5']} width="auto" tick={AXIS_TICK} axisLine={false} tickLine={false} label={yLabel('Avg HR (bpm)')} />
                       <ZAxis type="number" dataKey="distKm" range={[40, 220]} name="Distance" />
                       <Tooltip
                         cursor={{ strokeDasharray: '3 3', stroke: 'var(--border-strong)' }}
@@ -685,7 +682,7 @@ export default function Analysis() {
                           return (
                             <div className="custom-tooltip">
                               <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.name}</div>
-                              <div style={{ color: 'var(--text-3)' }}>{d.date}</div>
+                              <div style={{ color: 'var(--text-3)' }}>{d.type} · {d.date}</div>
                               <div>Pace: {fmtPace(d.pace)} /km</div>
                               <div>HR: {d.hr} bpm</div>
                               <div>Distance: {d.distKm} km</div>
@@ -693,26 +690,32 @@ export default function Analysis() {
                           )
                         }}
                       />
-                      <Scatter data={hrPaceData} fill="var(--primary)" opacity={0.6} />
+                      {/* Coloured per point rather than one series per type: a
+                          <Scatter> per type would give each its own z order and
+                          tooltip, when all that is wanted is the sport's hue. */}
+                      <Scatter data={hrPaceData} opacity={0.6}>
+                        {hrPaceData.map((d, i) => <Cell key={i} fill={TYPE_COLOR[d.type]} />)}
+                      </Scatter>
                     </ScatterChart>
                   </ResponsiveContainer>
                 )}
+                <TypeLegend types={hrPaceData.map(d => d.type)} />
               </ChartCard>
 
               <ChartCard
                 title="Distance vs Pace"
                 icon={<Navigation size={14} color="var(--blue)" />}
-                description="Does pace hold up as distance grows? Marker size is elevation gain."
+                description="Does pace hold up as distance grows? Marker size is elevation gain, colour is activity type."
                 info="Each activity plotted by distance against pace, with marker area scaled to elevation gain. A flat cloud means your pace is durable over distance; one that slopes toward slower paces as distance grows points at endurance rather than speed being the limiter. Large markers low on the chart are hills, not fatigue — that's what the size encoding is there to separate."
               >
                 {distPaceData.length === 0 ? (
                   <EmptyPlot height={240}>No activities with distance and pace in the {rangeLabel(rangeDays)}</EmptyPlot>
                 ) : (
                   <ResponsiveContainer width="100%" height={240}>
-                    <ScatterChart margin={{ top: 8, right: 16, left: 8, bottom: 18 }}>
+                    <ScatterChart margin={space.margin(18)}>
                       <CartesianGrid {...GRID_PROPS} vertical />
                       <XAxis type="number" dataKey="km" name="Distance" domain={['dataMin - 1', 'dataMax + 1']} tick={AXIS_TICK} axisLine={false} tickLine={false} label={xLabel('Distance (km)')} />
-                      <YAxis type="number" dataKey="pace" name="Pace" domain={['dataMin - 20', 'dataMax + 20']} width={56} tick={AXIS_TICK} axisLine={false} tickLine={false} reversed tickFormatter={v => fmtPace(v)} label={yLabel('Pace (min/km)')} />
+                      <YAxis type="number" dataKey="pace" name="Pace" domain={['dataMin - 20', 'dataMax + 20']} width="auto" tick={AXIS_TICK} axisLine={false} tickLine={false} reversed tickFormatter={v => fmtPace(v)} label={yLabel('Pace (min/km)')} />
                       {/* Elevation can legitimately be 0, so the range starts at
                           a visible minimum rather than collapsing to a dot. */}
                       <ZAxis type="number" dataKey="elev" range={[40, 220]} name="Elevation" />
@@ -724,7 +727,7 @@ export default function Analysis() {
                           return (
                             <div className="custom-tooltip">
                               <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.name}</div>
-                              <div style={{ color: 'var(--text-3)' }}>{d.date}</div>
+                              <div style={{ color: 'var(--text-3)' }}>{d.type} · {d.date}</div>
                               <div>Distance: {d.km} km</div>
                               <div>Pace: {fmtPace(d.pace)} /km</div>
                               <div>Elevation: {d.elev} m</div>
@@ -733,10 +736,13 @@ export default function Analysis() {
                           )
                         }}
                       />
-                      <Scatter data={distPaceData} fill="var(--blue)" opacity={0.6} />
+                      <Scatter data={distPaceData} opacity={0.6}>
+                        {distPaceData.map((d, i) => <Cell key={i} fill={TYPE_COLOR[d.type]} />)}
+                      </Scatter>
                     </ScatterChart>
                   </ResponsiveContainer>
                 )}
+                <TypeLegend types={distPaceData.map(d => d.type)} />
               </ChartCard>
             </div>
           </>
@@ -753,10 +759,10 @@ export default function Analysis() {
               style={{ marginBottom: 16 }}
             >
               <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={trainingLoad} margin={{ top: 4, right: 16, left: 8, bottom: 18 }}>
+                <BarChart data={trainingLoad} margin={space.margin(18, 4)}>
                   <CartesianGrid {...GRID_PROPS} />
-                  <XAxis dataKey="date" tick={<EdgeTick fontSize={9} />} axisLine={false} tickLine={false} interval={tickInterval(trainingLoad.length)} label={xLabel('Date')} />
-                  <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={48} label={yLabel('Load (TSS-equivalent)')} />
+                  <XAxis dataKey="date" {...denseXAxis(9)} label={xLabel('Date')} />
+                  <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" label={yLabel('Load (TSS-equivalent)')} />
                   <Tooltip
                     cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
                     content={({ active, payload }) => {
@@ -785,10 +791,10 @@ export default function Analysis() {
               )}
             >
               <ResponsiveContainer width="100%" height={220}>
-                <LineChart data={acwr} margin={{ top: 4, right: 16, left: 8, bottom: 18 }}>
+                <LineChart data={acwr} margin={space.margin(18, 4)}>
                   <CartesianGrid {...GRID_PROPS} />
-                  <XAxis dataKey="date" tick={<EdgeTick fontSize={9} />} axisLine={false} tickLine={false} interval={tickInterval(acwr.length)} label={xLabel('Date')} />
-                  <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={48} domain={[0, (max: number) => Math.max(2, Math.ceil(max * 10) / 10)]} label={yLabel('Acute : chronic ratio')} />
+                  <XAxis dataKey="date" {...denseXAxis(9)} label={xLabel('Date')} />
+                  <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" domain={[0, (max: number) => Math.max(2, Math.ceil(max * 10) / 10)]} label={yLabel('Acute : chronic ratio')} />
                   <ReferenceArea y1={0.8} y2={1.3} fill="var(--success)" fillOpacity={0.1} />
                   <ReferenceLine y={1.5} stroke="var(--danger)" strokeDasharray="4 4" strokeOpacity={0.6} />
                   <Tooltip
@@ -847,7 +853,7 @@ export default function Analysis() {
             ) : (
               <>
                 <ResponsiveContainer width="100%" height={260}>
-                  <ComposedChart margin={{ top: 8, right: 16, left: 8, bottom: 18 }}>
+                  <ComposedChart margin={space.margin(18)}>
                     <CartesianGrid {...GRID_PROPS} />
                     <XAxis
                       type="number" dataKey="temp" name="Temperature"
@@ -857,7 +863,7 @@ export default function Analysis() {
                     />
                     <YAxis
                       type="number" dataKey="value"
-                      tick={AXIS_TICK} axisLine={false} tickLine={false} width={52}
+                      tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto"
                       tickFormatter={v => weatherMetric === 'pace' ? fmtPace(v) : String(Math.round(v))}
                       label={yLabel(weatherMetric === 'pace' ? 'Pace (/km)' : 'Avg HR (bpm)')}
                     />

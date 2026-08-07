@@ -9,6 +9,7 @@ import { AXIS_TICK, GRID_PROPS, HOVER_FILL, recencyRamp } from '../lib/chartColo
 import { recentWeekStarts, weekdayMatrix } from '../lib/insights'
 import ChartCard, { EmptyPlot } from '../components/ChartCard'
 import InfoTip from '../components/InfoTip'
+import { useChartSpace } from '../components/ChartAxis'
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid, Legend, Cell,
@@ -70,6 +71,7 @@ export default function Consistency() {
   const [rangeDays, setRangeDays] = useLocalStorage<number>('al_hm_range', 365)
   const [measure, setMeasure] = useLocalStorage<Measure>('al_hm_measure', 'count')
   const [tab, setTab] = useLocalStorage<TabId>('al_cs_tab', 'calendar')
+  const space = useChartSpace()
 
   const m = MEASURES[measure]
 
@@ -363,10 +365,10 @@ export default function Consistency() {
           style={{ marginTop: 16 }}
         >
           <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={dayOfWeek} margin={{ top: 4, right: 16, left: 8, bottom: 18 }}>
+            <BarChart data={dayOfWeek} margin={space.margin(18, 4)}>
               <CartesianGrid {...GRID_PROPS} />
               <XAxis dataKey="label" tick={{ ...AXIS_TICK, fontSize: 11 }} axisLine={false} tickLine={false} label={xLabel('Day of week')} />
-              <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={52} unit={m.axisLabel || undefined} label={yLabel(measure === 'count' ? 'Activities' : 'Duration (hours)')} />
+              <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" unit={m.axisLabel || undefined} label={yLabel(measure === 'count' ? 'Activities' : 'Duration (hours)')} />
               <Tooltip
                 cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
                 content={({ active, payload, label }) => {
@@ -404,10 +406,10 @@ export default function Consistency() {
               {/* Years are an ordered series, so they get a single-hue ramp
                   stepping away from the accent rather than arbitrary hues —
                   that stays legible whichever accent the user has picked. */}
-              <BarChart data={yoyData} margin={{ top: 8, right: 16, left: 8, bottom: 18 }} barCategoryGap="18%" barGap={2}>
+              <BarChart data={yoyData} margin={space.margin(18)} barCategoryGap="18%" barGap={2}>
                 <CartesianGrid {...GRID_PROPS} />
                 <XAxis dataKey="month" tick={AXIS_TICK} axisLine={false} tickLine={false} label={xLabel('Month')} />
-                <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={52} unit={m.axisLabel || undefined} label={yLabel(measure === 'count' ? 'Activities' : 'Duration (hours)')} />
+                <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" unit={m.axisLabel || undefined} label={yLabel(measure === 'count' ? 'Activities' : 'Duration (hours)')} />
                 <Tooltip
                   cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
                   content={({ active, payload, label }) => {
@@ -444,10 +446,10 @@ export default function Consistency() {
             <EmptyPlot height={260}>No activities yet</EmptyPlot>
           ) : (
             <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={wowData} margin={{ top: 8, right: 16, left: 8, bottom: 18 }} barCategoryGap="18%" barGap={2}>
+              <BarChart data={wowData} margin={space.margin(18)} barCategoryGap="18%" barGap={2}>
                 <CartesianGrid {...GRID_PROPS} />
                 <XAxis dataKey="day" tick={AXIS_TICK} axisLine={false} tickLine={false} label={xLabel('Day of week')} />
-                <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={52} label={yLabel(measure === 'count' ? 'Activities' : 'Duration (hours)')} />
+                <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" label={yLabel(measure === 'count' ? 'Activities' : 'Duration (hours)')} />
                 <Tooltip
                   cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
                   content={({ active, payload, label }) => {
@@ -494,10 +496,10 @@ export default function Consistency() {
             <EmptyPlot height={260}>No activities yet</EmptyPlot>
           ) : (
             <ResponsiveContainer width="100%" height={260}>
-              <LineChart data={cumulativeData} margin={{ top: 8, right: 16, left: 8, bottom: 18 }}>
+              <LineChart data={cumulativeData} margin={space.margin(18)}>
                 <CartesianGrid {...GRID_PROPS} />
                 <XAxis dataKey="month" tick={AXIS_TICK} axisLine={false} tickLine={false} label={xLabel('Month')} />
-                <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={56} label={yLabel('Cumulative distance (km)')} />
+                <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" label={yLabel('Cumulative distance (km)')} />
                 <Tooltip
                   content={({ active, payload, label }) => {
                     if (!active || !payload?.length) return null

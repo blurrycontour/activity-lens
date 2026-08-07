@@ -1675,6 +1675,31 @@ body {
   margin-bottom: 12px;
 }
 
+/* Key for marks coloured by activity type. Sits under the plot, recessive
+   enough to read as an annotation rather than a control. */
+.type-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 10px;
+  list-style: none;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.type-legend li { display: inline-flex; align-items: center; gap: 5px; }
+.type-legend-dot { width: 8px; height: 8px; border-radius: 99px; flex-shrink: 0; }
+
+/* A phone has ~360px to spend, and the plot is the content — so a chart card
+   keeps only enough side padding to stop its text touching the border, and the
+   plot inside it gets the rest. The heading and description sit slightly in
+   from the plot so they still line up with the card's other text. */
+@media (max-width: 768px) {
+  .chart-card { padding-inline: 8px; }
+  .chart-card > .chart-card-head,
+  .chart-card > .chart-card-desc,
+  .chart-card > .type-legend { padding-inline: 4px; }
+}
+
 .infotip-trigger {
   display: inline-flex;
   align-items: center;

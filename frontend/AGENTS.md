@@ -15,25 +15,17 @@ toolchain file. Config code runs as native ESM, so use `import.meta.dirname`, ne
 
 ## Styling
 
-Styling is driven by **CSS custom properties and semantic classes in `src/index.css`**, not by
-utility classes. Follow what the existing components do:
+**Read [`docs/ui-design.md`](../docs/ui-design.md) before writing or changing any UI.** It is the
+single source for tokens, the accent/theme matrix, layout, reuse and chart conventions — kept in
+one place so it cannot drift from a second copy here.
 
-- Reach for the shared primitives first — `.card`, `.btn` / `.btn-primary` / `.btn-ghost` /
-  `.btn-icon`, `.input`, `.select`, `.badge`, `.chip`, `.modal-box`. Add a new semantic class to
-  `index.css` when a pattern repeats; use an inline `style` object for one-offs.
-- Never hardcode a colour. Everything comes from the tokens on `:root` — `--bg` / `--bg-2` /
-  `--bg-3`, `--text` / `--text-2` / `--text-3`, `--border`, and `--primary` / `--primary-dim` /
-  `--primary-glow`. The accent is user-selectable across six colours (`src/lib/theme.ts`) and
-  light mode is the `.light` class on `:root`, so hardcoding breaks 11 of 12 combinations.
-- Radius convention: `var(--radius)` (8px) for controls, `calc(var(--radius) * 1.5)` for cards,
-  `calc(var(--radius) * 2)` for modals, `99px` for pills. Cards carry no shadow — separation
-  comes from `--bg-2` on `--bg` plus a 1px `--border`.
-- Numbers use `var(--font-mono)` with negative letter-spacing; micro-labels are 11px uppercase
-  mono in `--text-3`.
+The two things worth repeating, because they are what people get wrong:
 
-Tailwind v4 is installed and loaded via the Vite plugin, but the app does **not** use its utility
-classes — `@theme` in `index.css` only supplies the two font tokens. Don't introduce utility
-classes into a file that doesn't already have them.
+- Styling is **CSS custom properties and semantic classes in `src/index.css`**, not utility
+  classes. Tailwind v4 is installed and loaded, but `@theme` supplies only the two font tokens
+  and the app uses no utilities. Don't introduce them.
+- **Never hardcode a colour.** The accent is user-selectable across six hues and the theme has
+  three modes, so a literal breaks 17 of the 18 combinations.
 
 ## Brand mark
 

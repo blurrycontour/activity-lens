@@ -20,7 +20,7 @@ interface ChartCardProps {
  */
 export default function ChartCard({ title, description, info, icon, actions, children, style }: ChartCardProps) {
   return (
-    <div className="card" style={style}>
+    <div className="card chart-card" style={style}>
       <div className="chart-card-head">
         {icon && <span style={{ display: 'inline-flex', flexShrink: 0 }}>{icon}</span>}
         <h3 className="chart-card-title">{title}</h3>
