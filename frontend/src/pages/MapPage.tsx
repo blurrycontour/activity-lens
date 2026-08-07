@@ -79,18 +79,33 @@ export default function MapPage() {
   const [error, setError] = useState<string | null>(null)
   const [full, setFull] = useState(false)
 
-  // Held in state, not a ref: maximizing moves the map's container from the
-  // page into the modal, which is a different element, and the effect that
-  // builds the map has to notice. A ref's identity never changes, so it cannot.
-  const [node, setNode] = useState<HTMLDivElement | null>(null)
+  /*
+   * The map's container, created here and never rendered by React.
+   *
+   * Maximizing moves it from the page into the modal. If React owned the
+   * element, that would be an unmount and a remount — a brand new MapLibre
+   * instance every time, which means a blank panel, the style, glyphs and
+   * sprite fetched again, and every visible tile re-decoded and re-uploaded to
+   * the GPU. Moving the element itself keeps the live map, its WebGL context
+   * and everything it has already downloaded, so maximizing is instant.
+   *
+   * `host` is the React-rendered box it currently lives in, and is state rather
+   * than a ref because the effect below has to run when it changes.
+   */
+  const [holder] = useState(() => {
+    const el = document.createElement('div')
+    el.className = 'map-page-gl'
+    return el
+  })
+  const [host, setHost] = useState<HTMLDivElement | null>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const glAvailable = useMemo(hasWebGL, [])
   // True until the first response has been fitted; the map opens on nothing in
   // particular and should move to where the workouts are exactly once.
   const needsFit = useRef(true)
-  // Where the map is looking, carried across the rebuild that maximizing
-  // causes. Not persisted — see above.
-  const view = useRef<{ center: maplibregl.LngLat; zoom: number } | null>(null)
+  // The pan debounce, held across the effect that binds it so the teardown
+  // below can clear it.
+  const panTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   const from = useMemo(() => {
     if (rangeDays <= 0) return undefined
@@ -205,67 +220,75 @@ export default function MapPage() {
   const heat = mode === 'heat' || (mode === 'auto' && shown.length > HEATMAP_FROM)
 
   // ── The map ────────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!node || !glAvailable) return
-    const saved = view.current
-    const map = new maplibregl.Map({
-      container: node,
-      style: MAP_LAYERS[layer].style,
-      // Where it was left, but only across a maximize — `view` starts empty on
-      // every visit, so arriving at the page still fits to the routes.
-      center: saved ? saved.center : [0, 20],
-      zoom: saved ? saved.zoom : 1.4,
-      attributionControl: { compact: true },
-      pitchWithRotate: false,
-      dragRotate: false,
-    })
-    map.touchZoomRotate.disableRotation()
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right')
-    mapRef.current = map
+  // Torn down when the page goes away, and only then. Keeping this out of the
+  // effect below is what lets that one re-run as the container moves without
+  // destroying the map each time.
+  useEffect(() => () => {
+    clearTimeout(panTimer.current)
+    mapRef.current?.remove()
+    mapRef.current = null
+  }, [])
 
-    // Debounced, because a drag fires moveend once but a pinch-zoom fires it
-    // repeatedly, and each one is a request.
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const onMove = () => {
-      view.current = { center: map.getCenter(), zoom: map.getZoom() }
-      clearTimeout(timer)
-      // Through a ref: this handler is bound once, and the direct reference
-      // would have kept fetching with the range that was selected when the map
-      // was built.
-      timer = setTimeout(() => { void loadRef.current() }, PAN_DEBOUNCE)
+  useEffect(() => {
+    if (!host || !glAvailable) return
+    // Moves the container if it already exists elsewhere; appendChild on a node
+    // that has a parent is a move, not a copy, so the map comes with it.
+    host.appendChild(holder)
+
+    if (!mapRef.current) {
+      const map = new maplibregl.Map({
+        container: holder,
+        style: MAP_LAYERS[layer].style,
+        center: [0, 20],
+        zoom: 1.4,
+        attributionControl: { compact: true },
+        pitchWithRotate: false,
+        dragRotate: false,
+      })
+      map.touchZoomRotate.disableRotation()
+      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right')
+      mapRef.current = map
+
+      // Debounced, because a drag fires moveend once but a pinch-zoom fires it
+      // repeatedly, and each one is a request.
+      const onMove = () => {
+        clearTimeout(panTimer.current)
+        // Through a ref: this handler is bound once, and the direct reference
+        // would have kept fetching with the range that was selected when the
+        // map was built.
+        panTimer.current = setTimeout(() => { void loadRef.current() }, PAN_DEBOUNCE)
+      }
+      map.on('moveend', onMove)
+      // Three, and via a ref for the same reason. `load` covers the first
+      // style; `styledata` and `idle` cover a base-layer switch, which discards
+      // every source and layer and needs them put back. Whichever arrives, the
+      // data is applied from what is current rather than from what was current
+      // at binding time.
+      const apply = () => applyRef.current()
+      map.on('load', apply)
+      map.on('styledata', apply)
+      // MapLibre builds the compact attribution *expanded* and only folds it
+      // away on the first interaction with the map, so a page that is looked at
+      // before it is touched wears a bar of tile credits across its corner.
+      // Removing the class is exactly what MapLibre's own minimise does. It is
+      // a documented stylesheet class rather than a private method, and the
+      // worst outcome if it is ever renamed is the attribution staying open —
+      // which is where it starts anyway.
+      map.on('load', () => {
+        map.getContainer()
+          .querySelector('.maplibregl-ctrl-attrib')
+          ?.classList.remove('maplibregl-compact-show')
+      })
     }
-    map.on('moveend', onMove)
-    // Both, and via a ref for the same reason. `load` covers the first style;
-    // `styledata` covers a base-layer switch, which discards every source and
-    // layer and needs them put back. Whichever arrives, the data is applied
-    // from what is current rather than from what was current at binding time.
-    const apply = () => applyRef.current()
-    map.on('load', apply)
-    map.on('styledata', apply)
-    // MapLibre builds the compact attribution *expanded* and only folds it away
-    // on the first interaction with the map, so a page that is looked at before
-    // it is touched wears a bar of tile credits across its corner. Removing the
-    // class is exactly what MapLibre's own minimise does. It is a documented
-    // stylesheet class rather than a private method, and the worst outcome if it
-    // is ever renamed is the attribution staying open — which is where it starts
-    // anyway.
-    map.on('load', () => {
-      map.getContainer()
-        .querySelector('.maplibregl-ctrl-attrib')
-        ?.classList.remove('maplibregl-compact-show')
-    })
-    return () => {
-      clearTimeout(timer)
-      map.remove()
-      mapRef.current = null
-    }
-    // Rebuilt only when the container element itself changes, which is once per
-    // maximize and never otherwise. Everything else — the range, the filter,
-    // the base layer, the data — reaches the existing map through a ref or its
-    // own effect, because rebuilding for those would throw away the position
-    // the user had panned to.
+
+    // The box around it changed size, which MapLibre cannot detect on its own.
+    // Deferred a frame so the new layout has been applied.
+    const id = requestAnimationFrame(() => mapRef.current?.resize())
+    return () => cancelAnimationFrame(id)
+    // `layer` is read only when the map is first built; changing it afterwards
+    // goes through setStyle in its own effect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [glAvailable, node])
+  }, [glAvailable, host, holder])
 
   // Switching base layer replaces the style, which drops every source and layer
   // with it; the data effect below re-adds them when the new style settles.
@@ -283,10 +306,38 @@ export default function MapPage() {
     [],
   )
 
-  /** Puts the current data on the map. A no-op until the style is ready. */
+  // Set while an apply is waiting for a style to finish installing, so a burst
+  // of styledata events queues one retry rather than dozens.
+  const waitingForStyle = useRef(false)
+
+  /**
+   * Puts the current data on the map.
+   *
+   * Sources and layers cannot be added to a style that is still installing, and
+   * switching the base layer throws every one of them away — so this has to run
+   * again afterwards, and the event that says "afterwards" is not reliable on
+   * its own. `styledata` fires several times during a switch, sometimes while
+   * `isStyleLoaded()` is still false, and the last one is not guaranteed to
+   * come after it turns true. That is how switching to Satellite and back left
+   * the routes gone until something else happened to redraw them.
+   *
+   * So a refusal here is not the end of it: `idle` fires once the map has
+   * finished loading and rendering everything it is going to, which is the one
+   * moment the style is certainly ready, and the apply is retried from there.
+   */
   const applyData = useCallback(() => {
     const map = mapRef.current
-    if (!map || !map.isStyleLoaded()) return
+    if (!map) return
+    if (!map.isStyleLoaded()) {
+      if (!waitingForStyle.current) {
+        waitingForStyle.current = true
+        map.once('idle', () => {
+          waitingForStyle.current = false
+          applyRef.current()
+        })
+      }
+      return
+    }
 
     const lines = {
       type: 'FeatureCollection' as const,
@@ -389,10 +440,6 @@ export default function MapPage() {
       if (!b.isEmpty()) {
         needsFit.current = false
         map.fitBounds(b, { padding: 48, animate: false, maxZoom: 14 })
-        // Recorded here as well as on moveend: the fit happens once, and if a
-        // maximize came before the user had panned anywhere there would be no
-        // position to rebuild at and the new map would open on an empty world.
-        view.current = { center: map.getCenter(), zoom: map.getZoom() }
       }
     }
   }, [shown, heat, colorFor])
@@ -409,10 +456,9 @@ export default function MapPage() {
   const scope = rangeLabel(rangeDays)
 
   /*
-   * The map and its controls, rendered in exactly one place at a time: in the
-   * page, or inside the modal that maximizing opens. Moving it costs a rebuild
-   * of the MapLibre instance — React cannot hand the same element to a new
-   * parent — which is what `view` above exists to paper over.
+   * The map's controls and the box the map lives in, rendered in exactly one
+   * place at a time: in the page, or inside the modal that maximizing opens.
+   * The map itself is not in here — it is moved between the two, see `holder`.
    *
    * The alternative was leaving it in the page and making it cover the screen
    * with `position: fixed`, which is what the first version did and why the
@@ -422,7 +468,7 @@ export default function MapPage() {
   const mapPanel = (
     <>
       {glAvailable
-        ? <div ref={setNode} className="map-page-gl" />
+        ? <div ref={setHost} className="map-page-host" />
         : (
           <div className="map-page-empty">
             This browser has no WebGL, so the map cannot be drawn here.

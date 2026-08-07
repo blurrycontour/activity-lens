@@ -1321,6 +1321,11 @@ body {
    page — see MapPage. No rule here could have lifted it above the bottom bar:
    the page renders inside the swipe pager, which is a stacking context, so a
    z-index of 1100 on a fixed child still loses to a tab bar at 50. */
+/* .map-page-host is the React-rendered box; .map-page-gl is the map's own
+   container, which is moved into it rather than rendered. Both fill the panel:
+   the host so a maximize hands the map the whole modal, the container so it
+   fills the host. */
+.map-page-host,
 .map-page-gl { position: absolute; inset: 0; }
 .map-page-expand {
   position: absolute;
@@ -2190,7 +2195,20 @@ body {
     padding-bottom: 0;
     overflow: hidden;
   }
-  .modal-box-immersive { max-width: 1200px; }
+  /* Except the map, which takes the window. A chart is read against the page
+     it came from, so boxing it keeps that context; a map is the opposite —
+     every pixel given back to it is more of the route you can see, and a
+     1200px panel floating in a 2560px window is not what "maximize" means on
+     something you opened to look at. */
+  .modal-immersive { padding: 0; }
+  .modal-box-immersive {
+    max-width: none;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    border: none;
+    border-radius: 0;
+  }
 }
 
 /* Holds the map's place while its chunk loads, so the cards below do not jump. */
