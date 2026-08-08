@@ -43,7 +43,10 @@ export default function ShareCardDialog({ workout, onClose }: {
   const [full, setFull] = useState(workout)
   useEffect(() => {
     setFull(workout)
-    if (workout.route) return
+    // Length, not truthiness: the summary endpoint sends `route: []` rather
+    // than omitting it, and an empty array is truthy — which is what made the
+    // first version of this skip the fetch and draw an empty route anyway.
+    if (workout.route?.length) return
     let alive = true
     // A workout genuinely without a route — a treadmill run, a gym session —
     // resolves to the same thing, so there is nothing to handle separately.

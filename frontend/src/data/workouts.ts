@@ -160,6 +160,20 @@ export function fmtPace(secPerKm: number): string {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
+/**
+ * The headline rate for a workout: pace where that is the natural reading,
+ * speed where it is not, and nothing at all when neither was measured.
+ *
+ * The last case is the point. A strength session, or a treadmill run imported
+ * without distance, has no rate — and falling through to `avgSpeed.toFixed(1)`
+ * stated "0.0 km/h", which reads as a measurement rather than as its absence.
+ */
+export function fmtRate(w: Pick<Workout, 'avgPace' | 'avgSpeed'>): { value: string; unit: string } {
+  if (w.avgPace > 0) return { value: fmtPace(w.avgPace), unit: '/km' }
+  if (w.avgSpeed > 0) return { value: w.avgSpeed.toFixed(1), unit: 'km/h' }
+  return { value: '—', unit: '' }
+}
+
 export function fmtDist(m: number): string {
   if (m === 0) return '—'
   if (m >= 1000) return `${(m / 1000).toFixed(2)} km`

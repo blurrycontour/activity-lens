@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useWorkouts } from '../context/WorkoutsContext'
-import { fmtDuration, fmtDist, fmtPace, TYPE_COLOR, type Workout, type WorkoutType } from '../data/workouts'
+import { fmtDuration, fmtDist, fmtRate, TYPE_COLOR, type Workout, type WorkoutType } from '../data/workouts'
 import TypeIcon from '../components/TypeIcon'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
@@ -102,6 +102,57 @@ function WorkoutRow({ w, onOpen }: { w: Workout; onOpen: () => void }) {
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-3)' }}>{fmtDuration(w.duration)}</div>
       </div>
     </button>
+  )
+}
+
+/** The most recent workout, with the headline numbers and a way into it. */
+function LatestActivity({ w, onOpen }: { w: Workout; onOpen: () => void }) {
+  const rate = fmtRate(w)
+  const stats = [
+    { label: 'Distance', value: fmtDist(w.distance) },
+    { label: 'Duration', value: fmtDuration(w.duration) },
+    { label: 'Avg HR', value: `${w.avgHR} bpm` },
+    { label: 'Elevation', value: `${Math.round(w.elevationGain)} m` },
+    { label: 'Calories', value: `${w.calories} kcal` },
+    // Labelled by what it actually is: a ride reports speed, not pace, and a
+    // strength session reports neither.
+    {
+      label: rate.unit === 'km/h' ? 'Avg Speed' : 'Avg Pace',
+      value: [rate.value, rate.unit].filter(Boolean).join(' '),
+    },
+  ]
+
+  return (
+    <div className="card" style={{ background: 'var(--bg-2)', position: 'relative', overflow: 'hidden' }}>
+      <div style={{
+        position: 'absolute', top: 0, right: 0, width: 120, height: 120,
+        background: `radial-gradient(circle at 80% 20%, ${TYPE_COLOR[w.type]}18 0%, transparent 70%)`,
+        pointerEvents: 'none',
+      }} />
+      {/* The same title row as every other panel. This card used to lead with a
+          mono micro-label and put the workout name in the heading slot, which
+          made it the odd one out. */}
+      <div className="chart-card-head">
+        <h3 className="chart-card-title">Latest Activity</h3>
+        <span className={`badge tag-${w.type.toLowerCase()}`} style={{ marginLeft: 'auto' }}>
+          <TypeIcon type={w.type} size={12} /> {w.type}
+        </span>
+      </div>
+      <button className="latest-activity-link" onClick={onOpen}>
+        <span className="latest-activity-name">{w.name}</span>
+        <span className="latest-activity-date">
+          {new Date(`${w.date}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+        </span>
+      </button>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+        {stats.map(s => (
+          <div key={s.label} className="stat-chip">
+            <span className="label">{s.label}</span>
+            <span className="value" style={{ fontSize: 14 }}>{s.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -511,45 +562,7 @@ export default function Dashboard({ onSelect }: { onSelect: (w: Workout) => void
 
             {/* Latest workout + recent list */}
             <div className="grid-2">
-              {d.latest && (
-                <div className="card" style={{ background: 'var(--bg-2)', position: 'relative', overflow: 'hidden' }}>
-                  <div style={{
-                    position: 'absolute', top: 0, right: 0, width: 120, height: 120,
-                    background: `radial-gradient(circle at 80% 20%, ${TYPE_COLOR[d.latest.type]}18 0%, transparent 70%)`,
-                    pointerEvents: 'none',
-                  }} />
-                  {/* Same title row as every other panel — this one used to
-                      lead with a mono micro-label and put the workout name in
-                      the heading slot, which made it the odd card out. */}
-                  <div className="chart-card-head">
-                    <h3 className="chart-card-title">Latest Activity</h3>
-                    <span className={`badge tag-${d.latest.type.toLowerCase()}`} style={{ marginLeft: 'auto' }}>
-                      <TypeIcon type={d.latest.type} size={12} /> {d.latest.type}
-                    </span>
-                  </div>
-                  <button className="latest-activity-link" onClick={() => onSelect(d.latest)}>
-                    <span className="latest-activity-name">{d.latest.name}</span>
-                    <span className="latest-activity-date">
-                      {new Date(`${d.latest.date}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-                    </span>
-                  </button>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-                    {[
-                      { label: 'Distance', value: fmtDist(d.latest.distance) },
-                      { label: 'Duration', value: fmtDuration(d.latest.duration) },
-                      { label: 'Avg HR', value: `${d.latest.avgHR} bpm` },
-                      { label: 'Elevation', value: `${Math.round(d.latest.elevationGain)} m` },
-                      { label: 'Calories', value: `${d.latest.calories} kcal` },
-                      { label: 'Avg Pace', value: d.latest.avgPace ? fmtPace(d.latest.avgPace) + ' /km' : `${d.latest.avgSpeed.toFixed(1)} km/h` },
-                    ].map(s => (
-                      <div key={s.label} className="stat-chip">
-                        <span className="label">{s.label}</span>
-                        <span className="value" style={{ fontSize: 14 }}>{s.value}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+              {d.latest && <LatestActivity w={d.latest} onOpen={() => onSelect(d.latest)} />}
 
               {/* Recent list */}
               <div className="card">

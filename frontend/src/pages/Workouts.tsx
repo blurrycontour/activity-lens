@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
-import { fmtDuration, fmtDist, fmtPace, TYPE_COLOR, ALL_WORKOUT_TYPES, type WorkoutType, type Workout } from '../data/workouts'
+import { fmtDuration, fmtDist, fmtRate, TYPE_COLOR, ALL_WORKOUT_TYPES, type WorkoutType, type Workout } from '../data/workouts'
 import TypeIcon from '../components/TypeIcon'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useRefreshHandler } from '../context/RefreshContext'
@@ -28,6 +28,8 @@ import {
 
 const FILTERS_KEY = 'workouts.filters'
 const SHOWN_KEY = 'workouts.shown'
+/** Set only while leaving for a workout, so the page count survives that trip. */
+const RESUME_KEY = 'workouts.resume'
 
 /** Cards rendered per page, and how many more each time the end comes into view. */
 const PAGE_SIZE = 20
@@ -63,23 +65,39 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
    * workouts and every card draws a sparkline, so the whole thing is a slow
    * first paint for a list nobody scrolls to the bottom of.
    *
-   * Sessioned like the filters, and for the same reason: opening a workout
-   * unmounts this page, and a count that reset to 20 on the way back would
-   * strand the restored scroll position past the end of the list.
+   * Carried across the unmount that opening a workout causes — a count that
+   * reset there would strand the restored scroll position past the end of the
+   * list — but *only* across that one. Arriving at the page any other way
+   * starts at the first page again, which is why this is not simply sessioned
+   * like the filters are: stored on its own, one long scroll would make every
+   * later visit in the same session render the whole library.
    */
-  const [paging, setPaging] = useSessionState(SHOWN_KEY, { shown: PAGE_SIZE })
-  const showMore = useCallback(
-    () => setPaging(p => ({ shown: p.shown + PAGE_SIZE })),
-    [setPaging],
-  )
+  const [shown, setShown] = useState(() => {
+    if (!sessionStorage.getItem(RESUME_KEY)) return PAGE_SIZE
+    const saved = Number(sessionStorage.getItem(SHOWN_KEY))
+    return Number.isFinite(saved) && saved > PAGE_SIZE ? saved : PAGE_SIZE
+  })
+  // Cleared in an effect rather than in the initializer above: StrictMode calls
+  // an initializer twice, and consuming the flag there would make the second
+  // call disagree with the first.
+  useEffect(() => { sessionStorage.removeItem(RESUME_KEY) }, [])
+  useEffect(() => { sessionStorage.setItem(SHOWN_KEY, String(shown)) }, [shown])
+
+  /** Opens a workout, marking this as the trip the page count survives. */
+  const openWorkout = useCallback((w: Workout) => {
+    sessionStorage.setItem(RESUME_KEY, '1')
+    onSelect(w)
+  }, [onSelect])
+
+  const showMore = useCallback(() => setShown(s => s + PAGE_SIZE), [])
   const patch = useCallback(
     (next: Partial<WorkoutFilters>) => {
       // Every filter change funnels through here, so this is the one place that
       // has to put the list back to the first page.
-      setPaging({ shown: PAGE_SIZE })
+      setShown(PAGE_SIZE)
       setFilters(prev => ({ ...prev, ...next }))
     },
-    [setFilters, setPaging],
+    [setFilters],
   )
   const setScope = (v: Scope) => patch({ scope: v })
   const setSearch = (v: string) => patch({ search: v })
@@ -224,7 +242,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
     setTypeFilter('All')
     setSortBy('date-desc')
     setRangeDays(0)
-    setPaging({ shown: PAGE_SIZE })
+    setShown(PAGE_SIZE)
     setFilters({ ...DEFAULT_FILTERS, scope })
   }
 
@@ -313,7 +331,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
     () => applyWorkoutFilters(source ?? [], filters),
     [source, filters],
   )
-  const visible = useMemo(() => filtered.slice(0, paging.shown), [filtered, paging.shown])
+  const visible = useMemo(() => filtered.slice(0, shown), [filtered, shown])
   const hasMore = filtered.length > visible.length
 
   /**
@@ -337,7 +355,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
     )
     io.observe(el)
     return () => io.disconnect()
-  }, [hasMore, showMore, paging.shown])
+  }, [hasMore, showMore, shown])
 
   return (
     <div>
@@ -473,7 +491,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
                 selected={selected?.has(w.id) ?? false}
                 selecting={selecting}
                 onLongPress={() => startSelecting(w.id)}
-                onClick={() => (selecting ? toggle(w.id) : onSelect(w))}
+                onClick={() => (selecting ? toggle(w.id) : openWorkout(w))}
                 badge={scope === 'mine' ? <ShareBadge workout={w} /> : undefined}
                 aside={scope === 'mine'
                   ? (
@@ -676,6 +694,7 @@ function WorkoutCard({
     ? { outline: '2px solid var(--primary)', outlineOffset: -2 }
     : {}
   const dateLabel = new Date(w.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  const rate = fmtRate(w)
 
   if (variant === 'grid') {
     return (
@@ -724,9 +743,9 @@ function WorkoutCard({
         {/* Primary metric */}
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, paddingBottom: 4, borderBottom: '1px solid var(--border)' }}>
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 24, fontWeight: 700, color }}>
-            {w.avgPace ? fmtPace(w.avgPace) : w.avgSpeed.toFixed(1)}
+            {rate.value}
           </span>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-3)' }}>{w.avgPace ? '/km' : 'km/h'}</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-3)' }}>{rate.unit}</span>
         </div>
 
         {/* Stats */}
@@ -805,8 +824,8 @@ function WorkoutCard({
 
       <div className="workout-row-aside">
         <div className="workout-row-pace">
-          <b>{w.avgPace ? fmtPace(w.avgPace) : `${w.avgSpeed.toFixed(1)}`}</b>
-          <small>{w.avgPace ? '/km' : 'km/h'}</small>
+          <b>{rate.value}</b>
+          <small>{rate.unit}</small>
         </div>
         {aside}
       </div>
