@@ -44,10 +44,7 @@ function literalColor(value: string, fallback: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback
 }
 
-/** Above this many tracks, drawing them individually stops informing. */
-const HEATMAP_FROM = 400
-
-type Mode = 'auto' | 'routes' | 'heat'
+type Mode = 'routes' | 'heat'
 
 /** Refetch no faster than this while a pan is in progress. */
 const PAN_DEBOUNCE = 400
@@ -65,7 +62,17 @@ const PAN_DEBOUNCE = 400
 export default function MapPage() {
   const [rangeDays, setRangeDays] = useLocalStorage<number>('al_map_range', 365)
   const [typeFilter, setTypeFilter] = useLocalStorage<WorkoutType | 'All'>('al_map_type', 'All')
-  const [mode, setMode] = useLocalStorage<Mode>('al_map_mode', 'auto')
+  /**
+   * Heatmap is the default: it is the view that answers "where do I actually
+   * go", and it says something useful at every library size, where individual
+   * routes stop informing once there are a few hundred of them.
+   *
+   * There used to be a third mode, 'auto', which picked between the two above a
+   * route-count threshold. It is gone — with heatmap as the default it had
+   * nothing left to decide — so a stored 'auto' resolves to the default here.
+   */
+  const [storedMode, setMode] = useLocalStorage<Mode>('al_map_mode', 'heat')
+  const mode: Mode = storedMode === 'routes' ? 'routes' : 'heat'
   const [layer, setLayer] = useState<MapLayerId>(() => {
     const stored = localStorage.getItem(MAP_LAYER_KEY)
     return stored === 'topo' || stored === 'satellite' ? stored : 'street'
@@ -223,7 +230,7 @@ export default function MapPage() {
     () => typeFilter === 'All' ? tracks : tracks.filter(t => t.type === typeFilter),
     [tracks, typeFilter],
   )
-  const heat = mode === 'heat' || (mode === 'auto' && shown.length > HEATMAP_FROM)
+  const heat = mode === 'heat'
 
   // Read once, when the map is built, without making the routes a dependency of
   // building it.
@@ -557,19 +564,19 @@ export default function MapPage() {
             {capped && !loading && ' (showing the most recent — zoom in for the rest)'}
           </span>
 
-          {/* Only offered once there is a choice to make. Below the threshold
-              the automatic answer is always "routes", and a toggle that does
-              nothing visible is worse than no toggle. */}
+          {/* Heatmap leads because it is the default view. One of the two is
+              always on — clicking the active chip does nothing rather than
+              leaving the map with neither. */}
           <div className="map-mode">
             {([
-              { id: 'routes' as Mode, label: 'Routes', icon: <RouteIcon size={13} /> },
               { id: 'heat' as Mode, label: 'Heatmap', icon: <Flame size={13} /> },
+              { id: 'routes' as Mode, label: 'Routes', icon: <RouteIcon size={13} /> },
             ]).map(o => (
               <button
                 key={o.id}
-                className={`chip${(mode === o.id || (mode === 'auto' && heat === (o.id === 'heat'))) ? ' active' : ''}`}
+                className={`chip${mode === o.id ? ' active' : ''}`}
                 aria-pressed={mode === o.id}
-                onClick={() => setMode(mode === o.id ? 'auto' : o.id)}
+                onClick={() => setMode(o.id)}
               >
                 {o.icon} {o.label}
               </button>

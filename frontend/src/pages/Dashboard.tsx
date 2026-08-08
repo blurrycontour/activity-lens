@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useWorkouts } from '../context/WorkoutsContext'
-import { fmtDuration, fmtDist, fmtPace, TYPE_COLOR, type Workout, type WorkoutType } from '../data/workouts'
+import { fmtDuration, fmtDist, fmtRate, TYPE_COLOR, type Workout, type WorkoutType } from '../data/workouts'
 import TypeIcon from '../components/TypeIcon'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
@@ -82,12 +82,9 @@ function StatCard({ icon, label, value, unit, sub, delta, spark, color }: {
   )
 }
 
-function WorkoutRow({ w }: { w: Workout }) {
+function WorkoutRow({ w, onOpen }: { w: Workout; onOpen: () => void }) {
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 12,
-      padding: '10px 0', borderBottom: '1px solid var(--border)',
-    }}>
+    <button className="dash-workout-row" onClick={onOpen}>
       <div style={{
         width: 36, height: 36, borderRadius: 10, flexShrink: 0,
         background: `${TYPE_COLOR[w.type]}20`,
@@ -103,6 +100,57 @@ function WorkoutRow({ w }: { w: Workout }) {
       <div style={{ textAlign: 'right', flexShrink: 0 }}>
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600 }}>{fmtDist(w.distance)}</div>
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-3)' }}>{fmtDuration(w.duration)}</div>
+      </div>
+    </button>
+  )
+}
+
+/** The most recent workout, with the headline numbers and a way into it. */
+function LatestActivity({ w, onOpen }: { w: Workout; onOpen: () => void }) {
+  const rate = fmtRate(w)
+  const stats = [
+    { label: 'Distance', value: fmtDist(w.distance) },
+    { label: 'Duration', value: fmtDuration(w.duration) },
+    { label: 'Avg HR', value: `${w.avgHR} bpm` },
+    { label: 'Elevation', value: `${Math.round(w.elevationGain)} m` },
+    { label: 'Calories', value: `${w.calories} kcal` },
+    // Labelled by what it actually is: a ride reports speed, not pace, and a
+    // strength session reports neither.
+    {
+      label: rate.unit === 'km/h' ? 'Avg Speed' : 'Avg Pace',
+      value: [rate.value, rate.unit].filter(Boolean).join(' '),
+    },
+  ]
+
+  return (
+    <div className="card" style={{ background: 'var(--bg-2)', position: 'relative', overflow: 'hidden' }}>
+      <div style={{
+        position: 'absolute', top: 0, right: 0, width: 120, height: 120,
+        background: `radial-gradient(circle at 80% 20%, ${TYPE_COLOR[w.type]}18 0%, transparent 70%)`,
+        pointerEvents: 'none',
+      }} />
+      {/* The same title row as every other panel. This card used to lead with a
+          mono micro-label and put the workout name in the heading slot, which
+          made it the odd one out. */}
+      <div className="chart-card-head">
+        <h3 className="chart-card-title">Latest Activity</h3>
+        <span className={`badge tag-${w.type.toLowerCase()}`} style={{ marginLeft: 'auto' }}>
+          <TypeIcon type={w.type} size={12} /> {w.type}
+        </span>
+      </div>
+      <button className="latest-activity-link" onClick={onOpen}>
+        <span className="latest-activity-name">{w.name}</span>
+        <span className="latest-activity-date">
+          {new Date(`${w.date}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+        </span>
+      </button>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+        {stats.map(s => (
+          <div key={s.label} className="stat-chip">
+            <span className="label">{s.label}</span>
+            <span className="value" style={{ fontSize: 14 }}>{s.value}</span>
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -181,7 +229,7 @@ function CompareRow({ label, value, average, format }: {
   )
 }
 
-export default function Dashboard() {
+export default function Dashboard({ onSelect }: { onSelect: (w: Workout) => void }) {
   const { workouts, loading } = useWorkouts()
   const [cfg] = useLocalStorage<DashboardConfig>(DASHBOARD_CFG_KEY, DEFAULT_DASHBOARD_CONFIG)
   const [goals, setGoals] = useState<Goal[]>([])
@@ -514,38 +562,7 @@ export default function Dashboard() {
 
             {/* Latest workout + recent list */}
             <div className="grid-2">
-              {d.latest && (
-                <div className="card" style={{ background: 'var(--bg-2)', position: 'relative', overflow: 'hidden' }}>
-                  <div style={{
-                    position: 'absolute', top: 0, right: 0, width: 120, height: 120,
-                    background: `radial-gradient(circle at 80% 20%, ${TYPE_COLOR[d.latest.type]}18 0%, transparent 70%)`,
-                    pointerEvents: 'none',
-                  }} />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-                    <div>
-                      <div style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Latest Activity</div>
-                      <h3 style={{ fontSize: 15, fontWeight: 700 }}>{d.latest.name}</h3>
-                      <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>{new Date(`${d.latest.date}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div>
-                    </div>
-                    <span className={`badge tag-${d.latest.type.toLowerCase()}`}><TypeIcon type={d.latest.type} size={12} /> {d.latest.type}</span>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-                    {[
-                      { label: 'Distance', value: fmtDist(d.latest.distance) },
-                      { label: 'Duration', value: fmtDuration(d.latest.duration) },
-                      { label: 'Avg HR', value: `${d.latest.avgHR} bpm` },
-                      { label: 'Elevation', value: `${Math.round(d.latest.elevationGain)} m` },
-                      { label: 'Calories', value: `${d.latest.calories} kcal` },
-                      { label: 'Avg Pace', value: d.latest.avgPace ? fmtPace(d.latest.avgPace) + ' /km' : `${d.latest.avgSpeed.toFixed(1)} km/h` },
-                    ].map(s => (
-                      <div key={s.label} className="stat-chip">
-                        <span className="label">{s.label}</span>
-                        <span className="value" style={{ fontSize: 14 }}>{s.value}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+              {d.latest && <LatestActivity w={d.latest} onOpen={() => onSelect(d.latest)} />}
 
               {/* Recent list */}
               <div className="card">
@@ -554,7 +571,7 @@ export default function Dashboard() {
                   <InfoTip label="Recent Activities" text="Your most recently recorded activities, newest first, by activity date rather than import date. Open one from the Workouts page to see its full detail view with charts and route map." />
                 </div>
                 <div>
-                  {d.sorted.slice(0, 5).map(w => <WorkoutRow key={w.id} w={w} />)}
+                  {d.sorted.slice(0, 5).map(w => <WorkoutRow key={w.id} w={w} onOpen={() => onSelect(w)} />)}
                 </div>
               </div>
             </div>

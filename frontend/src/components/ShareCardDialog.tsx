@@ -7,6 +7,7 @@ import {
 } from '../lib/shareCard'
 import { reportSaveFailure, shareFile } from '../lib/download'
 import { isNative } from '../lib/serverConfig'
+import { api } from '../lib/api'
 
 /**
  * A workout as a picture, for sending to people who do not have an account.
@@ -31,16 +32,40 @@ export default function ShareCardDialog({ workout, onClose }: {
   // toggle rather than a decision made for them.
   const [titleMode, setTitleMode] = useState<CardTitleMode>('type')
 
+  /**
+   * The workout with its route attached.
+   *
+   * The list endpoint returns summaries with `route` stripped, so a card opened
+   * from the workouts list would draw a perfectly convincing picture with the
+   * route missing. Fetching here rather than at each call site keeps that from
+   * depending on which page the dialog was opened from.
+   */
+  const [full, setFull] = useState(workout)
+  useEffect(() => {
+    setFull(workout)
+    // Length, not truthiness: the summary endpoint sends `route: []` rather
+    // than omitting it, and an empty array is truthy — which is what made the
+    // first version of this skip the fetch and draw an empty route anyway.
+    if (workout.route?.length) return
+    let alive = true
+    // A workout genuinely without a route — a treadmill run, a gym session —
+    // resolves to the same thing, so there is nothing to handle separately.
+    api.getWorkout(workout.id)
+      .then(w => { if (alive) setFull(w) })
+      .catch(() => { if (alive) setNote('Could not load the route for this card.') })
+    return () => { alive = false }
+  }, [workout])
+
   useEffect(() => {
     let alive = true
     const canvas = canvasRef.current
     if (!canvas) return
     setReady(false)
-    drawShareCard(canvas, workout, themeFromDocument(), { titleMode })
+    drawShareCard(canvas, full, themeFromDocument(), { titleMode })
       .then(() => { if (alive) setReady(true) })
       .catch(() => { if (alive) setNote('Could not draw the card.') })
     return () => { alive = false }
-  }, [workout, titleMode])
+  }, [full, titleMode])
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }

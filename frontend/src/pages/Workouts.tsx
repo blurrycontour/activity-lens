@@ -1,14 +1,16 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
-import { fmtDuration, fmtDist, fmtPace, TYPE_COLOR, ALL_WORKOUT_TYPES, type WorkoutType, type Workout } from '../data/workouts'
+import { fmtDuration, fmtDist, fmtRate, TYPE_COLOR, ALL_WORKOUT_TYPES, type WorkoutType, type Workout } from '../data/workouts'
 import TypeIcon from '../components/TypeIcon'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useRefreshHandler } from '../context/RefreshContext'
-import { Search, Clock, Mountain, Flame, Download, Plus, Grid2X2, List, Navigation, Library, Inbox, Globe, Users, Share2, SlidersHorizontal, X, Trash2, Check, LoaderCircle, Handshake, Layers } from 'lucide-react'
+import { Search, Clock, Mountain, Flame, Download, Plus, Grid2X2, List, Navigation, Library, Inbox, Globe, Users, Share2, SlidersHorizontal, X, Trash2, Check, CheckCheck, LoaderCircle, Handshake, Layers, Image as ImageIcon } from 'lucide-react'
 import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
 import SortDropdown, { SORT_OPTIONS, type SortKey } from '../components/SortDropdown'
 import FilterSheet, { type FilterGroup } from '../components/FilterSheet'
+import MenuButton from '../components/MenuButton'
 import ShareDialog from '../components/ShareDialog'
+import ShareCardDialog from '../components/ShareCardDialog'
 import UserAvatar, { userLabel } from '../components/UserAvatar'
 import SourceMark from '../components/SourceMark'
 import ConfirmDialog from '../components/ConfirmDialog'
@@ -25,6 +27,12 @@ import {
 } from '../lib/workoutFilters'
 
 const FILTERS_KEY = 'workouts.filters'
+const SHOWN_KEY = 'workouts.shown'
+/** Set only while leaving for a workout, so the page count survives that trip. */
+const RESUME_KEY = 'workouts.resume'
+
+/** Cards rendered per page, and how many more each time the end comes into view. */
+const PAGE_SIZE = 20
 
 interface WorkoutsProps {
   onSelect: (w: Workout) => void
@@ -52,8 +60,43 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
   // search box they typed into an hour ago.
   const [filters, setFilters] = useSessionState<WorkoutFilters>(FILTERS_KEY, DEFAULT_FILTERS)
   const { scope, search, typeFilter, sortBy, rangeDays, sharedOnly, originFilter, since } = filters
+  /**
+   * How much of the filtered list is rendered. A library runs to thousands of
+   * workouts and every card draws a sparkline, so the whole thing is a slow
+   * first paint for a list nobody scrolls to the bottom of.
+   *
+   * Carried across the unmount that opening a workout causes — a count that
+   * reset there would strand the restored scroll position past the end of the
+   * list — but *only* across that one. Arriving at the page any other way
+   * starts at the first page again, which is why this is not simply sessioned
+   * like the filters are: stored on its own, one long scroll would make every
+   * later visit in the same session render the whole library.
+   */
+  const [shown, setShown] = useState(() => {
+    if (!sessionStorage.getItem(RESUME_KEY)) return PAGE_SIZE
+    const saved = Number(sessionStorage.getItem(SHOWN_KEY))
+    return Number.isFinite(saved) && saved > PAGE_SIZE ? saved : PAGE_SIZE
+  })
+  // Cleared in an effect rather than in the initializer above: StrictMode calls
+  // an initializer twice, and consuming the flag there would make the second
+  // call disagree with the first.
+  useEffect(() => { sessionStorage.removeItem(RESUME_KEY) }, [])
+  useEffect(() => { sessionStorage.setItem(SHOWN_KEY, String(shown)) }, [shown])
+
+  /** Opens a workout, marking this as the trip the page count survives. */
+  const openWorkout = useCallback((w: Workout) => {
+    sessionStorage.setItem(RESUME_KEY, '1')
+    onSelect(w)
+  }, [onSelect])
+
+  const showMore = useCallback(() => setShown(s => s + PAGE_SIZE), [])
   const patch = useCallback(
-    (next: Partial<WorkoutFilters>) => setFilters(prev => ({ ...prev, ...next })),
+    (next: Partial<WorkoutFilters>) => {
+      // Every filter change funnels through here, so this is the one place that
+      // has to put the list back to the first page.
+      setShown(PAGE_SIZE)
+      setFilters(prev => ({ ...prev, ...next }))
+    },
     [setFilters],
   )
   const setScope = (v: Scope) => patch({ scope: v })
@@ -63,6 +106,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
   const setRangeDays = (v: number) => patch({ rangeDays: v })
   const setSharedOnly = (v: boolean) => patch({ sharedOnly: v })
   const [sharing, setSharing] = useState<Workout | null>(null)
+  const [cardFor, setCardFor] = useState<Workout | null>(null)
   const [feeds, setFeeds] = useState<Partial<Record<Scope, Workout[]>>>({})
   const [feedError, setFeedError] = useState<string | null>(null)
   const [showFilters, setShowFilters] = useState(false)
@@ -198,6 +242,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
     setTypeFilter('All')
     setSortBy('date-desc')
     setRangeDays(0)
+    setShown(PAGE_SIZE)
     setFilters({ ...DEFAULT_FILTERS, scope })
   }
 
@@ -286,6 +331,50 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
     () => applyWorkoutFilters(source ?? [], filters),
     [source, filters],
   )
+  const visible = useMemo(() => filtered.slice(0, shown), [filtered, shown])
+  const hasMore = filtered.length > visible.length
+
+  /**
+   * Whether every workout the filters match is selected — all of them, not just
+   * the page that happens to be rendered. Paging is a display detail, and a
+   * "Select all" that quietly meant "these twenty" would be a trap in front of
+   * a Delete button.
+   *
+   * Checked by membership rather than by comparing sizes: changing a filter
+   * mid-selection leaves ids selected that the list no longer shows, which
+   * would make the counts agree while the visible rows were not all ticked.
+   */
+  const allSelected = useMemo(
+    () => filtered.length > 0 && filtered.every(w => selected?.has(w.id)),
+    [filtered, selected],
+  )
+  const toggleAll = useCallback(
+    () => setSelected(allSelected ? new Set() : new Set(filtered.map(w => w.id))),
+    [allSelected, filtered],
+  )
+
+  /**
+   * Loads the next page when the end of the list comes within a screen or so.
+   *
+   * Re-created whenever the count changes, deliberately: a fresh observer
+   * reports the current intersection immediately, so a page that lands entirely
+   * above the fold keeps loading until the end is genuinely below it. Watching
+   * only for a crossing would stall there until the user nudged the scroll.
+   */
+  const endOfList = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    const el = endOfList.current
+    if (!el || !hasMore) return
+    const io = new IntersectionObserver(
+      entries => { if (entries.some(e => e.isIntersecting)) showMore() },
+      // Enough to load before the end is reached, not so much that a first page
+      // taller than the viewport counts as "near the end" and loads a second
+      // one before anything has been scrolled.
+      { rootMargin: '300px' },
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [hasMore, showMore, shown])
 
   return (
     <div>
@@ -339,9 +428,26 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
             <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-mono)' }}>
               {selected?.size ?? 0} selected
             </span>
+            {/* Says how many it will take, because "all" on a filtered list is
+                not obviously the filtered set — and the label is the only thing
+                standing between a stray tap and 500 selected workouts. */}
             <button
               className="btn btn-ghost"
-              style={{ marginLeft: 'auto', color: 'var(--danger)' }}
+              style={{ marginLeft: 'auto' }}
+              onClick={toggleAll}
+              aria-label={allSelected ? 'Deselect all' : `Select all ${filtered.length} workouts`}
+              title={allSelected ? 'Deselect all' : `Select all ${filtered.length} workouts`}
+            >
+              <CheckCheck size={15} />
+              {/* Shortened rather than dropped on a phone: there is room, and a
+                  bare glyph has no hover to explain itself there. */}
+              {isMobile
+                ? (allSelected ? 'Clear' : 'All')
+                : (allSelected ? 'Deselect all' : `Select all ${filtered.length}`)}
+            </button>
+            <button
+              className="btn btn-ghost"
+              style={{ color: 'var(--danger)' }}
               disabled={(selected?.size ?? 0) === 0}
               onClick={() => setConfirmDelete(true)}
             >
@@ -412,7 +518,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
           </div>
         ) : (
           <div className={view === 'grid' ? 'workout-grid' : 'workout-list'}>
-            {filtered.map(w => (
+            {visible.map(w => (
               <WorkoutCard
                 key={w.id}
                 workout={w}
@@ -421,19 +527,22 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
                 selected={selected?.has(w.id) ?? false}
                 selecting={selecting}
                 onLongPress={() => startSelecting(w.id)}
-                onClick={() => (selecting ? toggle(w.id) : onSelect(w))}
+                onClick={() => (selecting ? toggle(w.id) : openWorkout(w))}
                 badge={scope === 'mine' ? <ShareBadge workout={w} /> : undefined}
                 aside={scope === 'mine'
                   ? (
                     <>
-                      <button
-                        className="btn-icon"
-                        title="Share"
-                        onClick={e => { e.stopPropagation(); setSharing(w) }}
-                        style={{ opacity: 0.6 }}
-                      >
-                        <Share2 size={15} />
-                      </button>
+                      {/* Both ways of sharing, the same pair the detail page
+                          offers. A link needs the server and the workout to be
+                          shareable; a card is made from what is already here. */}
+                      <MenuButton icon={<Share2 size={15} />} label="Share">
+                        <button className="options-menu-item" onClick={() => setSharing(w)}>
+                          <Share2 size={14} /> Share link
+                        </button>
+                        <button className="options-menu-item" onClick={() => setCardFor(w)}>
+                          <ImageIcon size={14} /> Share card
+                        </button>
+                      </MenuButton>
                       <button
                         className="btn-icon card-export-btn"
                         title="Export as GPX"
@@ -457,6 +566,12 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
                   : undefined}
               />
             ))}
+          </div>
+        )}
+        {hasMore && (
+          <div ref={endOfList} className="load-more">
+            <LoaderCircle size={14} className="spin" />
+            {filtered.length - visible.length} more
           </div>
         )}
       </div>
@@ -487,6 +602,8 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
           onChange={() => { void refresh() }}
         />
       )}
+
+      {cardFor && <ShareCardDialog workout={cardFor} onClose={() => setCardFor(null)} />}
 
       {confirmDelete && (
         <ConfirmDialog
@@ -613,6 +730,7 @@ function WorkoutCard({
     ? { outline: '2px solid var(--primary)', outlineOffset: -2 }
     : {}
   const dateLabel = new Date(w.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  const rate = fmtRate(w)
 
   if (variant === 'grid') {
     return (
@@ -661,9 +779,9 @@ function WorkoutCard({
         {/* Primary metric */}
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, paddingBottom: 4, borderBottom: '1px solid var(--border)' }}>
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 24, fontWeight: 700, color }}>
-            {w.avgPace ? fmtPace(w.avgPace) : w.avgSpeed.toFixed(1)}
+            {rate.value}
           </span>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-3)' }}>{w.avgPace ? '/km' : 'km/h'}</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-3)' }}>{rate.unit}</span>
         </div>
 
         {/* Stats */}
@@ -742,8 +860,8 @@ function WorkoutCard({
 
       <div className="workout-row-aside">
         <div className="workout-row-pace">
-          <b>{w.avgPace ? fmtPace(w.avgPace) : `${w.avgSpeed.toFixed(1)}`}</b>
-          <small>{w.avgPace ? '/km' : 'km/h'}</small>
+          <b>{rate.value}</b>
+          <small>{rate.unit}</small>
         </div>
         {aside}
       </div>
