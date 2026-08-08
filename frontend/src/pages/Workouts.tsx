@@ -3,7 +3,7 @@ import { fmtDuration, fmtDist, fmtRate, TYPE_COLOR, ALL_WORKOUT_TYPES, type Work
 import TypeIcon from '../components/TypeIcon'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useRefreshHandler } from '../context/RefreshContext'
-import { Search, Clock, Mountain, Flame, Download, Plus, Grid2X2, List, Navigation, Library, Inbox, Globe, Users, Share2, SlidersHorizontal, X, Trash2, Check, LoaderCircle, Handshake, Layers, Image as ImageIcon } from 'lucide-react'
+import { Search, Clock, Mountain, Flame, Download, Plus, Grid2X2, List, Navigation, Library, Inbox, Globe, Users, Share2, SlidersHorizontal, X, Trash2, Check, CheckCheck, LoaderCircle, Handshake, Layers, Image as ImageIcon } from 'lucide-react'
 import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
 import SortDropdown, { SORT_OPTIONS, type SortKey } from '../components/SortDropdown'
@@ -335,6 +335,25 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
   const hasMore = filtered.length > visible.length
 
   /**
+   * Whether every workout the filters match is selected — all of them, not just
+   * the page that happens to be rendered. Paging is a display detail, and a
+   * "Select all" that quietly meant "these twenty" would be a trap in front of
+   * a Delete button.
+   *
+   * Checked by membership rather than by comparing sizes: changing a filter
+   * mid-selection leaves ids selected that the list no longer shows, which
+   * would make the counts agree while the visible rows were not all ticked.
+   */
+  const allSelected = useMemo(
+    () => filtered.length > 0 && filtered.every(w => selected?.has(w.id)),
+    [filtered, selected],
+  )
+  const toggleAll = useCallback(
+    () => setSelected(allSelected ? new Set() : new Set(filtered.map(w => w.id))),
+    [allSelected, filtered],
+  )
+
+  /**
    * Loads the next page when the end of the list comes within a screen or so.
    *
    * Re-created whenever the count changes, deliberately: a fresh observer
@@ -409,9 +428,26 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
             <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-mono)' }}>
               {selected?.size ?? 0} selected
             </span>
+            {/* Says how many it will take, because "all" on a filtered list is
+                not obviously the filtered set — and the label is the only thing
+                standing between a stray tap and 500 selected workouts. */}
             <button
               className="btn btn-ghost"
-              style={{ marginLeft: 'auto', color: 'var(--danger)' }}
+              style={{ marginLeft: 'auto' }}
+              onClick={toggleAll}
+              aria-label={allSelected ? 'Deselect all' : `Select all ${filtered.length} workouts`}
+              title={allSelected ? 'Deselect all' : `Select all ${filtered.length} workouts`}
+            >
+              <CheckCheck size={15} />
+              {/* Shortened rather than dropped on a phone: there is room, and a
+                  bare glyph has no hover to explain itself there. */}
+              {isMobile
+                ? (allSelected ? 'Clear' : 'All')
+                : (allSelected ? 'Deselect all' : `Select all ${filtered.length}`)}
+            </button>
+            <button
+              className="btn btn-ghost"
+              style={{ color: 'var(--danger)' }}
               disabled={(selected?.size ?? 0) === 0}
               onClick={() => setConfirmDelete(true)}
             >
