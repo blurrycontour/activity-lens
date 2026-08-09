@@ -1450,6 +1450,22 @@ body {
 .share-card-actions .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .share-card-actions .btn-primary { flex: 1; }
 
+/* Two dropdowns and a joining word, in a chart card's action slot. Wraps as a
+   unit on a phone rather than leaving "vs" stranded on its own line. */
+.explore-picks {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.explore-vs {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+}
+
 /* ── Theme picker (Settings → Appearance) ── */
 
 /* Three abreast on a desktop, stacked on a phone: the hint under each label is

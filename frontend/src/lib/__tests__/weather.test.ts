@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { type Workout } from '../../data/workouts'
 import {
-  WEATHER_FIELDS, WEATHER_ROWS, binByTemperature, binWidthFor, describeCorrelation,
+  PERF_METRICS, WEATHER_FIELDS, WEATHER_ROWS, binByTemperature, binWidthFor, describeCorrelation,
+  linearFit, weatherScatter,
   formatWeatherValue, pearson, temperatureCorrelation, weatherLabel,
 } from '../weather'
 
@@ -236,5 +237,58 @@ describe('WEATHER_ROWS', () => {
   // trigger that opens an empty bubble.
   it('gives every field something to explain', () => {
     for (const f of WEATHER_FIELDS) expect(f.hint.length).toBeGreaterThan(20)
+  })
+})
+
+/*
+ * The free-choice chart. Both of these draw something plausible from wrong
+ * arithmetic, which is why they are tested rather than eyeballed.
+ */
+describe('weatherScatter', () => {
+  it('drops workouts missing either side of the pair', () => {
+    const metric = PERF_METRICS.find(m => m.key === 'hr')!
+    const pts = weatherScatter(
+      [
+        run(12, { avgHR: 150 }),
+        // No weather at all.
+        run(12, { avgHR: 150, weather: undefined }),
+        // No strap: stored as 0, which is an absence and not a heart rate.
+        run(12, { avgHR: 0 }),
+      ],
+      'tempC',
+      metric,
+    )
+    expect(pts).toHaveLength(1)
+    expect(pts[0]).toMatchObject({ x: 12, y: 150 })
+  })
+
+  // Elevation is the one figure whose zero is real: a flat run climbed nothing.
+  it('keeps a zero elevation gain', () => {
+    const metric = PERF_METRICS.find(m => m.key === 'elevation')!
+    expect(weatherScatter([run(12, { elevationGain: 0 })], 'tempC', metric)).toHaveLength(1)
+  })
+})
+
+describe('linearFit', () => {
+  const pt = (x: number, y: number) => ({ x, y, name: 'w', date: '2025-01-01' })
+
+  it('recovers a line the points lie on', () => {
+    const fit = linearFit([pt(0, 1), pt(1, 3), pt(2, 5), pt(3, 7)])
+    expect(fit).not.toBeNull()
+    expect(fit![0]).toMatchObject({ x: 0 })
+    expect(fit![0].y).toBeCloseTo(1, 6)
+    expect(fit![1]).toMatchObject({ x: 3 })
+    expect(fit![1].y).toBeCloseTo(7, 6)
+  })
+
+  // A line through two points is those two points, not a trend.
+  it('refuses fewer than three points', () => {
+    expect(linearFit([pt(0, 1), pt(1, 3)])).toBeNull()
+  })
+
+  // Every workout at the same humidity: the slope is a division by zero, and
+  // the line it would draw is vertical and meaningless.
+  it('refuses points with no spread on x', () => {
+    expect(linearFit([pt(5, 1), pt(5, 3), pt(5, 9)])).toBeNull()
   })
 })
