@@ -339,7 +339,7 @@ func deriveMetrics(w *Workout, stepLengthM float64) {
 		km := w.Distance / 1000
 		hours := float64(w.Duration) / 3600
 		w.AvgSpeed = km / hours
-		if w.Type == TypeRun || w.Type == TypeHike {
+		if onFoot(w.Type) {
 			w.AvgPace = float64(w.Duration) / km // seconds per km
 		}
 	}
@@ -352,6 +352,23 @@ func deriveMetrics(w *Workout, stepLengthM float64) {
 	}
 }
 
+// onFoot reports whether pace and a step count mean anything for this activity.
+//
+// TypeOther is included deliberately. It is not a sport someone picks — it is
+// where an import lands when the file named no sport and its free text named
+// none — and in practice that is a walk, a hike or a treadmill session from a
+// device that writes "Other" into the field. Rides are the case pace is
+// withheld from, and a ride is never misfiled here: a file that knows enough to
+// record cycling says so.
+//
+// The cost of being wrong is a step estimate on a row or a paddle. That is the
+// same class of estimate the app already makes for a hike, and it is visible
+// and correctable, where withholding both figures from every unclassified
+// workout was neither.
+func onFoot(t Type) bool {
+	return t == TypeRun || t == TypeHike || t == TypeOther
+}
+
 // estimateSteps approximates step count from distance using the user's stride
 // length when provided (stepLengthM > 0), otherwise a per-activity average.
 // Only foot-based activities produce a value.
@@ -360,7 +377,10 @@ func estimateSteps(t Type, distanceMeters, stepLengthM float64) int {
 	switch t {
 	case TypeRun:
 		stride = 1.0
-	case TypeHike:
+	case TypeHike, TypeOther:
+		// The walking figure for both: an unclassified activity is far more
+		// likely to be walked than run, and under-counting steps is the kinder
+		// error of the two.
 		stride = 0.75
 	default:
 		return 0

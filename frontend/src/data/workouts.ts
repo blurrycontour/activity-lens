@@ -153,6 +153,19 @@ export function fmtDuration(s: number): string {
   return `${m}:${String(sec).padStart(2, '0')}`
 }
 
+/**
+ * Elapsed seconds as h:mm, for a time axis and its tooltip.
+ *
+ * Minutes alone stopped reading as a time somewhere around "97m": a long hike's
+ * axis was a row of three-digit numbers nobody converts in their head. Hours
+ * are not padded, so a short workout gets "0:05" rather than "00:05" — the
+ * shape of a clock, at the length the number deserves.
+ */
+export function fmtClock(seconds: number): string {
+  const total = Math.max(0, Math.round(seconds / 60))
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
+}
+
 export function fmtPace(secPerKm: number): string {
   if (!secPerKm) return '—'
   const m = Math.floor(secPerKm / 60)

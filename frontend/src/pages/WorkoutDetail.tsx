@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { type Workout, type WorkoutType, fmtDuration, fmtDist, fmtPace, TYPE_COLOR } from '../data/workouts'
+import { type Workout, type WorkoutType, fmtClock, fmtDuration, fmtDist, fmtPace, TYPE_COLOR } from '../data/workouts'
 import TypeIcon from '../components/TypeIcon'
 import SportDropdown from '../components/SportDropdown'
 import Dropdown from '../components/Dropdown'
@@ -324,10 +324,9 @@ function xLabel(value: string) {
 
 function ChartTooltip({ active, payload, label, unit, valueFormatter }: { active?: boolean; payload?: any[]; label?: string; unit: string; valueFormatter?: (value: number) => string }) {
   if (!active || !payload?.length) return null
-  const mins = Math.floor(Number(label) / 60)
   return (
     <div className="custom-tooltip">
-      <div style={{ color: 'var(--text-3)', marginBottom: 2 }}>{mins}m</div>
+      <div style={{ color: 'var(--text-3)', marginBottom: 2 }}>{fmtClock(Number(label))}</div>
       <div style={{ color: 'var(--text)', fontWeight: 600 }}>{valueFormatter ? valueFormatter(Number(payload[0].value)) : payload[0].value} {unit}</div>
     </div>
   )
@@ -429,7 +428,11 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
   const [recalcErr, setRecalcErr] = useState<string | null>(null)
   const [originalErr, setOriginalErr] = useState<string | null>(null)
 
-  const [selectedMetrics, setSelectedMetrics] = useLocalStorage<Metric[]>('al_wd_metrics', ['hr', 'pace', 'speed', 'elevation'])
+  // The key carries a version because the default changed: cadence used to be
+  // off, and a workout that recorded it showed nothing until you found the
+  // toggle. Bumping the key is what lets an existing install pick the new
+  // default up — the cost is one forgotten customisation, once.
+  const [selectedMetrics, setSelectedMetrics] = useLocalStorage<Metric[]>('al_wd_metrics_v2', ['hr', 'pace', 'speed', 'elevation', 'cadence'])
   function toggleMetric(m: Metric) {
     setSelectedMetrics(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m])
   }
@@ -490,7 +493,9 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
       const d = w.elevTimeline[i].elev - w.elevTimeline[i - 1].elev
       if (d < 0) elevLoss += -d
     }
-    const strideLength = w.type === 'Run' ? 1.0 : w.type === 'Hike' ? 0.75 : null
+    // Mirrors estimateSteps on the server, including Other — see onFoot there
+    // for why an unclassified activity is treated as walked.
+    const strideLength = w.type === 'Run' ? 1.0 : w.type === 'Hike' || w.type === 'Other' ? 0.75 : null
     const steps = strideLength && w.distance > 0 ? Math.round(w.distance / strideLength) : null
     const cadVals = cadenceTimeline.map(p => p.cad)
     return {
@@ -743,8 +748,8 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
           <XAxis
             dataKey="t" type="number" domain={[0, w.duration || 1]}
             tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}
-            axisLine={false} tickLine={false} tickFormatter={v => `${Math.floor(v / 60)}m`} interval="preserveStartEnd"
-            label={xLabel('Elapsed time (min)')}
+            axisLine={false} tickLine={false} tickFormatter={fmtClock} interval="preserveStartEnd"
+            label={xLabel('Elapsed time (h:mm)')}
           />
           <YAxis
             tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}

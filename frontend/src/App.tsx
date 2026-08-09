@@ -262,6 +262,11 @@ export default function App() {
   const openSection = useCallback((p: Page, s: string | null) => {
     setPage(p)
     setSection(s)
+    // A workout being open wins over the page underneath it, so leaving this
+    // set meant the user menu's Profile entry changed the page and the URL and
+    // then carried on showing the workout — from anywhere else it worked, which
+    // is exactly what makes that kind of bug hard to describe.
+    setSelectedWorkout(null)
     window.history.pushState(null, '', pathForPage(p, s))
   }, [])
 

@@ -253,3 +253,35 @@ func TestUpdateRejectsEmptyName(t *testing.T) {
 		t.Fatal("expected error for empty name patch")
 	}
 }
+
+// An unclassified import used to get neither a pace nor a step count, because
+// both were gated on a list of types written before TypeOther existed. Pace is
+// arithmetic and was simply missing; the steps are an estimate, and treating an
+// unnamed activity as walked is the deliberate choice recorded on onFoot.
+func TestOtherIsTreatedAsAFootActivity(t *testing.T) {
+	for _, tc := range []struct {
+		typ       Type
+		wantPace  bool
+		wantSteps int
+	}{
+		{TypeRun, true, 5000},
+		{TypeHike, true, 6667},
+		{TypeOther, true, 6667},
+		{TypeRide, false, 0},
+		{TypeSwim, false, 0},
+		{TypeStrength, false, 0},
+	} {
+		w := &Workout{Type: tc.typ, Distance: 5000, Duration: 1800}
+		deriveMetrics(w, 0)
+		if got := w.AvgPace > 0; got != tc.wantPace {
+			t.Errorf("%s: pace present = %v, want %v", tc.typ, got, tc.wantPace)
+		}
+		if w.Steps != tc.wantSteps {
+			t.Errorf("%s: steps = %d, want %d", tc.typ, w.Steps, tc.wantSteps)
+		}
+		// Speed is reported for everything that moved, and always was.
+		if w.AvgSpeed <= 0 {
+			t.Errorf("%s: speed = %v, want a positive figure", tc.typ, w.AvgSpeed)
+		}
+	}
+}
