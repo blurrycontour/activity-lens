@@ -6,6 +6,15 @@ import { findDuplicateGroups, redundantIds } from '../lib/duplicates'
 import useDismissOnBack from '../lib/useDismissOnBack'
 import TypeIcon from './TypeIcon'
 import SourceMark from './SourceMark'
+import InfoTip from './InfoTip'
+
+const HOW_IT_WORKS = 'Workouts of the same sport on the same day are treated as '
+  + 'the same activity when their duration and distance agree to within a couple '
+  + 'of percent, and — where both files recorded one — their start times are '
+  + 'within half an hour. The first in each group is the earliest import and is '
+  + 'the one to keep. Check each group before removing anything: an interval '
+  + 'session repeated on a track is a real pair of workouts, and this cannot tell '
+  + 'that apart from a mistake.'
 
 /**
  * Suspected duplicate imports, and a way to act on them.
@@ -39,25 +48,21 @@ export default function DuplicatesDialog({ workouts, onClose, onSelect }: {
           <div className="dup-head">
             <h3 style={{ fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
               <Copy size={15} /> Possible duplicates
+              {/* The caveats matter and are too long to leave in front of the
+                  list they are about — a paragraph above a scrolling panel eats
+                  the room the panel needs, and is read once and never again. */}
+              <InfoTip label="Possible duplicates" text={HOW_IT_WORKS} />
             </h3>
             <button className="btn-icon" onClick={onClose} aria-label="Close"><X size={16} /></button>
           </div>
 
           {groups.length === 0 ? (
-            <p className="dup-note">
-              Nothing here looks imported twice. This compares workouts of the same
-              sport on the same day, and treats them as the same activity when their
-              duration and distance agree to within a couple of percent.
-            </p>
+            <p className="dup-note">Nothing here looks imported twice.</p>
           ) : (
             <>
               <p className="dup-note">
-                {groups.length} group{groups.length === 1 ? '' : 's'} of workouts look like
-                the same activity imported more than once. The first in each group is
-                the earliest import and is the one to keep.
-                {' '}
-                <strong>Check each one</strong> — intervals repeated on a track are a
-                real pair of workouts, and this cannot tell them apart from a mistake.
+                {groups.length} group{groups.length === 1 ? '' : 's'} look like the same
+                activity imported more than once. Check each before removing anything.
               </p>
 
               <div className="dup-groups">
