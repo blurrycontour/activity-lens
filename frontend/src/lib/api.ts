@@ -183,9 +183,13 @@ export interface UserPreferences {
 
 export interface ApiGoal {
   id: string
-  /** Qualifying activities required per period. */
-  count: number
+  /** What the goal measures: activity count, total km, or total hours. */
+  metric: 'count' | 'distance' | 'duration'
+  /** The number to reach, in the metric's unit. */
+  target: number
   period: 'week' | 'month'
+  /** How many periods one window covers; 1 for a plain week or month. */
+  span: number
   /** Activity type the goal applies to, or '' for any. */
   type: string
   /** Minimum distance (km) for an activity to count. */
