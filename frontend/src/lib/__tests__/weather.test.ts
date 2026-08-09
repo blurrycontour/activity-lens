@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { type Workout } from '../../data/workouts'
 import {
-  WEATHER_FIELDS, binByTemperature, binWidthFor, describeCorrelation,
+  WEATHER_FIELDS, WEATHER_ROWS, binByTemperature, binWidthFor, describeCorrelation,
   formatWeatherValue, pearson, temperatureCorrelation, weatherLabel,
 } from '../weather'
 
@@ -213,5 +213,28 @@ describe('weatherLabel', () => {
     expect(weatherLabel(3)).toBe('Overcast')
     expect(weatherLabel(61)).toBe('Rain')
     expect(weatherLabel(95)).toBe('Thunderstorm')
+  })
+})
+
+/*
+ * The rows are what the card lays out, and the fields are what it reads values
+ * from. They were separate lists once before and drifted into a panel showing
+ * four values while the editor offered five.
+ */
+describe('WEATHER_ROWS', () => {
+  it('lays out every field exactly once', () => {
+    const laid = WEATHER_ROWS.flat()
+    expect([...laid].sort()).toEqual(WEATHER_FIELDS.map(f => f.key).sort())
+  })
+
+  it('keeps the two temperatures on the same row', () => {
+    const row = WEATHER_ROWS.find(r => r.includes('tempC'))
+    expect(row).toContain('apparentC')
+  })
+
+  // Each reading is its own tooltip; a field with nothing to say would be a
+  // trigger that opens an empty bubble.
+  it('gives every field something to explain', () => {
+    for (const f of WEATHER_FIELDS) expect(f.hint.length).toBeGreaterThan(20)
   })
 })

@@ -40,6 +40,14 @@ export interface WeatherField {
   digits: number
   /** Increment for the manual editor's number input. */
   step: number
+  /**
+   * What the number means, shown on hover or tap.
+   *
+   * Worth the words because none of these is quite what a reader assumes: the
+   * figures are an hourly reanalysis averaged over the workout, on a grid about
+   * 25 km across, and rain is a total rather than a rate.
+   */
+  hint: string
 }
 
 /**
@@ -49,11 +57,39 @@ export interface WeatherField {
  * four values while the editor offers five — the exact drift reported here.
  */
 export const WEATHER_FIELDS: WeatherField[] = [
-  { key: 'tempC', label: 'Temperature', unit: '°C', digits: 0, step: 0.1 },
-  { key: 'apparentC', label: 'Feels like', unit: '°C', digits: 0, step: 0.1 },
-  { key: 'humidity', label: 'Humidity', unit: '%', digits: 0, step: 1 },
-  { key: 'windKph', label: 'Wind', unit: 'km/h', digits: 0, step: 0.1 },
-  { key: 'precipMm', label: 'Rain', unit: 'mm', digits: 1, step: 0.1 },
+  {
+    key: 'tempC', label: 'Temperature', unit: '°C', digits: 0, step: 0.1,
+    hint: 'Air temperature, averaged over the hours the workout covered. The model works on a grid about 25 km across, so a coastal or valley route can differ by a few degrees.',
+  },
+  {
+    key: 'apparentC', label: 'Feels like', unit: '°C', digits: 0, step: 0.1,
+    hint: 'What the air temperature felt like once wind, humidity and sun are taken into account. This is the one that explains a hard day at a mild temperature.',
+  },
+  {
+    key: 'humidity', label: 'Humidity', unit: '%', digits: 0, step: 1,
+    hint: 'Relative humidity, averaged over the workout. High humidity slows the sweat that cools you, which is why it shows up in pace long before temperature does.',
+  },
+  {
+    key: 'windKph', label: 'Wind', unit: 'km/h', digits: 0, step: 0.1,
+    hint: 'Average wind speed 10 m above the ground, over the workout. It says nothing about direction, so a loop that felt like a headwind throughout still reads as one number.',
+  },
+  {
+    key: 'precipMm', label: 'Rain', unit: 'mm', digits: 1, step: 0.1,
+    hint: 'Total rain that fell during the workout, not a rate. 0.0 mm means it was measured and there was none.',
+  },
+]
+
+/**
+ * The two rows the reading is laid out in: the temperatures together, then
+ * everything else.
+ *
+ * One flowing row wrapped wherever the width happened to run out, which put
+ * "feels like" on its own line next to the humidity as often as not — and those
+ * two temperatures are the pair a reader compares.
+ */
+export const WEATHER_ROWS: WeatherKey[][] = [
+  ['tempC', 'apparentC'],
+  ['humidity', 'windKph', 'precipMm'],
 ]
 
 /**

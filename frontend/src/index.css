@@ -1036,17 +1036,40 @@ body {
 }
 /* Five values on one line, each behind its own icon so the row can be scanned
    rather than read. They wrap to a second line on a narrow phone. */
+/* Two fixed rows rather than one wrapping one, so the two temperatures stay
+   next to each other at every width. */
 .weather-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 10px;
+}
+.weather-metric-row {
   display: flex;
   flex-wrap: wrap;
   gap: 7px 16px;
-  margin-top: 10px;
 }
+/* Each reading is an InfoTip trigger, so it is a button and has to be talked
+   back down to looking like text. The pointer and the hover are the only signs
+   it can be asked about — deliberately quiet, since all five carry one. */
 .weather-metric {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   color: var(--text-3);
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  cursor: help;
+  text-align: left;
+  transition: color 0.15s;
+}
+.weather-metric:hover { color: var(--text-2); }
+.weather-metric:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 /* The values are numbers, so they follow the numeric convention — sized to sit
    with the stat figures elsewhere on the page rather than above them. */

@@ -4,7 +4,8 @@ import {
   Thermometer, ThermometerSun, Wind,
 } from 'lucide-react'
 import { type Weather, type Workout } from '../data/workouts'
-import { WEATHER_FIELDS, type WeatherKey, formatWeatherValue, weatherLabel } from '../lib/weather'
+import { WEATHER_FIELDS, WEATHER_ROWS, type WeatherKey, formatWeatherValue, weatherLabel } from '../lib/weather'
+import InfoTip from './InfoTip'
 import Dropdown from './Dropdown'
 import { api } from '../lib/api'
 
@@ -115,22 +116,30 @@ function WeatherReading({ weather, manual }: { weather: Weather; manual?: boolea
             not measured by the model, and will not be replaced by it. */}
         {manual && ' · entered by hand'}
       </div>
-      {/* Every field, every time. The icon is what makes five values scannable;
-          the label stays as the tooltip and the accessible name, since an icon
-          alone is a guess. */}
+      {/* Every field, every time, in two fixed rows: the temperatures are the
+          pair a reader compares, and one flowing row separated them at whatever
+          width it happened to run out of. The icon is what makes five values
+          scannable; each is also its own tooltip, because none of these numbers
+          means quite what it looks like — see the hints in weather.ts. */}
       <div className="weather-metrics">
-        {WEATHER_FIELDS.map(f => {
-          const Icon = FIELD_ICONS[f.key]
-          return (
-            <span className="weather-metric" key={f.key} title={f.label}>
-              <Icon size={14} aria-hidden />
-              <span className="weather-metric-value">
-                <span className="sr-only">{f.label}: </span>
-                {formatWeatherValue(f, weather)}
-              </span>
-            </span>
-          )
-        })}
+        {WEATHER_ROWS.map((row, i) => (
+          <div className="weather-metric-row" key={i}>
+            {row.map(key => {
+              const f = WEATHER_FIELDS.find(x => x.key === key)
+              if (!f) return null
+              const Icon = FIELD_ICONS[f.key]
+              return (
+                <InfoTip key={f.key} label={f.label} text={f.hint} className="weather-metric">
+                  <Icon size={14} aria-hidden />
+                  <span className="weather-metric-value">
+                    <span className="sr-only">{f.label}: </span>
+                    {formatWeatherValue(f, weather)}
+                  </span>
+                </InfoTip>
+              )
+            })}
+          </div>
+        ))}
       </div>
     </>
   )
