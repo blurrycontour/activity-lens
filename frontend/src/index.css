@@ -248,6 +248,8 @@ body {
   transition: all 0.15s;
 }
 .btn-icon:hover { background: var(--bg-3); color: var(--text); }
+.btn-icon:disabled { opacity: 0.35; cursor: default; }
+.btn-icon:disabled:hover { background: transparent; color: var(--text-2); }
 
 /* Labelled on/off switch. Wrap the label text and a hidden checkbox:
    <label class="switch"><input type="checkbox" .../><span class="switch-track"></span>Label</label> */
@@ -3558,11 +3560,11 @@ body:has(.overlay) .fab { display: none; }
   .bottom-bar { display: none !important; }
 }
 
-/* Training-goal editor row: four fields plus a remove button on desktop,
-   stacking into a two-column grid on narrow screens. */
+/* Training-goal editor row: reorder arrows, four fields and a remove button on
+   desktop, stacking into a two-column grid on narrow screens. */
 .goal-row {
   display: grid;
-  grid-template-columns: 90px 1fr 110px 100px auto;
+  grid-template-columns: auto 170px 1fr 150px 82px auto;
   gap: 8px;
   align-items: start;
   padding: 12px;
@@ -3570,9 +3572,32 @@ body:has(.overlay) .fab { display: none; }
   border-radius: var(--radius);
   background: var(--bg-3);
 }
-@media (max-width: 640px) {
+
+/* A number and its unit read as one control, so they sit in one cell. */
+.goal-pair { display: flex; gap: 6px; }
+.goal-pair > .input { width: 100%; min-width: 0; flex: 1 1 44%; }
+.goal-pair > :not(.input) { flex: 1 1 56%; min-width: 0; }
+
+/* The arrows are stacked on desktop and side by side once the row wraps, so
+   they never eat a whole grid cell's height on a phone. Bottom-aligned like the
+   remove button, so both flank the line of inputs rather than the labels. */
+.goal-move { display: flex; flex-direction: column; gap: 2px; align-self: end; margin-bottom: 1px; }
+.goal-move .btn-icon { padding: 2px; }
+
+.goal-remove { align-self: end; margin-bottom: 1px; color: var(--danger); }
+
+/* Once the row wraps, the two buttons move below the fields — `order` rather
+   than a column, so grid auto-placement puts them on the same final line. */
+@media (max-width: 860px) {
   .goal-row { grid-template-columns: 1fr 1fr; }
-  .goal-row > button { grid-column: 1 / -1; justify-self: end; }
+  .goal-move, .goal-remove { order: 1; align-self: center; margin-bottom: 0; }
+  .goal-move { flex-direction: row; }
+  .goal-remove { justify-self: end; }
+}
+@media (max-width: 420px) {
+  /* One field per line, with the buttons still sharing the last one. */
+  .goal-row { grid-template-columns: 1fr auto; }
+  .goal-row > .field { grid-column: 1 / -1; }
 }
 
 /* ── Goal tile: the numbers carry the motivation, so they lead and everything
@@ -3613,6 +3638,10 @@ body:has(.overlay) .fab { display: none; }
   color: var(--text-3);
   opacity: 0.75;
 }
+/* Distance and time goals read as "44.2/120 km" rather than "3/3", so the
+   figure steps down to leave the description beside it room to breathe. */
+.goal-tile.measured .goal-figure-current { font-size: 30px; }
+.goal-tile.measured .goal-figure-total { font-size: 16px; }
 
 .goal-divider {
   width: 1px;
@@ -3665,4 +3694,5 @@ body:has(.overlay) .fab { display: none; }
 
 @media (max-width: 480px) {
   .goal-figure-current { font-size: 34px; }
+  .goal-tile.measured .goal-figure-current { font-size: 26px; }
 }
