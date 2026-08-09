@@ -4,10 +4,10 @@ import { type Workout, type WorkoutType, fmtClock, fmtDuration, fmtDist, fmtPace
 import TypeIcon from '../components/TypeIcon'
 import SportDropdown from '../components/SportDropdown'
 import Dropdown from '../components/Dropdown'
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ReferenceDot, BarChart, Bar } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ReferenceDot, ReferenceArea, BarChart, Bar } from 'recharts'
 import {
   ArrowLeft, Heart, Mountain, Zap, Clock, TrendingUp, Navigation, Download, Pencil, Trash2, Gauge,
-  Check, X as XIcon, Play, Pause, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, AlertTriangle, Activity, Share2, Lock, FileDown, Plus, Image as ImageIcon,
+  Check, X as XIcon, Play, Pause as PauseIcon, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, AlertTriangle, Activity, Share2, Lock, FileDown, Plus, Image as ImageIcon,
 } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useAuth } from '../context/AuthContext'
@@ -249,7 +249,7 @@ function PlaybackBar({
     <div className="playback-bar">
       <div className="playback-controls">
         <button className="btn-icon" onClick={onPlayPause} title={playing ? 'Pause' : 'Play'}>
-          {playing ? <Pause size={16} /> : <Play size={16} />}
+          {playing ? <PauseIcon size={16} /> : <Play size={16} />}
         </button>
         <button className="btn-icon" onClick={onReset} title="Reset">
           <RotateCcw size={16} />
@@ -314,6 +314,25 @@ function MetricPanel({ icon, title, badge, info, stats, onExpand, children }: {
       {stats && <div className="metric-panel-stats">{stats}</div>}
       {children}
     </div>
+  )
+}
+
+/**
+ * The break glyph in the middle of a pause band.
+ *
+ * Drawn only when the band is wide enough to hold it. A two-pixel band on a
+ * long workout would otherwise get a mark wider than the thing it marks, which
+ * reads as a data point rather than as a gap.
+ */
+function PauseMark({ viewBox }: { viewBox?: { x: number; y: number; width: number; height: number } }) {
+  if (!viewBox || viewBox.width < 14) return null
+  const cx = viewBox.x + viewBox.width / 2
+  const cy = viewBox.y + viewBox.height / 2
+  return (
+    <g pointerEvents="none" opacity={0.65}>
+      <rect x={cx - 4} y={cy - 5} width={2.5} height={10} rx={1} fill="var(--text-3)" />
+      <rect x={cx + 1.5} y={cy - 5} width={2.5} height={10} rx={1} fill="var(--text-3)" />
+    </g>
   )
 }
 
@@ -437,6 +456,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
     setSelectedMetrics(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m])
   }
   const [yFromZero, setYFromZero] = useLocalStorage<boolean>('al_y0', false)
+  const [showPauses, setShowPauses] = useLocalStorage<boolean>('al_show_pauses', true)
   const [hrZoneStyle] = useLocalStorage<HRZoneChart>(HR_ZONE_CHART_KEY, DEFAULT_HR_ZONE_CHART)
 
   // Equipment editing
@@ -468,6 +488,20 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
   )
   // Cadence arrives noisy (a dropped stride shows up as a zero), so zeros are
   // dropped and the series is lightly smoothed the way pace/speed are.
+  /*
+   * The stretches where the recording stopped.
+   *
+   * Empty for a workout imported before the server detected these, until it is
+   * recalculated — and empty is also the honest answer for one that ran
+   * straight through, so nothing here needs to tell the two apart. `movingTime`
+   * does, and the summary uses it.
+   */
+  const pauses = useMemo(() => w.pauses ?? [], [w.pauses])
+  const pausedSeconds = useMemo(
+    () => pauses.reduce((total, p) => total + Math.max(0, p.to - p.from), 0),
+    [pauses],
+  )
+
   const cadenceTimeline = useMemo(
     () => smoothTimeline((w.cadenceTimeline ?? []).filter(p => p.cad > 0).map(p => ({ t: p.t, value: p.cad })), 5)
       .map(p => ({ t: p.t, cad: Math.round(p.value) })),
@@ -745,6 +779,17 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             )}
           </defs>
           <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
+          {/* Before the axes and the series, so the shading sits behind them
+              rather than over the line it is meant to explain. */}
+          {showPauses && pauses.map(p => (
+            <ReferenceArea
+              key={`${p.from}-${p.to}`}
+              x1={p.from} x2={p.to}
+              fill="var(--text-3)" fillOpacity={0.14} stroke="none"
+              label={<PauseMark />}
+              ifOverflow="hidden"
+            />
+          ))}
           <XAxis
             dataKey="t" type="number" domain={[0, w.duration || 1]}
             tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}
@@ -1070,6 +1115,12 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
                   ourselves — TCX files state them outright, and those are as
                   good as any other reported field. */}
               <StatChip icon={<Zap size={12} />} label="Calories" value={w.calories > 0 ? `${w.calories} kcal` : '—'} manual={w.caloriesManual} calculated={!w.caloriesManual && !w.caloriesReported && w.calories > 0} />
+              {/* Only when it differs from the elapsed time. Two identical
+                  figures side by side invite the reader to look for the
+                  difference, and there is none to find on most workouts. */}
+              {pausedSeconds > 0 && (
+                <StatChip icon={<PauseIcon size={12} />} label="Moving" value={fmtDuration(w.movingTime ?? w.duration)} />
+              )}
             </div>
 
             {(w.hrTimeline.length > 0 || w.avgHR > 0) && (
@@ -1154,6 +1205,16 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             <span className="switch-track" />
             Y axis from 0
           </label>
+          {/* Only where there is something to show. A toggle that never
+              changes anything is a question about a feature this workout does
+              not have. */}
+          {pauses.length > 0 && (
+            <label className="switch" title="Shade the stretches where the recording stopped">
+              <input type="checkbox" checked={showPauses} onChange={e => setShowPauses(e.target.checked)} />
+              <span className="switch-track" />
+              Pauses
+            </label>
+          )}
         </div>
 
         {/* Charts */}
@@ -1186,7 +1247,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
               icon={<TrendingUp size={14} color={color} />}
               title="Pace"
               badge={<CalcIcon />}
-              info="Pace derived from the distance and time between consecutive GPS fixes, then smoothed — very few files record pace directly, which is what the Σ marks. Segments shorter than three metres are skipped so standing still doesn't produce wild spikes. Lower on the chart is faster."
+              info="Pace derived from the distance and time between consecutive GPS fixes, then smoothed — very few files record pace directly, which is what the Σ marks. Segments shorter than three metres are skipped so standing still doesn't produce wild spikes. Lower on the chart is faster. The average is over moving time: shaded bands mark the stretches where the recording stopped, and those are left out of it."
               stats={<>Min {derived.paceMin != null ? fmtPace(derived.paceMin) : '—'} · Avg {fmtPace(w.avgPace)} · Max {derived.paceMax != null ? fmtPace(derived.paceMax) : '—'} /km</>}
               onExpand={() => setExpanded('pace')}
             >

@@ -12,6 +12,13 @@ export interface ElevPoint { t: number; elev: number }
 /** Steps per minute for foot-based activities, rpm for rides. */
 export interface CadencePoint { t: number; cad: number }
 
+/**
+ * A stretch of a workout during which nothing was recorded, in seconds from the
+ * start — the watch paused, by hand or by itself. See backend/internal/workout
+ * /pauses.go for why only gaps in the recording count as one.
+ */
+export interface Pause { from: number; to: number }
+
 /** Conditions over the span of a workout. See backend/internal/weather. */
 export interface Weather {
   tempC: number
@@ -110,6 +117,14 @@ export interface Workout {
   paceTimeline: PacePoint[]
   elevTimeline: ElevPoint[]
   cadenceTimeline?: CadencePoint[]
+  /** Absent when the workout recorded straight through, or predates the feature. */
+  pauses?: Pause[]
+  /**
+   * Elapsed time less the pauses, and what avgPace and avgSpeed are computed
+   * from. Absent on every workout imported before pauses existed, until it is
+   * recalculated — read that as "the same as duration".
+   */
+  movingTime?: number
   notes?: string
   equipment?: { id: string; name: string; type: string }[]
   /** Sharing state. Present on your own workouts only. */
