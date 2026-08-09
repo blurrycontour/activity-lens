@@ -12,6 +12,30 @@ export interface ElevPoint { t: number; elev: number }
 /** Steps per minute for foot-based activities, rpm for rides. */
 export interface CadencePoint { t: number; cad: number }
 
+/**
+ * A stretch of a workout during which nothing was recorded, in seconds from the
+ * start — the watch paused, by hand or by itself. See backend/internal/workout
+ * /pauses.go for why only gaps in the recording count as one.
+ */
+export interface Pause { from: number; to: number }
+
+/**
+ * Which derived values a recalculation replaces.
+ *
+ * Every one of these is overwritten outright, including anything entered by
+ * hand, so the caller names them explicitly — a recalculation nobody scoped is
+ * how a corrected calorie figure disappears.
+ */
+export interface RecalcParts {
+  heartRate?: boolean
+  elevation?: boolean
+  /** Pauses and the moving time they leave; the two are one calculation. */
+  pauses?: boolean
+  paceSpeed?: boolean
+  steps?: boolean
+  calories?: boolean
+}
+
 /** Conditions over the span of a workout. See backend/internal/weather. */
 export interface Weather {
   tempC: number
@@ -110,6 +134,14 @@ export interface Workout {
   paceTimeline: PacePoint[]
   elevTimeline: ElevPoint[]
   cadenceTimeline?: CadencePoint[]
+  /** Absent when the workout recorded straight through, or predates the feature. */
+  pauses?: Pause[]
+  /**
+   * Elapsed time less the pauses, and what avgPace and avgSpeed are computed
+   * from. Absent on every workout imported before pauses existed, until it is
+   * recalculated — read that as "the same as duration".
+   */
+  movingTime?: number
   notes?: string
   equipment?: { id: string; name: string; type: string }[]
   /** Sharing state. Present on your own workouts only. */
@@ -151,6 +183,19 @@ export function fmtDuration(s: number): string {
   const sec = Math.round(s % 60)
   if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
   return `${m}:${String(sec).padStart(2, '0')}`
+}
+
+/**
+ * Elapsed seconds as h:mm, for a time axis and its tooltip.
+ *
+ * Minutes alone stopped reading as a time somewhere around "97m": a long hike's
+ * axis was a row of three-digit numbers nobody converts in their head. Hours
+ * are not padded, so a short workout gets "0:05" rather than "00:05" — the
+ * shape of a clock, at the length the number deserves.
+ */
+export function fmtClock(seconds: number): string {
+  const total = Math.max(0, Math.round(seconds / 60))
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
 }
 
 export function fmtPace(secPerKm: number): string {

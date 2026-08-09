@@ -1036,17 +1036,40 @@ body {
 }
 /* Five values on one line, each behind its own icon so the row can be scanned
    rather than read. They wrap to a second line on a narrow phone. */
+/* Two fixed rows rather than one wrapping one, so the two temperatures stay
+   next to each other at every width. */
 .weather-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 10px;
+}
+.weather-metric-row {
   display: flex;
   flex-wrap: wrap;
   gap: 7px 16px;
-  margin-top: 10px;
 }
+/* Each reading is an InfoTip trigger, so it is a button and has to be talked
+   back down to looking like text. The pointer and the hover are the only signs
+   it can be asked about — deliberately quiet, since all five carry one. */
 .weather-metric {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   color: var(--text-3);
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  cursor: help;
+  text-align: left;
+  transition: color 0.15s;
+}
+.weather-metric:hover { color: var(--text-2); }
+.weather-metric:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 /* The values are numbers, so they follow the numeric convention — sized to sit
    with the stat figures elsewhere on the page rather than above them. */
@@ -1427,6 +1450,227 @@ body {
 .share-card-actions .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .share-card-actions .btn-primary { flex: 1; }
 
+/* Placeholder while the full record is still on its way. A long workout is a
+   few hundred kilobytes of samples, and the panels' own empty states say "no
+   route data" — a statement about the workout rather than about the wait. */
+.detail-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 140px;
+  height: 100%;
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+/* Shading behind the stretches of a workout where the recording stopped.
+   A colour with the alpha baked in, and not `fill-opacity` on the layer: the
+   break glyph is a child of that layer and inherited the opacity, which is why
+   it was invisible. The two themes need different strengths — the same grey
+   that disappears on the dark ground is a smudge on white. */
+:root { --pause-band: color-mix(in srgb, var(--text-3) 20%, transparent); }
+:root.light { --pause-band: color-mix(in srgb, var(--text-3) 14%, transparent); }
+
+/* ── Recalculate ── */
+
+.recalc-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 82vh;
+}
+.recalc-title { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.recalc-note { font-size: 12.5px; color: var(--text-2); line-height: 1.6; }
+.recalc-parts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  min-height: 0;
+}
+.recalc-part {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.recalc-part:hover { background: var(--bg-3); }
+.recalc-part input { margin-top: 2px; flex-shrink: 0; accent-color: var(--primary); }
+.recalc-part-text { display: flex; flex-direction: column; gap: 2px; }
+.recalc-part-label { font-size: 13px; font-weight: 500; }
+.recalc-part-hint { font-size: 11.5px; color: var(--text-3); line-height: 1.5; }
+.recalc-error { font-size: 12.5px; color: var(--danger); }
+.recalc-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ── Duplicate finder ── */
+
+/* Wider than the default modal and capped by height: the groups are a list of
+   unknown length, and the actions have to stay reachable however long it is. */
+.dup-modal {
+  max-width: 620px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 80vh;
+}
+.dup-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.dup-note { font-size: 12.5px; color: var(--text-3); line-height: 1.6; flex-shrink: 0; }
+/* The only thing that scrolls, so the heading, the note and the actions stay
+   put however many groups there are. `min-height: 0` is what lets a flex item
+   shrink below its content — without it the list pushes the box past its own
+   max-height and the last rows end up beyond the bottom of the dialog. */
+.dup-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+/* One box per group, so which workouts are being compared with which is
+   structural rather than something the reader has to infer from the dates. */
+/* flex-shrink: 0 so a group is never squeezed by the scroller it sits in —
+   that squeezing is what cut the second row of a pair in half. */
+.dup-group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.dup-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  background: var(--bg-2);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.dup-row + .dup-row { border-top: 1px solid var(--border); }
+.dup-row input { flex-shrink: 0; accent-color: var(--danger); margin: 0; }
+.dup-row:hover { background: var(--bg-3); }
+/* A ticked row is on its way out, so it recedes: dimmed, and tinted with the
+   colour the delete button uses. The kept rows are the ones to read. */
+.dup-row.remove {
+  background: color-mix(in srgb, var(--danger) 8%, var(--bg-3));
+}
+.dup-row.remove .dup-row-name { opacity: 0.6; text-decoration: line-through; }
+.dup-row.remove .dup-row-tag { color: var(--danger); }
+.dup-group-warn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 11px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  border-top: 1px solid var(--border);
+}
+.dup-row-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+/* The tag rides with the name rather than sitting at the row's end, so a long
+   device-generated name cannot push it off a phone's screen. min-width: 0 on
+   the name is what lets the ellipsis happen at all inside a flex row. */
+.dup-row-top { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+/* Wraps to a second line rather than truncating. Device-generated names differ
+   only at the end — "Morning Run" and "Morning Run 2" — so a single clipped
+   line hid the very characters that tell two copies apart. Two lines is the
+   cap; past that it is a name nobody chose. */
+.dup-row-name {
+  font-size: 13px;
+  font-weight: 500;
+  min-width: 0;
+  flex: 1;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+/* Separators drawn by CSS rather than written into the markup, so a missing
+   distance does not leave a dangling middot. */
+.dup-row-meta {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-3);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.dup-row-meta > * + *::before {
+  content: '·';
+  margin-right: 6px;
+  color: var(--border-strong, var(--border));
+}
+/* A fixed column, so "Keep" and "Copy" line up down the group and every name
+   is cut at the same place. Left to size themselves the two words differ by a
+   few pixels, and the ragged truncation that produced was the thing that read
+   as broken. */
+.dup-row-tag {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+  flex-shrink: 0;
+  /* Wide enough for the longer of the two words, so every name is cut at the
+     same place whichever state its row is in. */
+  width: 52px;
+  text-align: right;
+}
+.dup-row.keep .dup-row-tag { color: var(--primary); }
+.dup-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+.dup-actions .btn { flex: 1; justify-content: center; }
+
+@media (max-width: 640px) {
+  /* Nearly full height, because the group list is the content and 80vh of cap
+     left it a letterbox. The safe-area insets come off as well: .modal centres
+     in the whole viewport, which on a notched phone includes the status bar. */
+  .dup-modal,
+  .recalc-modal {
+    max-height: calc(100dvh - 32px - var(--safe-top) - var(--safe-bottom));
+  }
+  .dup-row { padding: 10px; }
+  .dup-actions .btn { width: 100%; flex: none; }
+}
+
+/* Two dropdowns and a joining word, in a chart card's action slot. Wraps as a
+   unit on a phone rather than leaving "vs" stranded on its own line. */
+.explore-picks {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.explore-vs {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+}
+
 /* ── Theme picker (Settings → Appearance) ── */
 
 /* Three abreast on a desktop, stacked on a phone: the hint under each label is
@@ -1610,6 +1854,14 @@ body {
   z-index: 40;
   transition: transform 0.2s, box-shadow 0.2s;
 }
+/* Out of the way while anything modal is open. The button is `position: fixed`
+   inside the page, which the swipe pager makes a stacking context, so it cannot
+   be lifted above a dialog and instead showed through the blurred overlay as a
+   green disc in the corner. Hiding it is the honest answer either way: it is
+   not reachable while a dialog is up.
+   `:has` is not load-bearing — where it is unsupported the FAB simply stays
+   where it was. */
+body:has(.overlay) .fab { display: none; }
 .fab:hover { transform: scale(1.08); box-shadow: 0 6px 28px var(--primary-glow); }
 .fab:active { transform: scale(0.96); }
 
@@ -2123,6 +2375,14 @@ body {
   to { transform: rotate(360deg); }
 }
 
+/* Charts stacked down the page, for a tab whose cards are each full width.
+   Siblings dropped straight into .page-content have no gap between them. */
+.chart-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
 .charts-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -2356,9 +2616,14 @@ body {
 :root { --map-ctrl-invert: 1; }
 :root.light { --map-ctrl-invert: 0; }
 
+/* The summary column is wider than it looks like it needs to be, because its
+   rows are three stat chips across: at 320px "Elev. Gain" and a four-digit
+   figure had to share about 90px, and both wrapped. The map gives the space up
+   without complaint — it is the one panel that reads at any width. The mobile
+   override below stacks them, so this only governs the two-column layout. */
 .detail-top {
   display: grid;
-  grid-template-columns: 320px 1fr;
+  grid-template-columns: 380px 1fr;
   grid-template-areas: "summary map";
   gap: 16px;
   margin-bottom: 16px;

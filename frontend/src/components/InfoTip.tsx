@@ -29,7 +29,17 @@ interface Position { top: number; left: number; width: number }
  * keyboard and not when it came from a pointer, which is exactly the case that
  * should open on focus at all.
  */
-export default function InfoTip({ text, label }: { text: string; label?: string }) {
+export default function InfoTip({ text, label, children, className }: {
+  text: string
+  label?: string
+  /**
+   * What to hang the tip on. The "i" glyph by default; pass anything else to
+   * make an existing piece of the page its own trigger — the weather readings
+   * do this, so the value you want explained is the thing you tap.
+   */
+  children?: React.ReactNode
+  className?: string
+}) {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState<Position | null>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
@@ -95,7 +105,7 @@ export default function InfoTip({ text, label }: { text: string; label?: string 
       <button
         ref={triggerRef}
         type="button"
-        className="infotip-trigger"
+        className={className ?? 'infotip-trigger'}
         aria-label={label ? `About ${label}` : 'More information'}
         aria-expanded={open}
         onPointerDown={e => { pointerType.current = e.pointerType }}
@@ -111,7 +121,7 @@ export default function InfoTip({ text, label }: { text: string; label?: string 
           if (pointerType.current !== 'mouse') setOpen(o => !o)
         }}
       >
-        <Info size={13} />
+        {children ?? <Info size={13} />}
       </button>
       {open && createPortal(
         <div

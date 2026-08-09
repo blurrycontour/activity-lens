@@ -8,19 +8,21 @@ import TabStrip from '../components/TabStrip'
 import InfoTip from '../components/InfoTip'
 import { denseXAxis, useChartSpace } from '../components/ChartAxis'
 import TypeLegend from '../components/TypeLegend'
+import Dropdown from '../components/Dropdown'
 import { useLocalStorage } from '../lib/useLocalStorage'
 import { filterByRange, rangeLabel, toDateKey } from '../lib/range'
 import { AXIS_TICK, GRID_PROPS, HOVER_FILL } from '../lib/chartColors'
 import {
-  binByTemperature, binWidthFor, describeCorrelation, hasUsableWeather, temperatureCorrelation,
-  type WeatherMetric,
+  PERF_METRICS, WEATHER_FIELDS, binByTemperature, binWidthFor, describeCorrelation,
+  hasUsableWeather, linearFit, pearson, temperatureCorrelation, weatherScatter,
+  type PerfKey, type WeatherKey, type WeatherMetric,
 } from '../lib/weather'
 import { usePreferences } from '../context/PreferencesContext'
 import {
   ScatterChart, Scatter, XAxis, YAxis, ZAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   BarChart, Bar, Cell, LineChart, Line, ComposedChart, ReferenceArea, ReferenceLine,
 } from 'recharts'
-import { Award, Target, Zap, Activity, Navigation, TrendingUp, Gauge, Flame, CloudSun } from 'lucide-react'
+import { Award, Target, Zap, Activity, Navigation, TrendingUp, Gauge, Flame, CloudSun, Sparkles } from 'lucide-react'
 
 type PR = { longest: Workout; fastest: Workout | null; highest: Workout }
 
@@ -115,6 +117,8 @@ export default function Analysis() {
   const [volumeBucket, setVolumeBucket] = useLocalStorage<'week' | 'month'>('al_tl_bucket', 'week')
   const [volumeMeasure, setVolumeMeasure] = useLocalStorage<'distance' | 'time'>('al_tl_vol', 'distance')
   const [weatherMetric, setWeatherMetric] = useLocalStorage<WeatherMetric>('al_an_wx_metric', 'pace')
+  const [exploreX, setExploreX] = useLocalStorage<WeatherKey>('al_an_wx_x', 'humidity')
+  const [exploreY, setExploreY] = useLocalStorage<PerfKey>('al_an_wx_y', 'pace')
   const { prefs } = usePreferences()
   const space = useChartSpace()
 
@@ -160,6 +164,27 @@ export default function Analysis() {
     () => temperatureCorrelation(weatherPool, weatherMetric),
     [weatherPool, weatherMetric],
   )
+  // ── Free-choice comparison ───────────────────────────────────────────────
+  //
+  // Same activity-type restriction as above, and for the same reason, but no
+  // binning: across fifteen combinations most buckets would hold one workout,
+  // and a line through those states far more than the data does.
+  const exploreField = WEATHER_FIELDS.find(f => f.key === exploreX) ?? WEATHER_FIELDS[0]
+  const exploreMetric = PERF_METRICS.find(m => m.key === exploreY) ?? PERF_METRICS[0]
+  const explorePool = useMemo(
+    () => inRange.filter(w => w.type === weatherType),
+    [inRange, weatherType],
+  )
+  const explorePoints = useMemo(
+    () => weatherScatter(explorePool, exploreField.key, exploreMetric),
+    [explorePool, exploreField, exploreMetric],
+  )
+  const exploreFit = useMemo(() => linearFit(explorePoints), [explorePoints])
+  const exploreR = useMemo(
+    () => pearson(explorePoints.map(p => p.x), explorePoints.map(p => p.y)),
+    [explorePoints],
+  )
+
   // Anything at all, regardless of the current filters — the difference between
   // "no weather yet" and "none in this window" is the whole empty state.
   const anyWeather = useMemo(() => allWorkouts.some(w => w.weather), [allWorkouts])
@@ -819,6 +844,7 @@ export default function Analysis() {
 
         {/* ── Weather: does temperature move your pace or heart rate? ── */}
         {tab === 'weather' && (
+          <div className="chart-stack">
           <ChartCard
             title={`Temperature vs ${weatherMetric === 'pace' ? 'Pace' : 'Heart Rate'}`}
             icon={<CloudSun size={14} color="var(--primary)" />}
@@ -910,6 +936,99 @@ export default function Analysis() {
               </>
             )}
           </ChartCard>
+
+          {/* ── Weather: anything against anything ── */}
+          <ChartCard
+            title={`${exploreField.label} vs ${exploreMetric.label}`}
+            icon={<Sparkles size={14} color="var(--primary)" />}
+            description={`Every ${weatherType.toLowerCase()} workout in this period, one dot each.`}
+            info="Pick any weather value and any figure from your workouts and see whether they move together. Unbinned on purpose: with this many combinations most temperature bands would hold a single workout, and a line drawn through those would state far more than the data does. The fitted line is least squares over the dots, and r is how tightly they follow it — a value near 0 means no relationship in this data, not that there is none. Everything here is observational, and the seasons move distance, terrain and training phase along with the weather."
+            actions={
+              <div className="explore-picks">
+                <Dropdown
+                  value={exploreX}
+                  onChange={setExploreX}
+                  ariaLabel="Weather value"
+                  options={WEATHER_FIELDS.map(f => ({ value: f.key, label: f.label }))}
+                />
+                <span className="explore-vs">vs</span>
+                <Dropdown
+                  value={exploreY}
+                  onChange={setExploreY}
+                  ariaLabel="Workout figure"
+                  options={PERF_METRICS.map(m => ({ value: m.key, label: m.label }))}
+                />
+              </div>
+            }
+          >
+            {explorePoints.length === 0 ? (
+              <EmptyPlot height={260}>
+                No {weatherType.toLowerCase()} workouts in this period record both
+                {' '}{exploreField.label.toLowerCase()} and {exploreMetric.label.toLowerCase()}.
+                Widen the range, or pick another pair.
+              </EmptyPlot>
+            ) : (
+              <>
+                <ResponsiveContainer width="100%" height={260}>
+                  <ComposedChart margin={space.margin(18)}>
+                    <CartesianGrid {...GRID_PROPS} />
+                    <XAxis
+                      type="number" dataKey="x" name={exploreField.label}
+                      domain={['dataMin', 'dataMax']}
+                      tick={AXIS_TICK} axisLine={false} tickLine={false}
+                      label={xLabel(`${exploreField.label} (${exploreField.unit})`)}
+                    />
+                    <YAxis
+                      type="number" dataKey="y"
+                      tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto"
+                      domain={['dataMin', 'dataMax']}
+                      tickFormatter={exploreMetric.format}
+                      label={yLabel(`${exploreMetric.label} (${exploreMetric.unit})`)}
+                    />
+                    <Tooltip
+                      cursor={{ stroke: HOVER_FILL }}
+                      content={({ active, payload }) => {
+                        if (!active || !payload?.length) return null
+                        const d = payload[0].payload
+                        // The fitted line carries no workout, so hovering it
+                        // would otherwise show a blank card with two numbers.
+                        if (!d.name) return null
+                        return (
+                          <div className="custom-tooltip">
+                            <div>{d.name}</div>
+                            <div style={{ color: 'var(--text-3)' }}>{d.date}</div>
+                            <div style={{ color: 'var(--primary)' }}>
+                              {exploreMetric.format(d.y)} {exploreMetric.unit}
+                              {' · '}
+                              {exploreField.label.toLowerCase()} {d.x.toFixed(exploreField.digits)} {exploreField.unit}
+                            </div>
+                          </div>
+                        )
+                      }}
+                    />
+                    <Scatter data={explorePoints} dataKey="y" fill="var(--primary)" opacity={0.6} isAnimationActive={false} />
+                    {exploreFit && (
+                      <Line
+                        data={exploreFit} dataKey="y" type="linear"
+                        stroke="var(--text-3)" strokeWidth={2} strokeDasharray="5 4"
+                        dot={false} isAnimationActive={false} legendType="none"
+                      />
+                    )}
+                  </ComposedChart>
+                </ResponsiveContainer>
+                <p style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 10, lineHeight: 1.55 }}>
+                  {exploreR === null
+                    ? 'Not enough spread to fit a line — every workout sits at much the same value.'
+                    : `r = ${exploreR.toFixed(2)} across ${explorePoints.length} workout${explorePoints.length === 1 ? '' : 's'}.`}
+                  {' '}
+                  <span style={{ color: 'var(--text-3)' }}>
+                    This is a correlation, not a cause.
+                  </span>
+                </p>
+              </>
+            )}
+          </ChartCard>
+          </div>
         )}
       </div>
     </div>

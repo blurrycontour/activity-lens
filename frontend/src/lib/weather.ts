@@ -1,4 +1,4 @@
-import { type Weather, type Workout, type WorkoutType } from '../data/workouts'
+import { fmtPace, type Weather, type Workout, type WorkoutType } from '../data/workouts'
 
 /**
  * Reading and reasoning about workout weather.
@@ -40,6 +40,14 @@ export interface WeatherField {
   digits: number
   /** Increment for the manual editor's number input. */
   step: number
+  /**
+   * What the number means, shown on hover or tap.
+   *
+   * Worth the words because none of these is quite what a reader assumes: the
+   * figures are an hourly reanalysis averaged over the workout, on a grid about
+   * 25 km across, and rain is a total rather than a rate.
+   */
+  hint: string
 }
 
 /**
@@ -49,11 +57,39 @@ export interface WeatherField {
  * four values while the editor offers five — the exact drift reported here.
  */
 export const WEATHER_FIELDS: WeatherField[] = [
-  { key: 'tempC', label: 'Temperature', unit: '°C', digits: 0, step: 0.1 },
-  { key: 'apparentC', label: 'Feels like', unit: '°C', digits: 0, step: 0.1 },
-  { key: 'humidity', label: 'Humidity', unit: '%', digits: 0, step: 1 },
-  { key: 'windKph', label: 'Wind', unit: 'km/h', digits: 0, step: 0.1 },
-  { key: 'precipMm', label: 'Rain', unit: 'mm', digits: 1, step: 0.1 },
+  {
+    key: 'tempC', label: 'Temperature', unit: '°C', digits: 0, step: 0.1,
+    hint: 'Air temperature, averaged over the hours the workout covered. The model works on a grid about 25 km across, so a coastal or valley route can differ by a few degrees.',
+  },
+  {
+    key: 'apparentC', label: 'Feels like', unit: '°C', digits: 0, step: 0.1,
+    hint: 'What the air temperature felt like once wind, humidity and sun are taken into account. This is the one that explains a hard day at a mild temperature.',
+  },
+  {
+    key: 'humidity', label: 'Humidity', unit: '%', digits: 0, step: 1,
+    hint: 'Relative humidity, averaged over the workout. High humidity slows the sweat that cools you, which is why it shows up in pace long before temperature does.',
+  },
+  {
+    key: 'windKph', label: 'Wind', unit: 'km/h', digits: 0, step: 0.1,
+    hint: 'Average wind speed 10 m above the ground, over the workout. It says nothing about direction, so a loop that felt like a headwind throughout still reads as one number.',
+  },
+  {
+    key: 'precipMm', label: 'Rain', unit: 'mm', digits: 1, step: 0.1,
+    hint: 'Total rain that fell during the workout, not a rate. 0.0 mm means it was measured and there was none.',
+  },
+]
+
+/**
+ * The two rows the reading is laid out in: the temperatures together, then
+ * everything else.
+ *
+ * One flowing row wrapped wherever the width happened to run out, which put
+ * "feels like" on its own line next to the humidity as often as not — and those
+ * two temperatures are the pair a reader compares.
+ */
+export const WEATHER_ROWS: WeatherKey[][] = [
+  ['tempC', 'apparentC'],
+  ['humidity', 'windKph', 'precipMm'],
 ]
 
 /**
@@ -227,3 +263,96 @@ export function describeCorrelation(r: number | null, metric: WeatherMetric): st
 
 /** Activity types worth offering: the ones where pace and HR mean something. */
 export const CORRELATABLE_TYPES: WorkoutType[] = ['Run', 'Ride', 'Hike', 'Swim']
+
+// ── Free-choice comparison ──────────────────────────────────────────────────
+//
+// The temperature chart above answers one question carefully. This answers any
+// of them roughly: pick a weather value and a performance figure and see
+// whether they move together. It is deliberately a scatter with a fitted line
+// and an r, not binned averages — binning implies enough workouts per bucket to
+// mean something, and across fifteen combinations most of them will not have it.
+
+/** A performance figure a weather value can be plotted against. */
+export type PerfKey = 'pace' | 'hr' | 'speed' | 'distance' | 'elevation'
+
+export interface PerfMetric {
+  key: PerfKey
+  label: string
+  unit: string
+  /** The figure, or null where this workout did not record it. */
+  get: (w: Workout) => number | null
+  format: (v: number) => string
+  /** True where a smaller number is a better performance. */
+  lowerIsBetter?: boolean
+}
+
+/**
+ * Zero is the absence of a measurement in every one of these, not a value —
+ * a workout with no HR strap stores 0, and averaging it in would drag every
+ * correlation towards a line that describes the gaps rather than the weather.
+ */
+const positive = (v: number) => (v > 0 ? v : null)
+
+export const PERF_METRICS: PerfMetric[] = [
+  { key: 'pace', label: 'Pace', unit: '/km', get: w => positive(w.avgPace), format: fmtPace, lowerIsBetter: true },
+  { key: 'hr', label: 'Avg HR', unit: 'bpm', get: w => positive(w.avgHR), format: v => String(Math.round(v)) },
+  { key: 'speed', label: 'Speed', unit: 'km/h', get: w => positive(w.avgSpeed), format: v => v.toFixed(1) },
+  { key: 'distance', label: 'Distance', unit: 'km', get: w => positive(w.distance / 1000), format: v => v.toFixed(1) },
+  {
+    key: 'elevation', label: 'Elevation gain', unit: 'm',
+    // Not `positive`: a flat run really did climb nothing, and dropping those
+    // would leave the chart describing hilly workouts only.
+    get: w => (w.elevationGain >= 0 ? w.elevationGain : null),
+    format: v => String(Math.round(v)),
+  },
+]
+
+export interface ScatterPoint {
+  x: number
+  y: number
+  name: string
+  date: string
+}
+
+/** Paired samples for the free-choice chart, skipping workouts missing either side. */
+export function weatherScatter(workouts: Workout[], xKey: WeatherKey, metric: PerfMetric): ScatterPoint[] {
+  const out: ScatterPoint[] = []
+  for (const w of workouts) {
+    if (!w.weather) continue
+    const y = metric.get(w)
+    if (y === null) continue
+    out.push({ x: w.weather[xKey], y, name: w.name, date: w.date })
+  }
+  return out
+}
+
+/**
+ * Least-squares line through the points, as its two endpoints.
+ *
+ * Returned as endpoints rather than a slope so the caller can draw it without
+ * repeating the arithmetic, and null on the same degenerate inputs `pearson`
+ * refuses: fewer than three points, or no spread on x. A line through two
+ * points is not a trend, it is those two points.
+ */
+export function linearFit(points: ScatterPoint[]): [ScatterPoint, ScatterPoint] | null {
+  if (points.length < 3) return null
+  let sx = 0, sy = 0
+  for (const p of points) { sx += p.x; sy += p.y }
+  const mx = sx / points.length, my = sy / points.length
+  let num = 0, den = 0
+  for (const p of points) {
+    const dx = p.x - mx
+    num += dx * (p.y - my)
+    den += dx * dx
+  }
+  if (den === 0) return null
+  const slope = num / den
+  const intercept = my - slope * mx
+  let lo = Infinity, hi = -Infinity
+  for (const p of points) {
+    if (p.x < lo) lo = p.x
+    if (p.x > hi) hi = p.x
+  }
+  const at = (x: number): ScatterPoint => ({ x, y: intercept + slope * x, name: '', date: '' })
+  return [at(lo), at(hi)]
+}

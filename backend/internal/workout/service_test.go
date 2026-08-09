@@ -2,6 +2,7 @@ package workout
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 )
@@ -251,5 +252,91 @@ func TestUpdateRejectsEmptyName(t *testing.T) {
 	empty := "   "
 	if _, err := svc.Update(context.Background(), 1, created.ID, Patch{Name: &empty}); err == nil {
 		t.Fatal("expected error for empty name patch")
+	}
+}
+
+// An unclassified import used to get neither a pace nor a step count, because
+// both were gated on a list of types written before TypeOther existed. Pace is
+// arithmetic and was simply missing; the steps are an estimate, and treating an
+// unnamed activity as walked is the deliberate choice recorded on onFoot.
+func TestOtherIsTreatedAsAFootActivity(t *testing.T) {
+	for _, tc := range []struct {
+		typ       Type
+		wantPace  bool
+		wantSteps int
+	}{
+		{TypeRun, true, 5000},
+		{TypeHike, true, 6667},
+		{TypeOther, true, 6667},
+		{TypeRide, false, 0},
+		{TypeSwim, false, 0},
+		{TypeStrength, false, 0},
+	} {
+		w := &Workout{Type: tc.typ, Distance: 5000, Duration: 1800}
+		deriveMetrics(w, 0)
+		if got := w.AvgPace > 0; got != tc.wantPace {
+			t.Errorf("%s: pace present = %v, want %v", tc.typ, got, tc.wantPace)
+		}
+		if w.Steps != tc.wantSteps {
+			t.Errorf("%s: steps = %d, want %d", tc.typ, w.Steps, tc.wantSteps)
+		}
+		// Speed is reported for everything that moved, and always was.
+		if w.AvgSpeed <= 0 {
+			t.Errorf("%s: speed = %v, want a positive figure", tc.typ, w.AvgSpeed)
+		}
+	}
+}
+
+// Recalculation overwrites values a person entered by hand. Selecting parts is
+// what makes it usable on an old workout: someone who wants their pauses found
+// should not have to lose a corrected calorie figure to get them.
+func TestRecalculateOnlyTouchesSelectedParts(t *testing.T) {
+	repo := NewSQLiteRepository(newTestDB(t))
+	svc := NewService(repo)
+	ctx := context.Background()
+
+	in := importInput("run", "hash-recalc")
+	in.HRTimeline = samples([2]int{0, 900}, [2]int{1200, 1800})
+	wk, _, err := svc.CreateIdempotent(ctx, 1, in)
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	// A hand-entered calorie figure, and a workout whose pauses were never found.
+	calories := 999
+	if _, err := svc.Update(ctx, 1, wk.ID, Patch{Calories: &calories}); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+
+	got, err := svc.Recalculate(ctx, 1, wk.ID, RecalcParts{Pauses: true, PaceSpeed: true}, CalorieProfile{
+		Method: "distance", WeightKg: 70,
+	})
+	if err != nil {
+		t.Fatalf("recalculate: %v", err)
+	}
+	if got.Calories != calories {
+		t.Errorf("calories = %d, want the hand-entered %d left alone", got.Calories, calories)
+	}
+	if !got.CaloriesManual {
+		t.Error("the hand-entered flag was cleared by a recalculation that did not touch calories")
+	}
+	if len(got.Pauses) != 1 {
+		t.Errorf("pauses = %v, want the one that was selected for", got.Pauses)
+	}
+}
+
+// A request that names nothing must change nothing, rather than quietly meaning
+// everything — the destructive reading of an ambiguous request.
+func TestRecalculateRejectsAnEmptySelection(t *testing.T) {
+	repo := NewSQLiteRepository(newTestDB(t))
+	svc := NewService(repo)
+	ctx := context.Background()
+
+	wk, _, err := svc.CreateIdempotent(ctx, 1, importInput("run", "hash-empty"))
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := svc.Recalculate(ctx, 1, wk.ID, RecalcParts{}, CalorieProfile{}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("error = %v, want ErrInvalid", err)
 	}
 }

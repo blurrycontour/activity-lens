@@ -192,15 +192,62 @@ func (s *Service) Update(ctx context.Context, userID int64, id string, p Patch) 
 	return w, nil
 }
 
-// Recalculate re-derives every computed metric of a workout from its recorded
-// route/timelines and the given calorie preferences, overwriting any manually
-// entered values. The name, type, date and notes are left untouched.
-func (s *Service) Recalculate(ctx context.Context, userID int64, id, calorieMethod string, weightKg float64, age int, sex string, stepLengthM float64) (*Workout, error) {
+// RecalcParts selects which derived values a recalculation replaces.
+//
+// Selective because recalculation is destructive in a way the user cannot
+// undo: it overwrites hand-entered calories and steps, and someone who wants
+// their pauses found on an old workout should not have to lose a corrected
+// calorie figure to get them. An empty struct is a no-op rather than an
+// everything, so a request that names nothing changes nothing.
+type RecalcParts struct {
+	HeartRate bool
+	Elevation bool
+	// Pauses covers the moving time as well; the two are one calculation.
+	Pauses bool
+	// PaceSpeed is computed from the stored moving time, so recalculating it
+	// without Pauses uses whatever moving time the workout already has.
+	PaceSpeed bool
+	Steps     bool
+	Calories  bool
+}
+
+// AllRecalcParts is every part, which is what a request that names none gets —
+// the behaviour before this was selectable.
+func AllRecalcParts() RecalcParts {
+	return RecalcParts{HeartRate: true, Elevation: true, Pauses: true, PaceSpeed: true, Steps: true, Calories: true}
+}
+
+// Any reports whether there is anything to do.
+func (p RecalcParts) Any() bool {
+	return p.HeartRate || p.Elevation || p.Pauses || p.PaceSpeed || p.Steps || p.Calories
+}
+
+// CalorieProfile is the body data the calorie estimate needs, gathered into one
+// argument so Recalculate does not take eight.
+type CalorieProfile struct {
+	Method      string
+	WeightKg    float64
+	Age         int
+	Sex         string
+	StepLengthM float64
+}
+
+// Recalculate re-derives the selected metrics of a workout from its recorded
+// route and timelines, overwriting any manually entered values among them. The
+// name, type, date and notes are never touched, and neither is the weather.
+func (s *Service) Recalculate(ctx context.Context, userID int64, id string, parts RecalcParts, profile CalorieProfile) (*Workout, error) {
 	w, err := s.repo.Get(ctx, userID, id)
 	if err != nil {
 		return nil, err
 	}
-	if len(w.HRTimeline) > 0 {
+	if !parts.Any() {
+		return nil, fmt.Errorf("%w: nothing selected to recalculate", ErrInvalid)
+	}
+	// Always, and not a part: the series are stored in whatever order they were
+	// written, and everything below reads them in order. It changes no value.
+	sortTimelines(w)
+
+	if parts.HeartRate && len(w.HRTimeline) > 0 {
 		var sum, count, max int
 		for _, p := range w.HRTimeline {
 			if p.HR <= 0 {
@@ -217,7 +264,7 @@ func (s *Service) Recalculate(ctx context.Context, userID int64, id, calorieMeth
 			w.MaxHR = max
 		}
 	}
-	if len(w.ElevTimeline) > 0 {
+	if parts.Elevation && len(w.ElevTimeline) > 0 {
 		var gain float64
 		for i := 1; i < len(w.ElevTimeline); i++ {
 			if d := w.ElevTimeline[i].Elev - w.ElevTimeline[i-1].Elev; d > 0 {
@@ -226,16 +273,22 @@ func (s *Service) Recalculate(ctx context.Context, userID int64, id, calorieMeth
 		}
 		w.ElevationGain = gain
 	}
-	w.AvgPace = 0
-	w.AvgSpeed = 0
-	w.Steps = estimateSteps(w.Type, w.Distance, stepLengthM)
-	deriveMetrics(w, stepLengthM)
-	w.Calories = EstimateCalories(w.Type, w.Duration, w.AvgHR, w.Distance, weightKg, age, sex, calorieMethod)
-	// Recalculation re-derives these values, so they are neither manual nor
-	// the number the source file reported.
-	w.CaloriesManual = false
-	w.CaloriesReported = false
-	w.StepsManual = false
+	if parts.Pauses {
+		derivePauses(w)
+	}
+	if parts.PaceSpeed {
+		derivePaceSpeed(w)
+	}
+	if parts.Steps {
+		deriveSteps(w, profile.StepLengthM)
+		w.StepsManual = false
+	}
+	if parts.Calories {
+		w.Calories = EstimateCalories(w.Type, w.Duration, w.AvgHR, w.Distance, profile.WeightKg, profile.Age, profile.Sex, profile.Method)
+		// Re-derived, so neither hand-entered nor the number the file reported.
+		w.CaloriesManual = false
+		w.CaloriesReported = false
+	}
 	if err := s.repo.Update(ctx, w); err != nil {
 		return nil, err
 	}
@@ -332,24 +385,116 @@ func validate(in *Input) error {
 	return nil
 }
 
-// deriveMetrics fills in avg pace/speed from distance & duration when possible,
-// and sorts route/timeline samples so downstream charts render correctly.
-func deriveMetrics(w *Workout, stepLengthM float64) {
-	if w.Distance > 0 && w.Duration > 0 {
-		km := w.Distance / 1000
-		hours := float64(w.Duration) / 3600
-		w.AvgSpeed = km / hours
-		if w.Type == TypeRun || w.Type == TypeHike {
-			w.AvgPace = float64(w.Duration) / km // seconds per km
-		}
-	}
+// sortTimelines puts every per-sample series in time order, which everything
+// downstream assumes: the charts draw them in array order, and a pause is a gap
+// between consecutive samples, so an unsorted series is nothing but gaps.
+func sortTimelines(w *Workout) {
 	sort.Slice(w.HRTimeline, func(i, j int) bool { return w.HRTimeline[i].T < w.HRTimeline[j].T })
 	sort.Slice(w.PaceTimeline, func(i, j int) bool { return w.PaceTimeline[i].T < w.PaceTimeline[j].T })
 	sort.Slice(w.ElevTimeline, func(i, j int) bool { return w.ElevTimeline[i].T < w.ElevTimeline[j].T })
 	sort.Slice(w.CadenceTimeline, func(i, j int) bool { return w.CadenceTimeline[i].T < w.CadenceTimeline[j].T })
-	if w.Steps == 0 {
-		w.Steps = estimateSteps(w.Type, w.Distance, stepLengthM)
+}
+
+// derivePauses finds the gaps in the recording and the moving time they leave.
+// Runs on sorted series only.
+func derivePauses(w *Workout) {
+	w.Pauses = DetectPauses(w)
+	w.MovingTime = MovingSeconds(w.Duration, w.Pauses)
+}
+
+// derivePaceSpeed computes the headline rates over moving time.
+//
+// Moving time, not elapsed. A run with five minutes standing at a level
+// crossing did not slow down; averaging over the wait says it did, and says so
+// in the figure the whole library is ranked by.
+func derivePaceSpeed(w *Workout) {
+	w.AvgPace = 0
+	w.AvgSpeed = 0
+	if w.Distance <= 0 || w.MovingTime <= 0 {
+		return
 	}
+	km := w.Distance / 1000
+	w.AvgSpeed = km / (float64(w.MovingTime) / 3600)
+	if onFoot(w.Type) {
+		w.AvgPace = float64(w.MovingTime) / km // seconds per km
+	}
+}
+
+// deriveSteps fills in a step count, preferring the recorded cadence.
+func deriveSteps(w *Workout, stepLengthM float64) {
+	if steps, ok := stepsFromCadence(w); ok {
+		w.Steps = steps
+		return
+	}
+	w.Steps = estimateSteps(w.Type, w.Distance, stepLengthM)
+}
+
+// deriveMetrics fills in the values that follow from the recorded series, and
+// sorts those series so downstream charts render correctly.
+func deriveMetrics(w *Workout, stepLengthM float64) {
+	sortTimelines(w)
+	// Before the averages, because they are computed from what it produces.
+	derivePauses(w)
+	derivePaceSpeed(w)
+	if w.Steps == 0 {
+		deriveSteps(w, stepLengthM)
+	}
+}
+
+// The longest gap in the cadence series that is still integrated across.
+//
+// Cadence is a rate, so turning it into a count means multiplying by the time
+// each sample stands for — and across a five-minute pause that invents five
+// minutes of walking. Anything longer than this is treated as time the device
+// was not measuring, and contributes nothing.
+const maxCadenceGapSec = 30
+
+// stepsFromCadence integrates the cadence series into a step count.
+//
+// Preferred over the stride estimate wherever it exists, because it is very
+// nearly a measurement: the watch counted the steps and reported the rate,
+// where the estimate divides distance by an assumed stride and is wrong by
+// however much the person's stride differs from the assumption — which on a
+// hill, or on a walk, is a lot.
+//
+// The series is already normalised to total steps per minute at import; see
+// normalizeCadence, which doubles the per-foot figure some devices report.
+func stepsFromCadence(w *Workout) (int, bool) {
+	if !onFoot(w.Type) || len(w.CadenceTimeline) < 2 {
+		return 0, false
+	}
+	var total float64
+	for i := 1; i < len(w.CadenceTimeline); i++ {
+		dt := w.CadenceTimeline[i].T - w.CadenceTimeline[i-1].T
+		if dt <= 0 || dt > maxCadenceGapSec {
+			continue
+		}
+		// Trapezoid: the rate between two samples is taken as the average of
+		// them, which is closer than either endpoint over a changing cadence.
+		mean := float64(w.CadenceTimeline[i].Cad+w.CadenceTimeline[i-1].Cad) / 2
+		total += mean * float64(dt) / 60
+	}
+	if total <= 0 {
+		return 0, false
+	}
+	return int(math.Round(total)), true
+}
+
+// onFoot reports whether pace and a step count mean anything for this activity.
+//
+// TypeOther is included deliberately. It is not a sport someone picks — it is
+// where an import lands when the file named no sport and its free text named
+// none — and in practice that is a walk, a hike or a treadmill session from a
+// device that writes "Other" into the field. Rides are the case pace is
+// withheld from, and a ride is never misfiled here: a file that knows enough to
+// record cycling says so.
+//
+// The cost of being wrong is a step estimate on a row or a paddle. That is the
+// same class of estimate the app already makes for a hike, and it is visible
+// and correctable, where withholding both figures from every unclassified
+// workout was neither.
+func onFoot(t Type) bool {
+	return t == TypeRun || t == TypeHike || t == TypeOther
 }
 
 // estimateSteps approximates step count from distance using the user's stride
@@ -360,7 +505,10 @@ func estimateSteps(t Type, distanceMeters, stepLengthM float64) int {
 	switch t {
 	case TypeRun:
 		stride = 1.0
-	case TypeHike:
+	case TypeHike, TypeOther:
+		// The walking figure for both: an unclassified activity is far more
+		// likely to be walked than run, and under-counting steps is the kinder
+		// error of the two.
 		stride = 0.75
 	default:
 		return 0

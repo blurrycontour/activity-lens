@@ -3,7 +3,7 @@ import { fmtDuration, fmtDist, fmtRate, TYPE_COLOR, ALL_WORKOUT_TYPES, type Work
 import TypeIcon from '../components/TypeIcon'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useRefreshHandler } from '../context/RefreshContext'
-import { Search, Clock, Mountain, Flame, Download, Plus, Grid2X2, List, Navigation, Library, Inbox, Globe, Users, Share2, SlidersHorizontal, X, Trash2, Check, CheckCheck, LoaderCircle, Handshake, Layers, Image as ImageIcon } from 'lucide-react'
+import { Search, Clock, Mountain, Flame, Download, Plus, Grid2X2, List, Navigation, Library, Inbox, Globe, Users, Share2, SlidersHorizontal, X, Trash2, Check, CheckCheck, LoaderCircle, Handshake, Layers, Image as ImageIcon, MoreVertical, Copy } from 'lucide-react'
 import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
 import SortDropdown, { SORT_OPTIONS, type SortKey } from '../components/SortDropdown'
@@ -14,6 +14,7 @@ import ShareCardDialog from '../components/ShareCardDialog'
 import UserAvatar, { userLabel } from '../components/UserAvatar'
 import SourceMark from '../components/SourceMark'
 import ConfirmDialog from '../components/ConfirmDialog'
+import DuplicatesDialog from '../components/DuplicatesDialog'
 import { useLongPress } from '../lib/useLongPress'
 import { RANGE_OPTIONS } from '../lib/range'
 import { api } from '../lib/api'
@@ -127,6 +128,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
   // over a stale copy.
   const selectionEntry = useRef(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [showDuplicates, setShowDuplicates] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const selecting = selected !== null && scope === 'mine'
   const isMobile = useIsMobile()
@@ -262,6 +264,21 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
   }, [])
 
   /**
+   * Enters selection mode with a set chosen for the user.
+   *
+   * The duplicates dialog's only action. It hands the copies over rather than
+   * deleting them itself, so removing them goes through the toolbar and the
+   * confirmation that already exist — one destructive path, not two, and the
+   * user sees exactly what is ticked before anything happens.
+   */
+  const selectMany = useCallback((ids: string[]) => {
+    setSelected(new Set(ids))
+    if (selectionEntry.current) return
+    selectionEntry.current = true
+    window.history.pushState({ selecting: true }, '', window.location.href)
+  }, [])
+
+  /**
    * Leaves selection mode.
    *
    * @param popped true when back is what ended it, in which case the entry is
@@ -323,6 +340,22 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
     stopSelecting()
     if (failed > 0) setFeedError(`${failed} of ${ids.length} could not be deleted.`)
   }
+
+  /**
+   * Actions on the library as a whole, as opposed to filters on the view.
+   *
+   * Its own menu because there is exactly one of them today and a button
+   * labelled "Find duplicates" sitting permanently in a filter row would claim
+   * more of it than a maintenance task deserves. Your own library only: the
+   * feed tabs are other people's workouts.
+   */
+  const listTools = scope === 'mine' ? (
+    <MenuButton icon={<MoreVertical size={15} />} label="Library options">
+      <button className="options-menu-item" onClick={() => setShowDuplicates(true)}>
+        <Copy size={14} /> Find duplicates
+      </button>
+    </MenuButton>
+  ) : null
 
   const source = scope === 'mine' ? workouts : feeds[scope]
   const busy = source === undefined || (scope === 'mine' && loading)
@@ -476,7 +509,9 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
               <SlidersHorizontal size={15} />
               {activeFilters.length > 0 && <span className="filter-count">{activeFilters.length}</span>}
             </button>
-          ) : (
+          ) : null}
+          {isMobile ? listTools : null}
+          {!isMobile ? (
             <>
               <TypeDropdown value={typeFilter} onChange={v => setTypeFilter(v)} />
               <SortDropdown value={sortBy} onChange={setSortBy} />
@@ -488,8 +523,9 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
                   Shared only
                 </label>
               )}
+              {listTools}
             </>
-          )}
+          ) : null}
         </div>
         )}
 
@@ -604,6 +640,18 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
       )}
 
       {cardFor && <ShareCardDialog workout={cardFor} onClose={() => setCardFor(null)} />}
+
+      {showDuplicates && (
+        <DuplicatesDialog
+          // The whole library, not the filtered view: a duplicate hidden by
+          // the current range or sport filter is still a duplicate, and one
+          // that only showed up under the right filter would be worse than
+          // none at all.
+          workouts={workouts}
+          onClose={() => setShowDuplicates(false)}
+          onSelect={ids => { setShowDuplicates(false); selectMany(ids) }}
+        />
+      )}
 
       {confirmDelete && (
         <ConfirmDialog

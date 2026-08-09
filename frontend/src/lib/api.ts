@@ -548,8 +548,18 @@ export const api = {
     request<import('../data/workouts').Workout>('/api/workouts', { method: 'POST', body: payload }),
   patchWorkout: (id: string, patch: { name?: string; type?: string; notes?: string; date?: string; calories?: number; steps?: number; equipmentIds?: string[] }) =>
     request<import('../data/workouts').Workout>(`/api/workouts/${id}`, { method: 'PATCH', body: patch }),
-  recalcWorkout: (id: string) =>
-    request<import('../data/workouts').Workout>(`/api/workouts/${id}/recalculate`, { method: 'POST' }),
+  /**
+   * Re-derives the named values. Everything named is overwritten, including
+   * anything entered by hand, which is why the caller has to name them.
+   */
+  recalcWorkout: (id: string, parts: import('../data/workouts').RecalcParts) =>
+    request<import('../data/workouts').Workout>(`/api/workouts/${id}/recalculate`, {
+      method: 'POST',
+      // The object, not a string: request() serialises `body` itself, and
+      // stringifying here sent a JSON string containing JSON, which the server
+      // rejected as an invalid body.
+      body: parts,
+    }),
   deleteWorkout: (id: string) => request<unknown>(`/api/workouts/${id}`, { method: 'DELETE' }),
   // `deferChecks` suppresses the post-import gear and goal evaluation, which
   // re-reads the whole library each time. A batch sets it on every file and

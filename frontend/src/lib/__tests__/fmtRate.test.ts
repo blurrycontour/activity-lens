@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fmtRate } from '../../data/workouts'
+import { fmtClock, fmtRate } from '../../data/workouts'
 
 describe('fmtRate', () => {
   it('reports pace where a pace was measured', () => {
@@ -17,5 +17,25 @@ describe('fmtRate', () => {
    */
   it('reports nothing when neither was measured', () => {
     expect(fmtRate({ avgPace: 0, avgSpeed: 0 })).toEqual({ value: '—', unit: '' })
+  })
+})
+
+/*
+ * The time axis on every workout chart. Minutes alone stopped reading as a
+ * time on anything long, and the failure was quiet: "97m" is a legible number
+ * that nobody converts.
+ */
+describe('fmtClock', () => {
+  it('reads as a clock, unpadded hours', () => {
+    expect(fmtClock(0)).toBe('0:00')
+    expect(fmtClock(300)).toBe('0:05')
+    expect(fmtClock(3600)).toBe('1:00')
+    expect(fmtClock(5820)).toBe('1:37')
+  })
+
+  // Recharts hands a tick whatever the domain produces, which on an empty or
+  // malformed series can be below zero.
+  it('does not render a negative time', () => {
+    expect(fmtClock(-90)).toBe('0:00')
   })
 })

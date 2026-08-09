@@ -1,13 +1,13 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { type Workout, type WorkoutType, fmtDuration, fmtDist, fmtPace, TYPE_COLOR } from '../data/workouts'
+import { type RecalcParts, type Workout, type WorkoutType, fmtClock, fmtDuration, fmtDist, fmtPace, TYPE_COLOR } from '../data/workouts'
 import TypeIcon from '../components/TypeIcon'
 import SportDropdown from '../components/SportDropdown'
 import Dropdown from '../components/Dropdown'
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ReferenceDot, BarChart, Bar } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ReferenceDot, ReferenceArea, BarChart, Bar } from 'recharts'
 import {
   ArrowLeft, Heart, Mountain, Zap, Clock, TrendingUp, Navigation, Download, Pencil, Trash2, Gauge,
-  Check, X as XIcon, Play, Pause, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, AlertTriangle, Activity, Share2, Lock, FileDown, Plus, Image as ImageIcon,
+  Check, X as XIcon, Play, Pause as PauseIcon, LoaderCircle, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, AlertTriangle, Activity, Share2, Lock, FileDown, Plus, Image as ImageIcon,
 } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useAuth } from '../context/AuthContext'
@@ -37,6 +37,7 @@ import type { Shading } from '../components/RouteMap'
  */
 const RouteMap = lazy(() => import('../components/RouteMap'))
 import ExpandModal from '../components/ExpandModal'
+import RecalculateDialog from '../components/RecalculateDialog'
 import UserAvatar, { avatarUrl, userLabel } from '../components/UserAvatar'
 import MenuButton from '../components/MenuButton'
 import ShareDialog from '../components/ShareDialog'
@@ -249,7 +250,7 @@ function PlaybackBar({
     <div className="playback-bar">
       <div className="playback-controls">
         <button className="btn-icon" onClick={onPlayPause} title={playing ? 'Pause' : 'Play'}>
-          {playing ? <Pause size={16} /> : <Play size={16} />}
+          {playing ? <PauseIcon size={16} /> : <Play size={16} />}
         </button>
         <button className="btn-icon" onClick={onReset} title="Reset">
           <RotateCcw size={16} />
@@ -317,6 +318,25 @@ function MetricPanel({ icon, title, badge, info, stats, onExpand, children }: {
   )
 }
 
+/**
+ * The break glyph in the middle of a pause band.
+ *
+ * Drawn only when the band is wide enough to hold it. A two-pixel band on a
+ * long workout would otherwise get a mark wider than the thing it marks, which
+ * reads as a data point rather than as a gap.
+ */
+function PauseMark({ viewBox }: { viewBox?: { x: number; y: number; width: number; height: number } }) {
+  if (!viewBox || viewBox.width < 14) return null
+  const cx = viewBox.x + viewBox.width / 2
+  const cy = viewBox.y + viewBox.height / 2
+  return (
+    <g pointerEvents="none">
+      <rect x={cx - 4} y={cy - 6} width={3} height={12} rx={1} fill="var(--text-3)" fillOpacity={0.75} />
+      <rect x={cx + 1.5} y={cy - 6} width={3} height={12} rx={1} fill="var(--text-3)" fillOpacity={0.75} />
+    </g>
+  )
+}
+
 /** Axis label below the plot, clear of the tick row. Matches Analysis. */
 function xLabel(value: string) {
   return { value, position: 'insideBottom' as const, offset: -4, fontSize: 10, fill: 'var(--text-3)' }
@@ -324,10 +344,9 @@ function xLabel(value: string) {
 
 function ChartTooltip({ active, payload, label, unit, valueFormatter }: { active?: boolean; payload?: any[]; label?: string; unit: string; valueFormatter?: (value: number) => string }) {
   if (!active || !payload?.length) return null
-  const mins = Math.floor(Number(label) / 60)
   return (
     <div className="custom-tooltip">
-      <div style={{ color: 'var(--text-3)', marginBottom: 2 }}>{mins}m</div>
+      <div style={{ color: 'var(--text-3)', marginBottom: 2 }}>{fmtClock(Number(label))}</div>
       <div style={{ color: 'var(--text)', fontWeight: 600 }}>{valueFormatter ? valueFormatter(Number(payload[0].value)) : payload[0].value} {unit}</div>
     </div>
   )
@@ -383,6 +402,23 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
   const { updateWorkout, removeWorkout } = useWorkouts()
   const { user } = useAuth()
   const [w, setW] = useState(w0)
+  /*
+   * The page can be opened from a list row, which carries no timelines and no
+   * route, and be handed the full record a moment later. Keyed by id, this
+   * component does not remount for that, so without this it would keep showing
+   * the summary it started with — an empty map and no charts on a workout that
+   * has both.
+   *
+   * Guarded on identity, so a re-render of the parent never resets an edit in
+   * progress: the prop only changes identity when the workout is refetched or
+   * reselected.
+   */
+  const seeded = useRef(w0)
+  useEffect(() => {
+    if (w0 === seeded.current) return
+    seeded.current = w0
+    setW(w0)
+  }, [w0])
   const [sharing, setSharing] = useState(false)
   const [cardOpen, setCardOpen] = useState(false)
   /**
@@ -406,10 +442,21 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
   // efficiency, so if we were handed a summary-only workout, fetch the full
   // record before rendering the map/charts (otherwise they'd stay blank
   // until an unrelated re-render happened to bring in the full data).
+  //
+  // `hydrating` is what the map and the charts show a spinner for meanwhile. On
+  // a long workout the request is several hundred kilobytes of samples and
+  // takes long enough to see, and the panels' own empty states say "no route
+  // data" — which is a statement about the workout, not about the wait, and it
+  // is wrong.
+  const [hydrating, setHydrating] = useState(false)
   useEffect(() => {
     if (w0.route.length > 0 || w0.hrTimeline.length > 0 || w0.paceTimeline.length > 0 || w0.elevTimeline.length > 0) return
     let cancelled = false
-    api.getWorkout(w0.id).then(full => { if (!cancelled) setW(full) }).catch(() => {})
+    setHydrating(true)
+    api.getWorkout(w0.id)
+      .then(full => { if (!cancelled) setW(full) })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setHydrating(false) })
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -425,15 +472,31 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [saveErr, setSaveErr] = useState<string | null>(null)
   const [confirmRecalc, setConfirmRecalc] = useState(false)
+  /*
+   * What a recalculation will replace.
+   *
+   * Everything by default, which is what it always did — but each one is now
+   * refusable, because the operation overwrites hand-entered figures and there
+   * was no way to ask for the pauses on an old workout without also losing a
+   * corrected calorie count.
+   */
+  const [recalcParts, setRecalcParts] = useState<RecalcParts>(() => ({
+    heartRate: true, elevation: true, pauses: true, paceSpeed: true, steps: true, calories: true,
+  }))
   const [recalculating, setRecalculating] = useState(false)
   const [recalcErr, setRecalcErr] = useState<string | null>(null)
   const [originalErr, setOriginalErr] = useState<string | null>(null)
 
-  const [selectedMetrics, setSelectedMetrics] = useLocalStorage<Metric[]>('al_wd_metrics', ['hr', 'pace', 'speed', 'elevation'])
+  // The key carries a version because the default changed: cadence used to be
+  // off, and a workout that recorded it showed nothing until you found the
+  // toggle. Bumping the key is what lets an existing install pick the new
+  // default up — the cost is one forgotten customisation, once.
+  const [selectedMetrics, setSelectedMetrics] = useLocalStorage<Metric[]>('al_wd_metrics_v2', ['hr', 'pace', 'speed', 'elevation', 'cadence'])
   function toggleMetric(m: Metric) {
     setSelectedMetrics(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m])
   }
   const [yFromZero, setYFromZero] = useLocalStorage<boolean>('al_y0', false)
+  const [showPauses, setShowPauses] = useLocalStorage<boolean>('al_show_pauses', true)
   const [hrZoneStyle] = useLocalStorage<HRZoneChart>(HR_ZONE_CHART_KEY, DEFAULT_HR_ZONE_CHART)
 
   // Equipment editing
@@ -465,6 +528,16 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
   )
   // Cadence arrives noisy (a dropped stride shows up as a zero), so zeros are
   // dropped and the series is lightly smoothed the way pace/speed are.
+  /*
+   * The stretches where the recording stopped.
+   *
+   * Empty for a workout imported before the server detected these, until it is
+   * recalculated — and empty is also the honest answer for one that ran
+   * straight through, so nothing here needs to tell the two apart. `movingTime`
+   * does, and the summary uses it.
+   */
+  const pauses = useMemo(() => w.pauses ?? [], [w.pauses])
+
   const cadenceTimeline = useMemo(
     () => smoothTimeline((w.cadenceTimeline ?? []).filter(p => p.cad > 0).map(p => ({ t: p.t, value: p.cad })), 5)
       .map(p => ({ t: p.t, cad: Math.round(p.value) })),
@@ -490,7 +563,9 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
       const d = w.elevTimeline[i].elev - w.elevTimeline[i - 1].elev
       if (d < 0) elevLoss += -d
     }
-    const strideLength = w.type === 'Run' ? 1.0 : w.type === 'Hike' ? 0.75 : null
+    // Mirrors estimateSteps on the server, including Other — see onFoot there
+    // for why an unclassified activity is treated as walked.
+    const strideLength = w.type === 'Run' ? 1.0 : w.type === 'Hike' || w.type === 'Other' ? 0.75 : null
     const steps = strideLength && w.distance > 0 ? Math.round(w.distance / strideLength) : null
     const cadVals = cadenceTimeline.map(p => p.cad)
     return {
@@ -675,7 +750,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
     setRecalculating(true)
     setRecalcErr(null)
     try {
-      const updated = await api.recalcWorkout(w.id)
+      const updated = await api.recalcWorkout(w.id, recalcParts)
       setW(updated)
       setConfirmRecalc(false)
     } catch (err) {
@@ -725,7 +800,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
       <ResponsiveContainer width="100%" height={height}>
         <AreaChart
           data={visible}
-          margin={{ top: 4, right: 4, left: -24, bottom: 14 }}
+          margin={{ top: 4, right: 18, left: -24, bottom: 14 }}
           onClick={(e: any) => { if (e && e.activeLabel != null) handleScrub(Number(e.activeLabel)) }}
         >
           <defs>
@@ -740,11 +815,22 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             )}
           </defs>
           <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
+          {/* Before the axes and the series, so the shading sits behind them
+              rather than over the line it is meant to explain. */}
+          {showPauses && pauses.map(p => (
+            <ReferenceArea
+              key={`${p.from}-${p.to}`}
+              x1={p.from} x2={p.to}
+              fill="var(--pause-band)" fillOpacity={1} stroke="none"
+              label={<PauseMark />}
+              ifOverflow="hidden"
+            />
+          ))}
           <XAxis
             dataKey="t" type="number" domain={[0, w.duration || 1]}
             tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}
-            axisLine={false} tickLine={false} tickFormatter={v => `${Math.floor(v / 60)}m`} interval="preserveStartEnd"
-            label={xLabel('Elapsed time (min)')}
+            axisLine={false} tickLine={false} tickFormatter={fmtClock} interval="preserveStartEnd"
+            label={xLabel('Elapsed time (h:mm)')}
           />
           <YAxis
             tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}
@@ -779,7 +865,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
     if (hrZoneStyle === 'histogram') {
       return (
         <ResponsiveContainer width="100%" height={height}>
-          <BarChart data={hrZonesPlayed} margin={{ top: 4, right: 4, left: -24, bottom: 14 }}>
+          <BarChart data={hrZonesPlayed} margin={{ top: 4, right: 18, left: -24, bottom: 14 }}>
             <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
             <XAxis
               dataKey="short" tick={{ fontSize: 11, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}
@@ -886,30 +972,14 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
   return (
     <div>
       {confirmRecalc && (
-        <div
-          onClick={() => { if (!recalculating) setConfirmRecalc(false) }}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'grid', placeItems: 'center', padding: 16 }}
-        >
-          <div className="card" onClick={e => e.stopPropagation()} style={{ maxWidth: 420, width: '100%' }}>
-            <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <RotateCcw size={16} /> Recalculate workout?
-            </h3>
-            <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6, marginBottom: 20 }}>
-              This recomputes all derived metrics (calories, steps, heart-rate, pace, speed and elevation)
-              from the recorded track and your calorie settings. Any values you entered manually will be
-              <strong> overwritten</strong>. The workout's name, type and date are not affected.
-            </p>
-            {recalcErr && (
-              <p style={{ fontSize: 13, color: 'var(--danger, #e5484d)', marginBottom: 12 }}>{recalcErr}</p>
-            )}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button className="btn btn-ghost" onClick={() => setConfirmRecalc(false)} disabled={recalculating}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleRecalculate} disabled={recalculating}>
-                {recalculating ? 'Recalculating…' : 'Recalculate'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <RecalculateDialog
+          parts={recalcParts}
+          onChange={setRecalcParts}
+          busy={recalculating}
+          error={recalcErr}
+          onClose={() => setConfirmRecalc(false)}
+          onConfirm={handleRecalculate}
+        />
       )}
       {editing && (
         <>
@@ -1056,15 +1126,41 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
               reported directly by the source) carry a small calculated
               indicator. */}
           <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <h3 style={{ fontSize: 13, fontWeight: 600 }}>Summary</h3>
+            <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+              Summary
+              {/* The headline figures come with the list row; the ones derived
+                  from the samples — min and max HR, elevation loss — arrive
+                  with the full record, so the spinner says the rest is still
+                  coming rather than leaving dashes that look final. */}
+              {hydrating && <LoaderCircle size={12} className="spin" style={{ color: 'var(--text-3)' }} />}
+            </h3>
 
+            {/* The three figures about the activity itself on one row, and the
+                two counted from it on the next. Moving time shows even when it
+                equals the duration: an empty slot on most workouts would be
+                worse than a repeated number, and its absence would read as
+                "not measured" rather than "nothing was missed". */}
             <div className="stat-grid-3">
               <StatChip icon={<Navigation size={12} />} label="Distance" value={w.distance > 0 ? fmtDist(w.distance) : '—'} />
               <StatChip icon={<Clock size={12} />} label="Duration" value={w.duration > 0 ? fmtDuration(w.duration) : '—'} />
+              <StatChip icon={<PauseIcon size={12} />} label="Moving" value={w.duration > 0 ? fmtDuration(w.movingTime || w.duration) : '—'} />
+            </div>
+
+            <div className="stat-grid-3">
               {/* Calories are only badged as computed when we estimated them
                   ourselves — TCX files state them outright, and those are as
                   good as any other reported field. */}
               <StatChip icon={<Zap size={12} />} label="Calories" value={w.calories > 0 ? `${w.calories} kcal` : '—'} manual={w.caloriesManual} calculated={!w.caloriesManual && !w.caloriesReported && w.calories > 0} />
+              {/* The Σ marks an estimate, and steps counted from a recorded
+                  cadence are not one — the watch counted them. It belongs only
+                  on the fallback, which divides distance by an assumed stride. */}
+              <StatChip
+                icon={<Footprints size={12} />}
+                label="Steps"
+                value={(w.steps ?? 0) > 0 ? w.steps!.toLocaleString() : (derived.steps != null ? derived.steps.toLocaleString() : '—')}
+                manual={w.stepsManual}
+                calculated={!w.stepsManual && cadenceTimeline.length === 0 && ((w.steps ?? 0) > 0 || derived.steps != null)}
+              />
             </div>
 
             {(w.hrTimeline.length > 0 || w.avgHR > 0) && (
@@ -1102,7 +1198,6 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             <div className="stat-grid-3">
               <StatChip icon={<Mountain size={12} color="var(--hike)" />} label="Elev. Gain" value={w.elevTimeline.length > 0 ? `${Math.round(w.elevationGain)} m` : '—'} />
               <StatChip icon={<Mountain size={12} color="var(--hike)" />} label="Elev. Loss" value={w.elevTimeline.length > 0 ? `${derived.elevLoss} m` : '—'} calculated={w.elevTimeline.length > 0} />
-              <StatChip icon={<Footprints size={12} />} label="Steps" value={(w.steps ?? 0) > 0 ? w.steps!.toLocaleString() : (derived.steps != null ? derived.steps.toLocaleString() : '—')} manual={w.stepsManual} calculated={!w.stepsManual && ((w.steps ?? 0) > 0 || derived.steps != null)} />
             </div>
           </div>
         </div>
@@ -1149,10 +1244,28 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             <span className="switch-track" />
             Y axis from 0
           </label>
+          {/* Only where there is something to show. A toggle that never
+              changes anything is a question about a feature this workout does
+              not have. */}
+          {pauses.length > 0 && (
+            <label className="switch" title="Shade the stretches where the recording stopped">
+              <input type="checkbox" checked={showPauses} onChange={e => setShowPauses(e.target.checked)} />
+              <span className="switch-track" />
+              Pauses
+            </label>
+          )}
         </div>
 
         {/* Charts */}
         <div className="charts-grid">
+          {/* Spans the grid while the samples are on their way, so the page
+              does not look like a workout that recorded nothing. */}
+          {hydrating && (
+            <div className="card detail-loading" style={{ gridColumn: '1 / -1' }}>
+              <LoaderCircle size={18} className="spin" />
+              Loading charts…
+            </div>
+          )}
           {selectedMetrics.includes('hr') && w.hrTimeline.length > 0 && (
             <MetricPanel
               icon={<Heart size={14} color="var(--danger)" />}
@@ -1181,7 +1294,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
               icon={<TrendingUp size={14} color={color} />}
               title="Pace"
               badge={<CalcIcon />}
-              info="Pace derived from the distance and time between consecutive GPS fixes, then smoothed — very few files record pace directly, which is what the Σ marks. Segments shorter than three metres are skipped so standing still doesn't produce wild spikes. Lower on the chart is faster."
+              info="Pace derived from the distance and time between consecutive GPS fixes, then smoothed — very few files record pace directly, which is what the Σ marks. Segments shorter than three metres are skipped so standing still doesn't produce wild spikes. Lower on the chart is faster. The average is over moving time: shaded bands mark the stretches where the recording stopped, and those are left out of it."
               stats={<>Min {derived.paceMin != null ? fmtPace(derived.paceMin) : '—'} · Avg {fmtPace(w.avgPace)} · Max {derived.paceMax != null ? fmtPace(derived.paceMax) : '—'} /km</>}
               onExpand={() => setExpanded('pace')}
             >
@@ -1324,7 +1437,12 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
       {/* Rendered once, wherever mapHolder currently is. The maximize button is
           dropped while it is open — the modal's own header closes it. */}
       {createPortal(
-        mapCard('100%', expanded === 'map' ? undefined : (
+        hydrating && w.route.length < 2 ? (
+          <div className="detail-loading">
+            <LoaderCircle size={18} className="spin" />
+            Loading route…
+          </div>
+        ) : mapCard('100%', expanded === 'map' ? undefined : (
           <button
             className="btn-icon"
             onClick={() => setExpanded('map')}

@@ -76,6 +76,13 @@ export default function App() {
   // The open category within a hub page (settings, admin), or null for the hub.
   const [section, setSection] = useState<string | null>(initialLocation.section)
   const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null)
+  /**
+   * The last workout that was open, kept so the back gesture can put it back on
+   * screen at once rather than through a round trip. A ref and not state: it
+   * exists to be read inside the popstate listener, which is bound once.
+   */
+  const lastWorkout = useRef<Workout | null>(null)
+  if (selectedWorkout) lastWorkout.current = selectedWorkout
   // A push that arrived while the app was on screen, shown as a banner.
   const [banner, setBanner] = useState<BannerNotification | null>(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -237,6 +244,12 @@ export default function App() {
       setPage(loc.page)
       setSection(loc.section)
       if (loc.workoutId) {
+        // Shown again immediately when it is the one we just came from, and
+        // only then refreshed. The fetch takes long enough to see, and until it
+        // landed the page underneath — the workouts list — was what the user
+        // got, so going back from a settings page to a workout appeared to land
+        // somewhere else and then correct itself.
+        if (lastWorkout.current?.id === loc.workoutId) setSelectedWorkout(lastWorkout.current)
         api.getWorkout(loc.workoutId).then(setSelectedWorkout).catch(() => setSelectedWorkout(null))
       } else {
         setSelectedWorkout(null)
@@ -262,6 +275,11 @@ export default function App() {
   const openSection = useCallback((p: Page, s: string | null) => {
     setPage(p)
     setSection(s)
+    // A workout being open wins over the page underneath it, so leaving this
+    // set meant the user menu's Profile entry changed the page and the URL and
+    // then carried on showing the workout — from anywhere else it worked, which
+    // is exactly what makes that kind of bug hard to describe.
+    setSelectedWorkout(null)
     window.history.pushState(null, '', pathForPage(p, s))
   }, [])
 

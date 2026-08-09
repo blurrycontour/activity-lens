@@ -78,6 +78,9 @@ var workoutWeatherSchema string
 //go:embed migrations/0023_workout_tracks.sql
 var workoutTracksSchema string
 
+//go:embed migrations/0024_workout_pauses.sql
+var workoutPausesSchema string
+
 //go:embed migrations/0021_push_last_seen.sql
 var pushLastSeenSchema string
 
@@ -145,6 +148,7 @@ func MigrateApp(ctx context.Context, db *sql.DB) error {
 		{"push last seen", pushLastSeenSchema},
 		{"workout weather", workoutWeatherSchema},
 		{"workout tracks", workoutTracksSchema},
+		{"workout pauses", workoutPausesSchema},
 	} {
 		if err := applyAlters(ctx, db, m.schema); err != nil {
 			return fmt.Errorf("apply %s schema: %w", m.name, err)

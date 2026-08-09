@@ -117,6 +117,14 @@ type CadencePoint struct {
 	Cad int `json:"cad"`
 }
 
+// Pause is a stretch of a workout during which nothing was recorded, in
+// seconds from the start. See pauses.go for how these are found and why only
+// gaps in the recording count.
+type Pause struct {
+	From int `json:"from"`
+	To   int `json:"to"`
+}
+
 // Workout is the domain model. The JSON tags produce exactly the shape the
 // frontend expects.
 type Workout struct {
@@ -149,7 +157,16 @@ type Workout struct {
 	PaceTimeline     []PacePoint    `json:"paceTimeline"`
 	ElevTimeline     []ElevPoint    `json:"elevTimeline"`
 	CadenceTimeline  []CadencePoint `json:"cadenceTimeline"`
-	Notes            string         `json:"notes"`
+	// Pauses are the stretches with no samples in them. Omitted when empty,
+	// which covers both "recorded straight through" and "too few samples to
+	// tell" — MovingTime is what separates those.
+	Pauses []Pause `json:"pauses,omitempty"`
+	// MovingTime is Duration less the pauses, and is what AvgPace and AvgSpeed
+	// are computed from. Zero means it was never worked out: every workout
+	// imported before pauses existed, until it is recalculated. Clients read a
+	// zero as "use Duration".
+	MovingTime int    `json:"movingTime,omitempty"`
+	Notes      string `json:"notes"`
 	// CreatedAt is when this workout entered the library, which is not the same
 	// as when it happened: an import can bring in a run from years ago. It is
 	// what "the ones that just arrived" means.
