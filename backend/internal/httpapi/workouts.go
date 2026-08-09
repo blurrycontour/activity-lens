@@ -715,8 +715,10 @@ type savePrefsRequest struct {
 
 	Goals []struct {
 		ID     string  `json:"id"`
-		Count  int     `json:"count"`
+		Metric string  `json:"metric"`
+		Target float64 `json:"target"`
 		Period string  `json:"period"`
+		Span   int     `json:"span"`
 		Type   string  `json:"type"`
 		MinKm  float64 `json:"minKm"`
 	} `json:"goals"`
@@ -767,26 +769,29 @@ func (s *Server) handleSavePreferences(w http.ResponseWriter, r *http.Request) {
 	// never be met, so one bad row can't reject an otherwise valid save.
 	goals := make([]settings.Goal, 0, len(req.Goals))
 	for _, g := range req.Goals {
-		if g.Count <= 0 {
+		if g.Target <= 0 {
 			continue
-		}
-		period := g.Period
-		if period != "week" && period != "month" {
-			period = "week"
 		}
 		// An empty type means "any activity counts".
 		typ := g.Type
 		if typ != "" && !workout.ValidType(workout.Type(typ)) {
 			typ = ""
 		}
-		goals = append(goals, settings.Goal{
+		goal := settings.Goal{
 			ID:     g.ID,
-			Count:  min(g.Count, maxGoalCount(period)),
-			Period: period,
+			Metric: g.Metric,
+			Target: g.Target,
+			Period: g.Period,
+			Span:   g.Span,
 			Type:   typ,
-			MinKm:  max(g.MinKm, 0),
-		})
-		if len(goals) >= 12 {
+			MinKm:  g.MinKm,
+		}
+		// Normalize first: the ceiling depends on the metric, period and span
+		// it settles on, not on whatever the client sent.
+		goal.Normalize()
+		goal.Target = min(goal.Target, maxGoalTarget(goal))
+		goals = append(goals, goal)
+		if len(goals) >= maxGoals {
 			break
 		}
 	}
@@ -839,11 +844,23 @@ func (s *Server) writeWorkoutError(w http.ResponseWriter, err error) {
 	}
 }
 
-// maxGoalCount caps a goal at roughly three activities a day for its period —
-// beyond that it is a typo rather than a plan.
-func maxGoalCount(period string) int {
-	if period == "month" {
-		return 93
+// maxGoals is how many training goals one user may keep. The dashboard renders
+// every one of them, so the cap is about a readable page as much as storage.
+const maxGoals = 12
+
+// maxGoalTarget caps a goal at something a human could plausibly do in the
+// window — beyond that it is a typo rather than a plan. Per day of the window,
+// that is three activities, 300 km, or 12 hours.
+func maxGoalTarget(g settings.Goal) float64 {
+	days := 7 * g.Span
+	if g.Period == "month" {
+		days = 31 * g.Span
 	}
-	return 21
+	switch g.Metric {
+	case settings.MetricDistance:
+		return float64(days) * 300
+	case settings.MetricDuration:
+		return float64(days) * 12
+	}
+	return float64(days) * 3
 }
