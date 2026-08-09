@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 )
 
@@ -35,9 +36,12 @@ type Goal struct {
 	Target float64 `json:"target"`
 	Period string  `json:"period"` // "week" or "month"
 	// Span is how many periods one window covers; 1 for a plain week or month.
-	Span  int     `json:"span"`
-	Type  string  `json:"type"`  // activity type, or "" for any
-	MinKm float64 `json:"minKm"` // minimum distance for an activity to qualify; 0 for none
+	Span int    `json:"span"`
+	Type string `json:"type"` // activity type, or "" for any
+	// MinKm and MinMinutes are qualifiers on each activity, not on the total:
+	// an activity below either is ignored entirely. 0 means no minimum.
+	MinKm      float64 `json:"minKm"`
+	MinMinutes float64 `json:"minMinutes"`
 }
 
 // UnmarshalJSON accepts the stored shape and the one that came before it, where
@@ -89,6 +93,9 @@ func (g *Goal) Normalize() {
 	if g.MinKm < 0 {
 		g.MinKm = 0
 	}
+	if g.MinMinutes < 0 {
+		g.MinMinutes = 0
+	}
 }
 
 // Unit is the short label for the goal's metric, used in notification copy.
@@ -123,10 +130,7 @@ func (g Goal) Describe() string {
 	if g.Span > 1 {
 		window = fmt.Sprintf("every %d %ss", g.Span, g.Period)
 	}
-	minimum := ""
-	if g.MinKm > 0 {
-		minimum = fmt.Sprintf(" (%g km+ only)", g.MinKm)
-	}
+	minimum := g.describeMinimum()
 	if g.Metric != MetricCount {
 		if g.Type != "" {
 			return fmt.Sprintf("%s %s %s%s", g.Type, g.FormatAmount(g.Target), window, minimum)
@@ -144,10 +148,23 @@ func (g Goal) Describe() string {
 			noun = lower(g.Type) + "s"
 		}
 	}
+	return fmt.Sprintf("%d %s %s%s", n, noun, window, minimum)
+}
+
+// describeMinimum renders the per-activity qualifiers as a trailing clause, or
+// "" when the goal has none.
+func (g Goal) describeMinimum() string {
+	var parts []string
 	if g.MinKm > 0 {
-		noun = fmt.Sprintf("%g km+ %s", g.MinKm, noun)
+		parts = append(parts, fmt.Sprintf("%g km", g.MinKm))
 	}
-	return fmt.Sprintf("%d %s %s", n, noun, window)
+	if g.MinMinutes > 0 {
+		parts = append(parts, fmt.Sprintf("%g min", g.MinMinutes))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return " (" + strings.Join(parts, ", ") + "+ only)"
 }
 
 func lower(s string) string {

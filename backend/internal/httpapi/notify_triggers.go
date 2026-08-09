@@ -214,6 +214,9 @@ func progressTowardGoal(workouts []workout.Workout, g settings.Goal, now time.Ti
 		if g.MinKm > 0 && math.Round(w.Distance/100)/10 < g.MinKm {
 			continue
 		}
+		if g.MinMinutes > 0 && float64(w.Duration)/60 < g.MinMinutes {
+			continue
+		}
 		switch g.Metric {
 		case settings.MetricDistance:
 			total += w.Distance / 1000

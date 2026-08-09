@@ -93,7 +93,10 @@ func TestGoalDescribe(t *testing.T) {
 	}{
 		{Goal{Metric: MetricCount, Target: 2, Period: "week", Span: 1, Type: "Run"}, "2 runs a week"},
 		{Goal{Metric: MetricCount, Target: 1, Period: "week", Span: 1}, "1 activity a week"},
-		{Goal{Metric: MetricCount, Target: 3, Period: "week", Span: 1, MinKm: 5}, "3 5 km+ activities a week"},
+		{Goal{Metric: MetricCount, Target: 3, Period: "week", Span: 1, MinKm: 5}, "3 activities a week (5 km+ only)"},
+		{Goal{Metric: MetricCount, Target: 3, Period: "week", Span: 1, MinMinutes: 30}, "3 activities a week (30 min+ only)"},
+		{Goal{Metric: MetricCount, Target: 3, Period: "week", Span: 1, MinKm: 5, MinMinutes: 30}, "3 activities a week (5 km, 30 min+ only)"},
+		{Goal{Metric: MetricDistance, Target: 40, Period: "month", Span: 1, Type: "Hike", MinMinutes: 45}, "Hike 40 km a month (45 min+ only)"},
 		{Goal{Metric: MetricDistance, Target: 40, Period: "month", Span: 1, Type: "Hike"}, "Hike 40 km a month"},
 		{Goal{Metric: MetricDuration, Target: 30, Period: "month", Span: 2, Type: "Run"}, "Run 30 h every 2 months"},
 		{Goal{Metric: MetricDistance, Target: 25, Period: "week", Span: 3}, "25 km every 3 weeks"},
