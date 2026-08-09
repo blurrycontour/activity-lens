@@ -7,7 +7,7 @@ import Dropdown from '../components/Dropdown'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ReferenceDot, ReferenceArea, BarChart, Bar } from 'recharts'
 import {
   ArrowLeft, Heart, Mountain, Zap, Clock, TrendingUp, Navigation, Download, Pencil, Trash2, Gauge,
-  Check, X as XIcon, Play, Pause as PauseIcon, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, AlertTriangle, Activity, Share2, Lock, FileDown, Plus, Image as ImageIcon,
+  Check, X as XIcon, Play, Pause as PauseIcon, LoaderCircle, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, AlertTriangle, Activity, Share2, Lock, FileDown, Plus, Image as ImageIcon,
 } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useAuth } from '../context/AuthContext'
@@ -330,9 +330,9 @@ function PauseMark({ viewBox }: { viewBox?: { x: number; y: number; width: numbe
   const cx = viewBox.x + viewBox.width / 2
   const cy = viewBox.y + viewBox.height / 2
   return (
-    <g pointerEvents="none" opacity={0.65}>
-      <rect x={cx - 4} y={cy - 5} width={2.5} height={10} rx={1} fill="var(--text-3)" />
-      <rect x={cx + 1.5} y={cy - 5} width={2.5} height={10} rx={1} fill="var(--text-3)" />
+    <g pointerEvents="none">
+      <rect x={cx - 4} y={cy - 6} width={3} height={12} rx={1} fill="var(--text-3)" fillOpacity={0.75} />
+      <rect x={cx + 1.5} y={cy - 6} width={3} height={12} rx={1} fill="var(--text-3)" fillOpacity={0.75} />
     </g>
   )
 }
@@ -442,10 +442,21 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
   // efficiency, so if we were handed a summary-only workout, fetch the full
   // record before rendering the map/charts (otherwise they'd stay blank
   // until an unrelated re-render happened to bring in the full data).
+  //
+  // `hydrating` is what the map and the charts show a spinner for meanwhile. On
+  // a long workout the request is several hundred kilobytes of samples and
+  // takes long enough to see, and the panels' own empty states say "no route
+  // data" — which is a statement about the workout, not about the wait, and it
+  // is wrong.
+  const [hydrating, setHydrating] = useState(false)
   useEffect(() => {
     if (w0.route.length > 0 || w0.hrTimeline.length > 0 || w0.paceTimeline.length > 0 || w0.elevTimeline.length > 0) return
     let cancelled = false
-    api.getWorkout(w0.id).then(full => { if (!cancelled) setW(full) }).catch(() => {})
+    setHydrating(true)
+    api.getWorkout(w0.id)
+      .then(full => { if (!cancelled) setW(full) })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setHydrating(false) })
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -810,7 +821,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             <ReferenceArea
               key={`${p.from}-${p.to}`}
               x1={p.from} x2={p.to}
-              className="pause-band" stroke="none"
+              fill="var(--pause-band)" fillOpacity={1} stroke="none"
               label={<PauseMark />}
               ifOverflow="hidden"
             />
@@ -1115,7 +1126,14 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
               reported directly by the source) carry a small calculated
               indicator. */}
           <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <h3 style={{ fontSize: 13, fontWeight: 600 }}>Summary</h3>
+            <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+              Summary
+              {/* The headline figures come with the list row; the ones derived
+                  from the samples — min and max HR, elevation loss — arrive
+                  with the full record, so the spinner says the rest is still
+                  coming rather than leaving dashes that look final. */}
+              {hydrating && <LoaderCircle size={12} className="spin" style={{ color: 'var(--text-3)' }} />}
+            </h3>
 
             {/* The three figures about the activity itself on one row, and the
                 two counted from it on the next. Moving time shows even when it
@@ -1240,6 +1258,14 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
 
         {/* Charts */}
         <div className="charts-grid">
+          {/* Spans the grid while the samples are on their way, so the page
+              does not look like a workout that recorded nothing. */}
+          {hydrating && (
+            <div className="card detail-loading" style={{ gridColumn: '1 / -1' }}>
+              <LoaderCircle size={18} className="spin" />
+              Loading charts…
+            </div>
+          )}
           {selectedMetrics.includes('hr') && w.hrTimeline.length > 0 && (
             <MetricPanel
               icon={<Heart size={14} color="var(--danger)" />}
@@ -1411,7 +1437,12 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
       {/* Rendered once, wherever mapHolder currently is. The maximize button is
           dropped while it is open — the modal's own header closes it. */}
       {createPortal(
-        mapCard('100%', expanded === 'map' ? undefined : (
+        hydrating && w.route.length < 2 ? (
+          <div className="detail-loading">
+            <LoaderCircle size={18} className="spin" />
+            Loading route…
+          </div>
+        ) : mapCard('100%', expanded === 'map' ? undefined : (
           <button
             className="btn-icon"
             onClick={() => setExpanded('map')}

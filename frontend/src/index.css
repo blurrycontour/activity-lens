@@ -1450,12 +1450,27 @@ body {
 .share-card-actions .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .share-card-actions .btn-primary { flex: 1; }
 
+/* Placeholder while the full record is still on its way. A long workout is a
+   few hundred kilobytes of samples, and the panels' own empty states say "no
+   route data" — a statement about the workout rather than about the wait. */
+.detail-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 140px;
+  height: 100%;
+  font-size: 13px;
+  color: var(--text-3);
+}
+
 /* Shading behind the stretches of a workout where the recording stopped.
-   A class rather than a fill prop on the element, because the two themes need
-   different strengths: on the dark ground a grey at 14% was very nearly
-   invisible, while the same value on white is already a smudge. */
-.pause-band { fill: var(--text-3); fill-opacity: 0.3; }
-:root.light .pause-band { fill-opacity: 0.14; }
+   A colour with the alpha baked in, and not `fill-opacity` on the layer: the
+   break glyph is a child of that layer and inherited the opacity, which is why
+   it was invisible. The two themes need different strengths — the same grey
+   that disappears on the dark ground is a smudge on white. */
+:root { --pause-band: color-mix(in srgb, var(--text-3) 20%, transparent); }
+:root.light { --pause-band: color-mix(in srgb, var(--text-3) 14%, transparent); }
 
 /* ── Recalculate ── */
 
@@ -1568,6 +1583,10 @@ body {
   margin-right: 6px;
   color: var(--border-strong, var(--border));
 }
+/* A fixed column, so "Keep" and "Copy" line up down the group and every name
+   is cut at the same place. Left to size themselves the two words differ by a
+   few pixels, and the ragged truncation that produced was the thing that read
+   as broken. */
 .dup-row-tag {
   font-size: 10px;
   font-family: var(--font-mono);
@@ -1575,6 +1594,8 @@ body {
   letter-spacing: 0.06em;
   color: var(--text-3);
   flex-shrink: 0;
+  width: 34px;
+  text-align: right;
 }
 .dup-row.keep .dup-row-tag { color: var(--primary); }
 .dup-actions {
@@ -1586,9 +1607,13 @@ body {
 .dup-actions .btn { flex: 1; justify-content: center; }
 
 @media (max-width: 640px) {
-  /* Full height, because the group list is the content and a modal centred in
-     a phone's viewport with 80vh of cap left it a letterbox. */
-  .dup-modal { max-height: calc(100dvh - 32px); }
+  /* Nearly full height, because the group list is the content and 80vh of cap
+     left it a letterbox. The safe-area insets come off as well: .modal centres
+     in the whole viewport, which on a notched phone includes the status bar. */
+  .dup-modal,
+  .recalc-modal {
+    max-height: calc(100dvh - 32px - var(--safe-top) - var(--safe-bottom));
+  }
   .dup-row { padding: 10px; }
   .dup-actions .btn { width: 100%; flex: none; }
 }

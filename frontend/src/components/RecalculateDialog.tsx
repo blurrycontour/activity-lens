@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import { RotateCcw } from 'lucide-react'
 import { type RecalcParts } from '../data/workouts'
 import useDismissOnBack from '../lib/useDismissOnBack'
@@ -65,7 +66,12 @@ export default function RecalculateDialog({ parts, onChange, busy, error, onClos
   useDismissOnBack(true, () => { if (!busy) onClose() })
   const chosen = PARTS.filter(p => parts[p.key]).length
 
-  return (
+  // Portalled to the body, and not merely fixed-positioned. Pages render inside
+  // the swipe pager, which is `position: relative; z-index: 1` — a stacking
+  // context — so a dialog left in the page is capped at that level and the top
+  // and bottom bars draw over it. A short dialog never reaches them; a tall one
+  // does, which is how this surfaced.
+  return createPortal(
     <>
       <div className="overlay" onClick={() => { if (!busy) onClose() }} />
       <div className="modal">
@@ -116,6 +122,7 @@ export default function RecalculateDialog({ parts, onChange, busy, error, onClos
           </div>
         </div>
       </div>
-    </>
+    </>,
+    document.body,
   )
 }

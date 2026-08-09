@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { Copy, X } from 'lucide-react'
 import { fmtDist, fmtDuration, type Workout } from '../data/workouts'
 import { findDuplicateGroups, redundantIds } from '../lib/duplicates'
@@ -25,7 +26,12 @@ export default function DuplicatesDialog({ workouts, onClose, onSelect }: {
   const groups = useMemo(() => findDuplicateGroups(workouts), [workouts])
   const extra = useMemo(() => redundantIds(groups), [groups])
 
-  return (
+  // Portalled to the body, and not merely fixed-positioned. Pages render inside
+  // the swipe pager, which is `position: relative; z-index: 1` — a stacking
+  // context — so a dialog left in the page is capped at that level and the top
+  // and bottom bars draw over it. A short dialog never reaches them; a tall one
+  // does, which is how this surfaced.
+  return createPortal(
     <>
       <div className="overlay" onClick={onClose} />
       <div className="modal">
@@ -93,6 +99,7 @@ export default function DuplicatesDialog({ workouts, onClose, onSelect }: {
           </div>
         </div>
       </div>
-    </>
+    </>,
+    document.body,
   )
 }

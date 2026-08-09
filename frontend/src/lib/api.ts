@@ -555,7 +555,10 @@ export const api = {
   recalcWorkout: (id: string, parts: import('../data/workouts').RecalcParts) =>
     request<import('../data/workouts').Workout>(`/api/workouts/${id}/recalculate`, {
       method: 'POST',
-      body: JSON.stringify(parts),
+      // The object, not a string: request() serialises `body` itself, and
+      // stringifying here sent a JSON string containing JSON, which the server
+      // rejected as an invalid body.
+      body: parts,
     }),
   deleteWorkout: (id: string) => request<unknown>(`/api/workouts/${id}`, { method: 'DELETE' }),
   // `deferChecks` suppresses the post-import gear and goal evaluation, which
