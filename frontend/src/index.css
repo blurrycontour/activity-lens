@@ -1450,6 +1450,81 @@ body {
 .share-card-actions .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .share-card-actions .btn-primary { flex: 1; }
 
+/* ── Duplicate finder ── */
+
+/* Wider than the default modal and capped by height: the groups are a list of
+   unknown length, and the actions have to stay reachable however long it is. */
+.dup-modal {
+  max-width: 620px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 80vh;
+}
+.dup-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.dup-note { font-size: 12.5px; color: var(--text-3); line-height: 1.6; }
+.dup-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  /* The only thing that scrolls, so the heading and the actions stay put. */
+  min-height: 0;
+  flex: 1;
+}
+/* One box per group, so which workouts are being compared with which is
+   structural rather than something the reader has to infer from the dates. */
+.dup-group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.dup-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  background: var(--bg-3);
+}
+.dup-row + .dup-row { border-top: 1px solid var(--border); }
+.dup-row.keep { background: var(--bg-2); }
+.dup-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.dup-row-name {
+  font-size: 13px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dup-row-meta {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-3);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.dup-row-tag {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+.dup-row.keep .dup-row-tag { color: var(--primary); }
+.dup-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
 /* Two dropdowns and a joining word, in a chart card's action slot. Wraps as a
    unit on a phone rather than leaving "vs" stranded on its own line. */
 .explore-picks {

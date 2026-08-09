@@ -1,0 +1,90 @@
+import { useMemo } from 'react'
+import { Copy, X } from 'lucide-react'
+import { fmtDist, fmtDuration, type Workout } from '../data/workouts'
+import { findDuplicateGroups, redundantIds } from '../lib/duplicates'
+import TypeIcon from './TypeIcon'
+import SourceMark from './SourceMark'
+
+/**
+ * Suspected duplicate imports, and a way to act on them.
+ *
+ * The action deliberately does not delete: it ticks the copies in the list
+ * behind this dialog and closes, dropping the user into the selection toolbar
+ * they already know, where Delete lives behind the confirmation it already has.
+ * A second delete path here would be a second place to get a destructive
+ * operation wrong, on the output of a heuristic that can be mistaken.
+ */
+export default function DuplicatesDialog({ workouts, onClose, onSelect }: {
+  workouts: Workout[]
+  onClose: () => void
+  /** Hands the ids of every copy-to-remove back to the list. */
+  onSelect: (ids: string[]) => void
+}) {
+  const groups = useMemo(() => findDuplicateGroups(workouts), [workouts])
+  const extra = useMemo(() => redundantIds(groups), [groups])
+
+  return (
+    <>
+      <div className="overlay" onClick={onClose} />
+      <div className="modal">
+        <div className="modal-box dup-modal" role="dialog" aria-modal="true" aria-label="Possible duplicates">
+          <div className="dup-head">
+            <h3 style={{ fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Copy size={15} /> Possible duplicates
+            </h3>
+            <button className="btn-icon" onClick={onClose} aria-label="Close"><X size={16} /></button>
+          </div>
+
+          {groups.length === 0 ? (
+            <p className="dup-note">
+              Nothing here looks imported twice. This compares workouts of the same
+              sport on the same day, and treats them as the same activity when their
+              duration and distance agree to within a couple of percent.
+            </p>
+          ) : (
+            <>
+              <p className="dup-note">
+                {groups.length} group{groups.length === 1 ? '' : 's'} of workouts look like
+                the same activity imported more than once. The first in each group is
+                the earliest import and is the one to keep.
+                {' '}
+                <strong>Check each one</strong> — intervals repeated on a track are a
+                real pair of workouts, and this cannot tell them apart from a mistake.
+              </p>
+
+              <div className="dup-groups">
+                {groups.map(group => (
+                  <div className="dup-group" key={group[0].id}>
+                    {group.map((w, i) => (
+                      <div className={`dup-row${i === 0 ? ' keep' : ''}`} key={w.id}>
+                        <TypeIcon type={w.type} size={15} />
+                        <div className="dup-row-main">
+                          <span className="dup-row-name">{w.name}</span>
+                          <span className="dup-row-meta">
+                            {w.date} · {fmtDuration(w.duration)}
+                            {w.distance > 0 && ` · ${fmtDist(w.distance)}`}
+                            {w.source && <> · <SourceMark source={w.source} /></>}
+                          </span>
+                        </div>
+                        <span className="dup-row-tag">{i === 0 ? 'Keep' : 'Copy'}</span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          <div className="dup-actions">
+            <button className="btn btn-ghost" onClick={onClose}>Close</button>
+            {extra.length > 0 && (
+              <button className="btn btn-primary" onClick={() => onSelect(extra)}>
+                Select {extra.length} cop{extra.length === 1 ? 'y' : 'ies'} in the list
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
