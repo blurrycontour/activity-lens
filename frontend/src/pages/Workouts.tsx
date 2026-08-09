@@ -264,21 +264,6 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
   }, [])
 
   /**
-   * Enters selection mode with a set chosen for the user.
-   *
-   * The duplicates dialog's only action. It hands the copies over rather than
-   * deleting them itself, so removing them goes through the toolbar and the
-   * confirmation that already exist — one destructive path, not two, and the
-   * user sees exactly what is ticked before anything happens.
-   */
-  const selectMany = useCallback((ids: string[]) => {
-    setSelected(new Set(ids))
-    if (selectionEntry.current) return
-    selectionEntry.current = true
-    window.history.pushState({ selecting: true }, '', window.location.href)
-  }, [])
-
-  /**
    * Leaves selection mode.
    *
    * @param popped true when back is what ended it, in which case the entry is
@@ -323,9 +308,15 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
    * upload. Failures are counted rather than thrown, so one workout that will
    * not delete does not strand the other nine.
    */
-  async function deleteSelected() {
-    const ids = [...(selected ?? [])]
-    setDeleting(true)
+  /**
+   * Deletes workouts by id, then reloads the library.
+   *
+   * Shared by the selection toolbar and the duplicates dialog, which both need
+   * "delete these, then say what actually happened". Throws when any of them
+   * failed so the caller can report it on its own surface; the refresh has
+   * already run by then, so whatever survived is on screen either way.
+   */
+  const deleteIds = useCallback(async (ids: string[]) => {
     let failed = 0
     for (const id of ids) {
       try {
@@ -335,10 +326,20 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
       }
     }
     await refresh()
-    setDeleting(false)
-    setConfirmDelete(false)
-    stopSelecting()
-    if (failed > 0) setFeedError(`${failed} of ${ids.length} could not be deleted.`)
+    if (failed > 0) throw new Error(`${failed} of ${ids.length} could not be deleted.`)
+  }, [refresh])
+
+  async function deleteSelected() {
+    setDeleting(true)
+    try {
+      await deleteIds([...(selected ?? [])])
+    } catch (e) {
+      setFeedError(e instanceof Error ? e.message : 'Some workouts could not be deleted.')
+    } finally {
+      setDeleting(false)
+      setConfirmDelete(false)
+      stopSelecting()
+    }
   }
 
   /**
@@ -649,7 +650,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
           // none at all.
           workouts={workouts}
           onClose={() => setShowDuplicates(false)}
-          onSelect={ids => { setShowDuplicates(false); selectMany(ids) }}
+          onDelete={deleteIds}
         />
       )}
 
