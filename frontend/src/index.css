@@ -903,6 +903,12 @@ body {
 .tag-hike     { background: rgba(245, 158, 11, 0.12); color: var(--hike); }
 .tag-swim     { background: rgba(6, 182, 212, 0.12); color: var(--swim); }
 .tag-strength { background: rgba(168, 85, 247, 0.12); color: var(--strength); }
+/* Added when the Other type was, and missed then: without it the badge got the
+   base .badge rule only, which sets no background, so it read as loose text
+   among five pills. Mixed from the token rather than written as a literal like
+   the five above — those predate --other existing, and a sixth literal would be
+   a second copy of a colour that already has a name. */
+.tag-other    { background: color-mix(in srgb, var(--other) 14%, transparent); color: var(--other); }
 
 .stat-chip { display: flex; flex-direction: column; gap: 2px; }
 .stat-chip .label { font-size: 11px; color: var(--text-3); font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.06em; }
