@@ -82,15 +82,19 @@ export interface Goal {
   span: number
   /** Activity type that counts, or '' for any. */
   type: WorkoutType | ''
-  /** Minimum distance in km for an activity to count; 0 for no minimum. */
+  /**
+   * Qualifiers on each activity, not on the total: one below either is ignored
+   * entirely. 0 for no minimum.
+   */
   minKm: number
+  minMinutes: number
 }
 
 /** Cap on how many periods one window may cover, mirroring the server's. */
 export const MAX_GOAL_SPAN = 12
 
 export function newGoal(): Goal {
-  return { id: Math.random().toString(36).slice(2, 10), metric: 'count', target: 2, period: 'week', span: 1, type: '', minKm: 0 }
+  return { id: Math.random().toString(36).slice(2, 10), metric: 'count', target: 2, period: 'week', span: 1, type: '', minKm: 0, minMinutes: 0 }
 }
 
 /**
@@ -109,6 +113,7 @@ export function goalFromApi(g: Partial<Record<keyof Goal, unknown>>): Goal {
     span,
     type: (g.type as WorkoutType | '') ?? '',
     minKm: Math.max(0, Number(g.minKm) || 0),
+    minMinutes: Math.max(0, Number(g.minMinutes) || 0),
   }
 }
 
@@ -141,7 +146,7 @@ export function describeGoalWindow(g: Goal): string {
  */
 export function describeGoal(g: Goal): string {
   const window = describeGoalWindow(g)
-  const min = g.minKm > 0 ? ` (${g.minKm} km+ only)` : ''
+  const min = describeGoalMinimum(g)
   if (g.metric !== 'count') {
     const lead = g.type ? `${g.type} ` : ''
     return `${lead}${formatGoalAmount(g, g.target)} ${window}${min}`
@@ -150,6 +155,14 @@ export function describeGoal(g: Goal): string {
   const n = Math.round(g.target)
   const noun = n === 1 ? sport : g.type ? `${sport}s` : 'activities'
   return `${n} ${noun} ${window}${min}`
+}
+
+/** The per-activity qualifiers as a trailing clause, or '' when there are none. */
+function describeGoalMinimum(g: Goal): string {
+  const parts: string[] = []
+  if (g.minKm > 0) parts.push(`${g.minKm} km`)
+  if (g.minMinutes > 0) parts.push(`${g.minMinutes} min`)
+  return parts.length === 0 ? '' : ` (${parts.join(', ')}+ only)`
 }
 
 /** Whole days since the Unix epoch, immune to DST because it goes via UTC. */
@@ -235,6 +248,7 @@ export interface GoalProgress {
 function countsToward(w: Workout, goal: Goal): boolean {
   if (goal.type && w.type !== goal.type) return false
   if (goal.minKm > 0 && Math.round(w.distance / 100) / 10 < goal.minKm) return false
+  if (goal.minMinutes > 0 && w.duration / 60 < goal.minMinutes) return false
   return true
 }
 

@@ -147,12 +147,21 @@ export default function GoalsSettings() {
               </div>
             </Field>
 
-            <Field label="Min km" info="Activities shorter than this don't count toward the goal at all. Leave blank for no minimum.">
+            <Field label="Min km" info="Activities shorter than this don't count toward the goal at all. 0 means no minimum.">
               <input
-                className="input" type="number" min="0" step="0.5" placeholder="any" style={{ width: '100%' }}
+                className="input" type="number" min="0" step="0.5" placeholder="0" style={{ width: '100%' }}
                 value={g.minKm || ''}
                 aria-label="Minimum distance in km"
                 onChange={e => update(i, { minKm: Number(e.target.value) || 0 })}
+              />
+            </Field>
+
+            <Field label="Min min" info="Activities shorter than this many minutes don't count toward the goal at all. 0 means no minimum.">
+              <input
+                className="input" type="number" min="0" step="5" placeholder="0" style={{ width: '100%' }}
+                value={g.minMinutes || ''}
+                aria-label="Minimum duration in minutes"
+                onChange={e => update(i, { minMinutes: Number(e.target.value) || 0 })}
               />
             </Field>
 

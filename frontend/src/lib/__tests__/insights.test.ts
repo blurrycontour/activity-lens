@@ -68,6 +68,29 @@ describe('goalProgress', () => {
     expect(p.current).toBe(2.5)
   })
 
+  it('honours the duration minimum, and treats it as a per-activity qualifier', () => {
+    // A 40 km hiking goal with a 45-minute floor: the long hike counts in full,
+    // the ten-minute one is ignored entirely rather than partly credited.
+    const g: Goal = { ...newGoal(), metric: 'distance', target: 40, period: 'month', type: 'Hike', minMinutes: 45 }
+    const now = new Date(2026, 6, 29)
+    const p = goalProgress([
+      workout('2026-07-04', 12000, 'Hike', 5400),
+      workout('2026-07-05', 3000, 'Hike', 600),
+    ], g, 8, now)
+    expect(p.current).toBe(12)
+  })
+
+  it('applies both minimums together when both are set', () => {
+    const g: Goal = { ...newGoal(), metric: 'count', target: 3, period: 'week', type: '', minKm: 5, minMinutes: 30 }
+    const now = new Date(2026, 6, 29)
+    const p = goalProgress([
+      workout('2026-07-27', 6000, 'Run', 2400), // passes both
+      workout('2026-07-27', 6000, 'Run', 600),  // long enough in km, too short in time
+      workout('2026-07-28', 2000, 'Run', 3600), // long enough in time, too short in km
+    ], g, 8, now)
+    expect(p.current).toBe(1)
+  })
+
   it('honours the distance minimum on a distance goal', () => {
     // The minimum is a qualifier on each activity, not on the total: a 2 km
     // stroll should not chip away at a "40 km of proper hikes" goal.

@@ -192,8 +192,9 @@ export interface ApiGoal {
   span: number
   /** Activity type the goal applies to, or '' for any. */
   type: string
-  /** Minimum distance (km) for an activity to count. */
+  /** Per-activity qualifiers; an activity below either does not count at all. */
   minKm: number
+  minMinutes: number
 }
 
 export interface SmtpInput {

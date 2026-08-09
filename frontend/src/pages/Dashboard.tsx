@@ -403,7 +403,7 @@ export default function Dashboard({ onSelect }: { onSelect: (w: Workout) => void
                   <h3 className="chart-card-title">Goals</h3>
                   <InfoTip
                     label="Goals"
-                    text="Progress against each goal you set under Settings → Training Goals, in the order you arranged them there. A goal can count activities, kilometres or hours, over a window of one or more weeks or months. A streak counts consecutive windows that met the target; the window in progress extends a streak once you hit it but never breaks one, so a quiet Monday costs you nothing. Windows longer than one period run back to back from a fixed anchor, so they never overlap. The bars show the last eight windows, oldest on the left. Distance minimums are matched against the figure shown on the workout, so a run listed as 5.0 km counts toward a 5 km goal."
+                    text="Progress against each goal you set under Settings → Training Goals, in the order you arranged them there. A goal can count activities, kilometres or hours, over a window of one or more weeks or months. A streak counts consecutive windows that met the target; the window in progress extends a streak once you hit it but never breaks one, so a quiet Monday costs you nothing. Windows longer than one period run back to back from a fixed anchor, so they never overlap. The bars show the last eight windows, oldest on the left. The minimum distance and duration decide which activities count at all, rather than trimming the total. Distance minimums are matched against the figure shown on the workout, so a run listed as 5.0 km counts toward a 5 km goal."
                   />
                 </div>
                 {progress.length === 0 ? (

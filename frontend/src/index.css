@@ -3564,7 +3564,7 @@ body:has(.overlay) .fab { display: none; }
    desktop, stacking into a two-column grid on narrow screens. */
 .goal-row {
   display: grid;
-  grid-template-columns: auto 170px 1fr 150px 82px auto;
+  grid-template-columns: auto 170px 1fr 150px 76px 76px auto;
   gap: 8px;
   align-items: start;
   padding: 12px;
@@ -3586,12 +3586,14 @@ body:has(.overlay) .fab { display: none; }
 
 .goal-remove { align-self: end; margin-bottom: 1px; color: var(--danger); }
 
-/* Once the row wraps, the two buttons move below the fields — `order` rather
-   than a column, so grid auto-placement puts them on the same final line. */
-@media (max-width: 860px) {
+/* Once the row wraps, the two buttons move below the fields: `order` puts them
+   after every field, and pinning the arrows to column 1 starts a fresh line for
+   the pair rather than letting them trail the last field. The breakpoint is
+   where seven controls stop fitting a settings card beside the sidebar. */
+@media (max-width: 1024px) {
   .goal-row { grid-template-columns: 1fr 1fr; }
   .goal-move, .goal-remove { order: 1; align-self: center; margin-bottom: 0; }
-  .goal-move { flex-direction: row; }
+  .goal-move { flex-direction: row; grid-column: 1; }
   .goal-remove { justify-self: end; }
 }
 @media (max-width: 420px) {
