@@ -167,9 +167,16 @@ const insertCols = workoutCols + `, external_id, content_hash`
 const weatherCols = `weather_status, weather_temp_c, weather_apparent_c,
 	weather_humidity, weather_wind_kph, weather_precip_mm, weather_code`
 
+// Appended after weatherCols, under the same rule: the scanners are positional,
+// so a new column goes on the end or it shifts every field after it.
+//
+// The summary set takes moving_time but not the pauses blob. The list ranks and
+// filters on the averages, which are already computed from moving time; the
+// intervals themselves are only ever drawn on one workout's charts, and a blob
+// per row is exactly what the summary set exists to avoid.
 const (
-	selectCols        = workoutCols + `, visibility, raw_filename, created_at, ` + weatherCols
-	selectSummaryCols = workoutSummaryCols + `, visibility, created_at, ` + weatherCols
+	selectCols        = workoutCols + `, visibility, raw_filename, created_at, ` + weatherCols + `, moving_time, pauses`
+	selectSummaryCols = workoutSummaryCols + `, visibility, created_at, ` + weatherCols + `, moving_time`
 )
 
 func (r *SQLiteRepository) Create(ctx context.Context, w *Workout) error {
@@ -189,17 +196,23 @@ func (r *SQLiteRepository) Create(ctx context.Context, w *Workout) error {
 	if err != nil {
 		return err
 	}
+	pauses, err := marshalPauses(w.Pauses)
+	if err != nil {
+		return err
+	}
 	_, err = r.db.ExecContext(ctx, `INSERT INTO workouts (`+insertCols+`, created_at, updated_at,
 		start_lat, start_lon, weather_status,
-		track, track_points, bbox_min_lat, bbox_max_lat, bbox_min_lon, bbox_max_lon)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		track, track_points, bbox_min_lat, bbox_max_lat, bbox_min_lon, bbox_max_lon,
+		moving_time, pauses)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		w.ID, w.UserID, w.Name, string(w.Type), w.StartTime.UTC().Format(time.RFC3339),
 		w.Duration, w.Distance, w.AvgHR, w.MaxHR, w.ElevationGain, w.Calories, w.Steps,
 		w.AvgPace, w.AvgSpeed, s.route, s.hr, s.pace, s.elev, s.cadence, w.Notes,
 		boolToInt(w.CaloriesManual), boolToInt(w.CaloriesReported), boolToInt(w.StepsManual),
 		string(w.Source), nullIfEmpty(w.ExternalID), nullIfEmpty(w.ContentHash), now, now,
 		lat, lon, string(weatherStatus),
-		track.blob, track.points, box.MinLat, box.MaxLat, box.MinLon, box.MaxLon)
+		track.blob, track.points, box.MinLat, box.MaxLat, box.MinLon, box.MaxLon,
+		w.MovingTime, pauses)
 	if err != nil {
 		if isUniqueViolation(err) {
 			return ErrDuplicate
@@ -267,15 +280,22 @@ func (r *SQLiteRepository) Update(ctx context.Context, w *Workout) error {
 	if err != nil {
 		return err
 	}
+	pauses, err := marshalPauses(w.Pauses)
+	if err != nil {
+		return err
+	}
 	res, err := r.db.ExecContext(ctx, `UPDATE workouts SET name=?, type=?, start_time=?, duration=?,
 		distance=?, avg_hr=?, max_hr=?, elevation_gain=?, calories=?, steps=?, avg_pace=?, avg_speed=?,
 		route=?, hr_timeline=?, pace_timeline=?, elev_timeline=?, cadence_timeline=?, notes=?,
-		calories_manual=?, calories_reported=?, steps_manual=?, updated_at=?
+		calories_manual=?, calories_reported=?, steps_manual=?, moving_time=?, pauses=?, updated_at=?
 		WHERE id=? AND user_id=?`,
 		w.Name, string(w.Type), w.StartTime.UTC().Format(time.RFC3339), w.Duration, w.Distance,
 		w.AvgHR, w.MaxHR, w.ElevationGain, w.Calories, w.Steps, w.AvgPace, w.AvgSpeed,
 		s.route, s.hr, s.pace, s.elev, s.cadence, w.Notes,
 		boolToInt(w.CaloriesManual), boolToInt(w.CaloriesReported), boolToInt(w.StepsManual),
+		// Derived, so unlike the weather columns these are refreshed here: a
+		// Recalculate is how a workout imported before pauses existed gets them.
+		w.MovingTime, pauses,
 		time.Now().UTC().Format(time.RFC3339), w.ID, w.UserID)
 	if err != nil {
 		return fmt.Errorf("update workout: %w", err)
@@ -741,6 +761,21 @@ func marshalSeries(w *Workout) (seriesBlobs, error) {
 	return s, nil
 }
 
+// marshalPauses encodes the pause list the same way the timelines are encoded,
+// so one decoder reads all of them. Nil becomes an empty list rather than a
+// NULL: a NULL blob and an empty one both mean "no pauses", and having only one
+// representation is one fewer thing for a reader to handle.
+func marshalPauses(pauses []Pause) ([]byte, error) {
+	if pauses == nil {
+		pauses = []Pause{}
+	}
+	data, err := json.Marshal(pauses)
+	if err != nil {
+		return nil, fmt.Errorf("marshal pauses: %w", err)
+	}
+	return gzipBytes(data)
+}
+
 func boolToInt(b bool) int {
 	if b {
 		return 1
@@ -892,12 +927,17 @@ func scanWorkout(row interface{ Scan(...any) error }) (*Workout, error) {
 		visibility  string
 		createdAt   string
 		wx          weatherScan
+		pauses      []byte
 	)
 	if err := row.Scan(&w.ID, &w.UserID, &w.Name, &typ, &startTime, &w.Duration, &w.Distance,
 		&w.AvgHR, &w.MaxHR, &w.ElevationGain, &w.Calories, &w.Steps, &w.AvgPace, &w.AvgSpeed,
 		&s.route, &s.hr, &s.pace, &s.elev, &s.cadence, &w.Notes,
 		&calManual, &calReported, &stepManual, &source, &visibility, &w.RawFilename, &createdAt,
-		&wx.status, &wx.temp, &wx.apparent, &wx.humidity, &wx.wind, &wx.precip, &wx.code); err != nil {
+		&wx.status, &wx.temp, &wx.apparent, &wx.humidity, &wx.wind, &wx.precip, &wx.code,
+		&w.MovingTime, &pauses); err != nil {
+		return nil, err
+	}
+	if err := unmarshalInto(pauses, &w.Pauses); err != nil {
 		return nil, err
 	}
 	wx.applyTo(&w)
@@ -945,7 +985,8 @@ func scanWorkoutSummary(row interface{ Scan(...any) error }) (*Workout, error) {
 	if err := row.Scan(&w.ID, &w.UserID, &w.Name, &typ, &startTime, &w.Duration, &w.Distance,
 		&w.AvgHR, &w.MaxHR, &w.ElevationGain, &w.Calories, &w.Steps, &w.AvgPace, &w.AvgSpeed, &w.Notes,
 		&calManual, &calReported, &stepManual, &source, &visibility, &createdAt,
-		&wx.status, &wx.temp, &wx.apparent, &wx.humidity, &wx.wind, &wx.precip, &wx.code); err != nil {
+		&wx.status, &wx.temp, &wx.apparent, &wx.humidity, &wx.wind, &wx.precip, &wx.code,
+		&w.MovingTime); err != nil {
 		return nil, err
 	}
 	wx.applyTo(&w)

@@ -335,18 +335,28 @@ func validate(in *Input) error {
 // deriveMetrics fills in avg pace/speed from distance & duration when possible,
 // and sorts route/timeline samples so downstream charts render correctly.
 func deriveMetrics(w *Workout, stepLengthM float64) {
-	if w.Distance > 0 && w.Duration > 0 {
-		km := w.Distance / 1000
-		hours := float64(w.Duration) / 3600
-		w.AvgSpeed = km / hours
-		if onFoot(w.Type) {
-			w.AvgPace = float64(w.Duration) / km // seconds per km
-		}
-	}
 	sort.Slice(w.HRTimeline, func(i, j int) bool { return w.HRTimeline[i].T < w.HRTimeline[j].T })
 	sort.Slice(w.PaceTimeline, func(i, j int) bool { return w.PaceTimeline[i].T < w.PaceTimeline[j].T })
 	sort.Slice(w.ElevTimeline, func(i, j int) bool { return w.ElevTimeline[i].T < w.ElevTimeline[j].T })
 	sort.Slice(w.CadenceTimeline, func(i, j int) bool { return w.CadenceTimeline[i].T < w.CadenceTimeline[j].T })
+
+	// Before the averages, because they are computed from what it produces.
+	// The series have to be in order first — a pause is a gap between
+	// consecutive samples, and an unsorted series is nothing but gaps.
+	w.Pauses = DetectPauses(w)
+	w.MovingTime = MovingSeconds(w.Duration, w.Pauses)
+
+	if w.Distance > 0 && w.MovingTime > 0 {
+		// Moving time, not elapsed. A run with five minutes standing at a level
+		// crossing did not slow down; averaging over the wait says it did, and
+		// says so in the figure the whole library is ranked by.
+		km := w.Distance / 1000
+		hours := float64(w.MovingTime) / 3600
+		w.AvgSpeed = km / hours
+		if onFoot(w.Type) {
+			w.AvgPace = float64(w.MovingTime) / km // seconds per km
+		}
+	}
 	if w.Steps == 0 {
 		w.Steps = estimateSteps(w.Type, w.Distance, stepLengthM)
 	}
