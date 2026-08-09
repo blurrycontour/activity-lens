@@ -713,15 +713,17 @@ type savePrefsRequest struct {
 	FTP           int     `json:"ftp"`
 	StepLengthCm  int     `json:"stepLengthCm"`
 
-	Goals []struct {
-		ID     string  `json:"id"`
-		Metric string  `json:"metric"`
-		Target float64 `json:"target"`
-		Period string  `json:"period"`
-		Span   int     `json:"span"`
-		Type   string  `json:"type"`
-		MinKm  float64 `json:"minKm"`
-	} `json:"goals"`
+	// settings.Goal rather than a struct of its own, so there is one definition
+	// of a goal's wire shape instead of two that have to be kept in step.
+	//
+	// It matters more than tidiness here: Goal.UnmarshalJSON accepts the
+	// pre-metric shape, where a goal carried `count` and no `metric`. A second
+	// struct did not, and because decodeJSON disallows unknown fields, every
+	// save from a client still running the old bundle — a PWA holding a cached
+	// service worker, an Android build a version behind — failed with "invalid
+	// request body". Not just goal saves: the client PUTs the whole record, so
+	// one stale goal in it broke every setting on every page.
+	Goals []settings.Goal `json:"goals"`
 
 	Notify *struct {
 		Kinds map[string]bool `json:"kinds"`
@@ -768,27 +770,16 @@ func (s *Server) handleSavePreferences(w http.ResponseWriter, r *http.Request) {
 	// Goals are validated individually and silently dropped when they could
 	// never be met, so one bad row can't reject an otherwise valid save.
 	goals := make([]settings.Goal, 0, len(req.Goals))
-	for _, g := range req.Goals {
-		if g.Target <= 0 {
+	for _, goal := range req.Goals {
+		if goal.Target <= 0 {
 			continue
 		}
 		// An empty type means "any activity counts".
-		typ := g.Type
-		if typ != "" && !workout.ValidType(workout.Type(typ)) {
-			typ = ""
+		if goal.Type != "" && !workout.ValidType(workout.Type(goal.Type)) {
+			goal.Type = ""
 		}
-		goal := settings.Goal{
-			ID:     g.ID,
-			Metric: g.Metric,
-			Target: g.Target,
-			Period: g.Period,
-			Span:   g.Span,
-			Type:   typ,
-			MinKm:  g.MinKm,
-		}
-		// Normalize first: the ceiling depends on the metric, period and span
-		// it settles on, not on whatever the client sent.
-		goal.Normalize()
+		// Decoding already normalized the goal, so the ceiling can be read off
+		// the metric, period and span it settled on rather than what was sent.
 		goal.Target = min(goal.Target, maxGoalTarget(goal))
 		goals = append(goals, goal)
 		if len(goals) >= maxGoals {
