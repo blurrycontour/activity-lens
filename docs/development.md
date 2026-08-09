@@ -58,7 +58,8 @@ What is covered, and why — these were all real bugs:
 | Import | `internal/ingest/ingest_test.go` | Cadence and calorie parsing from `.gpx`/`.tcx` |
 | Offline | `src/lib/__tests__/network.test.ts` | Gateway errors and cache hits being mistaken for a healthy backend |
 | Dates | `src/lib/__tests__/range.test.ts` | UTC drift filing workouts under the wrong day |
-| Goals | `src/lib/__tests__/insights.test.ts` | A 4,983 m run displayed as "5.0 km" not counting toward a 5 km goal |
+| Goals | `src/lib/__tests__/insights.test.ts` | A 4,983 m run displayed as "5.0 km" not counting toward a 5 km goal; multi-week windows sliding instead of tiling |
+| Goal windows | `internal/settings/goal_test.go` | Goals saved before metrics existed decoding with a zero target; the server disagreeing with the browser about which window a workout falls in |
 
 Frontend tests are Vitest and cover pure logic in `src/lib` and `src/components`
 — there is no DOM-rendering suite. Note that Vitest does **not** typecheck; run

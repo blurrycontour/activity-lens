@@ -18,9 +18,9 @@ import {
   type DashboardConfig, type StatCardId,
 } from '../lib/dashboardConfig'
 import {
-  deltaPct, describeGoal, formReading, gearNudges, goalProgress, recentPersonalBests,
-  recentWeekStarts, sparkBuckets, totalsOf, weekdayMatrix, windowSlices,
-  type Goal, type GoalProgress,
+  deltaPct, describeGoal, formatGoalAmount, formReading, gearNudges, goalFromApi, goalProgress,
+  recentPersonalBests, recentWeekStarts, sparkBuckets, totalsOf, weekdayMatrix,
+  windowSlices, type Goal, type GoalProgress,
 } from '../lib/insights'
 
 /** Weeks shown in the dashboard's compact weekly-trend chart. */
@@ -162,17 +162,21 @@ function LatestActivity({ w, onOpen }: { w: Workout; onOpen: () => void }) {
  * the eye lands on the number first.
  */
 function GoalRow({ progress: p }: { progress: GoalProgress }) {
-  const met = p.current >= p.goal.count
-  const unit = p.goal.period === 'month' ? 'month' : 'week'
+  const met = p.current >= p.goal.target
+  // "Window" is the unit a streak is counted in — a week, a month, or a run of
+  // either when the goal spans several.
+  const unit = p.goal.span > 1 ? 'period' : p.goal.period
   return (
-    <div className={`goal-tile${met ? ' met' : ''}`}>
+    // A count is one or two digits; a distance or a time is "44.2/120 km", so
+    // it gets a smaller figure or it crowds the description beside it.
+    <div className={`goal-tile${met ? ' met' : ''}${p.goal.metric === 'count' ? '' : ' measured'}`}>
       <div className="goal-tile-head">
         <span
           className="goal-figure"
-          aria-label={`${p.current} of ${p.goal.count} ${describeGoal(p.goal)}`}
+          aria-label={`${formatGoalAmount(p.goal, p.current)} of ${describeGoal(p.goal)}`}
         >
-          <span className="goal-figure-current">{p.current}</span>
-          <span className="goal-figure-total">/{p.goal.count}</span>
+          <span className="goal-figure-current">{formatGoalAmount(p.goal, p.current, true)}</span>
+          <span className="goal-figure-total">/{formatGoalAmount(p.goal, p.goal.target)}</span>
         </span>
 
         <span className="goal-divider" aria-hidden="true" />
@@ -196,7 +200,9 @@ function GoalRow({ progress: p }: { progress: GoalProgress }) {
           <span
             key={h.key}
             className={h.met ? 'met' : undefined}
-            title={`${unit === 'month' ? 'Month' : 'Week'} of ${h.key}: ${h.count} ${h.count === 1 ? 'activity' : 'activities'}`}
+            title={`From ${h.key}: ${formatGoalAmount(p.goal, h.value)}${
+              p.goal.metric === 'count' ? (h.value === 1 ? ' activity' : ' activities') : ''
+            }`}
           />
         ))}
       </div>
@@ -240,13 +246,7 @@ export default function Dashboard({ onSelect }: { onSelect: (w: Workout) => void
     api.getPreferences()
       .then(p => {
         if (!active) return
-        setGoals((p.goals ?? []).filter(g => g.count > 0).map(g => ({
-          id: g.id || `${g.period}-${g.type}-${g.count}`,
-          count: g.count,
-          period: g.period === 'month' ? 'month' : 'week',
-          type: g.type as WorkoutType | '',
-          minKm: g.minKm,
-        })))
+        setGoals((p.goals ?? []).map(goalFromApi).filter(g => g.target > 0))
       })
       .catch(() => { /* goal tile simply stays hidden */ })
     api.listEquipment().then(e => { if (active) setEquipment(e) }).catch(() => {})
@@ -403,13 +403,13 @@ export default function Dashboard({ onSelect }: { onSelect: (w: Workout) => void
                   <h3 className="chart-card-title">Goals</h3>
                   <InfoTip
                     label="Goals"
-                    text="Progress against each goal you set under Settings → Training Goals, weekly and monthly tracked separately. A streak counts consecutive periods that met the target; the period in progress extends a streak once you hit it but never breaks one, so a quiet Monday costs you nothing. The bars show the last eight periods, oldest on the left. Distance minimums are matched against the figure shown on the workout, so a run listed as 5.0 km counts toward a 5 km goal."
+                    text="Progress against each goal you set under Settings → Training Goals, in the order you arranged them there. A goal can count activities, kilometres or hours, over a window of one or more weeks or months. A streak counts consecutive windows that met the target; the window in progress extends a streak once you hit it but never breaks one, so a quiet Monday costs you nothing. Windows longer than one period run back to back from a fixed anchor, so they never overlap. The bars show the last eight windows, oldest on the left. Distance minimums are matched against the figure shown on the workout, so a run listed as 5.0 km counts toward a 5 km goal."
                   />
                 </div>
                 {progress.length === 0 ? (
                   <p className="chart-card-desc" style={{ marginBottom: 0 }}>
-                    No goals set. Add one under Settings → Training Goals — for example two runs of
-                    at least 5 km a week — and this tile will track your streak.
+                    No goals set. Add one under Settings → Training Goals — two runs a week, or
+                    40 km of hiking a month — and this tile will track your streak.
                   </p>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
