@@ -2,6 +2,8 @@ package httpapi
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -11,13 +13,33 @@ import (
 // decodeSavePrefs runs a body through the same decoder the handler uses.
 func decodeSavePrefs(t *testing.T, body string) savePrefsRequest {
 	t.Helper()
-	dec := json.NewDecoder(strings.NewReader(body))
-	dec.DisallowUnknownFields()
+	r := httptest.NewRequest(http.MethodPut, "/api/preferences", strings.NewReader(body))
 	var req savePrefsRequest
-	if err := dec.Decode(&req); err != nil {
+	if err := decodeJSONLenient(r, &req); err != nil {
 		t.Fatalf("PUT /api/preferences rejected the body: %v\nbody: %s", err, body)
 	}
 	return req
+}
+
+// Saving preferences ignores fields it does not know, rather than failing.
+//
+// The client sends back the whole record it was given, and clients update on
+// their own schedule: an Android APK installed months ago, a PWA holding a
+// cached service worker. Under a strict decoder, one field that client knows
+// and this server does not fails every save, for every setting, including ones
+// that have not changed in years.
+func TestSavePreferencesIgnoresFieldsItDoesNotKnow(t *testing.T) {
+	req := decodeSavePrefs(t, `{
+		"calorieMethod":"distance","bodyWeightKg":72,
+		"somethingFromAFutureRelease":{"nested":true},
+		"goals":[{"id":"a","metric":"count","target":2,"period":"week","span":1,"type":"","minKm":0,"minMinutes":0,"whatIsThis":9}]
+	}`)
+	if req.CalorieMethod != "distance" || req.BodyWeightKg != 72 {
+		t.Errorf("known fields were lost: %+v", req)
+	}
+	if len(req.Goals) != 1 || req.Goals[0].Target != 2 {
+		t.Errorf("goal did not survive an unknown sibling field: %+v", req.Goals)
+	}
 }
 
 // A client that has not picked up the current bundle still sends goals the way

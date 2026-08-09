@@ -44,6 +44,33 @@ type Goal struct {
 	MinMinutes float64 `json:"minMinutes"`
 }
 
+// MarshalJSON writes the current shape plus `count`, the field goals carried
+// before they could measure distance or time.
+//
+// Purely for clients older than this server, which is a normal state of affairs
+// for weeks after a deploy: the Android APK is built and installed on its own
+// schedule, and a PWA can hold a cached service worker for a while. Those
+// clients read `count` to decide a goal exists at all — a goal without one reads
+// as zero, gets filtered out of the editor, and is then *deleted* by the next
+// save, which is a good deal worse than the save failing.
+//
+// Only count goals get one. A distance or time goal has no honest count to
+// report, so an old client still cannot see it; rebuilding the app is the only
+// fix for that, and it cannot silently destroy what it cannot see, because the
+// goals it does send back are matched and the rest are replaced wholesale.
+func (g Goal) MarshalJSON() ([]byte, error) {
+	type plain Goal
+	v := struct {
+		plain
+		Count *int `json:"count,omitempty"`
+	}{plain: plain(g)}
+	if g.Metric == MetricCount {
+		n := int(g.Target)
+		v.Count = &n
+	}
+	return json.Marshal(v)
+}
+
 // UnmarshalJSON accepts the stored shape and the one that came before it, where
 // every goal was a count and carried `count` instead of `metric`/`target`.
 // Normalising on read means nothing downstream — the dashboard, the notifiers,

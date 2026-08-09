@@ -26,6 +26,66 @@ func TestGoalDecodesTheShapeThatCameBefore(t *testing.T) {
 	}
 }
 
+// A count goal still goes out carrying `count`, for clients built before goals
+// could measure anything else.
+//
+// Those clients read `count` to decide a goal exists. Dropping it did not merely
+// hide their goals — the editor filtered out every goal with a falsy count and
+// the next save wrote the filtered list back, deleting them. An app a version
+// behind is normal for weeks after a deploy, and it must not destroy data.
+func TestCountGoalStillCarriesCountForOlderClients(t *testing.T) {
+	b, err := json.Marshal(Goal{ID: "a", Metric: MetricCount, Target: 3, Period: "week", Span: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(b, &out); err != nil {
+		t.Fatal(err)
+	}
+	if out["count"] != float64(3) {
+		t.Errorf("count = %v, want 3 — an older client reads this to see the goal at all", out["count"])
+	}
+	// The current fields are still there; `count` is an addition, not a swap.
+	if out["metric"] != MetricCount || out["target"] != float64(3) {
+		t.Errorf("current fields missing or wrong: %v", out)
+	}
+
+	// A distance goal has no honest count, so it does not invent one.
+	b, err = json.Marshal(Goal{ID: "b", Metric: MetricDistance, Target: 40, Period: "month", Span: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out = nil
+	if err := json.Unmarshal(b, &out); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := out["count"]; ok {
+		t.Errorf("distance goal emitted a count: %v", out)
+	}
+}
+
+// And what it emits, it reads back unchanged — the compatibility field must not
+// fight the real one on the way in.
+func TestGoalSurvivesItsOwnRoundTrip(t *testing.T) {
+	for _, want := range []Goal{
+		{ID: "a", Metric: MetricCount, Target: 3, Period: "week", Span: 1, Type: "Run", MinKm: 5, MinMinutes: 30},
+		{ID: "b", Metric: MetricDistance, Target: 40, Period: "month", Span: 2, Type: "Hike"},
+		{ID: "c", Metric: MetricDuration, Target: 30, Period: "week", Span: 3},
+	} {
+		b, err := json.Marshal(want)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got Goal
+		if err := json.Unmarshal(b, &got); err != nil {
+			t.Fatal(err)
+		}
+		if got != want {
+			t.Errorf("round trip changed the goal:\n got %+v\nwant %+v\njson %s", got, want, b)
+		}
+	}
+}
+
 // Decoding also normalizes, so nothing downstream has to defend against a span
 // of zero or a metric it has never heard of.
 func TestGoalDecodeNormalizes(t *testing.T) {

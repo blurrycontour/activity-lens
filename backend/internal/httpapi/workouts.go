@@ -741,7 +741,9 @@ type savePrefsRequest struct {
 func (s *Server) handleSavePreferences(w http.ResponseWriter, r *http.Request) {
 	user := httpmw.UserFrom(r)
 	var req savePrefsRequest
-	if err := decodeJSON(r, &req); err != nil {
+	// Lenient: this endpoint takes back the whole record it handed out, from
+	// clients that update on their own schedule. See decodeJSONLenient.
+	if err := decodeJSONLenient(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
