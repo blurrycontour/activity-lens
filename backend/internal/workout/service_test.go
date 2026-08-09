@@ -2,6 +2,7 @@ package workout
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 )
@@ -283,5 +284,59 @@ func TestOtherIsTreatedAsAFootActivity(t *testing.T) {
 		if w.AvgSpeed <= 0 {
 			t.Errorf("%s: speed = %v, want a positive figure", tc.typ, w.AvgSpeed)
 		}
+	}
+}
+
+// Recalculation overwrites values a person entered by hand. Selecting parts is
+// what makes it usable on an old workout: someone who wants their pauses found
+// should not have to lose a corrected calorie figure to get them.
+func TestRecalculateOnlyTouchesSelectedParts(t *testing.T) {
+	repo := NewSQLiteRepository(newTestDB(t))
+	svc := NewService(repo)
+	ctx := context.Background()
+
+	in := importInput("run", "hash-recalc")
+	in.HRTimeline = samples([2]int{0, 900}, [2]int{1200, 1800})
+	wk, _, err := svc.CreateIdempotent(ctx, 1, in)
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	// A hand-entered calorie figure, and a workout whose pauses were never found.
+	calories := 999
+	if _, err := svc.Update(ctx, 1, wk.ID, Patch{Calories: &calories}); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+
+	got, err := svc.Recalculate(ctx, 1, wk.ID, RecalcParts{Pauses: true, PaceSpeed: true}, CalorieProfile{
+		Method: "distance", WeightKg: 70,
+	})
+	if err != nil {
+		t.Fatalf("recalculate: %v", err)
+	}
+	if got.Calories != calories {
+		t.Errorf("calories = %d, want the hand-entered %d left alone", got.Calories, calories)
+	}
+	if !got.CaloriesManual {
+		t.Error("the hand-entered flag was cleared by a recalculation that did not touch calories")
+	}
+	if len(got.Pauses) != 1 {
+		t.Errorf("pauses = %v, want the one that was selected for", got.Pauses)
+	}
+}
+
+// A request that names nothing must change nothing, rather than quietly meaning
+// everything — the destructive reading of an ambiguous request.
+func TestRecalculateRejectsAnEmptySelection(t *testing.T) {
+	repo := NewSQLiteRepository(newTestDB(t))
+	svc := NewService(repo)
+	ctx := context.Background()
+
+	wk, _, err := svc.CreateIdempotent(ctx, 1, importInput("run", "hash-empty"))
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := svc.Recalculate(ctx, 1, wk.ID, RecalcParts{}, CalorieProfile{}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("error = %v, want ErrInvalid", err)
 	}
 }

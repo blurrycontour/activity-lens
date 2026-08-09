@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { Copy, X } from 'lucide-react'
 import { fmtDist, fmtDuration, type Workout } from '../data/workouts'
 import { findDuplicateGroups, redundantIds } from '../lib/duplicates'
+import useDismissOnBack from '../lib/useDismissOnBack'
 import TypeIcon from './TypeIcon'
 import SourceMark from './SourceMark'
 
@@ -20,6 +21,7 @@ export default function DuplicatesDialog({ workouts, onClose, onSelect }: {
   /** Hands the ids of every copy-to-remove back to the list. */
   onSelect: (ids: string[]) => void
 }) {
+  useDismissOnBack(true, onClose)
   const groups = useMemo(() => findDuplicateGroups(workouts), [workouts])
   const extra = useMemo(() => redundantIds(groups), [groups])
 
@@ -57,16 +59,22 @@ export default function DuplicatesDialog({ workouts, onClose, onSelect }: {
                   <div className="dup-group" key={group[0].id}>
                     {group.map((w, i) => (
                       <div className={`dup-row${i === 0 ? ' keep' : ''}`} key={w.id}>
-                        <TypeIcon type={w.type} size={15} />
+                        <TypeIcon type={w.type} size={16} />
                         <div className="dup-row-main">
-                          <span className="dup-row-name">{w.name}</span>
+                          {/* The name and the tag share the top line, so on a
+                              phone the tag cannot be pushed off the end by a
+                              long device-generated name. */}
+                          <span className="dup-row-top">
+                            <span className="dup-row-name">{w.name}</span>
+                            <span className="dup-row-tag">{i === 0 ? 'Keep' : 'Copy'}</span>
+                          </span>
                           <span className="dup-row-meta">
-                            {w.date} · {fmtDuration(w.duration)}
-                            {w.distance > 0 && ` · ${fmtDist(w.distance)}`}
-                            {w.source && <> · <SourceMark source={w.source} /></>}
+                            <span>{w.date}</span>
+                            <span>{fmtDuration(w.duration)}</span>
+                            {w.distance > 0 && <span>{fmtDist(w.distance)}</span>}
+                            <SourceMark source={w.source} />
                           </span>
                         </div>
-                        <span className="dup-row-tag">{i === 0 ? 'Keep' : 'Copy'}</span>
                       </div>
                     ))}
                   </div>

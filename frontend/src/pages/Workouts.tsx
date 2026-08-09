@@ -523,6 +523,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
                   Shared only
                 </label>
               )}
+              {listTools}
             </>
           ) : null}
         </div>

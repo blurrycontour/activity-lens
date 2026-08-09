@@ -1450,6 +1450,52 @@ body {
 .share-card-actions .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .share-card-actions .btn-primary { flex: 1; }
 
+/* Shading behind the stretches of a workout where the recording stopped.
+   A class rather than a fill prop on the element, because the two themes need
+   different strengths: on the dark ground a grey at 14% was very nearly
+   invisible, while the same value on white is already a smudge. */
+.pause-band { fill: var(--text-3); fill-opacity: 0.3; }
+:root.light .pause-band { fill-opacity: 0.14; }
+
+/* ── Recalculate ── */
+
+.recalc-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 82vh;
+}
+.recalc-title { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.recalc-note { font-size: 12.5px; color: var(--text-2); line-height: 1.6; }
+.recalc-parts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  min-height: 0;
+}
+.recalc-part {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.recalc-part:hover { background: var(--bg-3); }
+.recalc-part input { margin-top: 2px; flex-shrink: 0; accent-color: var(--primary); }
+.recalc-part-text { display: flex; flex-direction: column; gap: 2px; }
+.recalc-part-label { font-size: 13px; font-weight: 500; }
+.recalc-part-hint { font-size: 11.5px; color: var(--text-3); line-height: 1.5; }
+.recalc-error { font-size: 12.5px; color: var(--danger); }
+.recalc-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 /* ── Duplicate finder ── */
 
 /* Wider than the default modal and capped by height: the groups are a list of
@@ -1492,22 +1538,35 @@ body {
 }
 .dup-row + .dup-row { border-top: 1px solid var(--border); }
 .dup-row.keep { background: var(--bg-2); }
-.dup-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.dup-row-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+/* The tag rides with the name rather than sitting at the row's end, so a long
+   device-generated name cannot push it off a phone's screen. min-width: 0 on
+   the name is what lets the ellipsis happen at all inside a flex row. */
+.dup-row-top { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .dup-row-name {
   font-size: 13px;
   font-weight: 500;
+  min-width: 0;
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Separators drawn by CSS rather than written into the markup, so a missing
+   distance does not leave a dangling middot. */
 .dup-row-meta {
   font-size: 11px;
   font-family: var(--font-mono);
   color: var(--text-3);
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   flex-wrap: wrap;
+}
+.dup-row-meta > * + *::before {
+  content: '·';
+  margin-right: 6px;
+  color: var(--border-strong, var(--border));
 }
 .dup-row-tag {
   font-size: 10px;
@@ -1523,6 +1582,15 @@ body {
   gap: 8px;
   justify-content: flex-end;
   flex-wrap: wrap;
+}
+.dup-actions .btn { flex: 1; justify-content: center; }
+
+@media (max-width: 640px) {
+  /* Full height, because the group list is the content and a modal centred in
+     a phone's viewport with 80vh of cap left it a letterbox. */
+  .dup-modal { max-height: calc(100dvh - 32px); }
+  .dup-row { padding: 10px; }
+  .dup-actions .btn { width: 100%; flex: none; }
 }
 
 /* Two dropdowns and a joining word, in a chart card's action slot. Wraps as a
@@ -2235,6 +2303,14 @@ body {
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+/* Charts stacked down the page, for a tab whose cards are each full width.
+   Siblings dropped straight into .page-content have no gap between them. */
+.chart-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .charts-grid {

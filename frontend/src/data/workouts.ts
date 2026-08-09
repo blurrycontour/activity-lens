@@ -19,6 +19,23 @@ export interface CadencePoint { t: number; cad: number }
  */
 export interface Pause { from: number; to: number }
 
+/**
+ * Which derived values a recalculation replaces.
+ *
+ * Every one of these is overwritten outright, including anything entered by
+ * hand, so the caller names them explicitly — a recalculation nobody scoped is
+ * how a corrected calorie figure disappears.
+ */
+export interface RecalcParts {
+  heartRate?: boolean
+  elevation?: boolean
+  /** Pauses and the moving time they leave; the two are one calculation. */
+  pauses?: boolean
+  paceSpeed?: boolean
+  steps?: boolean
+  calories?: boolean
+}
+
 /** Conditions over the span of a workout. See backend/internal/weather. */
 export interface Weather {
   tempC: number

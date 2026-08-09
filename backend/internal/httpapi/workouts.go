@@ -611,6 +611,42 @@ func ageFromPrefs(prefs settings.UserPrefs) int {
 	return age
 }
 
+// recalcPartsFrom reads the selection from the request body.
+//
+// An absent or empty body means everything, which is what every client sent
+// before the selection existed and what a bare "recalculate" still means.
+func recalcPartsFrom(r *http.Request) (workout.RecalcParts, error) {
+	var body struct {
+		HeartRate *bool `json:"heartRate"`
+		Elevation *bool `json:"elevation"`
+		Pauses    *bool `json:"pauses"`
+		PaceSpeed *bool `json:"paceSpeed"`
+		Steps     *bool `json:"steps"`
+		Calories  *bool `json:"calories"`
+	}
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&body); err != nil {
+		if errors.Is(err, io.EOF) {
+			return workout.AllRecalcParts(), nil
+		}
+		return workout.RecalcParts{}, errors.New("invalid request body")
+	}
+	on := func(p *bool) bool { return p != nil && *p }
+	parts := workout.RecalcParts{
+		HeartRate: on(body.HeartRate),
+		Elevation: on(body.Elevation),
+		Pauses:    on(body.Pauses),
+		PaceSpeed: on(body.PaceSpeed),
+		Steps:     on(body.Steps),
+		Calories:  on(body.Calories),
+	}
+	if !parts.Any() {
+		return workout.RecalcParts{}, errors.New("select at least one value to recalculate")
+	}
+	return parts, nil
+}
+
 func (s *Server) handleRecalculateWorkout(w http.ResponseWriter, r *http.Request) {
 	user := httpmw.UserFrom(r)
 	prefs, err := s.settings.UserPreferences(r.Context(), user.ID)
@@ -618,7 +654,18 @@ func (s *Server) handleRecalculateWorkout(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusInternalServerError, "could not load preferences")
 		return
 	}
-	wk, err := s.workout.Recalculate(r.Context(), user.ID, r.PathValue("id"), prefs.CalorieMethod, prefs.BodyWeightKg, ageFromPrefs(prefs), prefs.Sex, stepLengthMeters(prefs))
+	parts, err := recalcPartsFrom(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	wk, err := s.workout.Recalculate(r.Context(), user.ID, r.PathValue("id"), parts, workout.CalorieProfile{
+		Method:      prefs.CalorieMethod,
+		WeightKg:    prefs.BodyWeightKg,
+		Age:         ageFromPrefs(prefs),
+		Sex:         prefs.Sex,
+		StepLengthM: stepLengthMeters(prefs),
+	})
 	if err != nil {
 		s.writeWorkoutError(w, err)
 		return

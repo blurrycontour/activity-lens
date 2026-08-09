@@ -229,3 +229,62 @@ func TestUpdateRefreshesPauses(t *testing.T) {
 		t.Errorf("moving time = %d, want less than the elapsed %d", got.MovingTime, got.Duration)
 	}
 }
+
+// Cadence is very nearly a measurement of steps — the watch counted them and
+// reported the rate — where the stride estimate divides distance by an assumed
+// stride and is wrong by however much the person's stride differs from it,
+// which on a hill or a walk is a lot.
+func TestStepsPreferCadenceOverStride(t *testing.T) {
+	// Twenty minutes at 160 steps per minute, sampled every second: 3200 steps.
+	var cad []CadencePoint
+	for t := 0; t <= 1200; t++ {
+		cad = append(cad, CadencePoint{T: t, Cad: 160})
+	}
+	w := &Workout{Type: TypeRun, Distance: 5000, Duration: 1200, CadenceTimeline: cad}
+	deriveSteps(w, 0)
+	if w.Steps != 3200 {
+		t.Fatalf("Steps = %d, want 3200 from the cadence series", w.Steps)
+	}
+	// The stride estimate would have said 5000, which is the point.
+	if w.Steps == estimateSteps(TypeRun, 5000, 0) {
+		t.Fatal("fell back to the stride estimate despite having cadence")
+	}
+}
+
+// Cadence is a rate, so counting steps means multiplying by the time each
+// sample stands for. Carried across a pause, that invents the steps the person
+// did not take while they were standing still.
+func TestStepsFromCadenceSkipPauses(t *testing.T) {
+	var cad []CadencePoint
+	for t := 0; t <= 600; t++ {
+		cad = append(cad, CadencePoint{T: t, Cad: 180})
+	}
+	// Five minutes paused, then five more minutes of running.
+	for t := 900; t <= 1200; t++ {
+		cad = append(cad, CadencePoint{T: t, Cad: 180})
+	}
+	w := &Workout{Type: TypeRun, Distance: 4000, Duration: 1200, CadenceTimeline: cad}
+	deriveSteps(w, 0)
+	// 900 s of recorded running at 3 steps/s.
+	if w.Steps != 2700 {
+		t.Fatalf("Steps = %d, want 2700 — the pause should contribute none", w.Steps)
+	}
+}
+
+func TestStepsFallBackToStrideWithoutCadence(t *testing.T) {
+	w := &Workout{Type: TypeRun, Distance: 5000, Duration: 1800}
+	deriveSteps(w, 0)
+	if w.Steps != 5000 {
+		t.Fatalf("Steps = %d, want the stride estimate", w.Steps)
+	}
+	// A ride's cadence is revolutions, not steps, and must never be counted.
+	var cad []CadencePoint
+	for t := 0; t <= 600; t++ {
+		cad = append(cad, CadencePoint{T: t, Cad: 90})
+	}
+	ride := &Workout{Type: TypeRide, Distance: 20000, Duration: 3600, CadenceTimeline: cad}
+	deriveSteps(ride, 0)
+	if ride.Steps != 0 {
+		t.Fatalf("ride steps = %d, want none", ride.Steps)
+	}
+}

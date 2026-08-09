@@ -844,6 +844,7 @@ export default function Analysis() {
 
         {/* ── Weather: does temperature move your pace or heart rate? ── */}
         {tab === 'weather' && (
+          <div className="chart-stack">
           <ChartCard
             title={`Temperature vs ${weatherMetric === 'pace' ? 'Pace' : 'Heart Rate'}`}
             icon={<CloudSun size={14} color="var(--primary)" />}
@@ -935,10 +936,8 @@ export default function Analysis() {
               </>
             )}
           </ChartCard>
-        )}
 
-        {/* ── Weather: anything against anything ── */}
-        {tab === 'weather' && (
+          {/* ── Weather: anything against anything ── */}
           <ChartCard
             title={`${exploreField.label} vs ${exploreMetric.label}`}
             icon={<Sparkles size={14} color="var(--primary)" />}
@@ -1029,6 +1028,7 @@ export default function Analysis() {
               </>
             )}
           </ChartCard>
+          </div>
         )}
       </div>
     </div>
