@@ -2616,9 +2616,14 @@ body:has(.overlay) .fab { display: none; }
 :root { --map-ctrl-invert: 1; }
 :root.light { --map-ctrl-invert: 0; }
 
+/* The summary column is wider than it looks like it needs to be, because its
+   rows are three stat chips across: at 320px "Elev. Gain" and a four-digit
+   figure had to share about 90px, and both wrapped. The map gives the space up
+   without complaint — it is the one panel that reads at any width. The mobile
+   override below stacks them, so this only governs the two-column layout. */
 .detail-top {
   display: grid;
-  grid-template-columns: 320px 1fr;
+  grid-template-columns: 380px 1fr;
   grid-template-areas: "summary map";
   gap: 16px;
   margin-bottom: 16px;
