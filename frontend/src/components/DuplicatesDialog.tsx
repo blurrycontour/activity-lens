@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Copy, X } from 'lucide-react'
 import { fmtDist, fmtDuration, type Workout } from '../data/workouts'
@@ -7,6 +7,7 @@ import useDismissOnBack from '../lib/useDismissOnBack'
 import TypeIcon from './TypeIcon'
 import SourceMark from './SourceMark'
 import InfoTip from './InfoTip'
+import ConfirmDialog from './ConfirmDialog'
 
 const HOW_IT_WORKS = 'Workouts of the same sport on the same day are treated as '
   + 'the same activity when their duration and distance agree to within a couple '
@@ -31,7 +32,10 @@ export default function DuplicatesDialog({ workouts, onClose, onSelect }: {
   /** Hands the ids of every copy-to-remove back to the list. */
   onSelect: (ids: string[]) => void
 }) {
-  useDismissOnBack(true, onClose)
+  const [confirming, setConfirming] = useState(false)
+  // Back closes the confirmation first, then the dialog behind it — one step
+  // per surface, which is what the gesture means everywhere else in the app.
+  useDismissOnBack(true, () => (confirming ? setConfirming(false) : onClose()))
   const groups = useMemo(() => findDuplicateGroups(workouts), [workouts])
   const extra = useMemo(() => redundantIds(groups), [groups])
 
@@ -97,13 +101,31 @@ export default function DuplicatesDialog({ workouts, onClose, onSelect }: {
           <div className="dup-actions">
             <button className="btn btn-ghost" onClick={onClose}>Close</button>
             {extra.length > 0 && (
-              <button className="btn btn-primary" onClick={() => onSelect(extra)}>
+              <button className="btn btn-primary" onClick={() => setConfirming(true)}>
                 Select {extra.length} cop{extra.length === 1 ? 'y' : 'ies'} in the list
               </button>
             )}
           </div>
         </div>
       </div>
+      {/* Inside this portal and after the dialog, so it paints on top of it:
+          the two share a z-index, and a ConfirmDialog rendered from the page
+          instead would be trapped under the swipe pager's stacking context. */}
+      {confirming && (
+        <ConfirmDialog
+          title={`Select ${extra.length} cop${extra.length === 1 ? 'y' : 'ies'}?`}
+          message={
+            <>
+              This ticks them in your workout list so you can look through them
+              and delete the ones you want. <strong>Nothing is deleted here</strong> —
+              the earliest import in each group stays untouched.
+            </>
+          }
+          confirmLabel="Select them"
+          onConfirm={() => onSelect(extra)}
+          onCancel={() => setConfirming(false)}
+        />
+      )}
     </>,
     document.body,
   )
