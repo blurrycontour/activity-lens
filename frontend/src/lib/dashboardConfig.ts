@@ -6,6 +6,20 @@ import { RANGE_OPTIONS } from './range'
 
 export type StatCardId = 'distance' | 'time' | 'elevation' | 'calories' | 'avgHr' | 'activities'
 
+/**
+ * How the dashboard's goals card is drawn. Every style renders the same
+ * numbers — this is presentation, not a different measurement — so switching
+ * never changes what a goal means or what the notifiers do with it.
+ */
+export type GoalStyle = 'classic' | 'pace' | 'rings' | 'ledger'
+
+export const GOAL_STYLES: { id: GoalStyle; label: string; blurb: string }[] = [
+  { id: 'classic', label: 'Classic', blurb: 'A big figure per goal, with the streak beside it.' },
+  { id: 'pace', label: 'Pace line', blurb: 'Adds a marker for where you should be today.' },
+  { id: 'rings', label: 'Rings', blurb: 'One ring per goal, readable at a glance.' },
+  { id: 'ledger', label: 'Ledger', blurb: 'A compact monospace list. Best for many goals.' },
+]
+
 export interface DashboardConfig {
   cards: StatCardId[]
   windowDays: number // 0 = all time
@@ -13,6 +27,10 @@ export interface DashboardConfig {
   showDeltas?: boolean
   /** Show the 8-bucket trend line inside each stat card. */
   showSparklines?: boolean
+  /** How the goals card draws each goal. */
+  goalStyle?: GoalStyle
+  /** Show the run of recent windows under each goal. */
+  showGoalHistory?: boolean
   /** Label each bar under the goal history with its week number or month. */
   showGoalPeriods?: boolean
 }
@@ -51,6 +69,9 @@ export const DEFAULT_DASHBOARD_CONFIG: DashboardConfig = {
   windowDays: 30,
   showDeltas: true,
   showSparklines: true,
+  goalStyle: 'classic',
+  showGoalHistory: true,
+  showGoalPeriods: false,
 }
 
 export { rangeLabel as windowLabel } from './range'

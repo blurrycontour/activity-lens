@@ -310,6 +310,10 @@ body {
   flex-direction: column;
   gap: 20px;
 }
+/* Goals are a seven-control form per row, not prose. 720px was chosen for a
+   readable line length, which is the wrong measure for a table of inputs — it
+   squeezed the sport picker to about a hundred pixels. */
+.settings-page.wide { max-width: 980px; }
 
 .settings-groups { display: flex; flex-direction: column; gap: 26px; }
 .settings-group { display: flex; flex-direction: column; gap: 8px; }
@@ -3567,7 +3571,7 @@ body:has(.overlay) .fab { display: none; }
    desktop, stacking into a two-column grid on narrow screens. */
 .goal-row {
   display: grid;
-  grid-template-columns: auto 170px 1fr 150px 76px 76px auto;
+  grid-template-columns: auto 168px minmax(150px, 1fr) 148px 76px 76px auto;
   gap: 8px;
   align-items: start;
   padding: 12px;
@@ -3589,17 +3593,29 @@ body:has(.overlay) .fab { display: none; }
 
 .goal-remove { align-self: end; margin-bottom: 1px; color: var(--danger); }
 
+/* The rows wrap on the width they actually have, not the viewport's.
+   A container query rather than a media query because the settings card is a
+   fixed-width column inside a much wider page: keyed to the viewport, these
+   rows stayed in their seven-column layout on any desktop and crushed the
+   sport picker, while a phone-sized viewport was never the thing constraining
+   them. */
+.goal-rows {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 /* Once the row wraps, the two buttons move below the fields: `order` puts them
    after every field, and pinning the arrows to column 1 starts a fresh line for
-   the pair rather than letting them trail the last field. The breakpoint is
-   where seven controls stop fitting a settings card beside the sidebar. */
-@media (max-width: 1024px) {
+   the pair rather than letting them trail the last field. */
+@container (max-width: 760px) {
   .goal-row { grid-template-columns: 1fr 1fr; }
   .goal-move, .goal-remove { order: 1; align-self: center; margin-bottom: 0; }
   .goal-move { flex-direction: row; grid-column: 1; }
   .goal-remove { justify-self: end; }
 }
-@media (max-width: 420px) {
+@container (max-width: 430px) {
   /* One field per line, with the buttons still sharing the last one. */
   .goal-row { grid-template-columns: 1fr auto; }
   .goal-row > .field { grid-column: 1 / -1; }
@@ -3628,14 +3644,16 @@ body:has(.overlay) .fab { display: none; }
 .goal-figure-current {
   font-size: 40px;
   font-weight: 700;
-  color: var(--text);
+  /* Inherited from the figure, which the component paints in the goal's sport
+     colour. A colour here would win over that and repaint every goal alike. */
+  color: inherit;
   transition: color 0.2s ease, text-shadow 0.2s ease;
 }
 /* Hitting the target is the moment worth celebrating, so the number takes the
    accent and a soft glow rather than just changing colour. */
 .goal-tile.met .goal-figure-current {
-  color: var(--primary);
-  text-shadow: 0 0 22px var(--primary-glow);
+  text-shadow: 0 0 22px currentColor;
+  opacity: 1;
 }
 .goal-figure-total {
   font-size: 19px;
@@ -3665,6 +3683,10 @@ body:has(.overlay) .fab { display: none; }
   color: var(--text-3);
   opacity: 0.85;
 }
+/* Sport is named twice — mark and colour — so the icon sits on the name line
+   rather than floating somewhere decorative. */
+.goal-meta-name { display: flex; align-items: center; gap: 6px; }
+.goal-meta-name > svg { flex-shrink: 0; }
 .goal-meta-streak {
   display: block;
   margin-top: 3px;
@@ -3717,7 +3739,14 @@ body:has(.overlay) .fab { display: none; }
   transition: width 0.4s ease;
 }
 
+/* The panel stacks its tiles; the gap is the card's own rhythm. */
+.goal-panel-stack { display: flex; flex-direction: column; gap: 16px; }
+
 .goal-history { display: flex; gap: 4px; }
+/* Compact: the same run of windows reduced to a hairline, so the ledger and
+   the rings can carry history without becoming charts. */
+.goal-history.compact { gap: 2px; }
+.goal-history.compact .goal-history-bar { height: 5px; border-radius: 2px; }
 .goal-history-cell { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 /* Tall enough to carry the "+" that marks a beaten target — the old 6px bar
    had no room for a glyph. */
@@ -3735,7 +3764,7 @@ body:has(.overlay) .fab { display: none; }
   line-height: 1;
   color: transparent;
 }
-.goal-history-bar.met { background: var(--primary); border-color: transparent; }
+.goal-history-bar.met { background: var(--goal-hue, var(--primary)); border-color: transparent; }
 /* The "+" sits on the filled bar, so it needs the background's contrast colour
    rather than a text token. */
 .goal-history-bar.over { color: var(--on-primary); }
@@ -3748,6 +3777,165 @@ body:has(.overlay) .fab { display: none; }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ── Goal panel: pace line ──────────────────────────────────────────────────
+   The classic bar with a marker for where you would be exactly on schedule. */
+.goal-tile.pace { gap: 7px; }
+
+.goal-pace-top { display: flex; align-items: baseline; gap: 7px; }
+.goal-pace-top > svg { align-self: center; flex-shrink: 0; }
+.goal-pace-fig {
+  font-size: 21px;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+.goal-pace-total { font-size: 12px; color: var(--text-3); }
+
+.goal-verdict {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: 99px;
+  white-space: nowrap;
+}
+/* Semantic, never the accent: these report an outcome, and the accent is the
+   user's choice and carries no meaning. */
+.goal-verdict.done { background: var(--primary); color: var(--on-primary); }
+.goal-verdict.ahead { background: color-mix(in srgb, var(--success) 16%, transparent); color: var(--success); }
+.goal-verdict.on { background: var(--bg-3); color: var(--text-2); }
+.goal-verdict.behind { background: color-mix(in srgb, var(--warning) 18%, transparent); color: var(--warning); }
+
+.goal-pace-bar {
+  position: relative;
+  height: 9px;
+  border-radius: 99px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+}
+.goal-pace-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 99px;
+  transition: width 0.4s ease;
+}
+/* The needle is the whole idea of this style: today's position on the window. */
+.goal-pace-needle {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--text);
+  transition: left 0.4s ease;
+}
+.goal-pace-needle::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -3px;
+  width: 5px;
+  height: 5px;
+  transform: translateX(-50%) rotate(45deg);
+  background: var(--text);
+}
+
+.goal-pace-sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+.goal-pace-streak {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--primary);
+}
+
+/* ── Goal panel: rings ───────────────────────────────────────────────────── */
+.goal-rings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+  gap: 14px 8px;
+}
+.goal-ring-cell { display: grid; justify-items: center; gap: 7px; min-width: 0; }
+.goal-ring-wrap { position: relative; width: 100%; max-width: 108px; }
+.goal-ring-wrap > svg { display: block; width: 100%; height: auto; }
+.goal-ring-arc { transition: stroke-dashoffset 0.5s ease; }
+.goal-ring-mid {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  gap: 1px;
+}
+.goal-ring-num { font-size: 17px; font-weight: 500; letter-spacing: -0.03em; line-height: 1; }
+.goal-ring-of { font-size: 9px; color: var(--text-3); }
+.goal-ring-cap {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-2);
+  min-width: 0;
+}
+.goal-ring-cap > svg { flex-shrink: 0; }
+/* The history under a ring spans the cell, not the ring. */
+.goal-ring-cell .goal-history { width: 100%; }
+.goal-ring-cell.met .goal-ring-num { text-shadow: 0 0 20px currentColor; }
+
+/* ── Goal panel: ledger ──────────────────────────────────────────────────── */
+.goal-ledger { display: flex; flex-direction: column; }
+.goal-ledger-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+}
+.goal-ledger-key {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-2);
+  min-width: 0;
+}
+.goal-ledger-key > svg { flex-shrink: 0; }
+.goal-ledger-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.goal-ledger-dots {
+  border-bottom: 1px dotted var(--border-strong);
+  transform: translateY(-3px);
+  min-width: 12px;
+}
+.goal-ledger-val { font-size: 12px; color: var(--text); }
+.goal-ledger-hist { grid-column: 1 / -1; margin-top: 2px; }
+.goal-ledger-row .goal-verdict { margin-left: 0; }
+.goal-ledger-foot {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 9px;
+  font-size: 10.5px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+@media (max-width: 420px) {
+  /* Two rings a row beats three squeezed ones. */
+  .goal-rings { grid-template-columns: repeat(auto-fit, minmax(78px, 1fr)); }
+  .goal-ledger-row { grid-template-columns: auto 1fr auto; }
+  .goal-ledger-row .goal-verdict { grid-column: 3; }
 }
 
 /* Full-viewport, above everything, and untouchable — it is decoration, and it

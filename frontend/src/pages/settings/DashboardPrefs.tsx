@@ -83,20 +83,6 @@ export default function DashboardSettings() {
           Show trend sparklines
         </label>
 
-        <label className="switch">
-          <input
-            type="checkbox"
-            checked={cfg.showGoalPeriods === true}
-            onChange={e => setCfg(prev => ({ ...prev, showGoalPeriods: e.target.checked }))}
-          />
-          <span className="switch-track" />
-          Label goal history bars
-        </label>
-        <span className="field-hint">
-          Puts the week number or month name under each bar in the Goals card. Off by default —
-          the bars read as a run of recent periods without them, and eight labels is a lot of
-          small text on a phone.
-        </span>
       </SettingsCard>
     </>
   )

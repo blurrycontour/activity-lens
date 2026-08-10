@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { goalProgress, newGoal, periodKeyOf, periodLabel, weekStartKey, type Goal } from '../insights'
+import {
+  goalProgress, newGoal, parseDateKey, periodKeyOf, periodLabel, weekStartKey, type Goal,
+} from '../insights'
 import type { Workout } from '../../data/workouts'
 
 function workout(date: string, distance: number, type: Workout['type'] = 'Run', duration = 1800): Workout {
@@ -98,6 +100,46 @@ describe('goalProgress', () => {
     const now = new Date(2026, 6, 29)
     const p = goalProgress([workout('2026-07-04', 8000, 'Hike'), workout('2026-07-05', 2000, 'Hike')], g, 8, now)
     expect(p.current).toBe(8)
+  })
+})
+
+describe('elapsed', () => {
+  // The Pace and Rings styles put a marker at `elapsed` on the bar. If it were
+  // measured against the wrong window the marker would sit in the wrong place
+  // all week, and the panel would confidently tell you the opposite of the
+  // truth — worse than not showing it at all.
+  it('measures how far through the current week has gone', () => {
+    const g: Goal = { ...newGoal(), target: 3, period: 'week' }
+    // Thursday midday: 3.5 of 7 days used.
+    const p = goalProgress([], g, 8, new Date(2026, 6, 30, 12, 0))
+    expect(p.elapsed).toBeCloseTo(3.5 / 7, 2)
+  })
+
+  it('measures a month against that month’s real length', () => {
+    const g: Goal = { ...newGoal(), target: 40, period: 'month' }
+    // 15 February of a 28-day month is further through it than 15 March is
+    // through a 31-day one; a fixed 30-day assumption gets both wrong.
+    const feb = goalProgress([], g, 8, new Date(2026, 1, 15))
+    const mar = goalProgress([], g, 8, new Date(2026, 2, 15))
+    expect(feb.elapsed).toBeCloseTo(14 / 28, 2)
+    expect(mar.elapsed).toBeCloseTo(14 / 31, 2)
+    expect(feb.elapsed).toBeGreaterThan(mar.elapsed)
+  })
+
+  it('spreads across a multi-period window rather than repeating each period', () => {
+    // A 3-week goal one week in is a third done, not a whole one.
+    const g: Goal = { ...newGoal(), target: 3, period: 'week', span: 3 }
+    const start = parseDateKey(periodKeyOf('2026-07-27', g))
+    const oneWeekIn = new Date(start)
+    oneWeekIn.setDate(oneWeekIn.getDate() + 7)
+    expect(goalProgress([], g, 4, oneWeekIn).elapsed).toBeCloseTo(1 / 3, 2)
+  })
+
+  it('never leaves 0..1', () => {
+    const g: Goal = { ...newGoal(), target: 3, period: 'week' }
+    const monday = goalProgress([], g, 8, new Date(2026, 6, 27, 0, 0))
+    expect(monday.elapsed).toBe(0)
+    expect(monday.elapsed).toBeLessThanOrEqual(1)
   })
 })
 

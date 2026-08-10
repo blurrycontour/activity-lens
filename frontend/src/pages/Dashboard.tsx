@@ -8,6 +8,7 @@ import {
 } from 'recharts'
 import { TrendingUp, Zap, Flame, Clock, Mountain, Heart, Trophy, Target, Activity, Footprints, ChartColumnBig } from 'lucide-react'
 import Confetti from '../components/Confetti'
+import GoalSportMark, { goalColor } from '../components/GoalSportMark'
 import { useLocalStorage } from '../lib/useLocalStorage'
 import { useIsMobile } from '../lib/useIsMobile'
 import InfoTip from '../components/InfoTip'
@@ -16,7 +17,7 @@ import { api, type Equipment } from '../lib/api'
 import { AXIS_TICK, GRID_PROPS, HOVER_FILL, recencyRamp } from '../lib/chartColors'
 import {
   DASHBOARD_CFG_KEY, DEFAULT_DASHBOARD_CONFIG, windowLabel,
-  type DashboardConfig, type StatCardId,
+  type DashboardConfig, type GoalStyle, type StatCardId,
 } from '../lib/dashboardConfig'
 import {
   deltaPct, describeGoal, formatGoalAmount, formReading, gearNudges, goalFromApi, goalProgress,
@@ -159,18 +160,86 @@ function LatestActivity({ w, onOpen }: { w: Workout; onOpen: () => void }) {
   )
 }
 
+/** Display options the goals card reads, bundled so styles share one signature. */
+interface GoalViewOpts {
+  style: GoalStyle
+  showHistory: boolean
+  showPeriods: boolean
+}
+
+/** The unit a streak is counted in — a week, a month, or a run of either. */
+function streakUnit(g: GoalProgress['goal']): string {
+  return g.span > 1 ? 'period' : g.period
+}
+
 /**
- * One goal's progress. The count is the point of the tile — it leads at full
- * size, and the description and streak sit behind a divider in muted type so
- * the eye lands on the number first.
+ * The run of recent windows: pass/fail per period, with a "+" where the target
+ * was beaten. Shared by every style, at two densities — the compact one keeps
+ * the ledger and the rings from turning into a chart.
  */
-function GoalRow({ progress: p, showPeriods }: { progress: GoalProgress; showPeriods: boolean }) {
+function GoalHistory({ p, showPeriods, compact }: {
+  p: GoalProgress
+  showPeriods: boolean
+  compact?: boolean
+}) {
+  return (
+    <div className={`goal-history${compact ? ' compact' : ''}`}>
+      {p.history.map(h => {
+        // A period that beat its target is worth more than a filled bar, so it
+        // is marked. Meeting it exactly is not "exceeded".
+        const over = p.goal.target > 0 && h.value > p.goal.target
+        return (
+          <span className="goal-history-cell" key={h.key}>
+            <span
+              className={`goal-history-bar${h.met ? ' met' : ''}${over ? ' over' : ''}`}
+              style={{ '--goal-hue': goalColor(p.goal.type) } as React.CSSProperties}
+              title={`From ${h.key}: ${formatGoalAmount(p.goal, h.value)}${
+                p.goal.metric === 'count' ? (h.value === 1 ? ' activity' : ' activities') : ''
+              }${over ? ' — target beaten' : ''}`}
+            >
+              {over && !compact ? '+' : ''}
+            </span>
+            {showPeriods && !compact && (
+              <span className="goal-history-label">{periodLabel(h.key, p.goal.period)}</span>
+            )}
+          </span>
+        )
+      })}
+    </div>
+  )
+}
+
+/**
+ * How the current window is going, against how far through it you are.
+ *
+ * Returned as a short phrase because that is all there is room for, and because
+ * "1.4 km to catch up" is a task while "47%" is a grade. The dead band matters:
+ * without it the tile would flip between "ahead" and "behind" on rounding, and
+ * a panel that changes its verdict while you look at it is not trusted.
+ */
+function paceVerdict(p: GoalProgress): { text: string; tone: 'done' | 'ahead' | 'on' | 'behind' } {
+  if (p.current >= p.goal.target) return { text: 'done', tone: 'done' }
+  if (p.elapsed <= 0.06) return { text: 'just started', tone: 'on' }
+  const expected = p.goal.target * p.elapsed
+  const diff = p.current - expected
+  if (Math.abs(diff) <= p.goal.target * 0.04) return { text: 'on pace', tone: 'on' }
+  if (diff > 0) return { text: `${formatGoalAmount(p.goal, diff)} ahead`, tone: 'ahead' }
+  return { text: `${formatGoalAmount(p.goal, -diff)} to go`, tone: 'behind' }
+}
+
+/** Days remaining in the window, for copy that has to feel concrete. */
+function daysLeft(p: GoalProgress): number {
+  const span = (p.goal.period === 'week' ? 7 : 30) * p.goal.span
+  return Math.max(0, Math.round(span * (1 - p.elapsed)))
+}
+
+/**
+ * Classic: the count leads at full size, with the description and streak behind
+ * a divider in muted type so the eye lands on the number first.
+ */
+function GoalTileClassic({ p, opts }: { p: GoalProgress; opts: GoalViewOpts }) {
   const met = p.current >= p.goal.target
-  // "Window" is the unit a streak is counted in — a week, a month, or a run of
-  // either when the goal spans several.
-  const unit = p.goal.span > 1 ? 'period' : p.goal.period
-  // The bar fills to the target and stops; going past it is said by the figure
-  // and the trophy, not by a bar that would have to rescale everything else.
+  const unit = streakUnit(p.goal)
   const pct = p.goal.target > 0 ? Math.min(1, p.current / p.goal.target) : 0
   return (
     // A count is one or two digits; a distance or a time is "44.2/120 km", so
@@ -179,6 +248,7 @@ function GoalRow({ progress: p, showPeriods }: { progress: GoalProgress; showPer
       <div className="goal-tile-head">
         <span
           className="goal-figure"
+          style={{ color: goalColor(p.goal.type) }}
           aria-label={`${formatGoalAmount(p.goal, p.current)} of ${describeGoal(p.goal)}`}
         >
           <span className="goal-figure-current">{formatGoalAmount(p.goal, p.current, true)}</span>
@@ -188,7 +258,10 @@ function GoalRow({ progress: p, showPeriods }: { progress: GoalProgress; showPer
         <span className="goal-divider" aria-hidden="true" />
 
         <span className="goal-meta">
-          {describeGoal(p.goal)}
+          <span className="goal-meta-name">
+            <GoalSportMark type={p.goal.type} size={12} />
+            {describeGoal(p.goal)}
+          </span>
           <span className="goal-meta-streak">
             best {p.bestStreak} {p.bestStreak === 1 ? unit : `${unit}s`}
           </span>
@@ -217,31 +290,158 @@ function GoalRow({ progress: p, showPeriods }: { progress: GoalProgress; showPer
         aria-valuenow={Math.round(p.current * 10) / 10}
         aria-label={describeGoal(p.goal)}
       >
-        <span className="goal-progress-fill" style={{ width: `${pct * 100}%` }} />
+        <span className="goal-progress-fill" style={{ width: `${pct * 100}%`, background: goalColor(p.goal.type) }} />
       </div>
 
-      <div className={`goal-history${showPeriods ? ' labelled' : ''}`}>
-        {p.history.map(h => {
-          // A period that beat its target is worth more than a filled bar, so
-          // it is marked. Meeting it exactly is not "exceeded".
-          const over = p.goal.target > 0 && h.value > p.goal.target
-          return (
-            <span className="goal-history-cell" key={h.key}>
-              <span
-                className={`goal-history-bar${h.met ? ' met' : ''}${over ? ' over' : ''}`}
-                title={`From ${h.key}: ${formatGoalAmount(p.goal, h.value)}${
-                  p.goal.metric === 'count' ? (h.value === 1 ? ' activity' : ' activities') : ''
-                }${over ? ' — target beaten' : ''}`}
-              >
-                {over ? '+' : ''}
-              </span>
-              {showPeriods && (
-                <span className="goal-history-label">{periodLabel(h.key, p.goal.period)}</span>
-              )}
-            </span>
-          )
-        })}
+      {opts.showHistory && <GoalHistory p={p} showPeriods={opts.showPeriods} />}
+    </div>
+  )
+}
+
+/**
+ * Pace line: the classic bar plus a marker for where you would be if you were
+ * exactly on schedule. A bar that only ever creeps rightward cannot tell you
+ * that you are behind; with a reference point it says so at a glance.
+ */
+function GoalTilePace({ p, opts }: { p: GoalProgress; opts: GoalViewOpts }) {
+  const met = p.current >= p.goal.target
+  const pct = p.goal.target > 0 ? Math.min(1, p.current / p.goal.target) : 0
+  const v = paceVerdict(p)
+  // Suppressed at the very start of a window, where the marker sits against the
+  // left edge and reads as failure rather than as "nothing has happened yet".
+  const showNeedle = p.elapsed > 0.06 && !met
+  return (
+    <div className={`goal-tile pace${met ? ' met' : ''}`}>
+      <div className="goal-pace-top">
+        <GoalSportMark type={p.goal.type} size={13} />
+        <span className="goal-pace-fig mono" style={{ color: goalColor(p.goal.type) }}>
+          {formatGoalAmount(p.goal, p.current, true)}
+        </span>
+        <span className="goal-pace-total mono">/ {formatGoalAmount(p.goal, p.goal.target)}</span>
+        <span className={`goal-verdict ${v.tone}`}>{v.text}</span>
       </div>
+
+      <div
+        className="goal-pace-bar"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={p.goal.target}
+        aria-valuenow={Math.round(p.current * 10) / 10}
+        aria-label={describeGoal(p.goal)}
+      >
+        <span className="goal-pace-fill" style={{ width: `${pct * 100}%`, background: goalColor(p.goal.type) }} />
+        {showNeedle && (
+          <span
+            className="goal-pace-needle"
+            style={{ left: `${p.elapsed * 100}%` }}
+            title="Where you would be exactly on schedule"
+          />
+        )}
+      </div>
+
+      <div className="goal-pace-sub">
+        {describeGoal(p.goal)} · {daysLeft(p)}d left
+        {p.streak > 0 && <span className="goal-pace-streak"><Flame size={10} /> {p.streak}</span>}
+      </div>
+
+      {opts.showHistory && <GoalHistory p={p} showPeriods={opts.showPeriods} compact />}
+    </div>
+  )
+}
+
+/** Rings: one dial per goal, sized to be read across a room. */
+function GoalRings({ progress, opts }: { progress: GoalProgress[]; opts: GoalViewOpts }) {
+  return (
+    <div className="goal-rings">
+      {progress.map(p => {
+        const met = p.current >= p.goal.target
+        const pct = p.goal.target > 0 ? Math.min(1, p.current / p.goal.target) : 0
+        const R = 46
+        const C = 2 * Math.PI * R
+        const colour = goalColor(p.goal.type)
+        // The pace tick, same reference the pace style draws as a needle.
+        const angle = (p.elapsed * 360) - 90
+        const rad = (angle * Math.PI) / 180
+        return (
+          <div className={`goal-ring-cell${met ? ' met' : ''}`} key={p.goal.id}>
+            <div className="goal-ring-wrap">
+              <svg viewBox="0 0 112 112" role="img" aria-label={`${formatGoalAmount(p.goal, p.current)} of ${describeGoal(p.goal)}`}>
+                <circle cx="56" cy="56" r={R} fill="none" stroke="var(--bg-3)" strokeWidth="9" />
+                <circle
+                  cx="56" cy="56" r={R} fill="none" stroke={colour} strokeWidth="9" strokeLinecap="round"
+                  strokeDasharray={C} strokeDashoffset={C * (1 - pct)}
+                  transform="rotate(-90 56 56)" className="goal-ring-arc"
+                />
+                {p.elapsed > 0.06 && !met && (
+                  <line
+                    x1={56 + Math.cos(rad) * (R - 9)} y1={56 + Math.sin(rad) * (R - 9)}
+                    x2={56 + Math.cos(rad) * (R + 9)} y2={56 + Math.sin(rad) * (R + 9)}
+                    stroke="var(--text)" strokeWidth="2" strokeLinecap="round" opacity="0.8"
+                  />
+                )}
+              </svg>
+              <span className="goal-ring-mid">
+                <span className="goal-ring-num mono" style={{ color: colour }}>
+                  {formatGoalAmount(p.goal, p.current, true)}
+                </span>
+                <span className="goal-ring-of mono">of {formatGoalAmount(p.goal, p.goal.target)}</span>
+              </span>
+            </div>
+            <span className="goal-ring-cap" title={describeGoal(p.goal)}>
+              <GoalSportMark type={p.goal.type} size={11} />
+              {p.goal.type || 'Any'}
+            </span>
+            {opts.showHistory && <GoalHistory p={p} showPeriods={false} compact />}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/**
+ * Ledger: a monospace statement of account. No bars, no trophy — the style for
+ * someone tracking ten goals who wants them all on screen at once.
+ */
+function GoalLedger({ progress, opts }: { progress: GoalProgress[]; opts: GoalViewOpts }) {
+  const met = progress.filter(p => p.current >= p.goal.target).length
+  return (
+    <div className="goal-ledger">
+      {progress.map(p => {
+        const v = paceVerdict(p)
+        return (
+          <div className="goal-ledger-row" key={p.goal.id}>
+            <span className="goal-ledger-key" title={describeGoal(p.goal)}>
+              <GoalSportMark type={p.goal.type} size={12} />
+              <span className="goal-ledger-name">{p.goal.type || 'Any'}</span>
+            </span>
+            <span className="goal-ledger-dots" aria-hidden="true" />
+            <span className="goal-ledger-val mono">
+              {formatGoalAmount(p.goal, p.current, true)}/{formatGoalAmount(p.goal, p.goal.target)}
+            </span>
+            <span className={`goal-verdict ${v.tone}`}>{v.text}</span>
+            {opts.showHistory && (
+              <span className="goal-ledger-hist"><GoalHistory p={p} showPeriods={false} compact /></span>
+            )}
+          </div>
+        )
+      })}
+      <div className="goal-ledger-foot mono">
+        <span>{met} of {progress.length} met</span>
+        <span>{daysLeft(progress[0])}d left</span>
+      </div>
+    </div>
+  )
+}
+
+/** The goals card body, in whichever style the user picked. */
+function GoalPanel({ progress, opts }: { progress: GoalProgress[]; opts: GoalViewOpts }) {
+  if (opts.style === 'rings') return <GoalRings progress={progress} opts={opts} />
+  if (opts.style === 'ledger') return <GoalLedger progress={progress} opts={opts} />
+  const Tile = opts.style === 'pace' ? GoalTilePace : GoalTileClassic
+  return (
+    <div className="goal-panel-stack">
+      {progress.map(p => <Tile key={p.goal.id} p={p} opts={opts} />)}
     </div>
   )
 }
@@ -289,6 +489,11 @@ export default function Dashboard({ onSelect }: { onSelect: (w: Workout) => void
     return () => { active = false }
   }, [])
 
+  const goalOpts: GoalViewOpts = {
+    style: cfg.goalStyle ?? 'classic',
+    showHistory: cfg.showGoalHistory !== false,
+    showPeriods: cfg.showGoalPeriods === true,
+  }
   const showDeltas = cfg.showDeltas !== false && cfg.windowDays > 0
   const showSparklines = cfg.showSparklines !== false
 
@@ -460,7 +665,7 @@ export default function Dashboard({ onSelect }: { onSelect: (w: Workout) => void
                   <h3 className="chart-card-title">Goals</h3>
                   <InfoTip
                     label="Goals"
-                    text="Progress against each goal you set under Settings → Training Goals, in the order you arranged them there. A goal can count activities, kilometres or hours, over a window of one or more weeks or months. A streak counts consecutive windows that met the target; the window in progress extends a streak once you hit it but never breaks one, so a quiet Monday costs you nothing. Windows longer than one period run back to back from a fixed anchor, so they never overlap. The bar under each goal is progress through the window in hand. The row of bars below it is the last eight windows, oldest on the left: filled means the target was met, and a + means it was beaten. A trophy appears once the current window is done. Turn on “Label goal history bars” under Settings → Dashboard to put the week number or month under each bar. The minimum distance and duration decide which activities count at all, rather than trimming the total. Distance minimums are matched against the figure shown on the workout, so a run listed as 5.0 km counts toward a 5 km goal."
+                    text="Progress against each goal you set under Settings → Training Goals, in the order you arranged them there. A goal can count activities, kilometres or hours, over a window of one or more weeks or months. A streak counts consecutive windows that met the target; the window in progress extends a streak once you hit it but never breaks one, so a quiet Monday costs you nothing. Windows longer than one period run back to back from a fixed anchor, so they never overlap. The bar under each goal is progress through the window in hand. The row of bars below it is the last eight windows, oldest on the left: filled means the target was met, and a + means it was beaten. A trophy appears once the current window is done. Settings → Training goals chooses between four styles for this card, and whether these bars and their week or month labels appear. The minimum distance and duration decide which activities count at all, rather than trimming the total. Distance minimums are matched against the figure shown on the workout, so a run listed as 5.0 km counts toward a 5 km goal."
                   />
                 </div>
                 {progress.length === 0 ? (
@@ -469,9 +674,7 @@ export default function Dashboard({ onSelect }: { onSelect: (w: Workout) => void
                     40 km of hiking a month — and this tile will track your streak.
                   </p>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    {progress.map(p => <GoalRow key={p.goal.id} progress={p} showPeriods={cfg.showGoalPeriods === true} />)}
-                  </div>
+                  <GoalPanel progress={progress} opts={goalOpts} />
                 )}
               </div>
 

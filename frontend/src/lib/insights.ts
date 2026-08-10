@@ -256,10 +256,33 @@ export function recentPeriodKeys(count: number, g: Pick<Goal, 'period' | 'span'>
   return out
 }
 
+/** The first instant of a window and the first instant of the one after it. */
+export function periodBounds(key: string, g: Pick<Goal, 'period' | 'span'>): [Date, Date] {
+  const span = Math.max(1, Math.round(g.span || 1))
+  if (g.period === 'month') {
+    const start = parseDateKey(`${key}-01`)
+    const end = new Date(start)
+    end.setMonth(end.getMonth() + span)
+    return [start, end]
+  }
+  const start = parseDateKey(key)
+  const end = new Date(start)
+  end.setDate(end.getDate() + 7 * span)
+  return [start, end]
+}
+
 export interface GoalProgress {
   goal: Goal
   /** Progress in the current window, in the goal's unit. */
   current: number
+  /**
+   * How much of the current window has already gone, 0 to 1.
+   *
+   * The number the old tile never had, and the one that separates "behind" from
+   * "not finished yet": 1 of 3 runs is a fine Tuesday and a poor Sunday. Only
+   * the pace-aware styles read it, but it costs nothing to always compute.
+   */
+  elapsed: number
   /** Consecutive completed windows meeting the goal. */
   streak: number
   /** Longest run of goal-meeting windows ever recorded. */
@@ -345,7 +368,12 @@ export function goalProgress(workouts: Workout[], goal: Goal, historyLength = 8,
     }
   }
 
-  return { goal, current, streak, bestStreak: Math.max(bestStreak, streak), history }
+  const [windowStart, windowEnd] = periodBounds(currentKey, goal)
+  const elapsed = Math.min(1, Math.max(0,
+    (now.getTime() - windowStart.getTime()) / (windowEnd.getTime() - windowStart.getTime()),
+  ))
+
+  return { goal, current, elapsed, streak, bestStreak: Math.max(bestStreak, streak), history }
 }
 
 // ── Period-on-period deltas ──────────────────────────────────────────────────

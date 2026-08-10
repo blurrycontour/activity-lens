@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react'
 import { usePreferences } from '../../context/PreferencesContext'
 import { ApiError } from '../../lib/api'
 import { WORKOUT_TYPES } from '../../data/workouts'
@@ -7,6 +7,10 @@ import TypeIcon from '../../components/TypeIcon'
 import {
   MAX_GOAL_SPAN, describeGoal, goalFromApi, newGoal, type Goal,
 } from '../../lib/insights'
+import {
+  DASHBOARD_CFG_KEY, DEFAULT_DASHBOARD_CONFIG, GOAL_STYLES, type DashboardConfig,
+} from '../../lib/dashboardConfig'
+import { useLocalStorage } from '../../lib/useLocalStorage'
 import SettingsCard from '../../components/SettingsCard'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import Field from '../../components/Field'
@@ -34,6 +38,10 @@ const PERIOD_OPTIONS: DropdownOption<Goal['period']>[] = [
 /** Targets the dashboard tracks a streak against, in the order shown there. */
 export default function GoalsSettings() {
   const { prefs, save } = usePreferences()
+  // Display options are device-local, like the theme and the dashboard cards —
+  // they apply instantly and deliberately sit outside the Save button below,
+  // which owns the goals themselves.
+  const [cfg, setCfg] = useLocalStorage<DashboardConfig>(DASHBOARD_CFG_KEY, DEFAULT_DASHBOARD_CONFIG)
   const [goals, setGoals] = useState<Goal[]>([])
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<Msg | null>(null)
@@ -75,6 +83,7 @@ export default function GoalsSettings() {
   const filled = goals.filter(g => g.target > 0)
 
   return (
+    <>
     <SettingsCard
       title="Goals"
       description="A goal is a number of activities, kilometres or hours per window of time — two runs a week, or 40 km of hiking a month. Each is tracked as its own streak, in the order listed here."
@@ -83,7 +92,7 @@ export default function GoalsSettings() {
         <span className="field-hint">No goals yet. Add one to start tracking a streak.</span>
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div className="goal-rows">
         {goals.map((g, i) => (
           <div key={g.id} className="goal-row">
             <div className="goal-move">
@@ -208,5 +217,58 @@ export default function GoalsSettings() {
         />
       )}
     </SettingsCard>
+
+    <SettingsCard
+      title="How goals look"
+      description="Presentation only — every style shows the same numbers, and switching never changes what a goal means or when you are notified about one. Applies as soon as you pick it."
+    >
+      <div className="theme-choices">
+        {GOAL_STYLES.map(st => {
+          const on = (cfg.goalStyle ?? 'classic') === st.id
+          return (
+            <button
+              key={st.id}
+              className={`theme-choice${on ? ' active' : ''}`}
+              aria-pressed={on}
+              onClick={() => setCfg(prev => ({ ...prev, goalStyle: st.id }))}
+            >
+              <span className="theme-choice-label">{st.label}</span>
+              <span className="theme-choice-hint">{st.blurb}</span>
+              {on && <Check size={13} className="theme-choice-tick" />}
+            </button>
+          )
+        })}
+      </div>
+
+      <label className="switch">
+        <input
+          type="checkbox"
+          checked={cfg.showGoalHistory !== false}
+          onChange={e => setCfg(prev => ({ ...prev, showGoalHistory: e.target.checked }))}
+        />
+        <span className="switch-track" />
+        Show recent windows
+      </label>
+      <span className="field-hint">
+        The run of bars under each goal: filled where you met the target, with a + where you beat
+        it. Every style can show them.
+      </span>
+
+      <label className="switch">
+        <input
+          type="checkbox"
+          checked={cfg.showGoalPeriods === true}
+          disabled={cfg.showGoalHistory === false}
+          onChange={e => setCfg(prev => ({ ...prev, showGoalPeriods: e.target.checked }))}
+        />
+        <span className="switch-track" />
+        Label those windows
+      </label>
+      <span className="field-hint">
+        Puts the week number or month name under each bar. Off by default — eight labels is a lot
+        of small text on a phone, and the Classic and Pace styles are the only ones with room.
+      </span>
+    </SettingsCard>
+    </>
   )
 }
