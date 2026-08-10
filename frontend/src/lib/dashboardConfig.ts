@@ -3,6 +3,7 @@
 // between the Dashboard and Settings pages via the useLocalStorage hook.
 
 import { RANGE_OPTIONS } from './range'
+import { MOBILE_QUERY } from './useIsMobile'
 
 export type StatCardId = 'distance' | 'time' | 'elevation' | 'calories' | 'avgHr' | 'activities'
 
@@ -64,6 +65,16 @@ export const DEFAULT_HR_ZONE_CHART: HRZoneChart = 'histogram'
 
 export const DASHBOARD_CFG_KEY = 'al_dash_cfg'
 
+/**
+ * The stat cards a phone starts with.
+ *
+ * Six cards on a phone is three rows of tiles above everything the dashboard is
+ * actually for. These four are the ones that mean something on every activity;
+ * elevation is zero for a treadmill and calories are an estimate, so they are
+ * the two to earn their place by being switched on.
+ */
+export const MOBILE_DEFAULT_CARDS: StatCardId[] = ['distance', 'time', 'avgHr', 'calories']
+
 export const DEFAULT_DASHBOARD_CONFIG: DashboardConfig = {
   cards: STAT_CARDS.map(c => c.id),
   windowDays: 30,
@@ -72,6 +83,25 @@ export const DEFAULT_DASHBOARD_CONFIG: DashboardConfig = {
   goalStyle: 'classic',
   showGoalHistory: true,
   showGoalPeriods: false,
+}
+
+/**
+ * The configuration a device starts with, before the user has changed anything.
+ *
+ * Phone-sized screens get the shorter card list. This can key off the current
+ * viewport precisely because the config is stored per device — a phone and a
+ * desktop each keep their own, so seeding them differently is right rather than
+ * a guess that one of them has to live with. Once saved, the stored value wins
+ * and nothing here applies again.
+ */
+export function defaultDashboardConfig(): DashboardConfig {
+  // Via globalThis, which is `window` in a browser: the same call in production
+  // and one a test can stub without standing up a DOM. Called as a property so
+  // `this` stays the global, which matchMedia requires.
+  const narrow = typeof globalThis.matchMedia === 'function'
+    && globalThis.matchMedia(MOBILE_QUERY).matches
+  if (!narrow) return DEFAULT_DASHBOARD_CONFIG
+  return { ...DEFAULT_DASHBOARD_CONFIG, cards: MOBILE_DEFAULT_CARDS }
 }
 
 export { rangeLabel as windowLabel } from './range'
