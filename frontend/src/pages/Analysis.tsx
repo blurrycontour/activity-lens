@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { TYPE_COLOR, fmtPace, type WorkoutType, type Workout } from '../data/workouts'
+import { ALL_WORKOUT_TYPES, TYPE_COLOR, fmtPace, type WorkoutType, type Workout } from '../data/workouts'
 import { useWorkouts } from '../context/WorkoutsContext'
 import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
@@ -49,6 +49,29 @@ const METRICS: { id: Metric; label: string; color: string; unit: string; format?
   { id: 'calories', label: 'Calories', color: 'var(--accent)', unit: 'kcal' },
   { id: 'speed', label: 'Avg Speed', color: 'var(--swim)', unit: 'km/h', format: v => v.toFixed(1) },
   { id: 'steps', label: 'Steps', color: 'var(--strength)', unit: '', format: v => Math.round(v).toLocaleString() },
+]
+
+/**
+ * What the by-sport chart can measure, and how each reads.
+ *
+ * Deliberately the four that are comparable across sports as a bare number. A
+ * pace or a heart rate is not — "best pace" for a swim and a ride are different
+ * quantities wearing the same units — and those already live on the record
+ * cards above, per sport, where the comparison is never implied.
+ */
+type SportMeasure = 'distance' | 'duration' | 'elevation' | 'calories'
+
+const SPORT_MEASURES: {
+  id: SportMeasure
+  label: string
+  axis: string
+  of: (w: Workout) => number
+  fmt: (v: number) => string
+}[] = [
+  { id: 'distance', label: 'Distance', axis: 'Distance (km)', of: w => w.distance / 1000, fmt: v => `${v.toFixed(1)} km` },
+  { id: 'duration', label: 'Time', axis: 'Time (hours)', of: w => w.duration / 3600, fmt: v => `${v.toFixed(1)} h` },
+  { id: 'elevation', label: 'Elevation', axis: 'Elevation gain (m)', of: w => w.elevationGain, fmt: v => `${Math.round(v)} m` },
+  { id: 'calories', label: 'Calories', axis: 'Calories (kcal)', of: w => w.calories, fmt: v => `${Math.round(v).toLocaleString()} kcal` },
 ]
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -207,6 +230,8 @@ export default function Analysis() {
    * sits in a narrow band a long way above zero.
    */
   const [trendYAxis, setTrendYAxis] = useLocalStorage<'fit' | 'zero'>('al_tl_yaxis', 'fit')
+  const [sportMeasure, setSportMeasure] = useLocalStorage<SportMeasure>('al_an_sport_measure', 'calories')
+  const [sportAgg, setSportAgg] = useLocalStorage<'total' | 'best'>('al_an_sport_agg', 'total')
   const [weatherMetric, setWeatherMetric] = useLocalStorage<WeatherMetric>('al_an_wx_metric', 'pace')
   const [exploreX, setExploreX] = useLocalStorage<WeatherKey>('al_an_wx_x', 'humidity')
   const [exploreY, setExploreY] = useLocalStorage<PerfKey>('al_an_wx_y', 'pace')
@@ -281,7 +306,7 @@ export default function Analysis() {
   const anyWeather = useMemo(() => allWorkouts.some(w => w.weather), [allWorkouts])
 
   // ── Records ──────────────────────────────────────────────────────────────
-  const { PRs, calByType } = useMemo(() => {
+  const { PRs } = useMemo(() => {
     const PRs: Partial<Record<WorkoutType, PR>> = {}
     for (const type of ['Run', 'Ride', 'Hike', 'Swim', 'Strength'] as WorkoutType[]) {
       const tw = workouts.filter(w => w.type === type)
@@ -293,17 +318,30 @@ export default function Analysis() {
         highest: tw.reduce((a, b) => a.elevationGain > b.elevationGain ? a : b),
       }
     }
-    // One bar per type, coloured via Cell. A separate <Bar> per type would
-    // create one series each and leave every bar offset in its own slot
-    // rather than centred on its category.
-    const calByType = (['Run', 'Ride', 'Hike', 'Swim', 'Strength'] as WorkoutType[]).map(t => ({
-      type: t,
-      total: Math.round(workouts.filter(w => w.type === t).reduce((a, w) => a + w.calories, 0)),
-      count: workouts.filter(w => w.type === t).length,
-      fill: TYPE_COLOR[t],
-    })).filter(d => d.count > 0)
-    return { PRs, calByType }
+    return { PRs }
   }, [workouts])
+
+  /**
+   * One bar per sport, for whichever measure and aggregate are selected.
+   *
+   * Coloured via Cell. A separate <Bar> per type would create one series each
+   * and leave every bar offset in its own slot rather than centred on its
+   * category.
+   */
+  const bySport = useMemo(() => {
+    const m = SPORT_MEASURES.find(x => x.id === sportMeasure)!
+    return ALL_WORKOUT_TYPES.map(t => {
+      const of = workouts.filter(w => w.type === t)
+      if (of.length === 0) return null
+      const values = of.map(m.of)
+      return {
+        type: t,
+        value: sportAgg === 'best' ? Math.max(...values) : values.reduce((a, b) => a + b, 0),
+        count: of.length,
+        fill: TYPE_COLOR[t],
+      }
+    }).filter((d): d is NonNullable<typeof d> => d !== null && d.value > 0)
+  }, [workouts, sportMeasure, sportAgg])
 
   // ── Trends ───────────────────────────────────────────────────────────────
   const series = useMemo(() => {
@@ -556,38 +594,57 @@ export default function Analysis() {
             </div>
 
             <ChartCard
-              title="Total Calories by Type"
+              title="By Sport"
               icon={<Zap size={14} color="var(--accent)" />}
-              description="Where your energy went across the selected period."
-              info="Sums the calories of every activity of each type. Values reported by an imported file are used as-is; the rest are estimated from your body metrics and the calorie method set in Settings, so treat cross-sport comparisons as approximate."
+              description={sportAgg === 'best'
+                ? 'The single biggest activity of each sport.'
+                : 'Everything of each sport, added up.'}
+              info="Both halves of the same question: Total is where the period actually went, and Best is the one activity that stands out — the record cards above give the same thing per sport with pace included. Only measures that mean the same thing in every sport are offered; a pace or a heart rate does not, which is why they are on the cards rather than in this comparison. Calories reported by an imported file are used as-is and the rest are estimated, so read those across sports as approximate."
+              actions={
+                <>
+                  <Dropdown
+                    value={sportMeasure}
+                    options={SPORT_MEASURES.map(m => ({ value: m.id, label: m.label }))}
+                    onChange={setSportMeasure}
+                    ariaLabel="Measure"
+                  />
+                  <Segmented
+                    value={sportAgg}
+                    onChange={setSportAgg}
+                    options={[{ id: 'total', label: 'Total' }, { id: 'best', label: 'Best' }]}
+                  />
+                </>
+              }
             >
-              {calByType.length === 0 ? (
+              {bySport.length === 0 ? (
                 <EmptyPlot height={220}>No activities in the {rangeLabel(rangeDays)}</EmptyPlot>
               ) : (
                 <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={calByType} margin={space.margin(18, 4)}>
+                  <BarChart data={bySport} margin={space.margin(18, 4)}>
                     <CartesianGrid {...GRID_PROPS} />
                     <XAxis dataKey="type" tick={{ ...AXIS_TICK, fontSize: 11 }} axisLine={false} tickLine={false} label={xLabel('Activity type')} />
                     <YAxis
                       tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto"
-                      tickFormatter={v => v >= 1000 ? `${Math.round(v / 1000)}k` : `${v}`}
-                      label={yLabel('Calories (kcal)')}
+                      tickFormatter={v => v >= 1000 ? `${Math.round(v / 1000)}k` : `${Math.round(v * 10) / 10}`}
+                      label={yLabel(SPORT_MEASURES.find(m => m.id === sportMeasure)!.axis)}
                     />
                     <Tooltip
                       cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
                       content={({ active, payload }) => {
                         if (!active || !payload?.length) return null
                         const d = payload[0].payload
+                        const m = SPORT_MEASURES.find(x => x.id === sportMeasure)!
                         return (
                           <div className="custom-tooltip">
                             <div style={{ fontWeight: 600 }}>{d.type}</div>
-                            <div>{d.total.toLocaleString()} kcal · {d.count} activities</div>
+                            <div>{m.fmt(d.value)} {sportAgg === 'best' ? 'best single' : 'in total'}</div>
+                            <div style={{ color: 'var(--text-3)' }}>{d.count} {d.count === 1 ? 'activity' : 'activities'}</div>
                           </div>
                         )
                       }}
                     />
-                    <Bar dataKey="total" radius={[4, 4, 0, 0]} maxBarSize={72} isAnimationActive={false}>
-                      {calByType.map(d => <Cell key={d.type} fill={d.fill} />)}
+                    <Bar dataKey="value" radius={[4, 4, 0, 0]} maxBarSize={72} isAnimationActive={false}>
+                      {bySport.map(d => <Cell key={d.type} fill={d.fill} />)}
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
@@ -653,7 +710,7 @@ export default function Analysis() {
                 <Segmented
                   value={trendYAxis}
                   onChange={setTrendYAxis}
-                  options={[{ id: 'fit', label: 'Fit' }, { id: 'zero', label: 'From 0' }]}
+                  options={[{ id: 'fit', label: 'Fit' }, { id: 'zero', label: 'Zero' }]}
                 />
               }
             >

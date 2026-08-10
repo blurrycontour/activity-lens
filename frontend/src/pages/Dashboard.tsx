@@ -314,10 +314,13 @@ function GoalTileStandard({ p, opts }: { p: GoalProgress; opts: GoalViewOpts }) 
     <div className={`goal-tile${met ? ' met' : ''}${p.goal.metric === 'count' ? '' : ' measured'}`}>
       <div className="goal-std-top">
         <GoalSportMark type={p.goal.type} size={15} />
-        <span className="goal-std-cur mono" style={{ color: goalColor(p.goal.type) }}>
-          {formatGoalAmount(p.goal, p.current, true)}
+        <span className="goal-std-fig">
+          <span className="goal-std-cur mono" style={{ color: goalColor(p.goal.type) }}>
+            {formatGoalAmount(p.goal, p.current, true)}
+          </span>
+          <span className="goal-std-slash mono" aria-hidden="true">/</span>
+          <span className="goal-std-tot mono">{formatGoalAmount(p.goal, p.goal.target)}</span>
         </span>
-        <span className="goal-std-tot mono">/ {formatGoalAmount(p.goal, p.goal.target)}</span>
         <span className={`goal-verdict ${v.tone}`}>{v.text}</span>
       </div>
 
@@ -496,13 +499,17 @@ function GoalLedger({ progress, opts }: { progress: GoalProgress[]; opts: GoalVi
               <GoalSportMark type={p.goal.type} size={13} />
               <span className="goal-ledger-name">{describeGoal(p.goal)}</span>
             </span>
-            {/* Always rendered, even when there is nothing to award: the row is
-                `display: contents`, so an omitted cell would slide every later
-                column left and break the alignment down the card. */}
-            <span className="goal-ledger-badges"><GoalBadges p={p} compact /></span>
-            <span className={`goal-verdict ${v.tone}`}>{v.text}</span>
-            <span className="goal-ledger-val mono">
-              {formatGoalAmount(p.goal, p.current, true)}/{formatGoalAmount(p.goal, p.goal.target)}
+            {/* One cluster packed against the right edge rather than three
+                shared columns. Sharing them reserved the widest streak and the
+                widest verdict on every row, so a goal with neither sat beside
+                two holes; the figure keeps a fixed width of its own, which is
+                all that has to line up down the card. */}
+            <span className="goal-ledger-right">
+              <GoalBadges p={p} compact />
+              <span className={`goal-verdict ${v.tone}`}>{v.text}</span>
+              <span className="goal-ledger-val mono">
+                {formatGoalAmount(p.goal, p.current, true)}/{formatGoalAmount(p.goal, p.goal.target)}
+              </span>
             </span>
             {opts.showHistory && (
               <span className="goal-ledger-hist"><GoalHistory p={p} showPeriods={false} compact /></span>
