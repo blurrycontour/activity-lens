@@ -143,26 +143,31 @@ export function describeGoalWindow(g: Goal): string {
  * Distance and time goals lead with the sport as a verb rather than folding it
  * into a noun phrase: "40 km of hike" would need a gerund per activity type to
  * read as English, and the backend renders the same sentence for notifications.
+ *
+ * The per-activity minimums are deliberately not here. They are a filter on
+ * what counts, not part of what the goal is, and a trailing "(5 km, 30 min+
+ * only)" on every line was the longest thing in the goals card while being the
+ * least looked at. `describeGoalMinimum` still renders them for the places that
+ * do need to say so.
  */
 export function describeGoal(g: Goal): string {
   const window = describeGoalWindow(g)
-  const min = describeGoalMinimum(g)
   if (g.metric !== 'count') {
     const lead = g.type ? `${g.type} ` : ''
-    return `${lead}${formatGoalAmount(g, g.target)} ${window}${min}`
+    return `${lead}${formatGoalAmount(g, g.target)} ${window}`
   }
   const sport = g.type ? g.type.toLowerCase() : 'activity'
   const n = Math.round(g.target)
   const noun = n === 1 ? sport : g.type ? `${sport}s` : 'activities'
-  return `${n} ${noun} ${window}${min}`
+  return `${n} ${noun} ${window}`
 }
 
-/** The per-activity qualifiers as a trailing clause, or '' when there are none. */
-function describeGoalMinimum(g: Goal): string {
+/** The per-activity qualifiers as a phrase, or '' when the goal has none. */
+export function describeGoalMinimum(g: Goal): string {
   const parts: string[] = []
   if (g.minKm > 0) parts.push(`${g.minKm} km`)
   if (g.minMinutes > 0) parts.push(`${g.minMinutes} min`)
-  return parts.length === 0 ? '' : ` (${parts.join(', ')}+ only)`
+  return parts.length === 0 ? '' : `${parts.join(', ')}+ only`
 }
 
 /**

@@ -2322,7 +2322,6 @@ body:has(.overlay) .fab { display: none; }
 .options-menu-item.danger { color: var(--red, #dc2626); }
 .options-menu-item.danger:hover { background: rgba(220, 38, 38, 0.12); }
 
-
 /* Connectivity banner. Occupies its own grid row and collapses to nothing when
    online, so it pushes content down instead of covering it. */
 .offline-bar {
@@ -3628,71 +3627,55 @@ body:has(.overlay) .fab { display: none; }
 .goal-tile-head {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 9px;
 }
+.goal-tile-head > svg { flex-shrink: 0; }
 
-.goal-figure {
+/* The figure keeps its own column and the bar and history run beside it, so a
+   row of tiles lines up on both edges of the number. */
+.goal-classic-body {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+.goal-classic-tracks { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.goal-classic-fig {
   display: flex;
-  align-items: baseline;
-  gap: 1px;
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
+  flex-direction: column;
+  align-items: flex-end;
   line-height: 1;
-  flex-shrink: 0;
-  letter-spacing: -0.05em;
+  /* A floor rather than a fixed width: "3/3" and "29.2/40 km" both have to
+     leave the tracks starting at the same x down a stack of tiles. */
+  min-width: 58px;
 }
-.goal-figure-current {
-  font-size: 40px;
-  font-weight: 700;
-  /* Inherited from the figure, which the component paints in the goal's sport
-     colour. A colour here would win over that and repaint every goal alike. */
-  color: inherit;
-  transition: color 0.2s ease, text-shadow 0.2s ease;
+.goal-classic-cur {
+  font-family: var(--font-mono);
+  font-size: 25px;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  transition: text-shadow 0.2s ease;
 }
-/* Hitting the target is the moment worth celebrating, so the number takes the
-   accent and a soft glow rather than just changing colour. */
-.goal-tile.met .goal-figure-current {
-  text-shadow: 0 0 22px currentColor;
-  opacity: 1;
-}
-.goal-figure-total {
-  font-size: 19px;
-  font-weight: 600;
+.goal-classic-tot {
+  font-size: 11px;
   color: var(--text-3);
-  opacity: 0.75;
+  margin-top: 3px;
 }
-/* Distance and time goals read as "44.2/120 km" rather than "3/3", so the
-   figure steps down to leave the description beside it room to breathe. */
-.goal-tile.measured .goal-figure-current { font-size: 30px; }
-.goal-tile.measured .goal-figure-total { font-size: 16px; }
+.goal-tile.measured .goal-classic-cur { font-size: 21px; }
+.goal-tile.met .goal-classic-cur { text-shadow: 0 0 20px currentColor; }
 
-.goal-divider {
-  width: 1px;
-  align-self: stretch;
-  min-height: 32px;
-  background: var(--border);
-  flex-shrink: 0;
-}
+.goal-badges { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; flex-shrink: 0; }
 
 /* Supporting copy sits behind the figure in the visual hierarchy. */
 .goal-meta {
   flex: 1;
   min-width: 0;
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--text-3);
-  opacity: 0.85;
-}
-/* Sport is named twice — mark and colour — so the icon sits on the name line
-   rather than floating somewhere decorative. */
-.goal-meta-name { display: flex; align-items: center; gap: 6px; }
-.goal-meta-name > svg { flex-shrink: 0; }
-.goal-meta-streak {
-  display: block;
-  margin-top: 3px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  opacity: 0.8;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .goal-flame {
@@ -3712,31 +3695,30 @@ body:has(.overlay) .fab { display: none; }
 /* Awarded the moment the current window's target is reached, next to the
    streak pill. Success rather than the accent: it reports a state, and the
    accent is decoration the user picked. */
+/* A struck medal: a filled disc in the accent with ink on top and a soft halo,
+   rather than an outline glyph in a tinted pill. It marks the best thing that
+   happens in this card, and it was reading as the quietest. */
 .goal-award {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   flex-shrink: 0;
-  padding: 4px 7px;
+  width: 24px;
+  height: 24px;
   border-radius: 99px;
-  background: color-mix(in srgb, var(--success) 16%, transparent);
-  color: var(--success);
-}
-
-/* Where this window stands. The history bars below are pass/fail per period
-   and cannot show "most of the way there", which is where you usually are. */
-.goal-progress {
-  height: 5px;
-  border-radius: 99px;
-  background: var(--bg-3);
-  border: 1px solid var(--border);
-  overflow: hidden;
-}
-.goal-progress-fill {
-  display: block;
-  height: 100%;
   background: var(--primary);
-  border-radius: 99px;
-  transition: width 0.4s ease;
+  color: var(--on-primary);
+  box-shadow:
+    0 0 0 3px var(--primary-dim),
+    0 0 16px var(--primary-glow);
+  animation: goal-award-in 0.45s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+@keyframes goal-award-in {
+  from { transform: scale(0.4); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .goal-award { animation: none; }
 }
 
 /* The panel stacks its tiles; the gap is the card's own rhythm. */
@@ -3751,7 +3733,7 @@ body:has(.overlay) .fab { display: none; }
 /* Tall enough to carry the "+" that marks a beaten target — the old 6px bar
    had no room for a glyph. */
 .goal-history-bar {
-  height: 14px;
+  height: 16px;
   border-radius: 99px;
   background: var(--bg-3);
   border: 1px solid var(--border);
@@ -3759,8 +3741,8 @@ body:has(.overlay) .fab { display: none; }
   align-items: center;
   justify-content: center;
   font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 500;
   line-height: 1;
   color: transparent;
 }
@@ -3778,6 +3760,41 @@ body:has(.overlay) .fab { display: none; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ── Goal style picker ─────────────────────────────────────────────
+   Its own class rather than .theme-choice: that one is a three-column grid
+   built around a leading icon, and these tiles have none, so the label and its
+   blurb landed in the wrong columns. Here the name owns the first line and the
+   description follows underneath it. */
+.goal-style-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px;
+}
+.goal-style-choice {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 11px 30px 11px 12px;
+  border-radius: 10px;
+  border: 1.5px solid var(--border);
+  background: var(--bg-3);
+  color: var(--text-2);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.goal-style-choice:hover { border-color: var(--border-strong); color: var(--text); }
+.goal-style-choice.active {
+  border-color: var(--primary);
+  background: var(--primary-dim);
+  color: var(--primary);
+}
+.goal-style-label { font-size: 12.5px; font-weight: 600; }
+.goal-style-blurb { font-size: 11px; color: var(--text-3); line-height: 1.4; }
+.goal-style-choice.active .goal-style-blurb { color: var(--text-2); }
+.goal-style-tick { position: absolute; top: 11px; right: 11px; }
 
 /* ── Goal panel: pace line ──────────────────────────────────────────────────
    The classic bar with a marker for where you would be exactly on schedule. */
@@ -3852,12 +3869,11 @@ body:has(.overlay) .fab { display: none; }
   font-size: 10.5px;
   color: var(--text-3);
 }
-.goal-pace-streak {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  color: var(--primary);
+.goal-pace-desc {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ── Goal panel: rings ───────────────────────────────────────────────────── */
@@ -3889,19 +3905,28 @@ body:has(.overlay) .fab { display: none; }
   min-width: 0;
 }
 .goal-ring-cap > svg { flex-shrink: 0; }
+.goal-ring-cell .goal-badges { margin-left: 0; }
 /* The history under a ring spans the cell, not the ring. */
 .goal-ring-cell .goal-history { width: 100%; }
 .goal-ring-cell.met .goal-ring-num { text-shadow: 0 0 20px currentColor; }
 
 /* ── Goal panel: ledger ──────────────────────────────────────────────────── */
-.goal-ledger { display: flex; flex-direction: column; }
-.goal-ledger-row {
-  display: grid;
-  grid-template-columns: auto 1fr auto auto;
-  align-items: baseline;
+/* Space between rows rather than rules: at four or more goals the hairlines
+   turned the card into a table, which is more structure than a short list of
+   three-part rows needs. */
+.goal-ledger { display: flex; flex-direction: column; gap: 12px; }
+.goal-ledger-row { display: flex; flex-direction: column; gap: 5px; }
+.goal-ledger-line {
+  display: flex;
+  align-items: center;
   gap: 8px;
-  padding: 7px 0;
-  border-bottom: 1px solid var(--border);
+  min-width: 0;
+}
+.goal-ledger-right {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
 }
 .goal-ledger-key {
   display: flex;
@@ -3919,12 +3944,14 @@ body:has(.overlay) .fab { display: none; }
   min-width: 12px;
 }
 .goal-ledger-val { font-size: 12px; color: var(--text); }
-.goal-ledger-hist { grid-column: 1 / -1; margin-top: 2px; }
 .goal-ledger-row .goal-verdict { margin-left: 0; }
+.goal-ledger-row .goal-badges { margin-left: 0; }
 .goal-ledger-foot {
   display: flex;
   justify-content: space-between;
-  padding-top: 9px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+  margin-top: 2px;
   font-size: 10.5px;
   color: var(--text-3);
   text-transform: uppercase;
@@ -3934,8 +3961,10 @@ body:has(.overlay) .fab { display: none; }
 @media (max-width: 420px) {
   /* Two rings a row beats three squeezed ones. */
   .goal-rings { grid-template-columns: repeat(auto-fit, minmax(78px, 1fr)); }
-  .goal-ledger-row { grid-template-columns: auto 1fr auto; }
-  .goal-ledger-row .goal-verdict { grid-column: 3; }
+  .goal-classic-body { gap: 9px; }
+  .goal-classic-fig { min-width: 48px; }
+  .goal-classic-cur { font-size: 22px; }
+  .goal-tile.measured .goal-classic-cur { font-size: 18px; }
 }
 
 /* Full-viewport, above everything, and untouchable — it is decoration, and it
@@ -3950,8 +3979,6 @@ body:has(.overlay) .fab { display: none; }
 }
 
 @media (max-width: 480px) {
-  .goal-figure-current { font-size: 34px; }
-  .goal-tile.measured .goal-figure-current { font-size: 26px; }
   /* Eight labels at 9px is already dense; below this they would collide. */
   .goal-history-label { font-size: 8px; }
 }

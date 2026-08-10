@@ -1,6 +1,6 @@
 import { useLocalStorage } from '../../lib/useLocalStorage'
 import {
-  DASHBOARD_CFG_KEY, DEFAULT_DASHBOARD_CONFIG, STAT_CARDS, WINDOW_OPTIONS,
+  DASHBOARD_CFG_KEY, defaultDashboardConfig, STAT_CARDS, WINDOW_OPTIONS,
   type DashboardConfig, type StatCardId,
 } from '../../lib/dashboardConfig'
 import SettingsCard from '../../components/SettingsCard'
@@ -9,7 +9,7 @@ import Dropdown from '../../components/Dropdown'
 
 /** Which dashboard cards show, and over what period. */
 export default function DashboardSettings() {
-  const [cfg, setCfg] = useLocalStorage<DashboardConfig>(DASHBOARD_CFG_KEY, DEFAULT_DASHBOARD_CONFIG)
+  const [cfg, setCfg] = useLocalStorage<DashboardConfig>(DASHBOARD_CFG_KEY, defaultDashboardConfig())
 
   function toggleCard(id: StatCardId) {
     setCfg(prev => {

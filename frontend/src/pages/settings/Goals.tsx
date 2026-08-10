@@ -8,7 +8,7 @@ import {
   MAX_GOAL_SPAN, describeGoal, goalFromApi, newGoal, type Goal,
 } from '../../lib/insights'
 import {
-  DASHBOARD_CFG_KEY, DEFAULT_DASHBOARD_CONFIG, GOAL_STYLES, type DashboardConfig,
+  DASHBOARD_CFG_KEY, defaultDashboardConfig, GOAL_STYLES, type DashboardConfig,
 } from '../../lib/dashboardConfig'
 import { useLocalStorage } from '../../lib/useLocalStorage'
 import SettingsCard from '../../components/SettingsCard'
@@ -41,7 +41,7 @@ export default function GoalsSettings() {
   // Display options are device-local, like the theme and the dashboard cards —
   // they apply instantly and deliberately sit outside the Save button below,
   // which owns the goals themselves.
-  const [cfg, setCfg] = useLocalStorage<DashboardConfig>(DASHBOARD_CFG_KEY, DEFAULT_DASHBOARD_CONFIG)
+  const [cfg, setCfg] = useLocalStorage<DashboardConfig>(DASHBOARD_CFG_KEY, defaultDashboardConfig())
   const [goals, setGoals] = useState<Goal[]>([])
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<Msg | null>(null)
@@ -84,6 +84,58 @@ export default function GoalsSettings() {
 
   return (
     <>
+    <SettingsCard
+      title="How goals look"
+      description="Presentation only — every style shows the same numbers, and switching never changes what a goal means or when you are notified about one. Applies as soon as you pick it."
+    >
+      <div className="goal-style-choices">
+        {GOAL_STYLES.map(st => {
+          const on = (cfg.goalStyle ?? 'classic') === st.id
+          return (
+            <button
+              key={st.id}
+              className={`goal-style-choice${on ? ' active' : ''}`}
+              aria-pressed={on}
+              onClick={() => setCfg(prev => ({ ...prev, goalStyle: st.id }))}
+            >
+              <span className="goal-style-label">{st.label}</span>
+              <span className="goal-style-blurb">{st.blurb}</span>
+              {on && <Check size={13} className="goal-style-tick" />}
+            </button>
+          )
+        })}
+      </div>
+
+      <label className="switch">
+        <input
+          type="checkbox"
+          checked={cfg.showGoalHistory !== false}
+          onChange={e => setCfg(prev => ({ ...prev, showGoalHistory: e.target.checked }))}
+        />
+        <span className="switch-track" />
+        Show recent windows
+      </label>
+      <span className="field-hint">
+        The run of bars under each goal: filled where you met the target, with a + where you beat
+        it. Every style can show them.
+      </span>
+
+      <label className="switch">
+        <input
+          type="checkbox"
+          checked={cfg.showGoalPeriods === true}
+          disabled={cfg.showGoalHistory === false}
+          onChange={e => setCfg(prev => ({ ...prev, showGoalPeriods: e.target.checked }))}
+        />
+        <span className="switch-track" />
+        Label those windows
+      </label>
+      <span className="field-hint">
+        Puts the week number or month name under each bar. Off by default — eight labels is a lot
+        of small text on a phone, and the Classic and Pace styles are the only ones with room.
+      </span>
+    </SettingsCard>
+
     <SettingsCard
       title="Goals"
       description="A goal is a number of activities, kilometres or hours per window of time — two runs a week, or 40 km of hiking a month. Each is tracked as its own streak, in the order listed here."
@@ -218,57 +270,6 @@ export default function GoalsSettings() {
       )}
     </SettingsCard>
 
-    <SettingsCard
-      title="How goals look"
-      description="Presentation only — every style shows the same numbers, and switching never changes what a goal means or when you are notified about one. Applies as soon as you pick it."
-    >
-      <div className="theme-choices">
-        {GOAL_STYLES.map(st => {
-          const on = (cfg.goalStyle ?? 'classic') === st.id
-          return (
-            <button
-              key={st.id}
-              className={`theme-choice${on ? ' active' : ''}`}
-              aria-pressed={on}
-              onClick={() => setCfg(prev => ({ ...prev, goalStyle: st.id }))}
-            >
-              <span className="theme-choice-label">{st.label}</span>
-              <span className="theme-choice-hint">{st.blurb}</span>
-              {on && <Check size={13} className="theme-choice-tick" />}
-            </button>
-          )
-        })}
-      </div>
-
-      <label className="switch">
-        <input
-          type="checkbox"
-          checked={cfg.showGoalHistory !== false}
-          onChange={e => setCfg(prev => ({ ...prev, showGoalHistory: e.target.checked }))}
-        />
-        <span className="switch-track" />
-        Show recent windows
-      </label>
-      <span className="field-hint">
-        The run of bars under each goal: filled where you met the target, with a + where you beat
-        it. Every style can show them.
-      </span>
-
-      <label className="switch">
-        <input
-          type="checkbox"
-          checked={cfg.showGoalPeriods === true}
-          disabled={cfg.showGoalHistory === false}
-          onChange={e => setCfg(prev => ({ ...prev, showGoalPeriods: e.target.checked }))}
-        />
-        <span className="switch-track" />
-        Label those windows
-      </label>
-      <span className="field-hint">
-        Puts the week number or month name under each bar. Off by default — eight labels is a lot
-        of small text on a phone, and the Classic and Pace styles are the only ones with room.
-      </span>
-    </SettingsCard>
     </>
   )
 }
