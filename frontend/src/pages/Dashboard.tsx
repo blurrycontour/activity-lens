@@ -318,7 +318,7 @@ function GoalTileStandard({ p, opts }: { p: GoalProgress; opts: GoalViewOpts }) 
           grows into its own row rather than stretching the line the verdict
           is on, so nothing beside it moves. */}
       <div className="goal-std-head">
-        <GoalSportMark type={p.goal.type} size={17} />
+        <GoalSportMark type={p.goal.type} size={17} disc />
         <span className="goal-std-desc" title={goalTitle(p.goal)}>
           {describeGoal(p.goal)} · {daysLeft(p)}d left
         </span>

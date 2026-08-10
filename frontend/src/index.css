@@ -3637,7 +3637,23 @@ body:has(.overlay) .fab { display: none; }
   column-gap: 8px;
   row-gap: 2px;
 }
-.goal-std-head > svg { grid-row: 1 / 3; align-self: center; }
+.goal-std-head > .goal-sport-disc { grid-row: 1 / 3; align-self: center; }
+
+/* The sport hue as a wash rather than a fill: the icon on top of it is the
+   same colour at full strength, so the disc has to stay well behind it or the
+   mark stops reading. Mixed with transparent, not with a surface token, so it
+   sits correctly on the card in either theme. */
+.goal-sport-disc {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--goal-hue, var(--primary)) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--goal-hue, var(--primary)) 26%, transparent);
+}
 /* The third column is as wide as the wider of the verdict and the badges;
    without this the narrower of the two would stretch to fill it and stop
    sharing a right edge with the other. */
@@ -3717,7 +3733,7 @@ body:has(.overlay) .fab { display: none; }
   overflow: hidden;
 }
 .goal-award > svg { position: relative; z-index: 1; }
-/* A band of light crossing the medal every few seconds: the disc never moves,
+/* A band of light crossing the medal every three seconds: the disc never moves,
    so it catches the eye without anything on the dashboard shifting. */
 .goal-award::after {
   content: '';
@@ -3732,14 +3748,14 @@ body:has(.overlay) .fab { display: none; }
     transparent
   );
   transform: translateX(-260%) skewX(-18deg);
-  animation: goal-award-shine 5s ease-in-out infinite;
+  animation: goal-award-shine 3s ease-in-out infinite;
 }
 /* Staggered, so several met goals don't flash in unison. */
 :is(.goal-panel-stack, .goal-rings, .goal-ledger) > :nth-child(3n + 2) .goal-award::after {
-  animation-delay: 1.7s;
+  animation-delay: 1s;
 }
 :is(.goal-panel-stack, .goal-rings, .goal-ledger) > :nth-child(3n) .goal-award::after {
-  animation-delay: 3.4s;
+  animation-delay: 2s;
 }
 @keyframes goal-award-in {
   from { transform: scale(0.4); opacity: 0; }
@@ -3747,7 +3763,7 @@ body:has(.overlay) .fab { display: none; }
 }
 /* Most of the cycle is the rest between sweeps; the sweep itself is the tail. */
 @keyframes goal-award-shine {
-  0%, 78% { transform: translateX(-260%) skewX(-18deg); }
+  0%, 70% { transform: translateX(-260%) skewX(-18deg); }
   100% { transform: translateX(320%) skewX(-18deg); }
 }
 @media (prefers-reduced-motion: reduce) {

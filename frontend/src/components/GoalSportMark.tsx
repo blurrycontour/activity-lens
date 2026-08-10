@@ -1,3 +1,4 @@
+import type React from 'react'
 import { Orbit } from 'lucide-react'
 import { TYPE_COLOR, TYPE_ICON, type WorkoutType } from '../data/workouts'
 
@@ -22,12 +23,22 @@ export function goalColor(type: WorkoutType | ''): string {
  * someone has desaturated, and fails hardest here because two of the six sport
  * hues are neighbours. Anywhere a goal names its sport, it names it both ways.
  */
-export default function GoalSportMark({ type, size = 14 }: {
+export default function GoalSportMark({ type, size = 14, disc }: {
   type: WorkoutType | ''
   size?: number | string
+  /** Seat the icon on a tinted disc in the same hue. */
+  disc?: boolean
 }) {
   // Orbit rather than a dashed circle: this is "everything in the library",
   // not "unclassified", and CircleDashed already means the latter on workouts.
   const Icon = type ? TYPE_ICON[type] : Orbit
-  return <Icon size={size} color={goalColor(type)} aria-hidden />
+  const icon = <Icon size={size} color={goalColor(type)} aria-hidden />
+  if (!disc) return icon
+  // The hue goes on the wrapper as a variable so the disc's fill and ring can
+  // be mixed from it in CSS rather than computed twice here.
+  return (
+    <span className="goal-sport-disc" style={{ '--goal-hue': goalColor(type) } as React.CSSProperties}>
+      {icon}
+    </span>
+  )
 }
