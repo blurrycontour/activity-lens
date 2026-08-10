@@ -16,12 +16,12 @@ import Sparkline from '../components/Sparkline'
 import { api, type Equipment } from '../lib/api'
 import { AXIS_TICK, GRID_PROPS, HOVER_FILL, recencyRamp } from '../lib/chartColors'
 import {
-  DASHBOARD_CFG_KEY, defaultDashboardConfig, windowLabel,
+  DASHBOARD_CFG_KEY, defaultDashboardConfig, resolveGoalStyle, windowLabel,
   type DashboardConfig, type GoalStyle, type StatCardId,
 } from '../lib/dashboardConfig'
 import {
   deltaPct, describeGoal, describeGoalMinimum, formatGoalAmount, formReading, gearNudges, goalFromApi, goalProgress,
-  periodLabel, recentPersonalBests, recentWeekStarts, sparkBuckets, totalsOf, weekdayMatrix,
+  goalUnit, periodLabel, recentPersonalBests, recentWeekStarts, sparkBuckets, totalsOf, weekdayMatrix,
   windowSlices, type Goal, type GoalProgress,
 } from '../lib/insights'
 
@@ -301,73 +301,114 @@ function daysLeft(p: GoalProgress): number {
   return Math.max(0, Math.round(span * (1 - p.elapsed)))
 }
 
-/** The figure, stacked so a long "29.2 / 40 km" keeps the column narrow. */
-function GoalFigure({ p }: { p: GoalProgress }) {
-  return (
-    <span className="goal-classic-fig" aria-hidden="true">
-      <span className="goal-classic-cur" style={{ color: goalColor(p.goal.type) }}>
-        {formatGoalAmount(p.goal, p.current, true)}
-      </span>
-      <span className="goal-classic-tot mono">/{formatGoalAmount(p.goal, p.goal.target)}</span>
-    </span>
-  )
-}
-
 /**
- * Classic: the sport mark leads, the figure sits in a column of its own, and
- * the bar and history run beside it from the figure's right edge.
+ * Standard: the merge of what were Classic and Pace.
+ *
+ * Four rows — figure and heading, description, bar, history — with the figure
+ * large enough to stand across the first two, and the text beside it bottom-
+ * aligned so the number gets the height rather than the whitespace.
  */
-function GoalTileClassic({ p, opts }: { p: GoalProgress; opts: GoalViewOpts }) {
+function GoalTileStandard({ p, opts }: { p: GoalProgress; opts: GoalViewOpts }) {
   const met = p.current >= p.goal.target
   const v = paceVerdict(p)
   return (
     <div className={`goal-tile${met ? ' met' : ''}${p.goal.metric === 'count' ? '' : ' measured'}`}>
-      <div className="goal-tile-head">
-        <GoalSportMark type={p.goal.type} size={16} />
-        <span className="goal-meta" title={goalTitle(p.goal)}>{describeGoal(p.goal)}</span>
-        <span className={`goal-verdict ${v.tone}`}>{v.text}</span>
-        <GoalBadges p={p} />
+      <div className="goal-std-top">
+        <span className="goal-std-fig" aria-hidden="true">
+          <span className="goal-std-cur" style={{ color: goalColor(p.goal.type) }}>
+            {formatGoalAmount(p.goal, p.current, true)}
+          </span>
+          <span className="goal-std-tot mono">/{formatGoalAmount(p.goal, p.goal.target)}</span>
+        </span>
+
+        <span className="goal-std-head">
+          <GoalSportMark type={p.goal.type} size={15} />
+          <span className={`goal-verdict ${v.tone}`}>{v.text}</span>
+          <GoalBadges p={p} />
+        </span>
+
+        <span className="goal-std-desc" title={goalTitle(p.goal)}>
+          {describeGoal(p.goal)} · {daysLeft(p)}d left
+        </span>
       </div>
 
-      <div className="goal-classic-body">
-        <GoalFigure p={p} />
-        <div className="goal-classic-tracks">
-          <GoalBar p={p} needle />
-          {opts.showHistory && <GoalHistory p={p} showPeriods={opts.showPeriods} />}
-        </div>
-      </div>
+      <GoalBar p={p} needle />
+
+      {opts.showHistory && <GoalHistory p={p} showPeriods={opts.showPeriods} />}
     </div>
   )
 }
 
 /**
- * Pace line: the same bar and needle, led by the figure and a verdict in words
- * rather than by the sport mark.
+ * Today's move: what to do now, rather than what has happened.
+ *
+ * The only style that is useful before a workout instead of after one. It reads
+ * the goal furthest off pace and turns the arithmetic nobody does in their head
+ * — target, progress, days left — into one sentence.
  */
-function GoalTilePace({ p, opts }: { p: GoalProgress; opts: GoalViewOpts }) {
-  const met = p.current >= p.goal.target
-  const v = paceVerdict(p)
+function GoalToday({ progress, opts }: { progress: GoalProgress[]; opts: GoalViewOpts }) {
+  const unmet = progress.filter(p => p.current < p.goal.target)
+  // Furthest behind where it should be by now, not simply least complete: a
+  // monthly goal at 40% on the 3rd is fine, a weekly one at 40% on Saturday is
+  // not, and only the ratio against `elapsed` tells them apart.
+  const worst = unmet.slice().sort((a, b) => {
+    const ratio = (p: GoalProgress) => (p.goal.target * p.elapsed > 0
+      ? p.current / (p.goal.target * p.elapsed) : 1)
+    return ratio(a) - ratio(b)
+  })[0]
+
+  let headline: React.ReactNode
+  let because = ''
+  if (!worst) {
+    headline = <>Every goal is <span className="hl">met</span>. Go out because you want to.</>
+    because = progress.length > 0
+      ? `All ${progress.length} done, with ${daysLeft(progress[0])} days still on the clock.`
+      : ''
+  } else {
+    const left = worst.goal.target - worst.current
+    const days = Math.max(1, daysLeft(worst))
+    if (worst.goal.metric === 'count') {
+      const n = Math.ceil(left)
+      const noun = worst.goal.type
+        ? `${worst.goal.type.toLowerCase()}${n === 1 ? '' : 's'}`
+        : (n === 1 ? 'activity' : 'activities')
+      headline = <><span className="hl">{n} more {noun}</span> in {days} day{days === 1 ? '' : 's'} keeps every goal alive.</>
+      because = `${describeGoal(worst.goal)} is the one at risk — ${formatGoalAmount(worst.goal, worst.current)} of ${formatGoalAmount(worst.goal, worst.goal.target)}.`
+    } else {
+      const perDay = Math.round((left / days) * 10) / 10
+      headline = (
+        <>
+          <span className="hl">{perDay} {goalUnit(worst.goal.metric)}</span> a day
+          {worst.goal.type ? ` of ${worst.goal.type.toLowerCase()}` : ''} and you finish on target.
+        </>
+      )
+      because = `${formatGoalAmount(worst.goal, left)} still to go across ${days} day${days === 1 ? '' : 's'}. It is the goal furthest off pace.`
+    }
+  }
+
   return (
-    <div className={`goal-tile pace${met ? ' met' : ''}`}>
-      <div className="goal-pace-top">
-        <GoalSportMark type={p.goal.type} size={14} />
-        <span className="goal-pace-fig mono" style={{ color: goalColor(p.goal.type) }}>
-          {formatGoalAmount(p.goal, p.current, true)}
-        </span>
-        <span className="goal-pace-total mono">/ {formatGoalAmount(p.goal, p.goal.target)}</span>
-        <span className={`goal-verdict ${v.tone}`}>{v.text}</span>
+    <div className="goal-today">
+      <span className="goal-today-kicker mono">Your move</span>
+      <p className="goal-today-line">{headline}</p>
+      {because && <p className="goal-today-because">{because}</p>}
+
+      <div className="goal-today-strip">
+        {progress.map(p => {
+          const v = paceVerdict(p)
+          return (
+            <div className="goal-today-item" key={p.goal.id} title={goalTitle(p.goal)}>
+              <GoalSportMark type={p.goal.type} size={13} />
+              <span className="goal-today-name">{describeGoal(p.goal)}</span>
+              <GoalBadges p={p} compact />
+              <span className={`goal-verdict ${v.tone}`}>{v.text}</span>
+              <span className="goal-today-amt mono">
+                {formatGoalAmount(p.goal, p.current, true)}/{formatGoalAmount(p.goal, p.goal.target)}
+              </span>
+              {opts.showHistory && <GoalHistory p={p} showPeriods={false} compact />}
+            </div>
+          )
+        })}
       </div>
-
-      <div className="goal-pace-sub">
-        <span className="goal-pace-desc" title={goalTitle(p.goal)}>
-          {describeGoal(p.goal)} · {daysLeft(p)}d left
-        </span>
-        <GoalBadges p={p} compact />
-      </div>
-
-      <GoalBar p={p} needle />
-
-      {opts.showHistory && <GoalHistory p={p} showPeriods={opts.showPeriods} compact />}
     </div>
   )
 }
@@ -490,10 +531,10 @@ function GoalLedger({ progress, opts }: { progress: GoalProgress[]; opts: GoalVi
 function GoalPanel({ progress, opts }: { progress: GoalProgress[]; opts: GoalViewOpts }) {
   if (opts.style === 'rings') return <GoalRings progress={progress} opts={opts} />
   if (opts.style === 'ledger') return <GoalLedger progress={progress} opts={opts} />
-  const Tile = opts.style === 'pace' ? GoalTilePace : GoalTileClassic
+  if (opts.style === 'today') return <GoalToday progress={progress} opts={opts} />
   return (
     <div className="goal-panel-stack">
-      {progress.map(p => <Tile key={p.goal.id} p={p} opts={opts} />)}
+      {progress.map(p => <GoalTileStandard key={p.goal.id} p={p} opts={opts} />)}
     </div>
   )
 }
@@ -542,7 +583,7 @@ export default function Dashboard({ onSelect }: { onSelect: (w: Workout) => void
   }, [])
 
   const goalOpts: GoalViewOpts = {
-    style: cfg.goalStyle ?? 'classic',
+    style: resolveGoalStyle(cfg.goalStyle),
     showHistory: cfg.showGoalHistory !== false,
     showPeriods: cfg.showGoalPeriods === true,
   }
@@ -717,7 +758,7 @@ export default function Dashboard({ onSelect }: { onSelect: (w: Workout) => void
                   <h3 className="chart-card-title">Goals</h3>
                   <InfoTip
                     label="Goals"
-                    text="Progress against each goal you set under Settings → Training Goals, in the order you arranged them there. A goal can count activities, kilometres or hours, over a window of one or more weeks or months. A streak counts consecutive windows that met the target; the window in progress extends a streak once you hit it but never breaks one, so a quiet Monday costs you nothing. Windows longer than one period run back to back from a fixed anchor, so they never overlap. The bar under each goal is progress through the window in hand. The row of bars below it is the last eight windows, oldest on the left: filled means the target was met, and a + means it was beaten. A trophy appears once the current window is done. Settings → Training goals chooses between four styles for this card, and whether these bars and their week or month labels appear. The minimum distance and duration decide which activities count at all, rather than trimming the total. Distance minimums are matched against the figure shown on the workout, so a run listed as 5.0 km counts toward a 5 km goal."
+                    text="Every goal from Settings → Training goals, in the order you put them there. The marker on each bar is where you would be exactly on schedule, so past it means ahead. The bars below are recent windows — filled where you met the target, notched where you beat it — and a streak counts consecutive windows met, which the one in progress can extend but never break. Card styles and labels live in the same settings page."
                   />
                 </div>
                 {progress.length === 0 ? (
@@ -793,6 +834,39 @@ export default function Dashboard({ onSelect }: { onSelect: (w: Workout) => void
               {/* Weekly trend: the compact sibling of Consistency → Compare. */}
               <div className="card">
                 <div className="chart-card-head">
+                  <h3 className="chart-card-title">Activity Mix</h3>
+                  <InfoTip
+                    label="Activity Mix"
+                    text="How many activities of each type you logged in the dashboard's time window, which you can change under Settings → Dashboard. Ring length is proportional to the count, so it shows the balance of your training rather than how much time or distance each sport took."
+                  />
+                  <span className="chart-card-actions" style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>{caption}</span>
+                </div>
+                <p className="chart-card-desc">Share of activities by sport over the {caption}.</p>
+                <div className="activity-mix-body">
+                  <div className="activity-mix-legend">
+                    {d.radialData.map(r => (
+                      <div key={r.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                          <div style={{ width: 10, height: 10, borderRadius: 3, background: r.fill, flexShrink: 0 }} />
+                          <span style={{ fontSize: 13, color: 'var(--text-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
+                        </div>
+                        <span style={{ fontSize: 13, fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{r.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="activity-mix-chart">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <RadialBarChart innerRadius="34%" outerRadius="92%" data={d.radialData} startAngle={90} endAngle={-270}>
+                        <RadialBar dataKey="value" background={{ fill: 'var(--bg-3)' }} />
+                      </RadialBarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+
+              {/* Radial type breakdown: legend on the left, chart on the right (desktop) */}
+              <div className="card">
+                <div className="chart-card-head">
                   <h3 className="chart-card-title">Weekly Trend</h3>
                   <InfoTip
                     label="Weekly Trend"
@@ -836,39 +910,6 @@ export default function Dashboard({ onSelect }: { onSelect: (w: Workout) => void
                     ))}
                   </BarChart>
                 </ResponsiveContainer>
-              </div>
-
-              {/* Radial type breakdown: legend on the left, chart on the right (desktop) */}
-              <div className="card">
-                <div className="chart-card-head">
-                  <h3 className="chart-card-title">Activity Mix</h3>
-                  <InfoTip
-                    label="Activity Mix"
-                    text="How many activities of each type you logged in the dashboard's time window, which you can change under Settings → Dashboard. Ring length is proportional to the count, so it shows the balance of your training rather than how much time or distance each sport took."
-                  />
-                  <span className="chart-card-actions" style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>{caption}</span>
-                </div>
-                <p className="chart-card-desc">Share of activities by sport over the {caption}.</p>
-                <div className="activity-mix-body">
-                  <div className="activity-mix-legend">
-                    {d.radialData.map(r => (
-                      <div key={r.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                          <div style={{ width: 10, height: 10, borderRadius: 3, background: r.fill, flexShrink: 0 }} />
-                          <span style={{ fontSize: 13, color: 'var(--text-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
-                        </div>
-                        <span style={{ fontSize: 13, fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{r.value}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="activity-mix-chart">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <RadialBarChart innerRadius="34%" outerRadius="92%" data={d.radialData} startAngle={90} endAngle={-270}>
-                        <RadialBar dataKey="value" background={{ fill: 'var(--bg-3)' }} />
-                      </RadialBarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
               </div>
             </div>
 

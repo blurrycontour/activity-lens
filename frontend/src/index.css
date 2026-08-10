@@ -3623,67 +3623,67 @@ body:has(.overlay) .fab { display: none; }
 /* ── Goal tile: the numbers carry the motivation, so they lead and everything
    else recedes behind a divider. ── */
 .goal-tile { display: flex; flex-direction: column; gap: 10px; }
+/* Shared by the verdict, the streak and the medal. */
+.goal-panel-stack, .goal-ledger, .goal-rings, .goal-today { --goal-badge-h: 20px; }
 
-.goal-tile-head {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-.goal-tile-head > svg { flex-shrink: 0; }
-
-/* The figure keeps its own column and the bar and history run beside it, so a
-   row of tiles lines up on both edges of the number. */
-.goal-classic-body {
+/* The figure stands across both text lines rather than sitting on one of them,
+   and the description is pushed to the bottom of its row — the height goes to
+   the number instead of to the gap above the words. */
+.goal-std-top {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 12px;
+  grid-template-rows: auto auto;
+  align-items: end;
+  column-gap: 12px;
+  row-gap: 2px;
 }
-.goal-classic-tracks { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
-.goal-classic-fig {
+.goal-std-fig {
+  grid-row: 1 / span 2;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  line-height: 1;
+  justify-content: center;
+  line-height: 0.95;
   /* A floor rather than a fixed width: "3/3" and "29.2/40 km" both have to
-     leave the tracks starting at the same x down a stack of tiles. */
-  min-width: 58px;
+     leave the bar starting at the same x down a stack of tiles. */
+  min-width: 62px;
 }
-.goal-classic-cur {
+.goal-std-cur {
   font-family: var(--font-mono);
-  font-size: 25px;
+  font-size: 34px;
   font-weight: 500;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.045em;
   transition: text-shadow 0.2s ease;
 }
-.goal-classic-tot {
-  font-size: 11px;
+.goal-std-tot { font-size: 11px; color: var(--text-3); margin-top: 4px; }
+.goal-tile.measured .goal-std-cur { font-size: 27px; }
+.goal-tile.met .goal-std-cur { text-shadow: 0 0 20px currentColor; }
+
+.goal-std-head { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.goal-std-head > svg { flex-shrink: 0; }
+.goal-std-desc {
+  font-size: 11.5px;
+  font-family: var(--font-mono);
   color: var(--text-3);
-  margin-top: 3px;
-}
-.goal-tile.measured .goal-classic-cur { font-size: 21px; }
-.goal-tile.met .goal-classic-cur { text-shadow: 0 0 20px currentColor; }
-
-.goal-badges { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
-
-/* Supporting copy sits behind the figure in the visual hierarchy. */
-.goal-meta {
-  flex: 1;
-  min-width: 0;
-  font-size: 12.5px;
-  line-height: 1.4;
-  color: var(--text-2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  align-self: end;
 }
+
+/* One height for every pill in the card — verdict, streak and medal — so a row
+   of them sits on a single baseline whichever style is drawing it. */
+.goal-badges { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+/* Supporting copy sits behind the figure in the visual hierarchy. */
 
 .goal-flame {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
-  padding: 3px 9px;
+  height: var(--goal-badge-h);
+  padding: 0 9px;
   border-radius: 99px;
   background: var(--primary-dim);
   color: var(--primary);
@@ -3703,14 +3703,14 @@ body:has(.overlay) .fab { display: none; }
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 24px;
-  height: 24px;
+  width: var(--goal-badge-h);
+  height: var(--goal-badge-h);
   border-radius: 99px;
   background: var(--primary);
   color: var(--on-primary);
   box-shadow:
-    0 0 0 3px var(--primary-dim),
-    0 0 16px var(--primary-glow);
+    0 0 0 2px var(--primary-dim),
+    0 0 14px var(--primary-glow);
   animation: goal-award-in 0.45s cubic-bezier(0.2, 1.4, 0.4, 1) both;
 }
 @keyframes goal-award-in {
@@ -3747,14 +3747,17 @@ body:has(.overlay) .fab { display: none; }
   color: transparent;
 }
 .goal-history-bar.met { background: var(--goal-hue, var(--primary)); border-color: transparent; }
-/* The "+" sits on a bar filled with the goal's colour.
-   Near-black is the only ink that clears contrast on all six sport hues in both
-   themes — a colour that flipped with the theme would be legible in one and
-   almost invisible in the other, because the bar underneath does not change.
-   So it stays dark, but it is mixed with the goal's own hue rather than being
-   flat black, which is what made it read as a smudge. */
+/* A beaten window is marked by a notch cut out of the bar rather than a glyph
+   drawn on it. Ink on the bar could never be right in both themes — the bar is
+   a fixed sport colour, so a colour that followed the theme would be legible in
+   one and invisible in the other. The notch is the card's own background, so it
+   is correct in every theme by construction, and it survives being 12px tall. */
 .goal-history-bar.over {
-  color: color-mix(in srgb, var(--goal-hue, var(--primary)) 30%, #05070a);
+  color: transparent;
+  background-image: linear-gradient(var(--bg-2), var(--bg-2));
+  background-size: 2px 6px;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 
 .goal-history-label {
@@ -3766,6 +3769,46 @@ body:has(.overlay) .fab { display: none; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ── Analysis: trend summary tiles ──────────────────────────────────
+   Two up on a phone. At one per row the six of them pushed the chart they
+   summarise off the screen entirely. */
+.trend-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+  margin-bottom: 20px;
+}
+@media (max-width: 640px) {
+  .trend-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .trend-stats .card { padding: 10px; }
+}
+
+/* A filter that is on or off, sized and shaped like the dropdowns beside it so
+   the row reads as one set of controls. A labelled switch plus its own info
+   bubble could not share a line with them on a phone. */
+.filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  color: var(--text-2);
+  font-size: 12.5px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.filter-pill:hover { border-color: var(--border-strong); color: var(--text); }
+.filter-pill.on {
+  border-color: var(--primary);
+  background: var(--primary-dim);
+  color: var(--primary);
+}
+.filter-pill > svg { flex-shrink: 0; }
 
 /* ── Goal style picker ─────────────────────────────────────────────
    Its own class rather than .theme-choice: that one is a three-column grid
@@ -3802,27 +3845,18 @@ body:has(.overlay) .fab { display: none; }
 .goal-style-choice.active .goal-style-blurb { color: var(--text-2); }
 .goal-style-tick { position: absolute; top: 11px; right: 11px; }
 
-/* ── Goal panel: pace line ──────────────────────────────────────────────────
-   The classic bar with a marker for where you would be exactly on schedule. */
-.goal-tile.pace { gap: 7px; }
-
-.goal-pace-top { display: flex; align-items: baseline; gap: 7px; }
-.goal-pace-top > svg { align-self: center; flex-shrink: 0; }
-.goal-pace-fig {
-  font-size: 21px;
-  font-weight: 500;
-  letter-spacing: -0.03em;
-  line-height: 1;
-}
-.goal-pace-total { font-size: 12px; color: var(--text-3); }
+/* ── The progress bar, shared by every style that draws one ─────────────── */
 
 .goal-verdict {
   margin-left: auto;
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  height: var(--goal-badge-h);
   font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 500;
-  padding: 2px 7px;
+  padding: 0 8px;
   border-radius: 99px;
   white-space: nowrap;
 }
@@ -3865,22 +3899,6 @@ body:has(.overlay) .fab { display: none; }
   height: 5px;
   transform: translateX(-50%) rotate(45deg);
   background: var(--text);
-}
-
-.goal-pace-sub {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--text-3);
-}
-.goal-pace-desc {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* ── Goal panel: rings ───────────────────────────────────────────────────── */
@@ -3928,9 +3946,14 @@ body:has(.overlay) .fab { display: none; }
 .goal-ring-streak {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  font-size: 10px;
+  gap: 3px;
+  height: 16px;
+  padding: 0 6px;
+  border-radius: 99px;
+  background: var(--primary-dim);
   color: var(--primary);
+  font-size: 9.5px;
+  font-weight: 700;
   flex-shrink: 0;
 }
 /* On the dial rather than under it, for the same reason. */
@@ -3965,12 +3988,13 @@ body:has(.overlay) .fab { display: none; }
   grid-template-columns: auto minmax(6px, 1fr) auto auto auto;
   align-items: center;
   column-gap: 8px;
-  row-gap: 10px;
+  row-gap: 6px;
 }
 .goal-ledger-row { display: contents; }
-/* Its own goal's history hugs it, so the 10px row gap reads as the separation
-   between goals rather than as even spacing between six unrelated strips. */
-.goal-ledger-hist { grid-column: 1 / -1; margin-top: -5px; }
+/* The gap between goals lives on the history strip's own bottom padding rather
+   than on the grid's row gap, which could not tell "a goal and its history"
+   apart from "two different goals" and spaced them identically. */
+.goal-ledger-hist { grid-column: 1 / -1; padding-bottom: 6px; }
 .goal-ledger-badges { display: inline-flex; justify-content: flex-end; }
 .goal-ledger-val { justify-self: end; }
 .goal-ledger-row .goal-verdict { justify-self: end; text-align: center; min-width: 8.5ch; }
@@ -4007,10 +4031,65 @@ body:has(.overlay) .fab { display: none; }
   /* Exactly two a row: auto-fit would take three at 78px each, and a 78px dial
      on a phone is a decoration rather than a number you can read. */
   .goal-rings { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .goal-classic-body { gap: 9px; }
-  .goal-classic-fig { min-width: 48px; }
-  .goal-classic-cur { font-size: 22px; }
-  .goal-tile.measured .goal-classic-cur { font-size: 18px; }
+  .goal-std-top { column-gap: 9px; }
+  .goal-std-fig { min-width: 52px; }
+  .goal-std-cur { font-size: 29px; }
+  .goal-tile.measured .goal-std-cur { font-size: 23px; }
+}
+
+/* ── Goal panel: today's move ───────────────────────────────────────────── */
+.goal-today { display: flex; flex-direction: column; }
+.goal-today-kicker {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 9px;
+}
+.goal-today-line {
+  font-size: 21px;
+  font-weight: 640;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+  text-wrap: balance;
+  margin-bottom: 5px;
+}
+.goal-today-line .hl { color: var(--primary); }
+.goal-today-because {
+  font-size: 11.5px;
+  color: var(--text-3);
+  line-height: 1.5;
+  margin-bottom: 14px;
+}
+.goal-today-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.goal-today-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 8px;
+}
+.goal-today-name {
+  font-size: 11.5px;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.goal-today-amt { font-size: 11px; color: var(--text-3); }
+.goal-today-item .goal-history { grid-column: 1 / -1; }
+.goal-today-item .goal-verdict { margin-left: 0; }
+
+@media (max-width: 420px) {
+  .goal-today-line { font-size: 18px; }
+  /* The figure and the verdict matter more than the sentence at this width. */
+  .goal-today-item { grid-template-columns: auto minmax(0, 1fr) auto auto; }
+  .goal-today-item .goal-badges { display: none; }
 }
 
 /* Full-viewport, above everything, and untouchable — it is decoration, and it

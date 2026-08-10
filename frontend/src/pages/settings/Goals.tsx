@@ -8,7 +8,7 @@ import {
   MAX_GOAL_SPAN, describeGoal, goalFromApi, newGoal, type Goal,
 } from '../../lib/insights'
 import {
-  DASHBOARD_CFG_KEY, defaultDashboardConfig, GOAL_STYLES, type DashboardConfig,
+  DASHBOARD_CFG_KEY, GOAL_STYLES, defaultDashboardConfig, resolveGoalStyle, type DashboardConfig,
 } from '../../lib/dashboardConfig'
 import { useLocalStorage } from '../../lib/useLocalStorage'
 import SettingsCard from '../../components/SettingsCard'
@@ -90,7 +90,7 @@ export default function GoalsSettings() {
     >
       <div className="goal-style-choices">
         {GOAL_STYLES.map(st => {
-          const on = (cfg.goalStyle ?? 'classic') === st.id
+          const on = resolveGoalStyle(cfg.goalStyle) === st.id
           return (
             <button
               key={st.id}

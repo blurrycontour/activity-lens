@@ -12,14 +12,26 @@ export type StatCardId = 'distance' | 'time' | 'elevation' | 'calories' | 'avgHr
  * numbers — this is presentation, not a different measurement — so switching
  * never changes what a goal means or what the notifiers do with it.
  */
-export type GoalStyle = 'classic' | 'pace' | 'rings' | 'ledger'
+export type GoalStyle = 'standard' | 'rings' | 'ledger' | 'today'
 
 export const GOAL_STYLES: { id: GoalStyle; label: string; blurb: string }[] = [
-  { id: 'classic', label: 'Classic', blurb: 'A big figure per goal, with the streak beside it.' },
-  { id: 'pace', label: 'Pace line', blurb: 'Adds a marker for where you should be today.' },
-  { id: 'rings', label: 'Rings', blurb: 'One ring per goal, readable at a glance.' },
-  { id: 'ledger', label: 'Ledger', blurb: 'A compact monospace list. Best for many goals.' },
+  { id: 'standard', label: 'Standard', blurb: 'Figure, pace and history for each goal.' },
+  { id: 'rings', label: 'Rings', blurb: 'One dial per goal, readable at a glance.' },
+  { id: 'ledger', label: 'Ledger', blurb: 'A compact list. Best for many goals.' },
+  { id: 'today', label: "Today's move", blurb: 'The one thing that would keep you on track.' },
 ]
+
+/**
+ * Reads a stored style, folding away the two that merged.
+ *
+ * Classic and Pace ended up differing only in where the figure sat: both grew
+ * the same needle, verdict, badges and history, so they were one style with a
+ * preference rather than two. Anyone who had picked either lands on Standard.
+ */
+export function resolveGoalStyle(stored: string | undefined): GoalStyle {
+  if (stored === 'rings' || stored === 'ledger' || stored === 'today') return stored
+  return 'standard'
+}
 
 export interface DashboardConfig {
   cards: StatCardId[]
@@ -80,7 +92,7 @@ export const DEFAULT_DASHBOARD_CONFIG: DashboardConfig = {
   windowDays: 30,
   showDeltas: true,
   showSparklines: true,
-  goalStyle: 'classic',
+  goalStyle: 'standard',
   showGoalHistory: true,
   showGoalPeriods: false,
 }

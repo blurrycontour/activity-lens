@@ -23,7 +23,7 @@ import {
   ScatterChart, Scatter, XAxis, YAxis, ZAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   BarChart, Bar, Cell, LineChart, Line, ComposedChart, ReferenceArea, ReferenceLine,
 } from 'recharts'
-import { Award, Target, Zap, Activity, Navigation, TrendingUp, Gauge, Flame, CloudSun, Sparkles } from 'lucide-react'
+import { Award, Target, Zap, Activity, Navigation, TrendingUp, Gauge, Flame, CloudSun, Sparkles, CalendarRange } from 'lucide-react'
 
 type PR = { longest: Workout; fastest: Workout | null; highest: Workout }
 
@@ -70,12 +70,34 @@ function monthLabel(key: string): string {
   return `${MONTH_NAMES[Number(mo) - 1]} ${yr.slice(2)}`
 }
 
-function dayLabel(date: string): string {
-  return new Date(`${date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+/**
+ * Axis label for a day. The year is added only when the selection actually
+ * crosses one — on every tick it is noise, and on none of them "Jan 4" is
+ * ambiguous the moment a chart shows two Januaries.
+ */
+function dayLabel(date: string, withYear = false): string {
+  return new Date(`${date}T00:00:00`).toLocaleDateString(
+    'en-US',
+    withYear ? { month: 'short', day: 'numeric', year: '2-digit' } : { month: 'short', day: 'numeric' },
+  )
+}
+
+/** Tooltip form. Always names the year: there is room, and it settles it. */
+function fullDate(date: string): string {
+  return new Date(`${date}T00:00:00`).toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
+  })
+}
+
+/** Whether a set of YYYY-... keys covers more than one calendar year. */
+function spansYears(keys: string[]): boolean {
+  if (keys.length === 0) return false
+  const first = keys[0].slice(0, 4)
+  return keys.some(k => k.slice(0, 4) !== first)
 }
 
 /** A chart row anchored to an activity date; the rest varies per chart. */
-type DatedRow = { date: string; dateLabel: string } & Record<string, unknown>
+type DatedRow = { date: string; dateLabel: string; dateFull: string } & Record<string, unknown>
 
 /**
  * Gives a per-activity series one position per day between its first and last
@@ -85,14 +107,16 @@ type DatedRow = { date: string; dateLabel: string } & Record<string, unknown>
  * lines that draw these series pass `connectNulls`, so the line carries across
  * the gap while the x axis stops pretending the gap was not there.
  */
-function withEmptyDays(rows: DatedRow[]): DatedRow[] {
+function withEmptyDays(rows: DatedRow[], withYear: boolean): DatedRow[] {
   const span = keySpan(rows, r => r.date)
   if (!span) return rows
   return fillGaps(
     rows,
     everyDayBetween(span[0], span[1]),
     r => r.date,
-    date => ({ date, dateLabel: dayLabel(date) }),
+    // `empty` marks a day the gap filler inserted, so a tooltip can say "no
+    // activity" rather than rendering nothing and looking broken.
+    date => ({ date, dateLabel: dayLabel(date, withYear), dateFull: fullDate(date), empty: true }),
   )
 }
 
@@ -251,12 +275,17 @@ export default function Analysis() {
   }, [workouts])
 
   // ── Trends ───────────────────────────────────────────────────────────────
+  // Whether the whole selection crosses a year decides the axis format once,
+  // rather than each row guessing from its own date.
+  const multiYear = useMemo(() => spansYears(workouts.map(w => w.date).sort()), [workouts])
+
   const series = useMemo(() =>
     [...workouts]
       .sort((a, b) => a.date.localeCompare(b.date))
       .map(w => ({
         date: w.date,
-        dateLabel: new Date(`${w.date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        dateLabel: dayLabel(w.date, multiYear),
+        dateFull: fullDate(w.date),
         pace: w.avgPace || null,
         hr: w.avgHR,
         maxHr: w.maxHR || null,
@@ -269,7 +298,7 @@ export default function Analysis() {
         name: w.name,
         type: w.type,
       })),
-  [workouts])
+  [workouts, multiYear])
 
   const seriesWithMA = useMemo(() => {
     const window = 3
@@ -286,8 +315,8 @@ export default function Analysis() {
     // last three activities" rather than becoming "the last three days" the
     // moment the toggle is flipped. The toggle is about the x axis, not the
     // maths on it.
-    return showGaps ? withEmptyDays(rows) : rows
-  }, [series, showGaps])
+    return showGaps ? withEmptyDays(rows, multiYear) : rows
+  }, [series, showGaps, multiYear])
 
   const summaryStats = useMemo(() => {
     if (series.length === 0) return []
@@ -317,10 +346,12 @@ export default function Analysis() {
     // The rolling average runs over `keys`, so with gaps shown a week off pulls
     // it down the way it actually did, and with them hidden it behaves exactly
     // as it did before the toggle existed.
+    const crossesYears = spansYears(keys)
     return keys.map((key, i) => {
       const win = keys.slice(Math.max(0, i - 3), i + 1)
       return {
-        label: volumeBucket === 'month' ? monthLabel(key) : key.slice(5),
+        label: volumeBucket === 'month' ? monthLabel(key) : dayLabel(key, crossesYears),
+        full: volumeBucket === 'month' ? monthLabel(key) : `Week of ${fullDate(key)}`,
         key,
         value: Math.round((buckets.get(key) ?? 0) * 10) / 10,
         avg: Math.round((win.reduce((a, k) => a + (buckets.get(k) ?? 0), 0) / win.length) * 10) / 10,
@@ -361,9 +392,10 @@ export default function Analysis() {
     // in the same range as the real paces and needs no configuration.
     const hrs = usable.map(d => d.hr).sort((a, b) => a - b)
     const refHr = hrs[Math.floor(hrs.length / 2)]
-    const rows = usable.map(d => ({
+    const rows: DatedRow[] = usable.map(d => ({
       date: d.date,
       dateLabel: d.dateLabel,
+      dateFull: d.dateFull,
       name: d.name,
       hrPerSpeed: Math.round((d.hr / (d.speed as number)) * 10) / 10,
       adjPace: Math.round((d.pace as number) * (refHr / d.hr)),
@@ -371,8 +403,8 @@ export default function Analysis() {
       hr: d.hr,
       speed: d.speed as number,
     }))
-    return { refHr, rows: showGaps ? withEmptyDays(rows) : rows }
-  }, [series, showGaps])
+    return { refHr, rows: showGaps ? withEmptyDays(rows, multiYear) : rows }
+  }, [series, showGaps, multiYear])
 
   // ── Load ─────────────────────────────────────────────────────────────────
   const { trainingLoad, acwr } = useMemo(() => {
@@ -386,26 +418,31 @@ export default function Analysis() {
 
     const span = days + 27
     const daily: number[] = []
-    const labels: string[] = []
+    const keys: string[] = []
     for (let i = span - 1; i >= 0; i--) {
       const dt = new Date()
       dt.setDate(dt.getDate() - i)
       daily.push(byDate.get(toDateKey(dt)) ?? 0)
-      labels.push(dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))
+      keys.push(toDateKey(dt))
     }
     // Prefix sums make each window average O(1) instead of re-summing 28 days.
     const prefix = [0]
     for (const v of daily) prefix.push(prefix[prefix.length - 1] + v)
     const meanEndingAt = (end: number, count: number) => (prefix[end + 1] - prefix[end + 1 - count]) / count
 
-    const trainingLoad: { date: string; tss: number }[] = []
-    const acwr: { date: string; acute: number; chronic: number; ratio: number | null }[] = []
+    // Labels are derived after the fact, so the year rule can look at the span
+    // the chart will actually draw rather than at the 28-day lead-in too.
+    const shown = keys.slice(span - days)
+    const crossesYears = spansYears(shown)
+    const trainingLoad: { date: string; full: string; tss: number }[] = []
+    const acwr: { date: string; full: string; acute: number; chronic: number; ratio: number | null }[] = []
     for (let end = span - days; end < span; end++) {
-      trainingLoad.push({ date: labels[end], tss: daily[end] })
+      trainingLoad.push({ date: dayLabel(keys[end], crossesYears), full: fullDate(keys[end]), tss: daily[end] })
       const acute = meanEndingAt(end, 7)
       const chronic = meanEndingAt(end, 28)
       acwr.push({
-        date: labels[end],
+        date: dayLabel(keys[end], crossesYears),
+        full: fullDate(keys[end]),
         acute: Math.round(acute),
         chronic: Math.round(chronic),
         ratio: chronic > 0 ? Math.round((acute / chronic) * 100) / 100 : null,
@@ -439,15 +476,16 @@ export default function Analysis() {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <TypeDropdown value={typeFilter} onChange={setTypeFilter} />
           <RangeDropdown value={rangeDays} onChange={setRangeDays} />
-          <label className="switch">
-            <input type="checkbox" checked={showGaps} onChange={e => setShowGaps(e.target.checked)} />
-            <span className="switch-track" />
-            Show gaps
-          </label>
-          <InfoTip
-            label="Show gaps"
-            text="Time-series charts normally give each activity one position on the x axis, which closes up the days you did not train — dense and easy to read, but a fortnight off looks like business as usual. Switch this on and every skipped day, week or month keeps its place, so breaks and their effect on a trend are visible. Moving averages over activities are unaffected; the rolling average on Training Volume does count the empty buckets, because a week off genuinely lowers it."
-          />
+          <button
+            type="button"
+            className={`filter-pill${showGaps ? ' on' : ''}`}
+            aria-pressed={showGaps}
+            onClick={() => setShowGaps(!showGaps)}
+            title="Give every skipped day, week or month its place on the x axis. Charts normally give each activity one position, which closes up the days you did not train — dense and easy to read, but a fortnight off looks like business as usual. Moving averages over activities are unaffected; the rolling average on Training Volume does count the empty buckets, because a week off genuinely lowers it."
+          >
+            <CalendarRange size={14} />
+            <span>Gaps</span>
+          </button>
         </div>
       </div>
 
@@ -555,7 +593,7 @@ export default function Analysis() {
             </div>
 
             {summaryStats.length > 0 && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10, marginBottom: 20 }}>
+              <div className="trend-stats">
                 {summaryStats.map(s => (
                   <div key={s.id} className="card" style={{ borderLeft: `3px solid ${s.color}` }}>
                     <div style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{s.label}</div>
@@ -591,10 +629,23 @@ export default function Analysis() {
                     <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" label={yLabel('Selected metrics')} />
                     <Tooltip
                       content={({ active, payload, label }) => {
-                        if (!active || !payload?.length) return null
+                        if (!active) return null
+                        // With gaps shown most positions are days with nothing
+                        // on them, and Recharts hands over an empty payload.
+                        // Returning null there reads as a broken tooltip, so the
+                        // day still names itself and says it was a rest day.
+                        const row = payload?.[0]?.payload as DatedRow | undefined
+                        if (!payload?.length || row?.empty) {
+                          return (
+                            <div className="custom-tooltip">
+                              <div style={{ color: 'var(--text-2)', fontWeight: 600 }}>{row?.dateFull ?? label}</div>
+                              <div style={{ color: 'var(--text-3)' }}>No activity</div>
+                            </div>
+                          )
+                        }
                         return (
                           <div className="custom-tooltip">
-                            <div style={{ color: 'var(--text-2)', marginBottom: 6, fontWeight: 600 }}>{label}</div>
+                            <div style={{ color: 'var(--text-2)', marginBottom: 6, fontWeight: 600 }}>{row?.dateFull ?? label}</div>
                             {payload.filter(p => !String(p.dataKey).endsWith('_ma')).map(p => {
                               const m = METRICS.find(x => x.id === p.dataKey)
                               if (!m || !selectedMetrics.includes(m.id)) return null
@@ -648,7 +699,7 @@ export default function Analysis() {
                         const unit = volumeMeasure === 'distance' ? 'km' : 'h'
                         return (
                           <div className="custom-tooltip">
-                            <div style={{ fontWeight: 600, marginBottom: 2 }}>{volumeBucket === 'week' ? `Week of ${d.key}` : d.label}</div>
+                            <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.full}</div>
                             <div style={{ color: 'var(--primary)' }}>{d.value} {unit}</div>
                             <div style={{ color: 'var(--text-3)' }}>4-bucket avg {d.avg} {unit}</div>
                           </div>
@@ -686,12 +737,18 @@ export default function Analysis() {
                         content={({ active, payload }) => {
                           if (!active || !payload?.length) return null
                           const d = payload[0].payload
-                          // A day inserted to show a gap has no activity on it.
-                          if (!d?.name) return null
+                          if (!d?.name) {
+                            return (
+                              <div className="custom-tooltip">
+                                <div style={{ fontWeight: 600 }}>{d?.dateFull ?? ''}</div>
+                                <div style={{ color: 'var(--text-3)' }}>No activity</div>
+                              </div>
+                            )
+                          }
                           return (
                             <div className="custom-tooltip">
                               <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.name}</div>
-                              <div style={{ color: 'var(--text-3)' }}>{d.dateLabel}</div>
+                              <div style={{ color: 'var(--text-3)' }}>{d.dateFull}</div>
                               <div style={{ color: 'var(--danger)' }}>{d.hrPerSpeed} bpm per km/h</div>
                               <div style={{ color: 'var(--text-3)' }}>{d.hr} bpm · {d.speed.toFixed(1)} km/h</div>
                             </div>
@@ -725,11 +782,18 @@ export default function Analysis() {
                         content={({ active, payload }) => {
                           if (!active || !payload?.length) return null
                           const d = payload[0].payload
-                          if (!d?.name) return null
+                          if (!d?.name) {
+                            return (
+                              <div className="custom-tooltip">
+                                <div style={{ fontWeight: 600 }}>{d?.dateFull ?? ''}</div>
+                                <div style={{ color: 'var(--text-3)' }}>No activity</div>
+                              </div>
+                            )
+                          }
                           return (
                             <div className="custom-tooltip">
                               <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.name}</div>
-                              <div style={{ color: 'var(--text-3)' }}>{d.dateLabel}</div>
+                              <div style={{ color: 'var(--text-3)' }}>{d.dateFull}</div>
                               <div style={{ color: 'var(--blue)' }}>{fmtPace(d.adjPace)} /km adjusted</div>
                               <div style={{ color: 'var(--text-3)' }}>{fmtPace(d.pace)} /km actual · {d.hr} bpm</div>
                             </div>
@@ -856,7 +920,7 @@ export default function Analysis() {
                     content={({ active, payload }) => {
                       if (!active || !payload?.length) return null
                       const d = payload[0].payload
-                      return <div className="custom-tooltip"><div>{d.date}</div><div style={{ color: 'var(--blue)' }}>Load {d.tss}</div></div>
+                      return <div className="custom-tooltip"><div>{d.full}</div><div style={{ color: 'var(--blue)' }}>Load {d.tss}</div></div>
                     }}
                   />
                   <Bar dataKey="tss" fill="var(--blue)" radius={[2, 2, 0, 0]} opacity={0.8} isAnimationActive={false} />
@@ -891,7 +955,7 @@ export default function Analysis() {
                       const d = payload[0].payload
                       return (
                         <div className="custom-tooltip">
-                          <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.date}</div>
+                          <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.full}</div>
                           <div style={{ color: 'var(--purple)' }}>Ratio {d.ratio ?? '—'}</div>
                           <div style={{ color: 'var(--text-3)' }}>Acute {d.acute} · Chronic {d.chronic}</div>
                         </div>
