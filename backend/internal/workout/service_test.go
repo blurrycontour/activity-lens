@@ -340,3 +340,87 @@ func TestRecalculateRejectsAnEmptySelection(t *testing.T) {
 		t.Fatalf("error = %v, want ErrInvalid", err)
 	}
 }
+
+// A treadmill export often carries a total distance the app cannot derive —
+// the track points hold heart rate and time and no position at all — and
+// sometimes not even that. Editing it has to bring pace and speed with it: a
+// workout reading 5 km at the pace of the 8 km it used to be is worse than one
+// with no distance.
+func TestUpdateDistanceRederivesPaceAndSpeed(t *testing.T) {
+	repo := NewSQLiteRepository(newTestDB(t))
+	svc := NewService(repo)
+	ctx := context.Background()
+
+	in := importInput("treadmill", "hash-treadmill")
+	in.Distance = 8000
+	wk, _, err := svc.CreateIdempotent(ctx, 1, in)
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	before := wk.AvgPace
+
+	corrected := 5000.0
+	got, err := svc.Update(ctx, 1, wk.ID, Patch{Distance: &corrected})
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if got.Distance != corrected {
+		t.Fatalf("distance = %v, want %v", got.Distance, corrected)
+	}
+	if got.AvgPace == before {
+		t.Fatal("pace still describes the old distance")
+	}
+	if want := float64(got.MovingTime) / 5; got.AvgPace != want {
+		t.Errorf("AvgPace = %v, want %v", got.AvgPace, want)
+	}
+	if got.AvgSpeed <= 0 {
+		t.Errorf("AvgSpeed = %v, want a positive figure", got.AvgSpeed)
+	}
+	// The estimate follows the distance it is made from.
+	if got.Steps != estimateSteps(got.Type, corrected, 0) {
+		t.Errorf("Steps = %d, want the estimate for the new distance", got.Steps)
+	}
+}
+
+// A count someone typed in is theirs, and a later distance correction is not a
+// reason to throw it away.
+func TestUpdateDistanceKeepsHandEnteredSteps(t *testing.T) {
+	repo := NewSQLiteRepository(newTestDB(t))
+	svc := NewService(repo)
+	ctx := context.Background()
+
+	wk, _, err := svc.CreateIdempotent(ctx, 1, importInput("treadmill", "hash-steps"))
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	steps := 4321
+	if _, err := svc.Update(ctx, 1, wk.ID, Patch{Steps: &steps}); err != nil {
+		t.Fatalf("update steps: %v", err)
+	}
+	corrected := 3000.0
+	got, err := svc.Update(ctx, 1, wk.ID, Patch{Distance: &corrected})
+	if err != nil {
+		t.Fatalf("update distance: %v", err)
+	}
+	if got.Steps != steps {
+		t.Errorf("Steps = %d, want the hand-entered %d", got.Steps, steps)
+	}
+}
+
+// Kilometres typed where metres were wanted is the mistake this catches, and
+// it is one nothing on screen would reveal afterwards.
+func TestUpdateRejectsImpossibleDistance(t *testing.T) {
+	repo := NewSQLiteRepository(newTestDB(t))
+	svc := NewService(repo)
+	ctx := context.Background()
+
+	wk, _, err := svc.CreateIdempotent(ctx, 1, importInput("run", "hash-bad-distance"))
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	for _, bad := range []float64{-1, maxDistanceMeters + 1} {
+		if _, err := svc.Update(ctx, 1, wk.ID, Patch{Distance: &bad}); !errors.Is(err, ErrInvalid) {
+			t.Errorf("distance %v: error = %v, want ErrInvalid", bad, err)
+		}
+	}
+}

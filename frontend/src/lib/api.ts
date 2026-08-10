@@ -551,7 +551,7 @@ export const api = {
   getWorkoutOriginal: (id: string) => fetchFile(`/api/workouts/${id}/original`),
   createWorkout: (payload: ManualWorkoutInput) =>
     request<import('../data/workouts').Workout>('/api/workouts', { method: 'POST', body: payload }),
-  patchWorkout: (id: string, patch: { name?: string; type?: string; notes?: string; date?: string; calories?: number; steps?: number; equipmentIds?: string[] }) =>
+  patchWorkout: (id: string, patch: { name?: string; type?: string; notes?: string; date?: string; calories?: number; steps?: number; distance?: number; equipmentIds?: string[] }) =>
     request<import('../data/workouts').Workout>(`/api/workouts/${id}`, { method: 'PATCH', body: patch }),
   /**
    * Re-derives the named values. Everything named is overwritten, including

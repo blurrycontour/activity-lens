@@ -210,13 +210,24 @@ func (s *Server) handlePatchWorkout(w http.ResponseWriter, r *http.Request) {
 		Date         *string   `json:"date"` // YYYY-MM-DD
 		Calories     *int      `json:"calories"`
 		Steps        *int      `json:"steps"`
+		Distance     *float64  `json:"distance"` // metres
 		EquipmentIDs *[]string `json:"equipmentIds"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	patch := workout.Patch{Name: req.Name, Notes: req.Notes, Calories: req.Calories, Steps: req.Steps}
+	patch := workout.Patch{
+		Name: req.Name, Notes: req.Notes, Calories: req.Calories, Steps: req.Steps,
+		Distance: req.Distance,
+	}
+	// Only for a distance edit, which is what re-derives the step estimate.
+	// Every other field leaves it alone, and this is a query per request.
+	if req.Distance != nil {
+		if prefs, err := s.settings.UserPreferences(r.Context(), user.ID); err == nil {
+			patch.StepLengthM = stepLengthMeters(prefs)
+		}
+	}
 	if req.Type != nil {
 		t := workout.Type(*req.Type)
 		patch.Type = &t

@@ -467,6 +467,10 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
   const [editType, setEditType] = useState<WorkoutType>(w.type)
   const [editCalories, setEditCalories] = useState('')
   const [editSteps, setEditSteps] = useState('')
+  // Kilometres, because that is the unit on every other screen. A treadmill
+  // export often states a total the app cannot derive — the track points carry
+  // heart rate and time and no position at all — and sometimes states nothing.
+  const [editDistance, setEditDistance] = useState('')
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -724,6 +728,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
     setEditType(w.type)
     setEditCalories(w.calories > 0 ? String(w.calories) : '')
     setEditSteps(w.steps != null && w.steps > 0 ? String(w.steps) : '')
+    setEditDistance(w.distance > 0 ? (w.distance / 1000).toFixed(2) : '')
     setSaveErr(null)
     setEditing(true)
   }
@@ -736,6 +741,9 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
         name: editName.trim(), type: editType, date: editDate,
         calories: Math.max(0, Math.round(Number(editCalories) || 0)),
         steps: Math.max(0, Math.round(Number(editSteps) || 0)),
+        // Back to metres, which is what the field stores. Rounded, because a
+        // typed "5.03" is 5030 m and not 5029.999999999999.
+        distance: Math.max(0, Math.round((Number(editDistance) || 0) * 1000)),
       })
       setW(updated)
       setEditing(false)
@@ -1006,6 +1014,15 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
                 <div>
                   <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Date</label>
                   <input className="input" style={{ width: '100%' }} type="date" value={editDate} onChange={e => setEditDate(e.target.value)} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Distance (km)</label>
+                  <input
+                    className="input" style={{ width: '100%' }} type="number" min="0" step="0.01"
+                    value={editDistance}
+                    onChange={e => setEditDistance(e.target.value)}
+                    placeholder="Distance"
+                  />
                 </div>
                 <div>
                   <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Calories (kcal)</label>

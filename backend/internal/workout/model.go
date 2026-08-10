@@ -351,6 +351,15 @@ type Patch struct {
 	StartTime *time.Time
 	Calories  *int
 	Steps     *int
+	// Distance in metres. Editable because a treadmill export often carries a
+	// total the app cannot derive: the track points hold heart rate and time and
+	// no position at all, so the distance the machine displayed is the only one
+	// there is, and sometimes the file omits even that.
+	Distance *float64
+	// StepLengthM is the user's stride, needed only alongside Distance: the step
+	// estimate is distance over stride, so correcting one without the other
+	// leaves a count that contradicts the figure it was derived from.
+	StepLengthM float64
 }
 
 // Stats is the aggregate dashboard summary for a user's library.
