@@ -185,6 +185,25 @@ func (s *Service) Update(ctx context.Context, userID int64, id string, p Patch) 
 		w.Steps = *p.Steps
 		w.StepsManual = *p.Steps > 0
 	}
+	// Distance is applied last, because pace, speed and the step estimate are
+	// all computed from it and must not be left describing the old figure. A
+	// workout whose distance says 5 km and whose pace still says 4:00 from the
+	// 8 km it used to be is worse than one with no distance at all.
+	if p.Distance != nil {
+		if *p.Distance < 0 {
+			return nil, fmt.Errorf("%w: distance must be non-negative", ErrInvalid)
+		}
+		if *p.Distance > maxDistanceMeters {
+			return nil, fmt.Errorf("%w: distance is implausibly large", ErrInvalid)
+		}
+		w.Distance = *p.Distance
+		derivePaceSpeed(w)
+		// A count the user typed in is theirs and stays; anything else was
+		// derived from the distance that just changed.
+		if !w.StepsManual {
+			deriveSteps(w, p.StepLengthM)
+		}
+	}
 	if err := s.repo.Update(ctx, w); err != nil {
 		return nil, err
 	}
@@ -479,6 +498,11 @@ func stepsFromCadence(w *Workout) (int, bool) {
 	}
 	return int(math.Round(total)), true
 }
+
+// The longest distance a single workout can plausibly claim. Generous enough
+// for an ultra or a long ride, and low enough that a units mix-up — kilometres
+// typed where metres were wanted — is caught rather than stored.
+const maxDistanceMeters = 1000 * 1000
 
 // onFoot reports whether pace and a step count mean anything for this activity.
 //

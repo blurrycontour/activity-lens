@@ -210,13 +210,24 @@ func (s *Server) handlePatchWorkout(w http.ResponseWriter, r *http.Request) {
 		Date         *string   `json:"date"` // YYYY-MM-DD
 		Calories     *int      `json:"calories"`
 		Steps        *int      `json:"steps"`
+		Distance     *float64  `json:"distance"` // metres
 		EquipmentIDs *[]string `json:"equipmentIds"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	patch := workout.Patch{Name: req.Name, Notes: req.Notes, Calories: req.Calories, Steps: req.Steps}
+	patch := workout.Patch{
+		Name: req.Name, Notes: req.Notes, Calories: req.Calories, Steps: req.Steps,
+		Distance: req.Distance,
+	}
+	// Only for a distance edit, which is what re-derives the step estimate.
+	// Every other field leaves it alone, and this is a query per request.
+	if req.Distance != nil {
+		if prefs, err := s.settings.UserPreferences(r.Context(), user.ID); err == nil {
+			patch.StepLengthM = stepLengthMeters(prefs)
+		}
+	}
 	if req.Type != nil {
 		t := workout.Type(*req.Type)
 		patch.Type = &t
@@ -713,13 +724,17 @@ type savePrefsRequest struct {
 	FTP           int     `json:"ftp"`
 	StepLengthCm  int     `json:"stepLengthCm"`
 
-	Goals []struct {
-		ID     string  `json:"id"`
-		Count  int     `json:"count"`
-		Period string  `json:"period"`
-		Type   string  `json:"type"`
-		MinKm  float64 `json:"minKm"`
-	} `json:"goals"`
+	// settings.Goal rather than a struct of its own, so there is one definition
+	// of a goal's wire shape instead of two that have to be kept in step.
+	//
+	// It matters more than tidiness here: Goal.UnmarshalJSON accepts the
+	// pre-metric shape, where a goal carried `count` and no `metric`. A second
+	// struct did not, and because decodeJSON disallows unknown fields, every
+	// save from a client still running the old bundle — a PWA holding a cached
+	// service worker, an Android build a version behind — failed with "invalid
+	// request body". Not just goal saves: the client PUTs the whole record, so
+	// one stale goal in it broke every setting on every page.
+	Goals []settings.Goal `json:"goals"`
 
 	Notify *struct {
 		Kinds map[string]bool `json:"kinds"`
@@ -737,7 +752,9 @@ type savePrefsRequest struct {
 func (s *Server) handleSavePreferences(w http.ResponseWriter, r *http.Request) {
 	user := httpmw.UserFrom(r)
 	var req savePrefsRequest
-	if err := decodeJSON(r, &req); err != nil {
+	// Lenient: this endpoint takes back the whole record it handed out, from
+	// clients that update on their own schedule. See decodeJSONLenient.
+	if err := decodeJSONLenient(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -766,27 +783,19 @@ func (s *Server) handleSavePreferences(w http.ResponseWriter, r *http.Request) {
 	// Goals are validated individually and silently dropped when they could
 	// never be met, so one bad row can't reject an otherwise valid save.
 	goals := make([]settings.Goal, 0, len(req.Goals))
-	for _, g := range req.Goals {
-		if g.Count <= 0 {
+	for _, goal := range req.Goals {
+		if goal.Target <= 0 {
 			continue
 		}
-		period := g.Period
-		if period != "week" && period != "month" {
-			period = "week"
-		}
 		// An empty type means "any activity counts".
-		typ := g.Type
-		if typ != "" && !workout.ValidType(workout.Type(typ)) {
-			typ = ""
+		if goal.Type != "" && !workout.ValidType(workout.Type(goal.Type)) {
+			goal.Type = ""
 		}
-		goals = append(goals, settings.Goal{
-			ID:     g.ID,
-			Count:  min(g.Count, maxGoalCount(period)),
-			Period: period,
-			Type:   typ,
-			MinKm:  max(g.MinKm, 0),
-		})
-		if len(goals) >= 12 {
+		// Decoding already normalized the goal, so the ceiling can be read off
+		// the metric, period and span it settled on rather than what was sent.
+		goal.Target = min(goal.Target, maxGoalTarget(goal))
+		goals = append(goals, goal)
+		if len(goals) >= maxGoals {
 			break
 		}
 	}
@@ -839,11 +848,23 @@ func (s *Server) writeWorkoutError(w http.ResponseWriter, err error) {
 	}
 }
 
-// maxGoalCount caps a goal at roughly three activities a day for its period —
-// beyond that it is a typo rather than a plan.
-func maxGoalCount(period string) int {
-	if period == "month" {
-		return 93
+// maxGoals is how many training goals one user may keep. The dashboard renders
+// every one of them, so the cap is about a readable page as much as storage.
+const maxGoals = 12
+
+// maxGoalTarget caps a goal at something a human could plausibly do in the
+// window — beyond that it is a typo rather than a plan. Per day of the window,
+// that is three activities, 300 km, or 12 hours.
+func maxGoalTarget(g settings.Goal) float64 {
+	days := 7 * g.Span
+	if g.Period == "month" {
+		days = 31 * g.Span
 	}
-	return 21
+	switch g.Metric {
+	case settings.MetricDistance:
+		return float64(days) * 300
+	case settings.MetricDuration:
+		return float64(days) * 12
+	}
+	return float64(days) * 3
 }

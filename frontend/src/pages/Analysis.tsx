@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { TYPE_COLOR, fmtPace, type WorkoutType, type Workout } from '../data/workouts'
+import { ALL_WORKOUT_TYPES, TYPE_COLOR, fmtPace, type WorkoutType, type Workout } from '../data/workouts'
 import { useWorkouts } from '../context/WorkoutsContext'
 import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
@@ -11,6 +11,7 @@ import TypeLegend from '../components/TypeLegend'
 import Dropdown from '../components/Dropdown'
 import { useLocalStorage } from '../lib/useLocalStorage'
 import { filterByRange, rangeLabel, toDateKey } from '../lib/range'
+import { everyDayBetween, everyMonthBetween, everyWeekBetween, fillGaps, keySpan } from '../lib/timeGaps'
 import { AXIS_TICK, GRID_PROPS, HOVER_FILL } from '../lib/chartColors'
 import {
   PERF_METRICS, WEATHER_FIELDS, binByTemperature, binWidthFor, describeCorrelation,
@@ -22,7 +23,7 @@ import {
   ScatterChart, Scatter, XAxis, YAxis, ZAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   BarChart, Bar, Cell, LineChart, Line, ComposedChart, ReferenceArea, ReferenceLine,
 } from 'recharts'
-import { Award, Target, Zap, Activity, Navigation, TrendingUp, Gauge, Flame, CloudSun, Sparkles } from 'lucide-react'
+import { Award, Target, Zap, Activity, Navigation, TrendingUp, Gauge, Flame, CloudSun, Sparkles, CalendarRange } from 'lucide-react'
 
 type PR = { longest: Workout; fastest: Workout | null; highest: Workout }
 
@@ -50,6 +51,29 @@ const METRICS: { id: Metric; label: string; color: string; unit: string; format?
   { id: 'steps', label: 'Steps', color: 'var(--strength)', unit: '', format: v => Math.round(v).toLocaleString() },
 ]
 
+/**
+ * What the by-sport chart can measure, and how each reads.
+ *
+ * Deliberately the four that are comparable across sports as a bare number. A
+ * pace or a heart rate is not — "best pace" for a swim and a ride are different
+ * quantities wearing the same units — and those already live on the record
+ * cards above, per sport, where the comparison is never implied.
+ */
+type SportMeasure = 'distance' | 'duration' | 'elevation' | 'calories'
+
+const SPORT_MEASURES: {
+  id: SportMeasure
+  label: string
+  axis: string
+  of: (w: Workout) => number
+  fmt: (v: number) => string
+}[] = [
+  { id: 'distance', label: 'Distance', axis: 'Distance (km)', of: w => w.distance / 1000, fmt: v => `${v.toFixed(1)} km` },
+  { id: 'duration', label: 'Time', axis: 'Time (hours)', of: w => w.duration / 3600, fmt: v => `${v.toFixed(1)} h` },
+  { id: 'elevation', label: 'Elevation', axis: 'Elevation gain (m)', of: w => w.elevationGain, fmt: v => `${Math.round(v)} m` },
+  { id: 'calories', label: 'Calories', axis: 'Calories (kcal)', of: w => w.calories, fmt: v => `${Math.round(v).toLocaleString()} kcal` },
+]
+
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 /** TSS-equivalent for one workout: duration scaled by relative heart-rate effort. */
@@ -67,6 +91,78 @@ function weekKey(date: string): string {
 function monthLabel(key: string): string {
   const [yr, mo] = key.split('-')
   return `${MONTH_NAMES[Number(mo) - 1]} ${yr.slice(2)}`
+}
+
+/**
+ * Axis label for a day: "Jul 27", or "Jul 27 '26" when the year has to be said.
+ *
+ * Said on as few ticks as possible. A year on every tick made the labels half
+ * again as long, which pushed them into each other and left the axis looking
+ * broken — and it is redundant on all but one of them anyway, since a run of
+ * dates only changes year once. Callers mark that one tick; the rest stay short
+ * and the tooltip carries the full date regardless.
+ */
+function dayLabel(date: string, withYear = false): string {
+  const d = new Date(`${date}T00:00:00`)
+  const short = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return withYear ? `${short} '${String(d.getFullYear()).slice(2)}` : short
+}
+
+/**
+ * Marks which of `keys` should carry a year: the first, and any that starts a
+ * new one. Returns an all-false set when the range never leaves a single year.
+ */
+function yearMarks(keys: string[]): boolean[] {
+  if (!spansYears(keys)) return keys.map(() => false)
+  let prev = ''
+  return keys.map(k => {
+    const year = k.slice(0, 4)
+    const mark = year !== prev
+    prev = year
+    return mark
+  })
+}
+
+/** Tooltip form. Always names the year: there is room, and it settles it. */
+function fullDate(date: string): string {
+  return new Date(`${date}T00:00:00`).toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
+  })
+}
+
+/** Whether a set of YYYY-... keys covers more than one calendar year. */
+function spansYears(keys: string[]): boolean {
+  if (keys.length === 0) return false
+  const first = keys[0].slice(0, 4)
+  return keys.some(k => k.slice(0, 4) !== first)
+}
+
+/** A chart row anchored to an activity date; the rest varies per chart. */
+type DatedRow = { date: string; dateLabel: string; dateFull: string } & Record<string, unknown>
+
+/**
+ * Gives a per-activity series one position per day between its first and last
+ * activity, so time off shows as the distance it actually is.
+ *
+ * An inserted day carries only its date, leaving every value undefined. The
+ * lines that draw these series pass `connectNulls`, so the line carries across
+ * the gap while the x axis stops pretending the gap was not there.
+ */
+function withEmptyDays(rows: DatedRow[]): DatedRow[] {
+  const span = keySpan(rows, r => r.date)
+  if (!span) return rows
+  const filled = fillGaps(
+    rows,
+    everyDayBetween(span[0], span[1]),
+    r => r.date,
+    // `empty` marks a day the gap filler inserted, so a tooltip can say "no
+    // activity" rather than rendering nothing and looking broken.
+    date => ({ date, dateLabel: dayLabel(date), dateFull: fullDate(date), empty: true }),
+  )
+  // Re-marked over the filled run: the day that opens a year is usually one of
+  // the inserted ones, and the original marks now sit on the wrong rows.
+  const marks = yearMarks(filled.map(r => r.date))
+  return filled.map((r, i) => ({ ...r, dateLabel: dayLabel(r.date, marks[i]) }))
 }
 
 /** Axis label placed below the plot, clear of the tick row. */
@@ -116,6 +212,26 @@ export default function Analysis() {
   const [selectedMetrics, setSelectedMetrics] = useLocalStorage<Metric[]>('al_tl_metrics', ['pace', 'hr'])
   const [volumeBucket, setVolumeBucket] = useLocalStorage<'week' | 'month'>('al_tl_bucket', 'week')
   const [volumeMeasure, setVolumeMeasure] = useLocalStorage<'distance' | 'time'>('al_tl_vol', 'distance')
+  /**
+   * Whether time-series charts span real elapsed time.
+   *
+   * Off by default, which is how these charts have always drawn: one position
+   * per activity, gaps closed up. That is the denser and often more readable
+   * view — but it silently rescales the x axis, so a fortnight off looks like
+   * business as usual. On, every skipped day or bucket keeps its place.
+   */
+  const [showGaps, setShowGaps] = useLocalStorage<boolean>('al_an_gaps', false)
+  /**
+   * Whether the trend chart's y axis starts at zero or hugs the data.
+   *
+   * Both are honest and neither is the right default for every metric: from
+   * zero keeps the proportions truthful, which matters for distance; fitting
+   * the data is the only way to see a trend in heart rate, where every value
+   * sits in a narrow band a long way above zero.
+   */
+  const [trendYAxis, setTrendYAxis] = useLocalStorage<'fit' | 'zero'>('al_tl_yaxis', 'fit')
+  const [sportMeasure, setSportMeasure] = useLocalStorage<SportMeasure>('al_an_sport_measure', 'calories')
+  const [sportAgg, setSportAgg] = useLocalStorage<'total' | 'best'>('al_an_sport_agg', 'total')
   const [weatherMetric, setWeatherMetric] = useLocalStorage<WeatherMetric>('al_an_wx_metric', 'pace')
   const [exploreX, setExploreX] = useLocalStorage<WeatherKey>('al_an_wx_x', 'humidity')
   const [exploreY, setExploreY] = useLocalStorage<PerfKey>('al_an_wx_y', 'pace')
@@ -190,7 +306,7 @@ export default function Analysis() {
   const anyWeather = useMemo(() => allWorkouts.some(w => w.weather), [allWorkouts])
 
   // ── Records ──────────────────────────────────────────────────────────────
-  const { PRs, calByType } = useMemo(() => {
+  const { PRs } = useMemo(() => {
     const PRs: Partial<Record<WorkoutType, PR>> = {}
     for (const type of ['Run', 'Ride', 'Hike', 'Swim', 'Strength'] as WorkoutType[]) {
       const tw = workouts.filter(w => w.type === type)
@@ -202,25 +318,40 @@ export default function Analysis() {
         highest: tw.reduce((a, b) => a.elevationGain > b.elevationGain ? a : b),
       }
     }
-    // One bar per type, coloured via Cell. A separate <Bar> per type would
-    // create one series each and leave every bar offset in its own slot
-    // rather than centred on its category.
-    const calByType = (['Run', 'Ride', 'Hike', 'Swim', 'Strength'] as WorkoutType[]).map(t => ({
-      type: t,
-      total: Math.round(workouts.filter(w => w.type === t).reduce((a, w) => a + w.calories, 0)),
-      count: workouts.filter(w => w.type === t).length,
-      fill: TYPE_COLOR[t],
-    })).filter(d => d.count > 0)
-    return { PRs, calByType }
+    return { PRs }
   }, [workouts])
 
+  /**
+   * One bar per sport, for whichever measure and aggregate are selected.
+   *
+   * Coloured via Cell. A separate <Bar> per type would create one series each
+   * and leave every bar offset in its own slot rather than centred on its
+   * category.
+   */
+  const bySport = useMemo(() => {
+    const m = SPORT_MEASURES.find(x => x.id === sportMeasure)!
+    return ALL_WORKOUT_TYPES.map(t => {
+      const of = workouts.filter(w => w.type === t)
+      if (of.length === 0) return null
+      const values = of.map(m.of)
+      return {
+        type: t,
+        value: sportAgg === 'best' ? Math.max(...values) : values.reduce((a, b) => a + b, 0),
+        count: of.length,
+        fill: TYPE_COLOR[t],
+      }
+    }).filter((d): d is NonNullable<typeof d> => d !== null && d.value > 0)
+  }, [workouts, sportMeasure, sportAgg])
+
   // ── Trends ───────────────────────────────────────────────────────────────
-  const series = useMemo(() =>
-    [...workouts]
-      .sort((a, b) => a.date.localeCompare(b.date))
-      .map(w => ({
+  const series = useMemo(() => {
+    const sorted = [...workouts].sort((a, b) => a.date.localeCompare(b.date))
+    const marks = yearMarks(sorted.map(w => w.date))
+    return sorted
+      .map((w, i) => ({
         date: w.date,
-        dateLabel: new Date(`${w.date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        dateLabel: dayLabel(w.date, marks[i]),
+        dateFull: fullDate(w.date),
         pace: w.avgPace || null,
         hr: w.avgHR,
         maxHr: w.maxHR || null,
@@ -232,21 +363,26 @@ export default function Analysis() {
         steps: w.steps || null,
         name: w.name,
         type: w.type,
-      })),
-  [workouts])
+      }))
+  }, [workouts])
 
   const seriesWithMA = useMemo(() => {
     const window = 3
-    return series.map((d, i) => {
+    const rows = series.map((d, i) => {
       const slice = series.slice(Math.max(0, i - window + 1), i + 1)
-      const result: Record<string, number | null | string> = { ...d }
+      const result: DatedRow = { ...d }
       for (const m of METRICS) {
         const vals = slice.map(s => s[m.id]).filter(v => v !== null) as number[]
         result[`${m.id}_ma`] = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : null
       }
       return result
     })
-  }, [series])
+    // Gaps are filled *after* the moving average, so the average stays "the
+    // last three activities" rather than becoming "the last three days" the
+    // moment the toggle is flipped. The toggle is about the x axis, not the
+    // maths on it.
+    return showGaps ? withEmptyDays(rows) : rows
+  }, [series, showGaps])
 
   const summaryStats = useMemo(() => {
     if (series.length === 0) return []
@@ -267,17 +403,27 @@ export default function Analysis() {
       const key = volumeBucket === 'month' ? w.date.slice(0, 7) : weekKey(w.date)
       buckets.set(key, (buckets.get(key) ?? 0) + (volumeMeasure === 'distance' ? w.distance / 1000 : w.duration / 3600))
     }
-    const rows = [...buckets.entries()].sort((a, b) => a[0].localeCompare(b[0]))
-    return rows.map(([key, value], i) => {
-      const win = rows.slice(Math.max(0, i - 3), i + 1)
+    let keys = [...buckets.keys()].sort()
+    if (keys.length === 0) return []
+    if (showGaps) {
+      const [first, last] = [keys[0], keys[keys.length - 1]]
+      keys = volumeBucket === 'month' ? everyMonthBetween(first, last) : everyWeekBetween(first, last)
+    }
+    // The rolling average runs over `keys`, so with gaps shown a week off pulls
+    // it down the way it actually did, and with them hidden it behaves exactly
+    // as it did before the toggle existed.
+    const marks = yearMarks(keys)
+    return keys.map((key, i) => {
+      const win = keys.slice(Math.max(0, i - 3), i + 1)
       return {
-        label: volumeBucket === 'month' ? monthLabel(key) : key.slice(5),
+        label: volumeBucket === 'month' ? monthLabel(key) : dayLabel(key, marks[i]),
+        full: volumeBucket === 'month' ? monthLabel(key) : `Week of ${fullDate(key)}`,
         key,
-        value: Math.round(value * 10) / 10,
-        avg: Math.round((win.reduce((a, [, v]) => a + v, 0) / win.length) * 10) / 10,
+        value: Math.round((buckets.get(key) ?? 0) * 10) / 10,
+        avg: Math.round((win.reduce((a, k) => a + (buckets.get(k) ?? 0), 0) / win.length) * 10) / 10,
       }
     })
-  }, [workouts, volumeBucket, volumeMeasure])
+  }, [workouts, volumeBucket, volumeMeasure, showGaps])
 
   // ── Efficiency ───────────────────────────────────────────────────────────
   const hrPaceData = useMemo(() =>
@@ -312,19 +458,19 @@ export default function Analysis() {
     // in the same range as the real paces and needs no configuration.
     const hrs = usable.map(d => d.hr).sort((a, b) => a - b)
     const refHr = hrs[Math.floor(hrs.length / 2)]
-    return {
-      refHr,
-      rows: usable.map(d => ({
-        dateLabel: d.dateLabel,
-        name: d.name,
-        hrPerSpeed: Math.round((d.hr / (d.speed as number)) * 10) / 10,
-        adjPace: Math.round((d.pace as number) * (refHr / d.hr)),
-        pace: d.pace as number,
-        hr: d.hr,
-        speed: d.speed as number,
-      })),
-    }
-  }, [series])
+    const rows: DatedRow[] = usable.map(d => ({
+      date: d.date,
+      dateLabel: d.dateLabel,
+      dateFull: d.dateFull,
+      name: d.name,
+      hrPerSpeed: Math.round((d.hr / (d.speed as number)) * 10) / 10,
+      adjPace: Math.round((d.pace as number) * (refHr / d.hr)),
+      pace: d.pace as number,
+      hr: d.hr,
+      speed: d.speed as number,
+    }))
+    return { refHr, rows: showGaps ? withEmptyDays(rows) : rows }
+  }, [series, showGaps])
 
   // ── Load ─────────────────────────────────────────────────────────────────
   const { trainingLoad, acwr } = useMemo(() => {
@@ -338,26 +484,30 @@ export default function Analysis() {
 
     const span = days + 27
     const daily: number[] = []
-    const labels: string[] = []
+    const keys: string[] = []
     for (let i = span - 1; i >= 0; i--) {
       const dt = new Date()
       dt.setDate(dt.getDate() - i)
       daily.push(byDate.get(toDateKey(dt)) ?? 0)
-      labels.push(dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))
+      keys.push(toDateKey(dt))
     }
     // Prefix sums make each window average O(1) instead of re-summing 28 days.
     const prefix = [0]
     for (const v of daily) prefix.push(prefix[prefix.length - 1] + v)
     const meanEndingAt = (end: number, count: number) => (prefix[end + 1] - prefix[end + 1 - count]) / count
 
-    const trainingLoad: { date: string; tss: number }[] = []
-    const acwr: { date: string; acute: number; chronic: number; ratio: number | null }[] = []
+    // Labels are derived after the fact, so the year rule can look at the span
+    // the chart will actually draw rather than at the 28-day lead-in too.
+    const marks = yearMarks(keys.slice(span - days))
+    const trainingLoad: { date: string; full: string; tss: number }[] = []
+    const acwr: { date: string; full: string; acute: number; chronic: number; ratio: number | null }[] = []
     for (let end = span - days; end < span; end++) {
-      trainingLoad.push({ date: labels[end], tss: daily[end] })
+      trainingLoad.push({ date: dayLabel(keys[end], marks[end - (span - days)]), full: fullDate(keys[end]), tss: daily[end] })
       const acute = meanEndingAt(end, 7)
       const chronic = meanEndingAt(end, 28)
       acwr.push({
-        date: labels[end],
+        date: dayLabel(keys[end], marks[end - (span - days)]),
+        full: fullDate(keys[end]),
         acute: Math.round(acute),
         chronic: Math.round(chronic),
         ratio: chronic > 0 ? Math.round((acute / chronic) * 100) / 100 : null,
@@ -388,9 +538,19 @@ export default function Analysis() {
           </span>
         </div>
         {/* One filter row governs every tab below it. */}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div className="analysis-filters">
           <TypeDropdown value={typeFilter} onChange={setTypeFilter} />
           <RangeDropdown value={rangeDays} onChange={setRangeDays} />
+          <button
+            type="button"
+            className={`filter-pill${showGaps ? ' on' : ''}`}
+            aria-pressed={showGaps}
+            onClick={() => setShowGaps(!showGaps)}
+            title="Give every skipped day, week or month its place on the x axis. Charts normally give each activity one position, which closes up the days you did not train — dense and easy to read, but a fortnight off looks like business as usual. Moving averages over activities are unaffected; the rolling average on Training Volume does count the empty buckets, because a week off genuinely lowers it."
+          >
+            <CalendarRange size={14} />
+            <span>Gaps</span>
+          </button>
         </div>
       </div>
 
@@ -434,38 +594,57 @@ export default function Analysis() {
             </div>
 
             <ChartCard
-              title="Total Calories by Type"
+              title="By Sport"
               icon={<Zap size={14} color="var(--accent)" />}
-              description="Where your energy went across the selected period."
-              info="Sums the calories of every activity of each type. Values reported by an imported file are used as-is; the rest are estimated from your body metrics and the calorie method set in Settings, so treat cross-sport comparisons as approximate."
+              description={sportAgg === 'best'
+                ? 'The single biggest activity of each sport.'
+                : 'Everything of each sport, added up.'}
+              info="Both halves of the same question: Total is where the period actually went, and Best is the one activity that stands out — the record cards above give the same thing per sport with pace included. Only measures that mean the same thing in every sport are offered; a pace or a heart rate does not, which is why they are on the cards rather than in this comparison. Calories reported by an imported file are used as-is and the rest are estimated, so read those across sports as approximate."
+              actions={
+                <>
+                  <Dropdown
+                    value={sportMeasure}
+                    options={SPORT_MEASURES.map(m => ({ value: m.id, label: m.label }))}
+                    onChange={setSportMeasure}
+                    ariaLabel="Measure"
+                  />
+                  <Segmented
+                    value={sportAgg}
+                    onChange={setSportAgg}
+                    options={[{ id: 'total', label: 'Total' }, { id: 'best', label: 'Best' }]}
+                  />
+                </>
+              }
             >
-              {calByType.length === 0 ? (
+              {bySport.length === 0 ? (
                 <EmptyPlot height={220}>No activities in the {rangeLabel(rangeDays)}</EmptyPlot>
               ) : (
                 <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={calByType} margin={space.margin(18, 4)}>
+                  <BarChart data={bySport} margin={space.margin(18, 4)}>
                     <CartesianGrid {...GRID_PROPS} />
                     <XAxis dataKey="type" tick={{ ...AXIS_TICK, fontSize: 11 }} axisLine={false} tickLine={false} label={xLabel('Activity type')} />
                     <YAxis
                       tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto"
-                      tickFormatter={v => v >= 1000 ? `${Math.round(v / 1000)}k` : `${v}`}
-                      label={yLabel('Calories (kcal)')}
+                      tickFormatter={v => v >= 1000 ? `${Math.round(v / 1000)}k` : `${Math.round(v * 10) / 10}`}
+                      label={yLabel(SPORT_MEASURES.find(m => m.id === sportMeasure)!.axis)}
                     />
                     <Tooltip
                       cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
                       content={({ active, payload }) => {
                         if (!active || !payload?.length) return null
                         const d = payload[0].payload
+                        const m = SPORT_MEASURES.find(x => x.id === sportMeasure)!
                         return (
                           <div className="custom-tooltip">
                             <div style={{ fontWeight: 600 }}>{d.type}</div>
-                            <div>{d.total.toLocaleString()} kcal · {d.count} activities</div>
+                            <div>{m.fmt(d.value)} {sportAgg === 'best' ? 'best single' : 'in total'}</div>
+                            <div style={{ color: 'var(--text-3)' }}>{d.count} {d.count === 1 ? 'activity' : 'activities'}</div>
                           </div>
                         )
                       }}
                     />
-                    <Bar dataKey="total" radius={[4, 4, 0, 0]} maxBarSize={72} isAnimationActive={false}>
-                      {calByType.map(d => <Cell key={d.type} fill={d.fill} />)}
+                    <Bar dataKey="value" radius={[4, 4, 0, 0]} maxBarSize={72} isAnimationActive={false}>
+                      {bySport.map(d => <Cell key={d.type} fill={d.fill} />)}
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
@@ -498,17 +677,21 @@ export default function Analysis() {
             </div>
 
             {summaryStats.length > 0 && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10, marginBottom: 20 }}>
+              <div className="trend-stats">
                 {summaryStats.map(s => (
-                  <div key={s.id} className="card" style={{ borderLeft: `3px solid ${s.color}` }}>
-                    <div style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{s.label}</div>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 700, color: s.color, letterSpacing: '-0.03em' }}>
-                      {formatValue(s.id, s.avg)} <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-3)' }}>{s.unit}</span>
+                  <div key={s.id} className="card trend-stat" style={{ borderLeftColor: s.color }}>
+                    <div className="trend-stat-label">{s.label}</div>
+                    <div className="trend-stat-value" style={{ color: s.color }}>
+                      {formatValue(s.id, s.avg)} <span className="trend-stat-unit">{s.unit}</span>
                     </div>
-                    <div style={{ display: 'flex', gap: 12, marginTop: 8, fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-3)' }}>
+                    {/* A grid, not a flex row: pace is the one metric whose
+                        values are "12:05" wide, and three of those in a nowrap
+                        row overflowed the card and shunted the trend out of
+                        line with every other tile. */}
+                    <div className="trend-stat-range">
                       <span>↓ {formatValue(s.id, s.min)}</span>
                       <span>↑ {formatValue(s.id, s.max)}</span>
-                      <span style={{ color: s.trend > 0 ? 'var(--success)' : s.trend < 0 ? 'var(--danger)' : 'var(--text-3)', marginLeft: 'auto' }}>
+                      <span style={{ color: s.trend > 0 ? 'var(--success)' : s.trend < 0 ? 'var(--danger)' : 'var(--text-3)' }}>
                         {s.trend > 0 ? '▲' : s.trend < 0 ? '▼' : '—'} {Math.abs(s.trend).toFixed(1)}%
                       </span>
                     </div>
@@ -521,8 +704,15 @@ export default function Analysis() {
               title="Performance Over Time"
               icon={<TrendingUp size={14} color="var(--primary)" />}
               description={`One point per activity, with a bolder 3-activity moving average. ${series.length} activities.`}
-              info="Faint lines are individual activities; bold lines smooth them over three activities to show direction rather than noise. All selected metrics share one axis, so use it to read each line's shape and trend, not to compare their absolute heights. Filtering to a single sport makes pace and speed directly comparable."
+              info="Faint lines are individual activities; bold lines smooth them over three activities to show direction rather than noise. All selected metrics share one axis, so use it to read each line's shape and trend, not to compare their absolute heights. Filtering to a single sport makes pace and speed directly comparable. Starting the axis at zero keeps the proportions honest; fitting it to the data is the only way to see movement in a metric like heart rate, which never goes near zero."
               style={{ marginBottom: 16 }}
+              actions={
+                <Segmented
+                  value={trendYAxis}
+                  onChange={setTrendYAxis}
+                  options={[{ id: 'fit', label: 'Fit' }, { id: 'zero', label: 'Zero' }]}
+                />
+              }
             >
               {series.length === 0 ? (
                 <EmptyPlot height={300}>No activities in the {scope}</EmptyPlot>
@@ -531,13 +721,30 @@ export default function Analysis() {
                   <LineChart data={seriesWithMA} margin={space.margin(18)}>
                     <CartesianGrid {...GRID_PROPS} />
                     <XAxis dataKey="dateLabel" {...denseXAxis()} label={xLabel('Activity date')} />
-                    <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" label={yLabel('Selected metrics')} />
+                    <YAxis
+                      tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto"
+                      domain={trendYAxis === 'zero' ? [0, 'auto'] : ['auto', 'auto']}
+                      label={yLabel('Selected metrics')}
+                    />
                     <Tooltip
                       content={({ active, payload, label }) => {
-                        if (!active || !payload?.length) return null
+                        if (!active) return null
+                        // With gaps shown most positions are days with nothing
+                        // on them, and Recharts hands over an empty payload.
+                        // Returning null there reads as a broken tooltip, so the
+                        // day still names itself and says it was a rest day.
+                        const row = payload?.[0]?.payload as DatedRow | undefined
+                        if (!payload?.length || row?.empty) {
+                          return (
+                            <div className="custom-tooltip">
+                              <div style={{ color: 'var(--text-2)', fontWeight: 600 }}>{row?.dateFull ?? label}</div>
+                              <div style={{ color: 'var(--text-3)' }}>No activity</div>
+                            </div>
+                          )
+                        }
                         return (
                           <div className="custom-tooltip">
-                            <div style={{ color: 'var(--text-2)', marginBottom: 6, fontWeight: 600 }}>{label}</div>
+                            <div style={{ color: 'var(--text-2)', marginBottom: 6, fontWeight: 600 }}>{row?.dateFull ?? label}</div>
                             {payload.filter(p => !String(p.dataKey).endsWith('_ma')).map(p => {
                               const m = METRICS.find(x => x.id === p.dataKey)
                               if (!m || !selectedMetrics.includes(m.id)) return null
@@ -591,7 +798,7 @@ export default function Analysis() {
                         const unit = volumeMeasure === 'distance' ? 'km' : 'h'
                         return (
                           <div className="custom-tooltip">
-                            <div style={{ fontWeight: 600, marginBottom: 2 }}>{volumeBucket === 'week' ? `Week of ${d.key}` : d.label}</div>
+                            <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.full}</div>
                             <div style={{ color: 'var(--primary)' }}>{d.value} {unit}</div>
                             <div style={{ color: 'var(--text-3)' }}>4-bucket avg {d.avg} {unit}</div>
                           </div>
@@ -629,17 +836,28 @@ export default function Analysis() {
                         content={({ active, payload }) => {
                           if (!active || !payload?.length) return null
                           const d = payload[0].payload
+                          if (!d?.name) {
+                            return (
+                              <div className="custom-tooltip">
+                                <div style={{ fontWeight: 600 }}>{d?.dateFull ?? ''}</div>
+                                <div style={{ color: 'var(--text-3)' }}>No activity</div>
+                              </div>
+                            )
+                          }
                           return (
                             <div className="custom-tooltip">
                               <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.name}</div>
-                              <div style={{ color: 'var(--text-3)' }}>{d.dateLabel}</div>
+                              <div style={{ color: 'var(--text-3)' }}>{d.dateFull}</div>
                               <div style={{ color: 'var(--danger)' }}>{d.hrPerSpeed} bpm per km/h</div>
                               <div style={{ color: 'var(--text-3)' }}>{d.hr} bpm · {d.speed.toFixed(1)} km/h</div>
                             </div>
                           )
                         }}
                       />
-                      <Line type="monotone" dataKey="hrPerSpeed" stroke="var(--danger)" strokeWidth={2} dot={{ r: 2.5, strokeWidth: 0 }} isAnimationActive={false} />
+                      {/* An explicit fill: Recharts defaults a dot to solid
+                          white, which is invisible in light mode and wrong in
+                          both. Every other line on this page names its own. */}
+                      <Line type="monotone" dataKey="hrPerSpeed" stroke="var(--danger)" strokeWidth={2} dot={{ r: 2.5, strokeWidth: 0, fill: 'var(--danger)' }} connectNulls isAnimationActive={false} />
                     </LineChart>
                   </ResponsiveContainer>
                 )}
@@ -663,17 +881,25 @@ export default function Analysis() {
                         content={({ active, payload }) => {
                           if (!active || !payload?.length) return null
                           const d = payload[0].payload
+                          if (!d?.name) {
+                            return (
+                              <div className="custom-tooltip">
+                                <div style={{ fontWeight: 600 }}>{d?.dateFull ?? ''}</div>
+                                <div style={{ color: 'var(--text-3)' }}>No activity</div>
+                              </div>
+                            )
+                          }
                           return (
                             <div className="custom-tooltip">
                               <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.name}</div>
-                              <div style={{ color: 'var(--text-3)' }}>{d.dateLabel}</div>
+                              <div style={{ color: 'var(--text-3)' }}>{d.dateFull}</div>
                               <div style={{ color: 'var(--blue)' }}>{fmtPace(d.adjPace)} /km adjusted</div>
                               <div style={{ color: 'var(--text-3)' }}>{fmtPace(d.pace)} /km actual · {d.hr} bpm</div>
                             </div>
                           )
                         }}
                       />
-                      <Line type="monotone" dataKey="adjPace" stroke="var(--blue)" strokeWidth={2} dot={{ r: 2.5, strokeWidth: 0 }} isAnimationActive={false} />
+                      <Line type="monotone" dataKey="adjPace" stroke="var(--blue)" strokeWidth={2} dot={{ r: 2.5, strokeWidth: 0, fill: 'var(--blue)' }} connectNulls isAnimationActive={false} />
                     </LineChart>
                   </ResponsiveContainer>
                 )}
@@ -793,7 +1019,7 @@ export default function Analysis() {
                     content={({ active, payload }) => {
                       if (!active || !payload?.length) return null
                       const d = payload[0].payload
-                      return <div className="custom-tooltip"><div>{d.date}</div><div style={{ color: 'var(--blue)' }}>Load {d.tss}</div></div>
+                      return <div className="custom-tooltip"><div>{d.full}</div><div style={{ color: 'var(--blue)' }}>Load {d.tss}</div></div>
                     }}
                   />
                   <Bar dataKey="tss" fill="var(--blue)" radius={[2, 2, 0, 0]} opacity={0.8} isAnimationActive={false} />
@@ -828,7 +1054,7 @@ export default function Analysis() {
                       const d = payload[0].payload
                       return (
                         <div className="custom-tooltip">
-                          <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.date}</div>
+                          <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.full}</div>
                           <div style={{ color: 'var(--purple)' }}>Ratio {d.ratio ?? '—'}</div>
                           <div style={{ color: 'var(--text-3)' }}>Acute {d.acute} · Chronic {d.chronic}</div>
                         </div>

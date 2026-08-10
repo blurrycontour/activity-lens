@@ -64,59 +64,236 @@ export function weekdayMatrix(
 
 export type GoalPeriod = 'week' | 'month'
 
+/**
+ * What a goal measures. A goal targets exactly one of these — wanting both a
+ * count and a distance is two goals, which keeps every tile a single number
+ * against a single target.
+ */
+export type GoalMetric = 'count' | 'distance' | 'duration'
+
 export interface Goal {
   /** Stable key for the settings editor; not meaningful to the logic. */
   id: string
-  /** Qualifying activities required per period. */
-  count: number
+  metric: GoalMetric
+  /** The number to reach, in the metric's unit: activities, km, or hours. */
+  target: number
   period: GoalPeriod
+  /** How many periods one window covers; 1 for a plain week or month. */
+  span: number
   /** Activity type that counts, or '' for any. */
   type: WorkoutType | ''
-  /** Minimum distance in km for an activity to count; 0 for no minimum. */
+  /**
+   * Qualifiers on each activity, not on the total: one below either is ignored
+   * entirely. 0 for no minimum.
+   */
   minKm: number
+  minMinutes: number
 }
+
+/** Cap on how many periods one window may cover, mirroring the server's. */
+export const MAX_GOAL_SPAN = 12
 
 export function newGoal(): Goal {
-  return { id: Math.random().toString(36).slice(2, 10), count: 2, period: 'week', type: '', minKm: 0 }
+  return { id: Math.random().toString(36).slice(2, 10), metric: 'count', target: 2, period: 'week', span: 1, type: '', minKm: 0, minMinutes: 0 }
 }
 
-/** Human-readable summary, e.g. "2 runs a week, at least 5 km each". */
+/**
+ * Normalizes a goal as the API hands it over into the shape the logic below
+ * relies on. Both the dashboard and the settings editor read the same endpoint,
+ * and a goal saved by an older client is missing the newer fields entirely.
+ */
+export function goalFromApi(g: Partial<Record<keyof Goal, unknown>>): Goal {
+  const metric = g.metric === 'distance' || g.metric === 'duration' ? g.metric : 'count'
+  const span = Math.min(MAX_GOAL_SPAN, Math.max(1, Math.round(Number(g.span) || 1)))
+  return {
+    id: typeof g.id === 'string' && g.id ? g.id : Math.random().toString(36).slice(2, 10),
+    metric,
+    target: Math.max(0, Number(g.target) || 0),
+    period: g.period === 'month' ? 'month' : 'week',
+    span,
+    type: (g.type as WorkoutType | '') ?? '',
+    minKm: Math.max(0, Number(g.minKm) || 0),
+    minMinutes: Math.max(0, Number(g.minMinutes) || 0),
+  }
+}
+
+/** The short unit shown after a goal's numbers; counts carry none. */
+export function goalUnit(metric: GoalMetric): string {
+  return metric === 'distance' ? 'km' : metric === 'duration' ? 'h' : ''
+}
+
+/**
+ * A value in the goal's unit: counts whole, km and hours to one decimal.
+ * `bare` drops the unit, for the left half of a "12.4/40 km" pair.
+ */
+export function formatGoalAmount(g: Pick<Goal, 'metric'>, value: number, bare = false): string {
+  if (g.metric === 'count') return String(Math.round(value))
+  const n = Math.round(value * 10) / 10
+  return bare ? String(n) : `${n} ${goalUnit(g.metric)}`
+}
+
+/** How long one window is, in words: "a week", "every 3 weeks". */
+export function describeGoalWindow(g: Goal): string {
+  return g.span > 1 ? `every ${g.span} ${g.period}s` : `a ${g.period}`
+}
+
+/**
+ * Human-readable summary, e.g. "2 runs a week" or "Hike 40 km a month".
+ *
+ * Distance and time goals lead with the sport as a verb rather than folding it
+ * into a noun phrase: "40 km of hike" would need a gerund per activity type to
+ * read as English, and the backend renders the same sentence for notifications.
+ *
+ * The per-activity minimums are deliberately not here. They are a filter on
+ * what counts, not part of what the goal is, and a trailing "(5 km, 30 min+
+ * only)" on every line was the longest thing in the goals card while being the
+ * least looked at. `describeGoalMinimum` still renders them for the places that
+ * do need to say so.
+ */
 export function describeGoal(g: Goal): string {
-  const noun = g.type ? `${g.type.toLowerCase()}${g.count === 1 ? '' : 's'}` : g.count === 1 ? 'activity' : 'activities'
-  const min = g.minKm > 0 ? `, at least ${g.minKm} km each` : ''
-  return `${g.count} ${noun} a ${g.period}${min}`
+  const window = describeGoalWindow(g)
+  if (g.metric !== 'count') {
+    const lead = g.type ? `${g.type} ` : ''
+    return `${lead}${formatGoalAmount(g, g.target)} ${window}`
+  }
+  const sport = g.type ? g.type.toLowerCase() : 'activity'
+  const n = Math.round(g.target)
+  const noun = n === 1 ? sport : g.type ? `${sport}s` : 'activities'
+  return `${n} ${noun} ${window}`
 }
 
-/** The period key a date belongs to, matching the goal's period. */
-export function periodKeyOf(date: string, period: GoalPeriod): string {
-  return period === 'month' ? date.slice(0, 7) : weekStartKey(date)
+/** The per-activity qualifiers as a phrase, or '' when the goal has none. */
+export function describeGoalMinimum(g: Goal): string {
+  const parts: string[] = []
+  if (g.minKm > 0) parts.push(`${g.minKm} km`)
+  if (g.minMinutes > 0) parts.push(`${g.minMinutes} min`)
+  return parts.length === 0 ? '' : `${parts.join(', ')}+ only`
 }
 
-/** The last `count` period keys, oldest first, ending with the current one. */
-export function recentPeriodKeys(count: number, period: GoalPeriod, now = new Date()): string[] {
-  if (period === 'week') return recentWeekStarts(count, now)
+/**
+ * ISO-8601 week number for a date key.
+ *
+ * The ISO rule — the week containing the year's first Thursday is week 1 — is
+ * the one that matches Monday-anchored weeks, which is what goals count in. A
+ * naive "days since January 1, divided by seven" disagrees with it for the first
+ * and last days of most years.
+ */
+export function isoWeekNumber(date: string): number {
+  const d = parseDateKey(date)
+  // Shift to the Thursday of this week; the week's year and number are then
+  // whatever that Thursday's are.
+  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7))
+  const firstThursday = new Date(d.getFullYear(), 0, 4)
+  firstThursday.setDate(firstThursday.getDate() + 3 - ((firstThursday.getDay() + 6) % 7))
+  return 1 + Math.round((d.getTime() - firstThursday.getTime()) / (7 * 86400000))
+}
+
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/**
+ * The short label under a history bar: "W31" for a week, "Jul" for a month.
+ *
+ * A window spanning several periods is named by the one it starts in, since
+ * that is what its key is, and the tooltip carries the exact date either way.
+ */
+export function periodLabel(key: string, period: GoalPeriod): string {
+  if (period === 'month') return MONTH_NAMES[Number(key.slice(5, 7)) - 1] ?? key
+  return `W${isoWeekNumber(key)}`
+}
+
+/** Whole days since the Unix epoch, immune to DST because it goes via UTC. */
+function epochDays(d: Date): number {
+  return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000)
+}
+
+/**
+ * `a % n`, never negative — windows have to tile consistently on either side of
+ * the anchor, and JS's `%` keeps the sign of the dividend.
+ */
+function floorMod(a: number, n: number): number {
+  return ((a % n) + n) % n
+}
+
+/**
+ * The key of the window a date belongs to.
+ *
+ * For a span of one this is the Monday of the week or the YYYY-MM of the month.
+ * Longer windows tile forward from a fixed anchor — 1970-01-05, a Monday, for
+ * weeks and January for months — rather than from today, so the window a
+ * workout falls into does not shift from one day to the next and a streak of
+ * consecutive windows stays meaningful.
+ */
+export function periodKeyOf(date: string, g: Pick<Goal, 'period' | 'span'>): string {
+  const span = Math.max(1, Math.round(g.span || 1))
+  if (g.period === 'month') {
+    const [y, m] = date.split('-').map(Number)
+    const index = y * 12 + (m - 1)
+    const start = index - floorMod(index, span)
+    return `${String(Math.floor(start / 12)).padStart(4, '0')}-${String((start % 12) + 1).padStart(2, '0')}`
+  }
+  const monday = weekStartKey(date)
+  if (span === 1) return monday
+  // 4 is the epoch-day number of Monday 1970-01-05.
+  const weeks = Math.floor((epochDays(parseDateKey(monday)) - 4) / 7)
+  const back = floorMod(weeks, span)
+  const start = parseDateKey(monday)
+  start.setDate(start.getDate() - 7 * back)
+  return toDateKey(start)
+}
+
+/** The last `count` window keys for a goal, oldest first, ending with the current one. */
+export function recentPeriodKeys(count: number, g: Pick<Goal, 'period' | 'span'>, now = new Date()): string[] {
+  const span = Math.max(1, Math.round(g.span || 1))
   const cursor = new Date(now)
   cursor.setHours(0, 0, 0, 0)
-  // Anchor to the 1st: stepping back a month from the 31st skips short months.
-  cursor.setDate(1)
   const out: string[] = []
   for (let i = 0; i < count; i++) {
-    out.unshift(toDateKey(cursor).slice(0, 7))
-    cursor.setMonth(cursor.getMonth() - 1)
+    out.unshift(periodKeyOf(toDateKey(cursor), g))
+    // Step back one whole window. Months anchor to the 1st first, or stepping
+    // back from the 31st would skip the short months in between.
+    if (g.period === 'month') {
+      cursor.setDate(1)
+      cursor.setMonth(cursor.getMonth() - span)
+    } else {
+      cursor.setDate(cursor.getDate() - 7 * span)
+    }
   }
   return out
 }
 
+/** The first instant of a window and the first instant of the one after it. */
+export function periodBounds(key: string, g: Pick<Goal, 'period' | 'span'>): [Date, Date] {
+  const span = Math.max(1, Math.round(g.span || 1))
+  if (g.period === 'month') {
+    const start = parseDateKey(`${key}-01`)
+    const end = new Date(start)
+    end.setMonth(end.getMonth() + span)
+    return [start, end]
+  }
+  const start = parseDateKey(key)
+  const end = new Date(start)
+  end.setDate(end.getDate() + 7 * span)
+  return [start, end]
+}
+
 export interface GoalProgress {
   goal: Goal
-  /** Qualifying activities in the current period. */
+  /** Progress in the current window, in the goal's unit. */
   current: number
-  /** Consecutive completed periods meeting the goal. */
+  /**
+   * How much of the current window has already gone, 0 to 1.
+   *
+   * The number the old tile never had, and the one that separates "behind" from
+   * "not finished yet": 1 of 3 runs is a fine Tuesday and a poor Sunday. Only
+   * the pace-aware styles read it, but it costs nothing to always compute.
+   */
+  elapsed: number
+  /** Consecutive completed windows meeting the goal. */
   streak: number
-  /** Longest run of goal-meeting periods ever recorded. */
+  /** Longest run of goal-meeting windows ever recorded. */
   bestStreak: number
-  /** Recent periods, oldest first, with whether each met the goal. */
-  history: { key: string; count: number; met: boolean }[]
+  /** Recent windows, oldest first, with whether each met the goal. */
+  history: { key: string; value: number; met: boolean }[]
 }
 
 /**
@@ -130,11 +307,28 @@ export interface GoalProgress {
 function countsToward(w: Workout, goal: Goal): boolean {
   if (goal.type && w.type !== goal.type) return false
   if (goal.minKm > 0 && Math.round(w.distance / 100) / 10 < goal.minKm) return false
+  if (goal.minMinutes > 0 && w.duration / 60 < goal.minMinutes) return false
   return true
 }
 
+/** What one qualifying workout contributes: one activity, km, or hours. */
+function valueToward(w: Workout, metric: GoalMetric): number {
+  if (metric === 'distance') return w.distance / 1000
+  if (metric === 'duration') return w.duration / 3600
+  return 1
+}
+
+/** The key of the window immediately before `key`. */
+function previousPeriodKey(key: string, g: Pick<Goal, 'period' | 'span'>): string {
+  const span = Math.max(1, Math.round(g.span || 1))
+  const cursor = parseDateKey(g.period === 'month' ? `${key}-01` : key)
+  if (g.period === 'month') cursor.setMonth(cursor.getMonth() - span)
+  else cursor.setDate(cursor.getDate() - 7 * span)
+  return periodKeyOf(toDateKey(cursor), g)
+}
+
 /**
- * Progress against one goal. The period in progress is reported separately and
+ * Progress against one goal. The window in progress is reported separately and
  * excluded from the streak until it is actually met — a Monday shouldn't break
  * a streak that four completed weeks earned.
  */
@@ -142,55 +336,49 @@ export function goalProgress(workouts: Workout[], goal: Goal, historyLength = 8,
   const perPeriod = new Map<string, number>()
   for (const w of workouts) {
     if (!countsToward(w, goal)) continue
-    const key = periodKeyOf(w.date, goal.period)
-    perPeriod.set(key, (perPeriod.get(key) ?? 0) + 1)
+    const key = periodKeyOf(w.date, goal)
+    perPeriod.set(key, (perPeriod.get(key) ?? 0) + valueToward(w, goal.metric))
   }
-  const currentKey = recentPeriodKeys(1, goal.period, now)[0]
+  const currentKey = periodKeyOf(toDateKey(now), goal)
   const current = perPeriod.get(currentKey) ?? 0
+  const met = (value: number) => goal.target > 0 && value >= goal.target
 
-  const history = recentPeriodKeys(historyLength, goal.period, now).map(key => {
-    const count = perPeriod.get(key) ?? 0
-    return { key, count, met: goal.count > 0 && count >= goal.count }
+  const history = recentPeriodKeys(historyLength, goal, now).map(key => {
+    const value = perPeriod.get(key) ?? 0
+    return { key, value, met: met(value) }
   })
 
   let streak = 0
-  if (goal.count > 0) {
-    // Walk back from the current period. The one in progress extends a streak
+  if (goal.target > 0) {
+    // Walk back from the current window. The one in progress extends a streak
     // once met but never ends one.
-    if (current >= goal.count) streak++
-    const cursor = new Date(goal.period === 'month' ? `${currentKey}-01T00:00:00` : `${currentKey}T00:00:00`)
+    if (met(current)) streak++
+    let key = currentKey
     for (;;) {
-      if (goal.period === 'month') cursor.setMonth(cursor.getMonth() - 1)
-      else cursor.setDate(cursor.getDate() - 7)
-      const key = periodKeyOf(toDateKey(cursor), goal.period)
-      if ((perPeriod.get(key) ?? 0) < goal.count) break
+      key = previousPeriodKey(key, goal)
+      if (!met(perPeriod.get(key) ?? 0)) break
       streak++
     }
   }
 
   let bestStreak = 0
-  if (goal.count > 0 && perPeriod.size > 0) {
-    const met = [...perPeriod.entries()].filter(([, c]) => c >= goal.count).map(([k]) => k).sort()
+  if (goal.target > 0 && perPeriod.size > 0) {
+    const done = [...perPeriod.entries()].filter(([, v]) => met(v)).map(([k]) => k).sort()
     let run = 0
     let prev: string | null = null
-    for (const key of met) {
-      run = prev != null && isNextPeriod(prev, key, goal.period) ? run + 1 : 1
+    for (const key of done) {
+      run = prev != null && previousPeriodKey(key, goal) === prev ? run + 1 : 1
       bestStreak = Math.max(bestStreak, run)
       prev = key
     }
   }
 
-  return { goal, current, streak, bestStreak: Math.max(bestStreak, streak), history }
-}
+  const [windowStart, windowEnd] = periodBounds(currentKey, goal)
+  const elapsed = Math.min(1, Math.max(0,
+    (now.getTime() - windowStart.getTime()) / (windowEnd.getTime() - windowStart.getTime()),
+  ))
 
-/** Whether `b` is the period immediately after `a`. */
-function isNextPeriod(a: string, b: string, period: GoalPeriod): boolean {
-  if (period === 'week') {
-    return new Date(`${b}T00:00:00`).getTime() - new Date(`${a}T00:00:00`).getTime() === 7 * 86400000
-  }
-  const [ay, am] = a.split('-').map(Number)
-  const next = am === 12 ? `${ay + 1}-01` : `${ay}-${String(am + 1).padStart(2, '0')}`
-  return b === next
+  return { goal, current, elapsed, streak, bestStreak: Math.max(bestStreak, streak), history }
 }
 
 // ── Period-on-period deltas ──────────────────────────────────────────────────

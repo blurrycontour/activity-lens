@@ -183,13 +183,18 @@ export interface UserPreferences {
 
 export interface ApiGoal {
   id: string
-  /** Qualifying activities required per period. */
-  count: number
+  /** What the goal measures: activity count, total km, or total hours. */
+  metric: 'count' | 'distance' | 'duration'
+  /** The number to reach, in the metric's unit. */
+  target: number
   period: 'week' | 'month'
+  /** How many periods one window covers; 1 for a plain week or month. */
+  span: number
   /** Activity type the goal applies to, or '' for any. */
   type: string
-  /** Minimum distance (km) for an activity to count. */
+  /** Per-activity qualifiers; an activity below either does not count at all. */
   minKm: number
+  minMinutes: number
 }
 
 export interface SmtpInput {
@@ -546,7 +551,7 @@ export const api = {
   getWorkoutOriginal: (id: string) => fetchFile(`/api/workouts/${id}/original`),
   createWorkout: (payload: ManualWorkoutInput) =>
     request<import('../data/workouts').Workout>('/api/workouts', { method: 'POST', body: payload }),
-  patchWorkout: (id: string, patch: { name?: string; type?: string; notes?: string; date?: string; calories?: number; steps?: number; equipmentIds?: string[] }) =>
+  patchWorkout: (id: string, patch: { name?: string; type?: string; notes?: string; date?: string; calories?: number; steps?: number; distance?: number; equipmentIds?: string[] }) =>
     request<import('../data/workouts').Workout>(`/api/workouts/${id}`, { method: 'PATCH', body: patch }),
   /**
    * Re-derives the named values. Everything named is overwritten, including

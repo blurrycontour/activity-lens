@@ -142,20 +142,20 @@ func (s *Server) checkGoals(ctx context.Context, userID int64) {
 	}
 	now := time.Now()
 	for _, g := range prefs.Goals {
-		if g.Count <= 0 {
+		if g.Target <= 0 {
 			continue
 		}
-		done := countTowardGoal(workouts, g, now)
-		if done < g.Count {
+		done := progressTowardGoal(workouts, g, now)
+		if done < g.Target {
 			continue
 		}
 		s.notify.Notify(ctx, notify.Event{
 			UserID:    userID,
 			Kind:      notify.KindGoalMet,
-			Title:     "Goal complete: " + describeGoal(g),
-			Body:      fmt.Sprintf("%d of %d done this %s", done, g.Count, g.Period),
+			Title:     "Goal complete: " + g.Describe(),
+			Body:      fmt.Sprintf("%s of %s done this %s", g.FormatAmount(done), g.FormatAmount(g.Target), g.Period),
 			Link:      "/",
-			DedupeKey: fmt.Sprintf("goal-met:%s:%s", g.ID, periodKey(g.Period, now)),
+			DedupeKey: fmt.Sprintf("goal-met:%s:%s", g.ID, g.PeriodKey(now)),
 		})
 	}
 }
@@ -174,36 +174,36 @@ func (s *Server) checkGoalsAtRisk(ctx context.Context, userID int64) {
 	}
 	now := time.Now()
 	for _, g := range prefs.Goals {
-		if g.Count <= 0 || !nearPeriodEnd(g.Period, now) {
+		if g.Target <= 0 || !nearPeriodEnd(g, now) {
 			continue
 		}
-		done := countTowardGoal(workouts, g, now)
-		if done >= g.Count {
+		done := progressTowardGoal(workouts, g, now)
+		if done >= g.Target {
 			continue
 		}
-		short := g.Count - done
 		s.notify.Notify(ctx, notify.Event{
 			UserID: userID,
 			Kind:   notify.KindGoalAtRisk,
-			Title:  fmt.Sprintf("%d to go: %s", short, describeGoal(g)),
-			Body:   fmt.Sprintf("This %s is nearly over and you are at %d of %d.", g.Period, done, g.Count),
+			Title:  fmt.Sprintf("%s to go: %s", g.FormatAmount(g.Target-done), g.Describe()),
+			Body:   fmt.Sprintf("This %s is nearly over and you are at %s of %s.", g.Period, g.FormatAmount(done), g.FormatAmount(g.Target)),
 			Link:   "/",
 			// One warning per goal per period.
-			DedupeKey: fmt.Sprintf("goal-risk:%s:%s", g.ID, periodKey(g.Period, now)),
+			DedupeKey: fmt.Sprintf("goal-risk:%s:%s", g.ID, g.PeriodKey(now)),
 		})
 	}
 }
 
-// countTowardGoal counts the qualifying activities in the goal's current period.
+// progressTowardGoal sums the goal's metric over the qualifying activities in
+// its current window: activities, kilometres, or hours.
 //
 // The distance test compares the *displayed* distance, rounded to one decimal
 // place, rather than raw metres — a GPS run shown everywhere in the app as
 // "5.0 km" is typically stored as about 4,983 m, and a goal that rejected it
 // while the UI called it 5 km would simply look broken. This mirrors the same
 // rule in the frontend's insights module.
-func countTowardGoal(workouts []workout.Workout, g settings.Goal, now time.Time) int {
-	start := periodStart(g.Period, now)
-	n := 0
+func progressTowardGoal(workouts []workout.Workout, g settings.Goal, now time.Time) float64 {
+	start := g.PeriodStart(now)
+	total := 0.0
 	for _, w := range workouts {
 		if w.StartTime.Before(start) {
 			continue
@@ -214,52 +214,29 @@ func countTowardGoal(workouts []workout.Workout, g settings.Goal, now time.Time)
 		if g.MinKm > 0 && math.Round(w.Distance/100)/10 < g.MinKm {
 			continue
 		}
-		n++
+		if g.MinMinutes > 0 && float64(w.Duration)/60 < g.MinMinutes {
+			continue
+		}
+		switch g.Metric {
+		case settings.MetricDistance:
+			total += w.Distance / 1000
+		case settings.MetricDuration:
+			total += float64(w.Duration) / 3600
+		default:
+			total++
+		}
 	}
-	return n
+	return total
 }
 
-// periodStart is the Monday of this week, or the first of this month.
-func periodStart(period string, now time.Time) time.Time {
-	y, m, d := now.Date()
-	today := time.Date(y, m, d, 0, 0, 0, 0, now.Location())
-	if period == "month" {
-		return time.Date(y, m, 1, 0, 0, 0, 0, now.Location())
-	}
-	// Go's Sunday-first weekday needs shifting to a Monday-anchored week.
-	offset := (int(today.Weekday()) + 6) % 7
-	return today.AddDate(0, 0, -offset)
-}
-
-// periodKey identifies the current period, so a dedupe key resets when it rolls.
-func periodKey(period string, now time.Time) string {
-	return periodStart(period, now).Format("2006-01-02")
-}
-
-// nearPeriodEnd reports whether there is little enough of the period left that
+// nearPeriodEnd reports whether there is little enough of the window left that
 // a warning is actionable rather than premature: the last two days of a week,
-// or the last four of a month.
-func nearPeriodEnd(period string, now time.Time) bool {
-	start := periodStart(period, now)
-	if period == "month" {
-		end := start.AddDate(0, 1, 0)
-		return end.Sub(now) <= 4*24*time.Hour
-	}
-	return now.Sub(start) >= 5*24*time.Hour
-}
-
-// describeGoal renders a goal the way Settings shows it, e.g. "2 5 km runs a week".
-func describeGoal(g settings.Goal) string {
-	unit := "week"
+// or the last four of a month. A multi-period window is judged by its own end,
+// so a "3 weeks" goal is only flagged in the final days of the third week.
+func nearPeriodEnd(g settings.Goal, now time.Time) bool {
+	left := g.PeriodEnd(now).Sub(now)
 	if g.Period == "month" {
-		unit = "month"
+		return left <= 4*24*time.Hour
 	}
-	what := "activities"
-	if g.Type != "" {
-		what = g.Type + "s"
-	}
-	if g.MinKm > 0 {
-		what = fmt.Sprintf("%gkm+ %s", g.MinKm, what)
-	}
-	return fmt.Sprintf("%d %s a %s", g.Count, what, unit)
+	return left <= 2*24*time.Hour
 }

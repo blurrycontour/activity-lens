@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { AlertTriangle, Copy, X } from 'lucide-react'
+import { AlertTriangle, Copy, Trash2, X } from 'lucide-react'
 import { fmtDist, fmtDuration, type Workout } from '../data/workouts'
 import { findDuplicateGroups, redundantIds } from '../lib/duplicates'
 import useDismissOnBack from '../lib/useDismissOnBack'
@@ -17,17 +17,17 @@ const HOW_IT_WORKS = 'Workouts of the same sport on the same day are treated as 
   + 'session repeated on a track is a real pair of workouts, and this cannot tell '
   + 'that apart from a mistake. Nothing is decided for you: untick a copy to '
   + 'keep it, tick the earliest one to remove that instead, or leave a whole '
-  + 'group untouched.'
+  + 'group untouched. Deleting cannot be undone, so read the groups first.'
 
 /**
  * Suspected duplicate imports, and a way to act on them.
  *
- * The action deliberately does not delete: it ticks the chosen copies in the
- * list behind this dialog and closes, dropping the user into the selection
- * toolbar they already know, where Delete lives behind the confirmation it
- * already has. A second delete path here would be a second place to get a
- * destructive operation wrong, on the output of a heuristic that can be
- * mistaken.
+ * The action deletes the ticked copies. It used to hand them to the workout
+ * list's selection toolbar instead, on the reasoning that one destructive path
+ * is safer than two — but that only worked while the list was showing your own
+ * library, and on any other tab the button did nothing at all. A control that
+ * silently does nothing is worse than a second confirmation, and the rows here
+ * already say "Remove".
  *
  * Which copy goes is the user's to decide, per workout. The earliest import in
  * each group is proposed as the one to keep — it has been in the library
@@ -37,16 +37,26 @@ const HOW_IT_WORKS = 'Workouts of the same sport on the same day are treated as 
  * person who recorded them can weigh, and the guess that reads as a decision is
  * the one that quietly loses the better copy.
  */
-export default function DuplicatesDialog({ workouts, onClose, onSelect }: {
+export default function DuplicatesDialog({ workouts, onClose, onDelete }: {
   workouts: Workout[]
   onClose: () => void
-  /** Hands the ids of every copy-to-remove back to the list. */
-  onSelect: (ids: string[]) => void
+  /**
+   * Deletes every ticked copy and resolves once the library has been refreshed.
+   * Rejects if any of them could not be deleted.
+   */
+  onDelete: (ids: string[]) => Promise<void>
 }) {
   const [confirming, setConfirming] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   // Back closes the confirmation first, then the dialog behind it — one step
   // per surface, which is what the gesture means everywhere else in the app.
-  useDismissOnBack(true, () => (confirming ? setConfirming(false) : onClose()))
+  // Never mid-delete, which would leave the outcome unreported.
+  useDismissOnBack(true, () => {
+    if (deleting) return
+    if (confirming) setConfirming(false)
+    else onClose()
+  })
   const groups = useMemo(() => findDuplicateGroups(workouts), [workouts])
 
   /*
@@ -147,16 +157,19 @@ export default function DuplicatesDialog({ workouts, onClose, onSelect }: {
             </>
           )}
 
+          {error && <p className="dup-note" style={{ color: 'var(--danger)' }}>{error}</p>}
+
           <div className="dup-actions">
-            <button className="btn btn-ghost" onClick={onClose}>Close</button>
+            <button className="btn btn-ghost" onClick={onClose} disabled={deleting}>Close</button>
             <button
               className="btn btn-primary"
-              disabled={chosen.length === 0}
+              style={chosen.length > 0 ? { background: 'var(--danger)', borderColor: 'var(--danger)' } : undefined}
+              disabled={chosen.length === 0 || deleting}
               onClick={() => setConfirming(true)}
             >
-              {chosen.length === 0
-                ? 'Nothing ticked'
-                : `Select ${chosen.length} in the list`}
+              {chosen.length === 0 ? 'Nothing ticked' : (
+                <><Trash2 size={15} /> Delete {chosen.length} workout{chosen.length === 1 ? '' : 's'}</>
+              )}
             </button>
           </div>
         </div>
@@ -166,23 +179,38 @@ export default function DuplicatesDialog({ workouts, onClose, onSelect }: {
           instead would be trapped under the swipe pager's stacking context. */}
       {confirming && (
         <ConfirmDialog
-          title={`Select ${chosen.length} workout${chosen.length === 1 ? '' : 's'}?`}
-          danger={wholeGroups > 0}
+          title={`Delete ${chosen.length} workout${chosen.length === 1 ? '' : 's'}?`}
+          danger
+          busy={deleting}
+          busyLabel="Deleting…"
           message={
             <>
-              This ticks them in your workout list so you can look through them
-              and delete the ones you want. <strong>Nothing is deleted here.</strong>
+              This cannot be undone. Their shares and equipment links go with them.
+              The copies you left unticked stay in your library.
               {wholeGroups > 0 && (
                 <>
                   {' '}In {wholeGroups === 1 ? 'one group' : `${wholeGroups} groups`} you
-                  have ticked every copy, so that activity would leave your library
+                  have ticked every copy, so that activity leaves your library
                   entirely.
                 </>
               )}
             </>
           }
-          confirmLabel="Select them"
-          onConfirm={() => onSelect(chosen)}
+          confirmLabel="Delete"
+          onConfirm={() => {
+            setDeleting(true)
+            setError(null)
+            onDelete(chosen)
+              .then(onClose)
+              .catch(e => {
+                // Stay open on failure: some copies may be gone and some not,
+                // and the list behind has been refreshed either way.
+                setError(e instanceof Error ? e.message : 'Some workouts could not be deleted.')
+                setMarked(new Set())
+                setConfirming(false)
+              })
+              .finally(() => setDeleting(false))
+          }}
           onCancel={() => setConfirming(false)}
         />
       )}

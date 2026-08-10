@@ -66,7 +66,9 @@ export default function Settings({ section, onOpen, onBack, accent, onAccentChan
   return (
     <>
       <PageHeader title={meta?.label ?? 'Settings'} subtitle={meta?.sub} onBack={onBack} />
-      <div className="page-content settings-page">
+      {/* Goals is a form of seven controls per row; every other category is
+          prose-width. */}
+      <div className={`page-content settings-page${section === 'goals' ? ' wide' : ''}`}>
         {body}
       </div>
     </>

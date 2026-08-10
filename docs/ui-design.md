@@ -57,6 +57,13 @@ Three rules that follow from this:
 
 - **The breakpoint is 768px** (`MOBILE_QUERY` in `src/lib/useIsMobile.ts`, kept
   in sync with the CSS). 480/640px exist where a layout needs a third step.
+- **Ask what is actually constraining the element.** A media query is right when
+  the answer is the screen. When it is a fixed-width column — a settings card, a
+  dashboard tile — use `@container` on that column instead, and keep the
+  breakpoint in the container's own units. The goal editor is the worked
+  example: keyed to the viewport, its rows stayed in the wide layout on every
+  desktop and crushed a dropdown inside a 720px card, while the phone widths the
+  query named were never the thing squeezing them.
 - **The app shell never scrolls** — `html, body, #root` are
   `height: 100%; overflow: hidden`. A page manages its own scrolling. Use
   `100dvh`, not `100vh`.

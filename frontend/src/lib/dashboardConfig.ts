@@ -3,8 +3,35 @@
 // between the Dashboard and Settings pages via the useLocalStorage hook.
 
 import { RANGE_OPTIONS } from './range'
+import { MOBILE_QUERY } from './useIsMobile'
 
 export type StatCardId = 'distance' | 'time' | 'elevation' | 'calories' | 'avgHr' | 'activities'
+
+/**
+ * How the dashboard's goals card is drawn. Every style renders the same
+ * numbers — this is presentation, not a different measurement — so switching
+ * never changes what a goal means or what the notifiers do with it.
+ */
+export type GoalStyle = 'standard' | 'rings' | 'ledger' | 'today'
+
+export const GOAL_STYLES: { id: GoalStyle; label: string; blurb: string }[] = [
+  { id: 'standard', label: 'Standard', blurb: 'Figure, pace and history for each goal.' },
+  { id: 'rings', label: 'Rings', blurb: 'One dial per goal, readable at a glance.' },
+  { id: 'ledger', label: 'Ledger', blurb: 'A compact list. Best for many goals.' },
+  { id: 'today', label: "Today's move", blurb: 'The one thing that would keep you on track.' },
+]
+
+/**
+ * Reads a stored style, folding away the two that merged.
+ *
+ * Classic and Pace ended up differing only in where the figure sat: both grew
+ * the same needle, verdict, badges and history, so they were one style with a
+ * preference rather than two. Anyone who had picked either lands on Standard.
+ */
+export function resolveGoalStyle(stored: string | undefined): GoalStyle {
+  if (stored === 'rings' || stored === 'ledger' || stored === 'today') return stored
+  return 'standard'
+}
 
 export interface DashboardConfig {
   cards: StatCardId[]
@@ -13,6 +40,12 @@ export interface DashboardConfig {
   showDeltas?: boolean
   /** Show the 8-bucket trend line inside each stat card. */
   showSparklines?: boolean
+  /** How the goals card draws each goal. */
+  goalStyle?: GoalStyle
+  /** Show the run of recent windows under each goal. */
+  showGoalHistory?: boolean
+  /** Label each bar under the goal history with its week number or month. */
+  showGoalPeriods?: boolean
 }
 
 export const STAT_CARDS: { id: StatCardId; label: string }[] = [
@@ -44,11 +77,43 @@ export const DEFAULT_HR_ZONE_CHART: HRZoneChart = 'histogram'
 
 export const DASHBOARD_CFG_KEY = 'al_dash_cfg'
 
+/**
+ * The stat cards a phone starts with.
+ *
+ * Six cards on a phone is three rows of tiles above everything the dashboard is
+ * actually for. These four are the ones that mean something on every activity;
+ * elevation is zero for a treadmill and calories are an estimate, so they are
+ * the two to earn their place by being switched on.
+ */
+export const MOBILE_DEFAULT_CARDS: StatCardId[] = ['distance', 'time', 'avgHr', 'calories']
+
 export const DEFAULT_DASHBOARD_CONFIG: DashboardConfig = {
   cards: STAT_CARDS.map(c => c.id),
   windowDays: 30,
   showDeltas: true,
   showSparklines: true,
+  goalStyle: 'standard',
+  showGoalHistory: true,
+  showGoalPeriods: false,
+}
+
+/**
+ * The configuration a device starts with, before the user has changed anything.
+ *
+ * Phone-sized screens get the shorter card list. This can key off the current
+ * viewport precisely because the config is stored per device — a phone and a
+ * desktop each keep their own, so seeding them differently is right rather than
+ * a guess that one of them has to live with. Once saved, the stored value wins
+ * and nothing here applies again.
+ */
+export function defaultDashboardConfig(): DashboardConfig {
+  // Via globalThis, which is `window` in a browser: the same call in production
+  // and one a test can stub without standing up a DOM. Called as a property so
+  // `this` stays the global, which matchMedia requires.
+  const narrow = typeof globalThis.matchMedia === 'function'
+    && globalThis.matchMedia(MOBILE_QUERY).matches
+  if (!narrow) return DEFAULT_DASHBOARD_CONFIG
+  return { ...DEFAULT_DASHBOARD_CONFIG, cards: MOBILE_DEFAULT_CARDS }
 }
 
 export { rangeLabel as windowLabel } from './range'

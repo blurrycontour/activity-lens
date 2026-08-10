@@ -122,17 +122,6 @@ func (s *Store) VAPIDKeys(ctx context.Context, generate func() (private, public 
 	return v, nil
 }
 
-// Goal is one training target: `Count` qualifying activities per `Period`.
-type Goal struct {
-	// ID is client-generated and only needs to be unique within a user's list;
-	// it exists so the settings editor can key rows across edits.
-	ID     string  `json:"id"`
-	Count  int     `json:"count"`
-	Period string  `json:"period"` // "week" or "month"
-	Type   string  `json:"type"`   // activity type, or "" for any
-	MinKm  float64 `json:"minKm"`  // minimum distance to qualify; 0 for none
-}
-
 // Store persists settings and per-user last-login timestamps.
 type Store struct {
 	db *sql.DB
@@ -255,7 +244,7 @@ func (s *Store) UserPreferences(ctx context.Context, userID int64) (UserPrefs, e
 	} else if legacyCount > 0 {
 		// Seed from the single weekly goal this user set before goals became a
 		// list. Their next save writes it back as JSON and this stops firing.
-		v.Goals = []Goal{{ID: "legacy", Count: legacyCount, Period: "week", Type: legacyType, MinKm: legacyMinKm}}
+		v.Goals = []Goal{{ID: "legacy", Metric: MetricCount, Target: float64(legacyCount), Period: "week", Span: 1, Type: legacyType, MinKm: legacyMinKm}}
 	}
 	if v.Goals == nil {
 		v.Goals = []Goal{}
