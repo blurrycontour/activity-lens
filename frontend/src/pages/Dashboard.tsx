@@ -311,22 +311,25 @@ function GoalTileStandard({ p, opts }: { p: GoalProgress; opts: GoalViewOpts }) 
   const met = p.current >= p.goal.target
   const v = paceVerdict(p)
   return (
-    <div className={`goal-tile${met ? ' met' : ''}${p.goal.metric === 'count' ? '' : ' measured'}`}>
-      <div className="goal-std-top">
-        <GoalSportMark type={p.goal.type} size={15} />
+    <div className={`goal-tile${met ? ' met' : ''}`}>
+      {/* One grid, not two rows: the description and the verdict sit on the
+          first line, the figure and the badges on the second, and the sport
+          mark spans both. The figure can then be as large as it likes — it
+          grows into its own row rather than stretching the line the verdict
+          is on, so nothing beside it moves. */}
+      <div className="goal-std-head">
+        <GoalSportMark type={p.goal.type} size={17} />
+        <span className="goal-std-desc" title={goalTitle(p.goal)}>
+          {describeGoal(p.goal)} · {daysLeft(p)}d left
+        </span>
+        <span className={`goal-verdict ${v.tone}`}>{v.text}</span>
+
         <span className="goal-std-fig">
           <span className="goal-std-cur mono" style={{ color: goalColor(p.goal.type) }}>
             {formatGoalAmount(p.goal, p.current, true)}
           </span>
           <span className="goal-std-slash mono" aria-hidden="true">/</span>
           <span className="goal-std-tot mono">{formatGoalAmount(p.goal, p.goal.target)}</span>
-        </span>
-        <span className={`goal-verdict ${v.tone}`}>{v.text}</span>
-      </div>
-
-      <div className="goal-std-sub">
-        <span className="goal-std-desc" title={goalTitle(p.goal)}>
-          {describeGoal(p.goal)} · {daysLeft(p)}d left
         </span>
         <GoalBadges p={p} />
       </div>
