@@ -319,11 +319,13 @@ function GoalFigure({ p }: { p: GoalProgress }) {
  */
 function GoalTileClassic({ p, opts }: { p: GoalProgress; opts: GoalViewOpts }) {
   const met = p.current >= p.goal.target
+  const v = paceVerdict(p)
   return (
     <div className={`goal-tile${met ? ' met' : ''}${p.goal.metric === 'count' ? '' : ' measured'}`}>
       <div className="goal-tile-head">
-        <GoalSportMark type={p.goal.type} size={20} />
+        <GoalSportMark type={p.goal.type} size={16} />
         <span className="goal-meta" title={goalTitle(p.goal)}>{describeGoal(p.goal)}</span>
+        <span className={`goal-verdict ${v.tone}`}>{v.text}</span>
         <GoalBadges p={p} />
       </div>
 
@@ -356,14 +358,14 @@ function GoalTilePace({ p, opts }: { p: GoalProgress; opts: GoalViewOpts }) {
         <span className={`goal-verdict ${v.tone}`}>{v.text}</span>
       </div>
 
-      <GoalBar p={p} needle />
-
       <div className="goal-pace-sub">
         <span className="goal-pace-desc" title={goalTitle(p.goal)}>
           {describeGoal(p.goal)} · {daysLeft(p)}d left
         </span>
         <GoalBadges p={p} compact />
       </div>
+
+      <GoalBar p={p} needle />
 
       {opts.showHistory && <GoalHistory p={p} showPeriods={opts.showPeriods} compact />}
     </div>
@@ -407,12 +409,27 @@ function GoalRings({ progress, opts }: { progress: GoalProgress[]; opts: GoalVie
                 </span>
                 <span className="goal-ring-of mono">of {formatGoalAmount(p.goal, p.goal.target)}</span>
               </span>
+              {met && (
+                <span className="goal-ring-award" title={`Target met this ${streakUnit(p.goal)}`}>
+                  <Trophy size={11} strokeWidth={2.25} />
+                </span>
+              )}
             </div>
+            {/* Both badges sit inside the cell's existing rows — as their own
+                row they were optional height, so one goal with a streak and one
+                without pushed their histories out of line with each other. */}
             <span className="goal-ring-cap" title={goalTitle(p.goal)}>
               <GoalSportMark type={p.goal.type} size={11} />
-              {p.goal.type || 'Any'}
+              <span className="goal-ring-name">{p.goal.type || 'Any'}</span>
+              {p.streak > 0 && (
+                <span
+                  className="goal-ring-streak mono"
+                  title={`${p.streak} ${p.streak === 1 ? streakUnit(p.goal) : `${streakUnit(p.goal)}s`} in a row`}
+                >
+                  <Flame size={9} />{p.streak}
+                </span>
+              )}
             </span>
-            <GoalBadges p={p} compact />
             {opts.showHistory && <GoalHistory p={p} showPeriods={false} compact />}
           </div>
         )
@@ -427,35 +444,43 @@ function GoalRings({ progress, opts }: { progress: GoalProgress[]; opts: GoalVie
  */
 function GoalLedger({ progress, opts }: { progress: GoalProgress[]; opts: GoalViewOpts }) {
   const met = progress.filter(p => p.current >= p.goal.target).length
+  // A card can hold weekly and monthly goals at once, so there is no single
+  // "days left" — the footer names the window that closes first instead.
+  const soonest = progress.reduce<GoalProgress | null>(
+    (a, p) => (a === null || daysLeft(p) < daysLeft(a) ? p : a), null,
+  )
   return (
     <div className="goal-ledger">
       {progress.map(p => {
         const v = paceVerdict(p)
         return (
           <div className="goal-ledger-row" key={p.goal.id}>
-            <span className="goal-ledger-line">
-              <span className="goal-ledger-key" title={goalTitle(p.goal)}>
-                <GoalSportMark type={p.goal.type} size={13} />
-                <span className="goal-ledger-name">{p.goal.type || 'Any'}</span>
-              </span>
-              <span className="goal-ledger-dots" aria-hidden="true" />
-              {/* Figure and verdict travel together, so the verdict can never be
-                  orphaned onto a line of its own on a narrow card. */}
-              <span className="goal-ledger-right">
-                <span className="goal-ledger-val mono">
-                  {formatGoalAmount(p.goal, p.current, true)}/{formatGoalAmount(p.goal, p.goal.target)}
-                </span>
-                <GoalBadges p={p} compact />
-                <span className={`goal-verdict ${v.tone}`}>{v.text}</span>
-              </span>
+            <span className="goal-ledger-key" title={goalTitle(p.goal)}>
+              <GoalSportMark type={p.goal.type} size={13} />
+              <span className="goal-ledger-name">{p.goal.type || 'Any'}</span>
             </span>
-            {opts.showHistory && <GoalHistory p={p} showPeriods={false} compact />}
+            <span className="goal-ledger-dots" aria-hidden="true" />
+            <span className="goal-ledger-val mono">
+              {formatGoalAmount(p.goal, p.current, true)}/{formatGoalAmount(p.goal, p.goal.target)}
+            </span>
+            {/* Always rendered, even when there is nothing to award: the row is
+                `display: contents`, so an omitted cell would slide every later
+                column left and break the alignment down the card. */}
+            <span className="goal-ledger-badges"><GoalBadges p={p} compact /></span>
+            <span className={`goal-verdict ${v.tone}`}>{v.text}</span>
+            {opts.showHistory && (
+              <span className="goal-ledger-hist"><GoalHistory p={p} showPeriods={false} compact /></span>
+            )}
           </div>
         )
       })}
       <div className="goal-ledger-foot mono">
         <span>{met} of {progress.length} met</span>
-        <span>{daysLeft(progress[0])}d left</span>
+        {soonest && (
+          <span title={`${describeGoal(soonest.goal)} closes first`}>
+            next closes in {daysLeft(soonest)}d
+          </span>
+        )}
       </div>
     </div>
   )

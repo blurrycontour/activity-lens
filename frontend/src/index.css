@@ -3664,7 +3664,7 @@ body:has(.overlay) .fab { display: none; }
 .goal-tile.measured .goal-classic-cur { font-size: 21px; }
 .goal-tile.met .goal-classic-cur { text-shadow: 0 0 20px currentColor; }
 
-.goal-badges { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; flex-shrink: 0; }
+.goal-badges { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
 
 /* Supporting copy sits behind the figure in the visual hierarchy. */
 .goal-meta {
@@ -3733,7 +3733,7 @@ body:has(.overlay) .fab { display: none; }
 /* Tall enough to carry the "+" that marks a beaten target — the old 6px bar
    had no room for a glyph. */
 .goal-history-bar {
-  height: 16px;
+  height: 12px;
   border-radius: 99px;
   background: var(--bg-3);
   border: 1px solid var(--border);
@@ -3741,15 +3741,21 @@ body:has(.overlay) .fab { display: none; }
   align-items: center;
   justify-content: center;
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 500;
   line-height: 1;
   color: transparent;
 }
 .goal-history-bar.met { background: var(--goal-hue, var(--primary)); border-color: transparent; }
-/* The "+" sits on the filled bar, so it needs the background's contrast colour
-   rather than a text token. */
-.goal-history-bar.over { color: var(--on-primary); }
+/* The "+" sits on a bar filled with the goal's colour.
+   Near-black is the only ink that clears contrast on all six sport hues in both
+   themes — a colour that flipped with the theme would be legible in one and
+   almost invisible in the other, because the bar underneath does not change.
+   So it stays dark, but it is mixed with the goal's own hue rather than being
+   flat black, which is what made it read as a smudge. */
+.goal-history-bar.over {
+  color: color-mix(in srgb, var(--goal-hue, var(--primary)) 30%, #05070a);
+}
 
 .goal-history-label {
   text-align: center;
@@ -3870,6 +3876,7 @@ body:has(.overlay) .fab { display: none; }
   color: var(--text-3);
 }
 .goal-pace-desc {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3882,7 +3889,17 @@ body:has(.overlay) .fab { display: none; }
   grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
   gap: 14px 8px;
 }
-.goal-ring-cell { display: grid; justify-items: center; gap: 7px; min-width: 0; }
+/* Fixed rows so every cell is the same height: dial, caption, history. An
+   `auto` row that some cells filled and others did not was what knocked the
+   dials out of line with each other. */
+.goal-ring-cell {
+  display: grid;
+  grid-template-rows: auto auto auto;
+  align-content: start;
+  justify-items: center;
+  gap: 7px;
+  min-width: 0;
+}
 .goal-ring-wrap { position: relative; width: 100%; max-width: 108px; }
 .goal-ring-wrap > svg { display: block; width: 100%; height: auto; }
 .goal-ring-arc { transition: stroke-dashoffset 0.5s ease; }
@@ -3905,29 +3922,58 @@ body:has(.overlay) .fab { display: none; }
   min-width: 0;
 }
 .goal-ring-cap > svg { flex-shrink: 0; }
-.goal-ring-cell .goal-badges { margin-left: 0; }
+.goal-ring-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Inline with the name, so a cell with a streak is exactly as tall as one
+   without and the histories below stay on one line across the row. */
+.goal-ring-streak {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 10px;
+  color: var(--primary);
+  flex-shrink: 0;
+}
+/* On the dial rather than under it, for the same reason. */
+.goal-ring-award {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 99px;
+  background: var(--primary);
+  color: var(--on-primary);
+  box-shadow: 0 0 0 2px var(--bg-2), 0 0 12px var(--primary-glow);
+}
 /* The history under a ring spans the cell, not the ring. */
 .goal-ring-cell .goal-history { width: 100%; }
 .goal-ring-cell.met .goal-ring-num { text-shadow: 0 0 20px currentColor; }
 
 /* ── Goal panel: ledger ──────────────────────────────────────────────────── */
-/* Space between rows rather than rules: at four or more goals the hairlines
-   turned the card into a table, which is more structure than a short list of
-   three-part rows needs. */
-.goal-ledger { display: flex; flex-direction: column; gap: 12px; }
-.goal-ledger-row { display: flex; flex-direction: column; gap: 5px; }
-.goal-ledger-line {
-  display: flex;
+/* One grid for the whole card, with each row `display: contents`, so the
+   figures, badges and verdicts line up on their own edges all the way down.
+   Per-row flex could not do that: every row sized its columns to its own
+   content, which is exactly the ragged right edge this replaces.
+
+   Space between rows rather than rules, too — at four or more goals the
+   hairlines turned a short list into a table. */
+.goal-ledger {
+  display: grid;
+  grid-template-columns: auto minmax(6px, 1fr) auto auto auto;
   align-items: center;
-  gap: 8px;
-  min-width: 0;
+  column-gap: 8px;
+  row-gap: 10px;
 }
-.goal-ledger-right {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  flex-shrink: 0;
-}
+.goal-ledger-row { display: contents; }
+/* Its own goal's history hugs it, so the 10px row gap reads as the separation
+   between goals rather than as even spacing between six unrelated strips. */
+.goal-ledger-hist { grid-column: 1 / -1; margin-top: -5px; }
+.goal-ledger-badges { display: inline-flex; justify-content: flex-end; }
+.goal-ledger-val { justify-self: end; }
+.goal-ledger-row .goal-verdict { justify-self: end; text-align: center; min-width: 8.5ch; }
 .goal-ledger-key {
   display: flex;
   align-items: center;
@@ -3944,23 +3990,23 @@ body:has(.overlay) .fab { display: none; }
   min-width: 12px;
 }
 .goal-ledger-val { font-size: 12px; color: var(--text); }
-.goal-ledger-row .goal-verdict { margin-left: 0; }
 .goal-ledger-row .goal-badges { margin-left: 0; }
 .goal-ledger-foot {
+  grid-column: 1 / -1;
   display: flex;
   justify-content: space-between;
-  padding-top: 4px;
+  padding-top: 9px;
   border-top: 1px solid var(--border);
-  margin-top: 2px;
   font-size: 10.5px;
   color: var(--text-3);
   text-transform: uppercase;
   letter-spacing: 0.07em;
 }
 
-@media (max-width: 420px) {
-  /* Two rings a row beats three squeezed ones. */
-  .goal-rings { grid-template-columns: repeat(auto-fit, minmax(78px, 1fr)); }
+@media (max-width: 520px) {
+  /* Exactly two a row: auto-fit would take three at 78px each, and a 78px dial
+     on a phone is a decoration rather than a number you can read. */
+  .goal-rings { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .goal-classic-body { gap: 9px; }
   .goal-classic-fig { min-width: 48px; }
   .goal-classic-cur { font-size: 22px; }
