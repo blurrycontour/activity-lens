@@ -722,13 +722,33 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
     }
   }
 
+  /**
+   * What the form was opened with, so saving can send only what moved.
+   *
+   * The patch is not a description of the form, it is a list of instructions:
+   * sending `calories` marks that figure as hand-entered whatever its value,
+   * so a form that submitted every field flagged all of them as edits the
+   * moment anyone corrected one. Correcting a distance should not claim the
+   * calorie estimate as your own.
+   */
+  const editedFrom = useRef({ name: '', date: '', type: w.type, calories: '', steps: '', distance: '' })
+
   function startEdit() {
-    setEditName(w.name)
-    setEditDate(w.date)
-    setEditType(w.type)
-    setEditCalories(w.calories > 0 ? String(w.calories) : '')
-    setEditSteps(w.steps != null && w.steps > 0 ? String(w.steps) : '')
-    setEditDistance(w.distance > 0 ? (w.distance / 1000).toFixed(2) : '')
+    const initial = {
+      name: w.name,
+      date: w.date,
+      type: w.type,
+      calories: w.calories > 0 ? String(w.calories) : '',
+      steps: w.steps != null && w.steps > 0 ? String(w.steps) : '',
+      distance: w.distance > 0 ? (w.distance / 1000).toFixed(2) : '',
+    }
+    editedFrom.current = initial
+    setEditName(initial.name)
+    setEditDate(initial.date)
+    setEditType(initial.type)
+    setEditCalories(initial.calories)
+    setEditSteps(initial.steps)
+    setEditDistance(initial.distance)
     setSaveErr(null)
     setEditing(true)
   }
@@ -737,14 +757,24 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
     setSaving(true)
     setSaveErr(null)
     try {
-      const updated = await updateWorkout(w.id, {
-        name: editName.trim(), type: editType, date: editDate,
-        calories: Math.max(0, Math.round(Number(editCalories) || 0)),
-        steps: Math.max(0, Math.round(Number(editSteps) || 0)),
-        // Back to metres, which is what the field stores. Rounded, because a
-        // typed "5.03" is 5030 m and not 5029.999999999999.
-        distance: Math.max(0, Math.round((Number(editDistance) || 0) * 1000)),
-      })
+      const from = editedFrom.current
+      const patch: Parameters<typeof updateWorkout>[1] = {}
+      if (editName.trim() !== from.name) patch.name = editName.trim()
+      if (editType !== from.type) patch.type = editType
+      if (editDate !== from.date) patch.date = editDate
+      if (editCalories !== from.calories) patch.calories = Math.max(0, Math.round(Number(editCalories) || 0))
+      if (editSteps !== from.steps) patch.steps = Math.max(0, Math.round(Number(editSteps) || 0))
+      // Back to metres, which is what the field stores. Rounded, because a
+      // typed "5.03" is 5030 m and not 5029.999999999999.
+      if (editDistance !== from.distance) patch.distance = Math.max(0, Math.round((Number(editDistance) || 0) * 1000))
+
+      // Nothing moved: the request would be a no-op that still bumps the
+      // updated-at stamp and re-renders the list for no reason.
+      if (Object.keys(patch).length === 0) {
+        setEditing(false)
+        return
+      }
+      const updated = await updateWorkout(w.id, patch)
       setW(updated)
       setEditing(false)
     } catch (err) {
@@ -1188,7 +1218,14 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
               </div>
             )}
 
-            {w.paceTimeline.length > 0 && (
+            {/* Shown on the average alone, not on the timeline. A treadmill
+                export has no per-point pace to plot — its track carries heart
+                rate and time and no position — but it does have a distance and
+                a duration, which is all an average needs. Gating the row on the
+                series meant correcting the distance produced a pace nothing on
+                the page ever showed. Min and max still need the series and say
+                so with a dash when it is missing. */}
+            {(w.paceTimeline.length > 0 || w.avgPace > 0) && (
               <div className="stat-grid-3">
                 <StatChip icon={<TrendingUp size={12} color={color} />} label="Min Pace" value={derived.paceMin != null ? `${fmtPace(derived.paceMin)} /km` : '—'} calculated={derived.paceMin != null} />
                 <StatChip icon={<TrendingUp size={12} color={color} />} label="Avg Pace" value={w.avgPace ? `${fmtPace(w.avgPace)} /km` : '—'} calculated />
@@ -1196,7 +1233,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
               </div>
             )}
 
-            {speedTimeline.length > 0 && (
+            {(speedTimeline.length > 0 || w.avgSpeed > 0) && (
               <div className="stat-grid-3">
                 <StatChip icon={<Gauge size={12} color="var(--blue)" />} label="Min Speed" value={derived.speedMin != null ? `${derived.speedMin.toFixed(1)} km/h` : '—'} calculated={derived.speedMin != null} />
                 <StatChip icon={<Gauge size={12} color="var(--blue)" />} label="Avg Speed" value={w.avgSpeed > 0 ? `${w.avgSpeed.toFixed(1)} km/h` : '—'} calculated />
