@@ -11,6 +11,7 @@ import TypeLegend from '../components/TypeLegend'
 import Dropdown from '../components/Dropdown'
 import { useLocalStorage } from '../lib/useLocalStorage'
 import { filterByRange, rangeLabel, toDateKey } from '../lib/range'
+import { everyDayBetween, everyMonthBetween, everyWeekBetween, fillGaps, keySpan } from '../lib/timeGaps'
 import { AXIS_TICK, GRID_PROPS, HOVER_FILL } from '../lib/chartColors'
 import {
   PERF_METRICS, WEATHER_FIELDS, binByTemperature, binWidthFor, describeCorrelation,
@@ -69,6 +70,32 @@ function monthLabel(key: string): string {
   return `${MONTH_NAMES[Number(mo) - 1]} ${yr.slice(2)}`
 }
 
+function dayLabel(date: string): string {
+  return new Date(`${date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+/** A chart row anchored to an activity date; the rest varies per chart. */
+type DatedRow = { date: string; dateLabel: string } & Record<string, unknown>
+
+/**
+ * Gives a per-activity series one position per day between its first and last
+ * activity, so time off shows as the distance it actually is.
+ *
+ * An inserted day carries only its date, leaving every value undefined. The
+ * lines that draw these series pass `connectNulls`, so the line carries across
+ * the gap while the x axis stops pretending the gap was not there.
+ */
+function withEmptyDays(rows: DatedRow[]): DatedRow[] {
+  const span = keySpan(rows, r => r.date)
+  if (!span) return rows
+  return fillGaps(
+    rows,
+    everyDayBetween(span[0], span[1]),
+    r => r.date,
+    date => ({ date, dateLabel: dayLabel(date) }),
+  )
+}
+
 /** Axis label placed below the plot, clear of the tick row. */
 function xLabel(value: string) {
   return { value, position: 'insideBottom' as const, offset: -12, fontSize: 10, fill: 'var(--text-3)' }
@@ -116,6 +143,15 @@ export default function Analysis() {
   const [selectedMetrics, setSelectedMetrics] = useLocalStorage<Metric[]>('al_tl_metrics', ['pace', 'hr'])
   const [volumeBucket, setVolumeBucket] = useLocalStorage<'week' | 'month'>('al_tl_bucket', 'week')
   const [volumeMeasure, setVolumeMeasure] = useLocalStorage<'distance' | 'time'>('al_tl_vol', 'distance')
+  /**
+   * Whether time-series charts span real elapsed time.
+   *
+   * Off by default, which is how these charts have always drawn: one position
+   * per activity, gaps closed up. That is the denser and often more readable
+   * view — but it silently rescales the x axis, so a fortnight off looks like
+   * business as usual. On, every skipped day or bucket keeps its place.
+   */
+  const [showGaps, setShowGaps] = useLocalStorage<boolean>('al_an_gaps', false)
   const [weatherMetric, setWeatherMetric] = useLocalStorage<WeatherMetric>('al_an_wx_metric', 'pace')
   const [exploreX, setExploreX] = useLocalStorage<WeatherKey>('al_an_wx_x', 'humidity')
   const [exploreY, setExploreY] = useLocalStorage<PerfKey>('al_an_wx_y', 'pace')
@@ -237,16 +273,21 @@ export default function Analysis() {
 
   const seriesWithMA = useMemo(() => {
     const window = 3
-    return series.map((d, i) => {
+    const rows = series.map((d, i) => {
       const slice = series.slice(Math.max(0, i - window + 1), i + 1)
-      const result: Record<string, number | null | string> = { ...d }
+      const result: DatedRow = { ...d }
       for (const m of METRICS) {
         const vals = slice.map(s => s[m.id]).filter(v => v !== null) as number[]
         result[`${m.id}_ma`] = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : null
       }
       return result
     })
-  }, [series])
+    // Gaps are filled *after* the moving average, so the average stays "the
+    // last three activities" rather than becoming "the last three days" the
+    // moment the toggle is flipped. The toggle is about the x axis, not the
+    // maths on it.
+    return showGaps ? withEmptyDays(rows) : rows
+  }, [series, showGaps])
 
   const summaryStats = useMemo(() => {
     if (series.length === 0) return []
@@ -267,17 +308,25 @@ export default function Analysis() {
       const key = volumeBucket === 'month' ? w.date.slice(0, 7) : weekKey(w.date)
       buckets.set(key, (buckets.get(key) ?? 0) + (volumeMeasure === 'distance' ? w.distance / 1000 : w.duration / 3600))
     }
-    const rows = [...buckets.entries()].sort((a, b) => a[0].localeCompare(b[0]))
-    return rows.map(([key, value], i) => {
-      const win = rows.slice(Math.max(0, i - 3), i + 1)
+    let keys = [...buckets.keys()].sort()
+    if (keys.length === 0) return []
+    if (showGaps) {
+      const [first, last] = [keys[0], keys[keys.length - 1]]
+      keys = volumeBucket === 'month' ? everyMonthBetween(first, last) : everyWeekBetween(first, last)
+    }
+    // The rolling average runs over `keys`, so with gaps shown a week off pulls
+    // it down the way it actually did, and with them hidden it behaves exactly
+    // as it did before the toggle existed.
+    return keys.map((key, i) => {
+      const win = keys.slice(Math.max(0, i - 3), i + 1)
       return {
         label: volumeBucket === 'month' ? monthLabel(key) : key.slice(5),
         key,
-        value: Math.round(value * 10) / 10,
-        avg: Math.round((win.reduce((a, [, v]) => a + v, 0) / win.length) * 10) / 10,
+        value: Math.round((buckets.get(key) ?? 0) * 10) / 10,
+        avg: Math.round((win.reduce((a, k) => a + (buckets.get(k) ?? 0), 0) / win.length) * 10) / 10,
       }
     })
-  }, [workouts, volumeBucket, volumeMeasure])
+  }, [workouts, volumeBucket, volumeMeasure, showGaps])
 
   // ── Efficiency ───────────────────────────────────────────────────────────
   const hrPaceData = useMemo(() =>
@@ -312,19 +361,18 @@ export default function Analysis() {
     // in the same range as the real paces and needs no configuration.
     const hrs = usable.map(d => d.hr).sort((a, b) => a - b)
     const refHr = hrs[Math.floor(hrs.length / 2)]
-    return {
-      refHr,
-      rows: usable.map(d => ({
-        dateLabel: d.dateLabel,
-        name: d.name,
-        hrPerSpeed: Math.round((d.hr / (d.speed as number)) * 10) / 10,
-        adjPace: Math.round((d.pace as number) * (refHr / d.hr)),
-        pace: d.pace as number,
-        hr: d.hr,
-        speed: d.speed as number,
-      })),
-    }
-  }, [series])
+    const rows = usable.map(d => ({
+      date: d.date,
+      dateLabel: d.dateLabel,
+      name: d.name,
+      hrPerSpeed: Math.round((d.hr / (d.speed as number)) * 10) / 10,
+      adjPace: Math.round((d.pace as number) * (refHr / d.hr)),
+      pace: d.pace as number,
+      hr: d.hr,
+      speed: d.speed as number,
+    }))
+    return { refHr, rows: showGaps ? withEmptyDays(rows) : rows }
+  }, [series, showGaps])
 
   // ── Load ─────────────────────────────────────────────────────────────────
   const { trainingLoad, acwr } = useMemo(() => {
@@ -388,9 +436,18 @@ export default function Analysis() {
           </span>
         </div>
         {/* One filter row governs every tab below it. */}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <TypeDropdown value={typeFilter} onChange={setTypeFilter} />
           <RangeDropdown value={rangeDays} onChange={setRangeDays} />
+          <label className="switch">
+            <input type="checkbox" checked={showGaps} onChange={e => setShowGaps(e.target.checked)} />
+            <span className="switch-track" />
+            Show gaps
+          </label>
+          <InfoTip
+            label="Show gaps"
+            text="Time-series charts normally give each activity one position on the x axis, which closes up the days you did not train — dense and easy to read, but a fortnight off looks like business as usual. Switch this on and every skipped day, week or month keeps its place, so breaks and their effect on a trend are visible. Moving averages over activities are unaffected; the rolling average on Training Volume does count the empty buckets, because a week off genuinely lowers it."
+          />
         </div>
       </div>
 
@@ -629,6 +686,8 @@ export default function Analysis() {
                         content={({ active, payload }) => {
                           if (!active || !payload?.length) return null
                           const d = payload[0].payload
+                          // A day inserted to show a gap has no activity on it.
+                          if (!d?.name) return null
                           return (
                             <div className="custom-tooltip">
                               <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.name}</div>
@@ -639,7 +698,10 @@ export default function Analysis() {
                           )
                         }}
                       />
-                      <Line type="monotone" dataKey="hrPerSpeed" stroke="var(--danger)" strokeWidth={2} dot={{ r: 2.5, strokeWidth: 0 }} isAnimationActive={false} />
+                      {/* An explicit fill: Recharts defaults a dot to solid
+                          white, which is invisible in light mode and wrong in
+                          both. Every other line on this page names its own. */}
+                      <Line type="monotone" dataKey="hrPerSpeed" stroke="var(--danger)" strokeWidth={2} dot={{ r: 2.5, strokeWidth: 0, fill: 'var(--danger)' }} connectNulls isAnimationActive={false} />
                     </LineChart>
                   </ResponsiveContainer>
                 )}
@@ -663,6 +725,7 @@ export default function Analysis() {
                         content={({ active, payload }) => {
                           if (!active || !payload?.length) return null
                           const d = payload[0].payload
+                          if (!d?.name) return null
                           return (
                             <div className="custom-tooltip">
                               <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.name}</div>
@@ -673,7 +736,7 @@ export default function Analysis() {
                           )
                         }}
                       />
-                      <Line type="monotone" dataKey="adjPace" stroke="var(--blue)" strokeWidth={2} dot={{ r: 2.5, strokeWidth: 0 }} isAnimationActive={false} />
+                      <Line type="monotone" dataKey="adjPace" stroke="var(--blue)" strokeWidth={2} dot={{ r: 2.5, strokeWidth: 0, fill: 'var(--blue)' }} connectNulls isAnimationActive={false} />
                     </LineChart>
                   </ResponsiveContainer>
                 )}
