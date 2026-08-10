@@ -71,15 +71,33 @@ function monthLabel(key: string): string {
 }
 
 /**
- * Axis label for a day. The year is added only when the selection actually
- * crosses one — on every tick it is noise, and on none of them "Jan 4" is
- * ambiguous the moment a chart shows two Januaries.
+ * Axis label for a day: "Jul 27", or "Jul 27 '26" when the year has to be said.
+ *
+ * Said on as few ticks as possible. A year on every tick made the labels half
+ * again as long, which pushed them into each other and left the axis looking
+ * broken — and it is redundant on all but one of them anyway, since a run of
+ * dates only changes year once. Callers mark that one tick; the rest stay short
+ * and the tooltip carries the full date regardless.
  */
 function dayLabel(date: string, withYear = false): string {
-  return new Date(`${date}T00:00:00`).toLocaleDateString(
-    'en-US',
-    withYear ? { month: 'short', day: 'numeric', year: '2-digit' } : { month: 'short', day: 'numeric' },
-  )
+  const d = new Date(`${date}T00:00:00`)
+  const short = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return withYear ? `${short} '${String(d.getFullYear()).slice(2)}` : short
+}
+
+/**
+ * Marks which of `keys` should carry a year: the first, and any that starts a
+ * new one. Returns an all-false set when the range never leaves a single year.
+ */
+function yearMarks(keys: string[]): boolean[] {
+  if (!spansYears(keys)) return keys.map(() => false)
+  let prev = ''
+  return keys.map(k => {
+    const year = k.slice(0, 4)
+    const mark = year !== prev
+    prev = year
+    return mark
+  })
 }
 
 /** Tooltip form. Always names the year: there is room, and it settles it. */
@@ -107,17 +125,21 @@ type DatedRow = { date: string; dateLabel: string; dateFull: string } & Record<s
  * lines that draw these series pass `connectNulls`, so the line carries across
  * the gap while the x axis stops pretending the gap was not there.
  */
-function withEmptyDays(rows: DatedRow[], withYear: boolean): DatedRow[] {
+function withEmptyDays(rows: DatedRow[]): DatedRow[] {
   const span = keySpan(rows, r => r.date)
   if (!span) return rows
-  return fillGaps(
+  const filled = fillGaps(
     rows,
     everyDayBetween(span[0], span[1]),
     r => r.date,
     // `empty` marks a day the gap filler inserted, so a tooltip can say "no
     // activity" rather than rendering nothing and looking broken.
-    date => ({ date, dateLabel: dayLabel(date, withYear), dateFull: fullDate(date), empty: true }),
+    date => ({ date, dateLabel: dayLabel(date), dateFull: fullDate(date), empty: true }),
   )
+  // Re-marked over the filled run: the day that opens a year is usually one of
+  // the inserted ones, and the original marks now sit on the wrong rows.
+  const marks = yearMarks(filled.map(r => r.date))
+  return filled.map((r, i) => ({ ...r, dateLabel: dayLabel(r.date, marks[i]) }))
 }
 
 /** Axis label placed below the plot, clear of the tick row. */
@@ -176,6 +198,15 @@ export default function Analysis() {
    * business as usual. On, every skipped day or bucket keeps its place.
    */
   const [showGaps, setShowGaps] = useLocalStorage<boolean>('al_an_gaps', false)
+  /**
+   * Whether the trend chart's y axis starts at zero or hugs the data.
+   *
+   * Both are honest and neither is the right default for every metric: from
+   * zero keeps the proportions truthful, which matters for distance; fitting
+   * the data is the only way to see a trend in heart rate, where every value
+   * sits in a narrow band a long way above zero.
+   */
+  const [trendYAxis, setTrendYAxis] = useLocalStorage<'fit' | 'zero'>('al_tl_yaxis', 'fit')
   const [weatherMetric, setWeatherMetric] = useLocalStorage<WeatherMetric>('al_an_wx_metric', 'pace')
   const [exploreX, setExploreX] = useLocalStorage<WeatherKey>('al_an_wx_x', 'humidity')
   const [exploreY, setExploreY] = useLocalStorage<PerfKey>('al_an_wx_y', 'pace')
@@ -275,16 +306,13 @@ export default function Analysis() {
   }, [workouts])
 
   // ── Trends ───────────────────────────────────────────────────────────────
-  // Whether the whole selection crosses a year decides the axis format once,
-  // rather than each row guessing from its own date.
-  const multiYear = useMemo(() => spansYears(workouts.map(w => w.date).sort()), [workouts])
-
-  const series = useMemo(() =>
-    [...workouts]
-      .sort((a, b) => a.date.localeCompare(b.date))
-      .map(w => ({
+  const series = useMemo(() => {
+    const sorted = [...workouts].sort((a, b) => a.date.localeCompare(b.date))
+    const marks = yearMarks(sorted.map(w => w.date))
+    return sorted
+      .map((w, i) => ({
         date: w.date,
-        dateLabel: dayLabel(w.date, multiYear),
+        dateLabel: dayLabel(w.date, marks[i]),
         dateFull: fullDate(w.date),
         pace: w.avgPace || null,
         hr: w.avgHR,
@@ -297,8 +325,8 @@ export default function Analysis() {
         steps: w.steps || null,
         name: w.name,
         type: w.type,
-      })),
-  [workouts, multiYear])
+      }))
+  }, [workouts])
 
   const seriesWithMA = useMemo(() => {
     const window = 3
@@ -315,8 +343,8 @@ export default function Analysis() {
     // last three activities" rather than becoming "the last three days" the
     // moment the toggle is flipped. The toggle is about the x axis, not the
     // maths on it.
-    return showGaps ? withEmptyDays(rows, multiYear) : rows
-  }, [series, showGaps, multiYear])
+    return showGaps ? withEmptyDays(rows) : rows
+  }, [series, showGaps])
 
   const summaryStats = useMemo(() => {
     if (series.length === 0) return []
@@ -346,11 +374,11 @@ export default function Analysis() {
     // The rolling average runs over `keys`, so with gaps shown a week off pulls
     // it down the way it actually did, and with them hidden it behaves exactly
     // as it did before the toggle existed.
-    const crossesYears = spansYears(keys)
+    const marks = yearMarks(keys)
     return keys.map((key, i) => {
       const win = keys.slice(Math.max(0, i - 3), i + 1)
       return {
-        label: volumeBucket === 'month' ? monthLabel(key) : dayLabel(key, crossesYears),
+        label: volumeBucket === 'month' ? monthLabel(key) : dayLabel(key, marks[i]),
         full: volumeBucket === 'month' ? monthLabel(key) : `Week of ${fullDate(key)}`,
         key,
         value: Math.round((buckets.get(key) ?? 0) * 10) / 10,
@@ -403,8 +431,8 @@ export default function Analysis() {
       hr: d.hr,
       speed: d.speed as number,
     }))
-    return { refHr, rows: showGaps ? withEmptyDays(rows, multiYear) : rows }
-  }, [series, showGaps, multiYear])
+    return { refHr, rows: showGaps ? withEmptyDays(rows) : rows }
+  }, [series, showGaps])
 
   // ── Load ─────────────────────────────────────────────────────────────────
   const { trainingLoad, acwr } = useMemo(() => {
@@ -432,16 +460,15 @@ export default function Analysis() {
 
     // Labels are derived after the fact, so the year rule can look at the span
     // the chart will actually draw rather than at the 28-day lead-in too.
-    const shown = keys.slice(span - days)
-    const crossesYears = spansYears(shown)
+    const marks = yearMarks(keys.slice(span - days))
     const trainingLoad: { date: string; full: string; tss: number }[] = []
     const acwr: { date: string; full: string; acute: number; chronic: number; ratio: number | null }[] = []
     for (let end = span - days; end < span; end++) {
-      trainingLoad.push({ date: dayLabel(keys[end], crossesYears), full: fullDate(keys[end]), tss: daily[end] })
+      trainingLoad.push({ date: dayLabel(keys[end], marks[end - (span - days)]), full: fullDate(keys[end]), tss: daily[end] })
       const acute = meanEndingAt(end, 7)
       const chronic = meanEndingAt(end, 28)
       acwr.push({
-        date: dayLabel(keys[end], crossesYears),
+        date: dayLabel(keys[end], marks[end - (span - days)]),
         full: fullDate(keys[end]),
         acute: Math.round(acute),
         chronic: Math.round(chronic),
@@ -473,7 +500,7 @@ export default function Analysis() {
           </span>
         </div>
         {/* One filter row governs every tab below it. */}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div className="analysis-filters">
           <TypeDropdown value={typeFilter} onChange={setTypeFilter} />
           <RangeDropdown value={rangeDays} onChange={setRangeDays} />
           <button
@@ -595,15 +622,19 @@ export default function Analysis() {
             {summaryStats.length > 0 && (
               <div className="trend-stats">
                 {summaryStats.map(s => (
-                  <div key={s.id} className="card" style={{ borderLeft: `3px solid ${s.color}` }}>
-                    <div style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{s.label}</div>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 700, color: s.color, letterSpacing: '-0.03em' }}>
-                      {formatValue(s.id, s.avg)} <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-3)' }}>{s.unit}</span>
+                  <div key={s.id} className="card trend-stat" style={{ borderLeftColor: s.color }}>
+                    <div className="trend-stat-label">{s.label}</div>
+                    <div className="trend-stat-value" style={{ color: s.color }}>
+                      {formatValue(s.id, s.avg)} <span className="trend-stat-unit">{s.unit}</span>
                     </div>
-                    <div style={{ display: 'flex', gap: 12, marginTop: 8, fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-3)' }}>
+                    {/* A grid, not a flex row: pace is the one metric whose
+                        values are "12:05" wide, and three of those in a nowrap
+                        row overflowed the card and shunted the trend out of
+                        line with every other tile. */}
+                    <div className="trend-stat-range">
                       <span>↓ {formatValue(s.id, s.min)}</span>
                       <span>↑ {formatValue(s.id, s.max)}</span>
-                      <span style={{ color: s.trend > 0 ? 'var(--success)' : s.trend < 0 ? 'var(--danger)' : 'var(--text-3)', marginLeft: 'auto' }}>
+                      <span style={{ color: s.trend > 0 ? 'var(--success)' : s.trend < 0 ? 'var(--danger)' : 'var(--text-3)' }}>
                         {s.trend > 0 ? '▲' : s.trend < 0 ? '▼' : '—'} {Math.abs(s.trend).toFixed(1)}%
                       </span>
                     </div>
@@ -616,8 +647,15 @@ export default function Analysis() {
               title="Performance Over Time"
               icon={<TrendingUp size={14} color="var(--primary)" />}
               description={`One point per activity, with a bolder 3-activity moving average. ${series.length} activities.`}
-              info="Faint lines are individual activities; bold lines smooth them over three activities to show direction rather than noise. All selected metrics share one axis, so use it to read each line's shape and trend, not to compare their absolute heights. Filtering to a single sport makes pace and speed directly comparable."
+              info="Faint lines are individual activities; bold lines smooth them over three activities to show direction rather than noise. All selected metrics share one axis, so use it to read each line's shape and trend, not to compare their absolute heights. Filtering to a single sport makes pace and speed directly comparable. Starting the axis at zero keeps the proportions honest; fitting it to the data is the only way to see movement in a metric like heart rate, which never goes near zero."
               style={{ marginBottom: 16 }}
+              actions={
+                <Segmented
+                  value={trendYAxis}
+                  onChange={setTrendYAxis}
+                  options={[{ id: 'fit', label: 'Fit' }, { id: 'zero', label: 'From 0' }]}
+                />
+              }
             >
               {series.length === 0 ? (
                 <EmptyPlot height={300}>No activities in the {scope}</EmptyPlot>
@@ -626,7 +664,11 @@ export default function Analysis() {
                   <LineChart data={seriesWithMA} margin={space.margin(18)}>
                     <CartesianGrid {...GRID_PROPS} />
                     <XAxis dataKey="dateLabel" {...denseXAxis()} label={xLabel('Activity date')} />
-                    <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" label={yLabel('Selected metrics')} />
+                    <YAxis
+                      tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto"
+                      domain={trendYAxis === 'zero' ? [0, 'auto'] : ['auto', 'auto']}
+                      label={yLabel('Selected metrics')}
+                    />
                     <Tooltip
                       content={({ active, payload, label }) => {
                         if (!active) return null

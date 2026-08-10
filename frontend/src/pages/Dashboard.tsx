@@ -304,9 +304,8 @@ function daysLeft(p: GoalProgress): number {
 /**
  * Standard: the merge of what were Classic and Pace.
  *
- * Four rows — figure and heading, description, bar, history — with the figure
- * large enough to stand across the first two, and the text beside it bottom-
- * aligned so the number gets the height rather than the whitespace.
+ * Four rows: the mark, the figures and the verdict; then the description with
+ * the trophy and streak; then the bar; then the history.
  */
 function GoalTileStandard({ p, opts }: { p: GoalProgress; opts: GoalViewOpts }) {
   const met = p.current >= p.goal.target
@@ -314,22 +313,19 @@ function GoalTileStandard({ p, opts }: { p: GoalProgress; opts: GoalViewOpts }) 
   return (
     <div className={`goal-tile${met ? ' met' : ''}${p.goal.metric === 'count' ? '' : ' measured'}`}>
       <div className="goal-std-top">
-        <span className="goal-std-fig" aria-hidden="true">
-          <span className="goal-std-cur" style={{ color: goalColor(p.goal.type) }}>
-            {formatGoalAmount(p.goal, p.current, true)}
-          </span>
-          <span className="goal-std-tot mono">/{formatGoalAmount(p.goal, p.goal.target)}</span>
+        <GoalSportMark type={p.goal.type} size={15} />
+        <span className="goal-std-cur mono" style={{ color: goalColor(p.goal.type) }}>
+          {formatGoalAmount(p.goal, p.current, true)}
         </span>
+        <span className="goal-std-tot mono">/ {formatGoalAmount(p.goal, p.goal.target)}</span>
+        <span className={`goal-verdict ${v.tone}`}>{v.text}</span>
+      </div>
 
-        <span className="goal-std-head">
-          <GoalSportMark type={p.goal.type} size={15} />
-          <span className={`goal-verdict ${v.tone}`}>{v.text}</span>
-          <GoalBadges p={p} />
-        </span>
-
+      <div className="goal-std-sub">
         <span className="goal-std-desc" title={goalTitle(p.goal)}>
           {describeGoal(p.goal)} · {daysLeft(p)}d left
         </span>
+        <GoalBadges p={p} />
       </div>
 
       <GoalBar p={p} needle />
@@ -498,17 +494,16 @@ function GoalLedger({ progress, opts }: { progress: GoalProgress[]; opts: GoalVi
           <div className="goal-ledger-row" key={p.goal.id}>
             <span className="goal-ledger-key" title={goalTitle(p.goal)}>
               <GoalSportMark type={p.goal.type} size={13} />
-              <span className="goal-ledger-name">{p.goal.type || 'Any'}</span>
-            </span>
-            <span className="goal-ledger-dots" aria-hidden="true" />
-            <span className="goal-ledger-val mono">
-              {formatGoalAmount(p.goal, p.current, true)}/{formatGoalAmount(p.goal, p.goal.target)}
+              <span className="goal-ledger-name">{describeGoal(p.goal)}</span>
             </span>
             {/* Always rendered, even when there is nothing to award: the row is
                 `display: contents`, so an omitted cell would slide every later
                 column left and break the alignment down the card. */}
             <span className="goal-ledger-badges"><GoalBadges p={p} compact /></span>
             <span className={`goal-verdict ${v.tone}`}>{v.text}</span>
+            <span className="goal-ledger-val mono">
+              {formatGoalAmount(p.goal, p.current, true)}/{formatGoalAmount(p.goal, p.goal.target)}
+            </span>
             {opts.showHistory && (
               <span className="goal-ledger-hist"><GoalHistory p={p} showPeriods={false} compact /></span>
             )}
@@ -758,7 +753,7 @@ export default function Dashboard({ onSelect }: { onSelect: (w: Workout) => void
                   <h3 className="chart-card-title">Goals</h3>
                   <InfoTip
                     label="Goals"
-                    text="Every goal from Settings → Training goals, in the order you put them there. The marker on each bar is where you would be exactly on schedule, so past it means ahead. The bars below are recent windows — filled where you met the target, notched where you beat it — and a streak counts consecutive windows met, which the one in progress can extend but never break. Card styles and labels live in the same settings page."
+                    text="Every goal from Settings → Training goals, in the order you put them there. The marker on each bar is where you would be exactly on schedule, so past it means ahead. The bars below are recent windows — filled where you met the target, marked + where you beat it — and a streak counts consecutive windows met, which the one in progress can extend but never break. Card styles and labels live in the same settings page."
                   />
                 </div>
                 {progress.length === 0 ? (

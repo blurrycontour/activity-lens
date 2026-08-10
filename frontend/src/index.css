@@ -3626,49 +3626,31 @@ body:has(.overlay) .fab { display: none; }
 /* Shared by the verdict, the streak and the medal. */
 .goal-panel-stack, .goal-ledger, .goal-rings, .goal-today { --goal-badge-h: 20px; }
 
-/* The figure stands across both text lines rather than sitting on one of them,
-   and the description is pushed to the bottom of its row — the height goes to
-   the number instead of to the gap above the words. */
-.goal-std-top {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  grid-template-rows: auto auto;
-  align-items: end;
-  column-gap: 12px;
-  row-gap: 2px;
-}
-.goal-std-fig {
-  grid-row: 1 / span 2;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  justify-content: center;
-  line-height: 0.95;
-  /* A floor rather than a fixed width: "3/3" and "29.2/40 km" both have to
-     leave the bar starting at the same x down a stack of tiles. */
-  min-width: 62px;
-}
+/* Four plain rows: mark, figures and verdict; description with the trophy and
+   streak; the bar; the history. */
+.goal-std-top { display: flex; align-items: baseline; gap: 7px; }
+.goal-std-top > svg { align-self: center; flex-shrink: 0; }
 .goal-std-cur {
-  font-family: var(--font-mono);
-  font-size: 34px;
+  font-size: 22px;
   font-weight: 500;
-  letter-spacing: -0.045em;
+  letter-spacing: -0.035em;
+  line-height: 1;
   transition: text-shadow 0.2s ease;
 }
-.goal-std-tot { font-size: 11px; color: var(--text-3); margin-top: 4px; }
-.goal-tile.measured .goal-std-cur { font-size: 27px; }
+.goal-std-tot { font-size: 12px; color: var(--text-3); }
+.goal-tile.measured .goal-std-cur { font-size: 19px; }
 .goal-tile.met .goal-std-cur { text-shadow: 0 0 20px currentColor; }
 
-.goal-std-head { display: flex; align-items: center; gap: 7px; min-width: 0; }
-.goal-std-head > svg { flex-shrink: 0; }
+.goal-std-sub { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .goal-std-desc {
-  font-size: 11.5px;
+  flex: 1;
+  min-width: 0;
   font-family: var(--font-mono);
+  font-size: 10.5px;
   color: var(--text-3);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  align-self: end;
 }
 
 /* One height for every pill in the card — verdict, streak and medal — so a row
@@ -3747,17 +3729,13 @@ body:has(.overlay) .fab { display: none; }
   color: transparent;
 }
 .goal-history-bar.met { background: var(--goal-hue, var(--primary)); border-color: transparent; }
-/* A beaten window is marked by a notch cut out of the bar rather than a glyph
-   drawn on it. Ink on the bar could never be right in both themes — the bar is
-   a fixed sport colour, so a colour that followed the theme would be legible in
-   one and invisible in the other. The notch is the card's own background, so it
-   is correct in every theme by construction, and it survives being 12px tall. */
+/* The "+" marking a beaten window sits on a bar filled with the goal's colour.
+   It stays dark in both themes on purpose: the bar underneath is a fixed sport
+   hue, so ink that followed the theme would be legible against it in one and
+   almost invisible in the other. Mixed with the goal's own hue rather than flat
+   black, which is what made it read as a smudge. */
 .goal-history-bar.over {
-  color: transparent;
-  background-image: linear-gradient(var(--bg-2), var(--bg-2));
-  background-size: 2px 6px;
-  background-position: center;
-  background-repeat: no-repeat;
+  color: color-mix(in srgb, var(--goal-hue, var(--primary)) 28%, #05070a);
 }
 
 .goal-history-label {
@@ -3770,6 +3748,32 @@ body:has(.overlay) .fab { display: none; }
   white-space: nowrap;
 }
 
+/* ── Analysis: filter row ───────────────────────────────────────────
+   One line at every width. The dropdowns carry a 150px minimum of their own,
+   which two of them plus a pill cannot honour on a phone — inside this row they
+   give it up and share what there is, truncating their label rather than
+   pushing the last control onto a second line. */
+.analysis-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+.analysis-filters .al-dropdown { min-width: 0; flex: 0 1 auto; }
+.analysis-filters .al-dropdown-trigger { min-width: 0; width: 100%; }
+.analysis-filters .al-dropdown-trigger > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.analysis-filters .filter-pill { flex: 0 0 auto; }
+@media (max-width: 420px) {
+  /* The icon carries it once the row is this tight. */
+  .analysis-filters .filter-pill span { display: none; }
+  .analysis-filters .filter-pill { padding: 0 10px; }
+}
+
 /* ── Analysis: trend summary tiles ──────────────────────────────────
    Two up on a phone. At one per row the six of them pushed the chart they
    summarise off the screen entirely. */
@@ -3779,9 +3783,44 @@ body:has(.overlay) .fab { display: none; }
   gap: 10px;
   margin-bottom: 20px;
 }
+.trend-stat { border-left: 3px solid var(--border); }
+.trend-stat-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+.trend-stat-value {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+.trend-stat-unit { font-size: 12px; font-weight: 400; color: var(--text-3); }
+/* Three columns rather than a nowrap flex row: the widest values here are
+   paces like "12:05", and three of those overflowed the tile and dragged the
+   trend figure out of line with every other one. */
+.trend-stat-range {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.trend-stat-range > span:last-child { justify-self: end; }
 @media (max-width: 640px) {
   .trend-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-  .trend-stats .card { padding: 10px; }
+  .trend-stat { padding: 10px; }
+  .trend-stat-value { font-size: 19px; }
+  /* Two rows beats three cramped columns once the tile is half a phone wide. */
+  .trend-stat-range { grid-template-columns: auto auto; gap: 4px 10px; }
+  .trend-stat-range > span:last-child { grid-column: 1 / -1; justify-self: start; }
 }
 
 /* A filter that is on or off, sized and shaped like the dropdowns beside it so
@@ -3985,7 +4024,11 @@ body:has(.overlay) .fab { display: none; }
    hairlines turned a short list into a table. */
 .goal-ledger {
   display: grid;
-  grid-template-columns: auto minmax(6px, 1fr) auto auto auto;
+  /* Sport on the left, everything measured hard against the right edge, the
+     way the Today strip reads. The dotted leader went with it: with the figures
+     already sharing a column it was drawing a line to something that no longer
+     needed finding. */
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   align-items: center;
   column-gap: 8px;
   row-gap: 6px;
@@ -3996,7 +4039,7 @@ body:has(.overlay) .fab { display: none; }
    apart from "two different goals" and spaced them identically. */
 .goal-ledger-hist { grid-column: 1 / -1; padding-bottom: 6px; }
 .goal-ledger-badges { display: inline-flex; justify-content: flex-end; }
-.goal-ledger-val { justify-self: end; }
+.goal-ledger-val { justify-self: end; font-size: 12px; }
 .goal-ledger-row .goal-verdict { justify-self: end; text-align: center; min-width: 8.5ch; }
 .goal-ledger-key {
   display: flex;
@@ -4008,11 +4051,6 @@ body:has(.overlay) .fab { display: none; }
 }
 .goal-ledger-key > svg { flex-shrink: 0; }
 .goal-ledger-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.goal-ledger-dots {
-  border-bottom: 1px dotted var(--border-strong);
-  transform: translateY(-3px);
-  min-width: 12px;
-}
 .goal-ledger-val { font-size: 12px; color: var(--text); }
 .goal-ledger-row .goal-badges { margin-left: 0; }
 .goal-ledger-foot {
@@ -4031,10 +4069,8 @@ body:has(.overlay) .fab { display: none; }
   /* Exactly two a row: auto-fit would take three at 78px each, and a 78px dial
      on a phone is a decoration rather than a number you can read. */
   .goal-rings { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .goal-std-top { column-gap: 9px; }
-  .goal-std-fig { min-width: 52px; }
-  .goal-std-cur { font-size: 29px; }
-  .goal-tile.measured .goal-std-cur { font-size: 23px; }
+  .goal-std-cur { font-size: 20px; }
+  .goal-tile.measured .goal-std-cur { font-size: 17px; }
 }
 
 /* ── Goal panel: today's move ───────────────────────────────────────────── */
