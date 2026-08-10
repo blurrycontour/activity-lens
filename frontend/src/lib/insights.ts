@@ -165,6 +165,37 @@ function describeGoalMinimum(g: Goal): string {
   return parts.length === 0 ? '' : ` (${parts.join(', ')}+ only)`
 }
 
+/**
+ * ISO-8601 week number for a date key.
+ *
+ * The ISO rule — the week containing the year's first Thursday is week 1 — is
+ * the one that matches Monday-anchored weeks, which is what goals count in. A
+ * naive "days since January 1, divided by seven" disagrees with it for the first
+ * and last days of most years.
+ */
+export function isoWeekNumber(date: string): number {
+  const d = parseDateKey(date)
+  // Shift to the Thursday of this week; the week's year and number are then
+  // whatever that Thursday's are.
+  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7))
+  const firstThursday = new Date(d.getFullYear(), 0, 4)
+  firstThursday.setDate(firstThursday.getDate() + 3 - ((firstThursday.getDay() + 6) % 7))
+  return 1 + Math.round((d.getTime() - firstThursday.getTime()) / (7 * 86400000))
+}
+
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/**
+ * The short label under a history bar: "W31" for a week, "Jul" for a month.
+ *
+ * A window spanning several periods is named by the one it starts in, since
+ * that is what its key is, and the tooltip carries the exact date either way.
+ */
+export function periodLabel(key: string, period: GoalPeriod): string {
+  if (period === 'month') return MONTH_NAMES[Number(key.slice(5, 7)) - 1] ?? key
+  return `W${isoWeekNumber(key)}`
+}
+
 /** Whole days since the Unix epoch, immune to DST because it goes via UTC. */
 function epochDays(d: Date): number {
   return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000)

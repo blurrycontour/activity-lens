@@ -13,6 +13,8 @@ export interface DashboardConfig {
   showDeltas?: boolean
   /** Show the 8-bucket trend line inside each stat card. */
   showSparklines?: boolean
+  /** Label each bar under the goal history with its week number or month. */
+  showGoalPeriods?: boolean
 }
 
 export const STAT_CARDS: { id: StatCardId; label: string }[] = [

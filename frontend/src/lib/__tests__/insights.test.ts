@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { goalProgress, newGoal, periodKeyOf, weekStartKey, type Goal } from '../insights'
+import { goalProgress, newGoal, periodKeyOf, periodLabel, weekStartKey, type Goal } from '../insights'
 import type { Workout } from '../../data/workouts'
 
 function workout(date: string, distance: number, type: Workout['type'] = 'Run', duration = 1800): Workout {
@@ -98,6 +98,24 @@ describe('goalProgress', () => {
     const now = new Date(2026, 6, 29)
     const p = goalProgress([workout('2026-07-04', 8000, 'Hike'), workout('2026-07-05', 2000, 'Hike')], g, 8, now)
     expect(p.current).toBe(8)
+  })
+})
+
+describe('periodLabel', () => {
+  // The ISO rule puts the week containing the year's first Thursday at 1, which
+  // is what a Monday-anchored week needs. Counting days from January 1 instead
+  // disagrees around every new year — exactly where a wrong label is most
+  // obviously wrong.
+  it('numbers weeks the ISO way across a year boundary', () => {
+    expect(periodLabel('2025-12-29', 'week')).toBe('W1') // Mon of the week holding 1 Jan 2026
+    expect(periodLabel('2026-01-05', 'week')).toBe('W2')
+    expect(periodLabel('2026-07-27', 'week')).toBe('W31')
+  })
+
+  it('names months', () => {
+    expect(periodLabel('2026-07', 'month')).toBe('Jul')
+    expect(periodLabel('2026-01', 'month')).toBe('Jan')
+    expect(periodLabel('2026-12', 'month')).toBe('Dec')
   })
 })
 

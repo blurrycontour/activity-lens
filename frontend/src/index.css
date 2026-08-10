@@ -36,6 +36,9 @@
   --primary: #00e87a;
   --primary-dim: rgba(0, 232, 122, 0.15);
   --primary-glow: rgba(0, 232, 122, 0.3);
+  /* Ink for text and glyphs sitting *on* the accent. Every accent is a bright
+     hue in both themes, so one near-black reads on all six either way. */
+  --on-primary: #0a0b0e;
   --accent: #ff6b35;
   --accent-dim: rgba(255, 107, 53, 0.15);
   --blue: #3b82f6;
@@ -231,7 +234,7 @@ body {
   transition: all 0.15s ease;
   white-space: nowrap;
 }
-.btn-primary { background: var(--primary); color: #0a0b0e; }
+.btn-primary { background: var(--primary); color: var(--on-primary); }
 .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
 .btn-ghost { background: transparent; color: var(--text-2); border: 1px solid var(--border); }
 .btn-ghost:hover { background: var(--bg-3); color: var(--text); }
@@ -3684,17 +3687,83 @@ body:has(.overlay) .fab { display: none; }
   font-weight: 700;
 }
 
-.goal-history { display: flex; gap: 4px; }
-.goal-history span {
-  flex: 1;
-  height: 6px;
+/* Awarded the moment the current window's target is reached, next to the
+   streak pill. Success rather than the accent: it reports a state, and the
+   accent is decoration the user picked. */
+.goal-award {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 4px 7px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--success) 16%, transparent);
+  color: var(--success);
+}
+
+/* Where this window stands. The history bars below are pass/fail per period
+   and cannot show "most of the way there", which is where you usually are. */
+.goal-progress {
+  height: 5px;
   border-radius: 99px;
   background: var(--bg-3);
   border: 1px solid var(--border);
+  overflow: hidden;
 }
-.goal-history span.met { background: var(--primary); border-color: transparent; }
+.goal-progress-fill {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+  border-radius: 99px;
+  transition: width 0.4s ease;
+}
+
+.goal-history { display: flex; gap: 4px; }
+.goal-history-cell { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+/* Tall enough to carry the "+" that marks a beaten target — the old 6px bar
+   had no room for a glyph. */
+.goal-history-bar {
+  height: 14px;
+  border-radius: 99px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  color: transparent;
+}
+.goal-history-bar.met { background: var(--primary); border-color: transparent; }
+/* The "+" sits on the filled bar, so it needs the background's contrast colour
+   rather than a text token. */
+.goal-history-bar.over { color: var(--on-primary); }
+
+.goal-history-label {
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Full-viewport, above everything, and untouchable — it is decoration, and it
+   must never swallow a tap on the page it is celebrating. */
+.confetti {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 9999;
+}
 
 @media (max-width: 480px) {
   .goal-figure-current { font-size: 34px; }
   .goal-tile.measured .goal-figure-current { font-size: 26px; }
+  /* Eight labels at 9px is already dense; below this they would collide. */
+  .goal-history-label { font-size: 8px; }
 }

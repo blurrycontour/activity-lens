@@ -7,6 +7,7 @@ import {
   RadialBarChart, RadialBar,
 } from 'recharts'
 import { TrendingUp, Zap, Flame, Clock, Mountain, Heart, Trophy, Target, Activity, Footprints, ChartColumnBig } from 'lucide-react'
+import Confetti from '../components/Confetti'
 import { useLocalStorage } from '../lib/useLocalStorage'
 import { useIsMobile } from '../lib/useIsMobile'
 import InfoTip from '../components/InfoTip'
@@ -19,12 +20,14 @@ import {
 } from '../lib/dashboardConfig'
 import {
   deltaPct, describeGoal, formatGoalAmount, formReading, gearNudges, goalFromApi, goalProgress,
-  recentPersonalBests, recentWeekStarts, sparkBuckets, totalsOf, weekdayMatrix,
+  periodLabel, recentPersonalBests, recentWeekStarts, sparkBuckets, totalsOf, weekdayMatrix,
   windowSlices, type Goal, type GoalProgress,
 } from '../lib/insights'
 
 /** Weeks shown in the dashboard's compact weekly-trend chart. */
 const TREND_WEEKS = 3
+/** Marks that this app session already celebrated a full set of goals. */
+const CELEBRATED_KEY = 'al_goals_celebrated'
 /** Replacement distance per equipment type; mirrors the backend default. */
 const DEFAULT_RETIRE_KM: Record<string, number> = { shoes: 600 }
 
@@ -161,11 +164,14 @@ function LatestActivity({ w, onOpen }: { w: Workout; onOpen: () => void }) {
  * size, and the description and streak sit behind a divider in muted type so
  * the eye lands on the number first.
  */
-function GoalRow({ progress: p }: { progress: GoalProgress }) {
+function GoalRow({ progress: p, showPeriods }: { progress: GoalProgress; showPeriods: boolean }) {
   const met = p.current >= p.goal.target
   // "Window" is the unit a streak is counted in — a week, a month, or a run of
   // either when the goal spans several.
   const unit = p.goal.span > 1 ? 'period' : p.goal.period
+  // The bar fills to the target and stops; going past it is said by the figure
+  // and the trophy, not by a bar that would have to rescale everything else.
+  const pct = p.goal.target > 0 ? Math.min(1, p.current / p.goal.target) : 0
   return (
     // A count is one or two digits; a distance or a time is "44.2/120 km", so
     // it gets a smaller figure or it crowds the description beside it.
@@ -188,6 +194,12 @@ function GoalRow({ progress: p }: { progress: GoalProgress }) {
           </span>
         </span>
 
+        {met && (
+          <span className="goal-award" title={`Target met this ${unit}`}>
+            <Trophy size={12} />
+          </span>
+        )}
+
         {p.streak > 0 && (
           <span className="goal-flame" title={`${p.streak} ${p.streak === 1 ? unit : `${unit}s`} in a row`}>
             <Flame size={12} /> {p.streak}
@@ -195,16 +207,40 @@ function GoalRow({ progress: p }: { progress: GoalProgress }) {
         )}
       </div>
 
-      <div className="goal-history">
-        {p.history.map(h => (
-          <span
-            key={h.key}
-            className={h.met ? 'met' : undefined}
-            title={`From ${h.key}: ${formatGoalAmount(p.goal, h.value)}${
-              p.goal.metric === 'count' ? (h.value === 1 ? ' activity' : ' activities') : ''
-            }`}
-          />
-        ))}
+      {/* Where the current window stands, which the history bars cannot say:
+          they are pass/fail per period, and most of the time you are partway. */}
+      <div
+        className="goal-progress"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={p.goal.target}
+        aria-valuenow={Math.round(p.current * 10) / 10}
+        aria-label={describeGoal(p.goal)}
+      >
+        <span className="goal-progress-fill" style={{ width: `${pct * 100}%` }} />
+      </div>
+
+      <div className={`goal-history${showPeriods ? ' labelled' : ''}`}>
+        {p.history.map(h => {
+          // A period that beat its target is worth more than a filled bar, so
+          // it is marked. Meeting it exactly is not "exceeded".
+          const over = p.goal.target > 0 && h.value > p.goal.target
+          return (
+            <span className="goal-history-cell" key={h.key}>
+              <span
+                className={`goal-history-bar${h.met ? ' met' : ''}${over ? ' over' : ''}`}
+                title={`From ${h.key}: ${formatGoalAmount(p.goal, h.value)}${
+                  p.goal.metric === 'count' ? (h.value === 1 ? ' activity' : ' activities') : ''
+                }${over ? ' — target beaten' : ''}`}
+              >
+                {over ? '+' : ''}
+              </span>
+              {showPeriods && (
+                <span className="goal-history-label">{periodLabel(h.key, p.goal.period)}</span>
+              )}
+            </span>
+          )
+        })}
       </div>
     </div>
   )
@@ -314,6 +350,26 @@ export default function Dashboard({ onSelect }: { onSelect: (w: Workout) => void
   }, [workouts, cfg.windowDays])
 
   const progress = useMemo(() => goals.map(g => goalProgress(workouts, g)), [workouts, goals])
+
+  /**
+   * Every goal met, in every current window.
+   *
+   * Needs at least one goal: "all zero of your goals are met" is not a thing to
+   * celebrate, and would rain on everyone who has never set one.
+   */
+  const allGoalsMet = progress.length > 0 && progress.every(p => p.current >= p.goal.target)
+  const [celebrating, setCelebrating] = useState(false)
+  useEffect(() => {
+    if (!allGoalsMet) return
+    // Once per app open rather than once per visit to this page: the dashboard
+    // is the app's home and mounts again every time you navigate back to it,
+    // and a confetti burst on each of those turns a reward into an obstacle.
+    // sessionStorage is exactly the lifetime wanted — it ends with the tab, and
+    // on Android the WebView starts a fresh one each launch.
+    if (sessionStorage.getItem(CELEBRATED_KEY)) return
+    sessionStorage.setItem(CELEBRATED_KEY, '1')
+    setCelebrating(true)
+  }, [allGoalsMet])
   const bests = useMemo(() => recentPersonalBests(workouts), [workouts])
   const form = useMemo(() => formReading(workouts), [workouts])
   const nudges = useMemo(
@@ -339,6 +395,7 @@ export default function Dashboard({ onSelect }: { onSelect: (w: Workout) => void
 
   return (
     <div>
+      {celebrating && <Confetti onDone={() => setCelebrating(false)} />}
       <div className="page-header">
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
           <h1 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>Dashboard</h1>
@@ -403,7 +460,7 @@ export default function Dashboard({ onSelect }: { onSelect: (w: Workout) => void
                   <h3 className="chart-card-title">Goals</h3>
                   <InfoTip
                     label="Goals"
-                    text="Progress against each goal you set under Settings → Training Goals, in the order you arranged them there. A goal can count activities, kilometres or hours, over a window of one or more weeks or months. A streak counts consecutive windows that met the target; the window in progress extends a streak once you hit it but never breaks one, so a quiet Monday costs you nothing. Windows longer than one period run back to back from a fixed anchor, so they never overlap. The bars show the last eight windows, oldest on the left. The minimum distance and duration decide which activities count at all, rather than trimming the total. Distance minimums are matched against the figure shown on the workout, so a run listed as 5.0 km counts toward a 5 km goal."
+                    text="Progress against each goal you set under Settings → Training Goals, in the order you arranged them there. A goal can count activities, kilometres or hours, over a window of one or more weeks or months. A streak counts consecutive windows that met the target; the window in progress extends a streak once you hit it but never breaks one, so a quiet Monday costs you nothing. Windows longer than one period run back to back from a fixed anchor, so they never overlap. The bar under each goal is progress through the window in hand. The row of bars below it is the last eight windows, oldest on the left: filled means the target was met, and a + means it was beaten. A trophy appears once the current window is done. Turn on “Label goal history bars” under Settings → Dashboard to put the week number or month under each bar. The minimum distance and duration decide which activities count at all, rather than trimming the total. Distance minimums are matched against the figure shown on the workout, so a run listed as 5.0 km counts toward a 5 km goal."
                   />
                 </div>
                 {progress.length === 0 ? (
@@ -413,7 +470,7 @@ export default function Dashboard({ onSelect }: { onSelect: (w: Workout) => void
                   </p>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    {progress.map(p => <GoalRow key={p.goal.id} progress={p} />)}
+                    {progress.map(p => <GoalRow key={p.goal.id} progress={p} showPeriods={cfg.showGoalPeriods === true} />)}
                   </div>
                 )}
               </div>
