@@ -172,6 +172,13 @@ func (s *Server) apiRoutes() http.Handler {
 	mux.Handle("POST /api/workouts/{id}/media", s.authedCSRF(s.handleUploadMedia))
 	mux.Handle("GET /api/workouts/{id}/media/{mediaID}", s.authed(s.handleServeMedia))
 	mux.Handle("DELETE /api/workouts/{id}/media/{mediaID}", s.authedCSRF(s.handleDeleteMedia))
+	// Comments and reactions, readable by anyone who can see the workout and
+	// writable only while it is shared — see social.go, where both gates live.
+	mux.Handle("GET /api/workouts/{id}/social", s.authed(s.handleGetSocial))
+	mux.Handle("POST /api/workouts/{id}/comments", s.authedCSRF(s.handleAddComment))
+	mux.Handle("PATCH /api/workouts/{id}/comments/{commentID}", s.authedCSRF(s.handleEditComment))
+	mux.Handle("DELETE /api/workouts/{id}/comments/{commentID}", s.authedCSRF(s.handleDeleteComment))
+	mux.Handle("PUT /api/workouts/{id}/reaction", s.authedCSRF(s.handleSetReaction))
 	mux.Handle("POST /api/workouts/{id}/recalculate", s.authedCSRF(s.handleRecalculateWorkout))
 	// Weather a person typed in, for when the grid average is not good enough.
 	mux.Handle("PUT /api/workouts/{id}/weather", s.authedCSRF(s.handleSetWorkoutWeather))

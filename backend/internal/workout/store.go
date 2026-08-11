@@ -68,6 +68,34 @@ type Repository interface {
 	// would be.
 	DeleteMediaForUser(ctx context.Context, userID int64) error
 
+	// Comments and reactions. Same contract as the gallery: scoped by workout
+	// id, no permission logic of their own. The caller has established both
+	// that the user may see the workout and that it is shared — see social.go.
+	ListComments(ctx context.Context, workoutID string) ([]Comment, error)
+	GetComment(ctx context.Context, workoutID, commentID string) (Comment, error)
+	AddComment(ctx context.Context, c Comment) error
+	// UpdateComment only matches a comment authorID wrote; anyone else's is
+	// ErrCommentNotFound, which is also what a missing id returns.
+	UpdateComment(ctx context.Context, workoutID, commentID string, authorID int64, body string) (Comment, error)
+	// DeleteComment is author-scoped unless allowAny, which the workout's
+	// owner gets so they can moderate their own page.
+	DeleteComment(ctx context.Context, workoutID, commentID string, requesterID int64, allowAny bool) error
+	// DeleteCommentsForUser removes every comment an account wrote, including
+	// the ones on other people's workouts, which have no key back to it.
+	DeleteCommentsForUser(ctx context.Context, userID int64) error
+
+	ListReactions(ctx context.Context, workoutID string) ([]Reaction, error)
+	// SetReaction replaces whatever the user had; one each is a property of
+	// the primary key, not of the caller.
+	SetReaction(ctx context.Context, workoutID string, userID int64, emoji string) error
+	ClearReaction(ctx context.Context, workoutID string, userID int64) error
+	DeleteReactionsForUser(ctx context.Context, userID int64) error
+
+	// IsShared reports whether a workout the owner holds is visible to anyone
+	// else — public, or shared with at least one person. It is the gate the
+	// whole Social tab hangs on.
+	IsShared(ctx context.Context, ownerID int64, workoutID string) (bool, error)
+
 	// SetVisibility flips a workout the caller owns; ErrNotFound otherwise.
 	SetVisibility(ctx context.Context, ownerID int64, id string, v Visibility) error
 	// ShareRecipients lists the user ids a workout the caller owns is shared

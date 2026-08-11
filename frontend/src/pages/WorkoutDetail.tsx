@@ -7,7 +7,7 @@ import Dropdown from '../components/Dropdown'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ReferenceDot, ReferenceArea, BarChart, Bar } from 'recharts'
 import {
   ArrowLeft, Heart, Mountain, Zap, Clock, TrendingUp, Navigation, Download, Pencil, Trash2, Gauge,
-  Check, X as XIcon, Play, Pause as PauseIcon, LoaderCircle, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, AlertTriangle, Activity, Share2, Lock, FileDown, Plus, Image as ImageIcon, NotebookPen, Images } from 'lucide-react'
+  Check, X as XIcon, Play, Pause as PauseIcon, LoaderCircle, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, AlertTriangle, Activity, Share2, Lock, FileDown, Plus, Image as ImageIcon, NotebookPen, Images, MessageSquare } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
@@ -39,9 +39,10 @@ import ExpandModal from '../components/ExpandModal'
 import TabStrip, { type TabStripItem } from '../components/TabStrip'
 import { inlineTicks } from '../lib/chartTicks'
 const WorkoutGallery = lazy(() => import('../components/WorkoutGallery'))
+const WorkoutSocial = lazy(() => import('../components/WorkoutSocial'))
 
 /** The sections under the charts. */
-type DetailTab = 'notes' | 'gallery'
+type DetailTab = 'notes' | 'gallery' | 'social'
 import SessionProfile, { canProfile, type Tint } from '../components/SessionProfile'
 import SessionContext from '../components/SessionContext'
 import { sessionStanding } from '../lib/standing'
@@ -702,6 +703,11 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
   const detailTabs: TabStripItem<DetailTab>[] = [
     ...(readOnly ? [] : [{ id: 'notes' as DetailTab, label: 'Notes', icon: <NotebookPen size={14} /> }]),
     { id: 'gallery' as DetailTab, label: 'Gallery', icon: <Images size={14} /> },
+    // Only on a workout somebody else can see. A private one has no audience,
+    // so there is no conversation to be had — and offering an empty tab that
+    // refuses every comment would be worse than not offering it. A viewer is
+    // always past this check: they are looking at it, which is the proof.
+    ...(w.shared ? [{ id: 'social' as DetailTab, label: 'Social', icon: <MessageSquare size={14} /> }] : []),
   ]
   const activeTab = detailTabs.some(t => t.id === detailTab) ? detailTab : detailTabs[0].id
 
@@ -1665,6 +1671,11 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             {activeTab === 'gallery' && (
               <Suspense fallback={<div className="detail-loading"><LoaderCircle size={16} className="spin" /></div>}>
                 <WorkoutGallery workoutId={w.id} canEdit={!readOnly} />
+              </Suspense>
+            )}
+            {activeTab === 'social' && (
+              <Suspense fallback={<div className="detail-loading"><LoaderCircle size={16} className="spin" /></div>}>
+                <WorkoutSocial workoutId={w.id} isOwner={!readOnly} />
               </Suspense>
             )}
           </div>

@@ -58,6 +58,16 @@ type workoutDetailResponse struct {
 	// sent with the file itself. Owner-only, so Redact clearing RawFilename is
 	// enough to keep it false for everyone else.
 	HasOriginal bool `json:"hasOriginal,omitempty"`
+	// Shared reports that this workout is visible to someone other than its
+	// owner — public, or shared with at least one person. It is what decides
+	// whether the Social tab is offered, and it has to arrive with the workout
+	// rather than with the tab's own request: a tab that appears only after
+	// its contents load is a tab that flickers into existence on every page.
+	//
+	// One EXISTS query, and only on the detail path. Deliberately not added to
+	// the list response, which would turn it into a per-row lookup across the
+	// whole library for something no list shows.
+	Shared bool `json:"shared,omitempty"`
 }
 
 func (s *Server) handleGetWorkout(w http.ResponseWriter, r *http.Request) {
@@ -67,15 +77,25 @@ func (s *Server) handleGetWorkout(w http.ResponseWriter, r *http.Request) {
 		s.writeWorkoutError(w, err)
 		return
 	}
+	// Anyone who is not the owner is looking at this workout because it is
+	// shared, so the flag is theirs for free; only the owner needs the query.
+	shared := true
 	if isOwner {
 		s.attachEquipment(r, user.ID, wk)
+		var serr error
+		if shared, serr = s.workout.IsShared(r.Context(), user.ID, wk.ID); serr != nil {
+			// Not fatal: the workout is the point of this response, and a
+			// missing Social tab is a smaller failure than no page at all.
+			slog.Warn("could not check workout sharing", "workout_id", wk.ID, "error", serr)
+			shared = false
+		}
 	} else if owner, derr := s.ownerRef(r, wk.UserID); derr == nil {
 		// Equipment is deliberately left off: it is the owner's private gear
 		// inventory, not part of the workout being shared.
 		wk.Owner = owner
 	}
 	writeJSON(w, http.StatusOK, workoutDetailResponse{
-		Workout: wk, IsOwner: isOwner, HasOriginal: wk.RawFilename != "",
+		Workout: wk, IsOwner: isOwner, HasOriginal: wk.RawFilename != "", Shared: shared,
 	})
 }
 

@@ -157,6 +157,13 @@ export interface Workout {
    */
   isOwner?: boolean
   /**
+   * Whether this workout is visible to anyone but its owner — public, or
+   * shared with at least one person. Only single-workout responses carry it;
+   * it decides whether the Social tab is offered, and a workout nobody else
+   * can see has no audience to have a conversation with.
+   */
+  shared?: boolean
+  /**
    * Whether the file this workout was imported from was archived and can be
    * downloaded. Only true on your own workouts, and only when the server was
    * keeping originals at the time of the import.

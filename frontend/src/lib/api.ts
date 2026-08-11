@@ -344,6 +344,38 @@ export interface WorkoutPhoto {
   createdAt: string
 }
 
+/** One message on a shared workout. */
+export interface WorkoutComment {
+  id: string
+  body: string
+  createdAt: string
+  updatedAt: string
+  author?: UserRef
+}
+
+/** One person's single emoji on a shared workout. */
+export interface WorkoutReaction {
+  emoji: string
+  createdAt: string
+  author?: UserRef
+}
+
+/**
+ * The whole Social tab in one response.
+ *
+ * `shared` is what separates "nobody has said anything" from "this workout is
+ * private" — the lists are empty either way, and those need different words on
+ * screen. `emojis` comes from the server so the picker and the values it may
+ * store are one vocabulary that cannot drift.
+ */
+export interface WorkoutSocial {
+  shared: boolean
+  reactions: WorkoutReaction[]
+  comments: WorkoutComment[]
+  emojis: string[]
+  myReaction?: string
+}
+
 /** A file downloaded from the API, with the name the server offered it under. */
 export interface DownloadedFile {
   blob: Blob
@@ -605,6 +637,24 @@ export const api = {
   },
   deleteWorkoutPhoto: (id: string, mediaID: string) =>
     request<unknown>(`/api/workouts/${id}/media/${mediaID}`, { method: 'DELETE' }),
+  // Reactions and comments together: the tab is useless with half of them, so
+  // two requests would only add a state where the page is half drawn.
+  workoutSocial: (id: string) => request<WorkoutSocial>(`/api/workouts/${id}/social`),
+  addComment: (id: string, body: string) =>
+    request<WorkoutComment>(`/api/workouts/${id}/comments`, { method: 'POST', body: { body } }),
+  editComment: (id: string, commentID: string, body: string) =>
+    request<WorkoutComment>(`/api/workouts/${id}/comments/${commentID}`, { method: 'PATCH', body: { body } }),
+  deleteComment: (id: string, commentID: string) =>
+    request<unknown>(`/api/workouts/${id}/comments/${commentID}`, { method: 'DELETE' }),
+  /**
+   * Sets the caller's one reaction, or clears it with an empty emoji — tapping
+   * the one you already chose is the same request as picking a new one.
+   *
+   * Answers with the whole tab, because both the counts and who-reacted change
+   * and merging that on the client would be a second copy of the same rules.
+   */
+  setWorkoutReaction: (id: string, emoji: string) =>
+    request<WorkoutSocial>(`/api/workouts/${id}/reaction`, { method: 'PUT', body: { emoji } }),
   // `deferChecks` suppresses the post-import gear and goal evaluation, which
   // re-reads the whole library each time. A batch sets it on every file and
   // calls finalizeImport() once at the end.

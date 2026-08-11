@@ -4671,3 +4671,137 @@ body:has(.overlay) .fab { display: none; }
   .gallery-grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
 }
 
+/* ── Social: reactions and comments ───────────────────────────────────────
+   Reactions above the thread, because leaving one is the cheap gesture most
+   visits make and nothing else — putting them past a scroll of comments would
+   put the common case last. */
+.social { display: flex; flex-direction: column; gap: 16px; }
+
+.social-reactions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+/* The whole set, always visible. Six emoji is small enough to show outright,
+   and behind a menu the cheapest gesture on the page would cost two taps. */
+.social-picker {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 6px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+.social-picker-mark { color: var(--text-3); margin-right: 2px; flex-shrink: 0; }
+.social-emoji {
+  border: none;
+  background: transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  /* A 32px target: an emoji glyph is about half that, and a control you tap
+     with a thumb has to be bigger than the thing drawn in it. */
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  transition: background 0.15s, transform 0.15s;
+}
+.social-emoji:hover { background: var(--bg-2); }
+.social-emoji:active { transform: scale(0.9); }
+.social-emoji.mine { background: var(--primary-dim); box-shadow: inset 0 0 0 1px var(--primary); }
+
+/* What everyone else left, counted. */
+.social-tally { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.social-tally li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 14px;
+  line-height: 1;
+  cursor: default;
+}
+.social-tally li.mine { border-color: var(--primary); background: var(--primary-dim); }
+.social-tally b {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.social-thread { display: flex; flex-direction: column; gap: 14px; }
+.social-comment { display: flex; gap: 10px; align-items: flex-start; }
+.social-comment-body { flex: 1; min-width: 0; }
+.social-comment-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 3px;
+  flex-wrap: wrap;
+}
+.social-comment-head b { font-size: 13px; font-weight: 600; }
+.social-comment-head time { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); }
+.social-edited { font-size: 11px; color: var(--text-3); font-style: italic; }
+/* Pushed to the far end of the row, and only visible on hover on a desktop —
+   a phone has no hover, so there they simply stay. */
+.social-comment-actions { margin-left: auto; display: flex; gap: 2px; }
+@media (hover: hover) {
+  .social-comment-actions { opacity: 0; transition: opacity 0.15s; }
+  .social-comment:hover .social-comment-actions,
+  .social-comment-actions:focus-within { opacity: 1; }
+}
+/* pre-wrap, so the line breaks somebody typed survive; overflow-wrap, so a
+   pasted URL cannot push the panel wider than the page. */
+.social-comment-text {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.social-compose { display: flex; gap: 8px; align-items: flex-end; }
+.social-box {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  padding: 9px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-3);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  /* Height is set from scrollHeight in WorkoutSocial; this is only the floor
+     for the first, empty line. */
+  min-height: 38px;
+}
+.social-box:focus { outline: none; border-color: var(--primary); }
+.social-edit { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.social-edit-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.social-edit-actions .btn { font-size: 12px; padding: 5px 12px; }
+
+.social-error { font-size: 12px; color: var(--danger); }
+.social-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 60px;
+  font-size: 13px;
+  color: var(--text-3);
+  text-align: center;
+}
+
+@media (max-width: 480px) {
+  /* The button under the box rather than beside it: at 340px the two together
+     leave the box about twelve characters wide. */
+  .social-compose { flex-direction: column; align-items: stretch; }
+}
