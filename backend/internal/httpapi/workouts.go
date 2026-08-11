@@ -284,6 +284,9 @@ func (s *Server) handleDeleteWorkout(w http.ResponseWriter, r *http.Request) {
 	if err := s.rawUploads.Delete(r.Context(), id); err != nil {
 		slog.Warn("could not delete archived upload", "workout_id", id, "error", err)
 	}
+	// So are its photos. The rows went with the workout through the foreign
+	// key; the files are ours to remove, and the whole directory is one call.
+	s.media.RemoveWorkout(id)
 	slog.Info("workout deleted", "workout_id", id, "user_id", user.ID)
 	w.WriteHeader(http.StatusNoContent)
 }

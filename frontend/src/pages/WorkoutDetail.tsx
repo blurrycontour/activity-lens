@@ -7,8 +7,7 @@ import Dropdown from '../components/Dropdown'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ReferenceDot, ReferenceArea, BarChart, Bar } from 'recharts'
 import {
   ArrowLeft, Heart, Mountain, Zap, Clock, TrendingUp, Navigation, Download, Pencil, Trash2, Gauge,
-  Check, X as XIcon, Play, Pause as PauseIcon, LoaderCircle, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, AlertTriangle, Activity, Share2, Lock, FileDown, Plus, Image as ImageIcon,
-} from 'lucide-react'
+  Check, X as XIcon, Play, Pause as PauseIcon, LoaderCircle, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, AlertTriangle, Activity, Share2, Lock, FileDown, Plus, Image as ImageIcon, NotebookPen, Images } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
@@ -37,6 +36,11 @@ import type { Shading } from '../components/RouteMap'
  */
 const RouteMap = lazy(() => import('../components/RouteMap'))
 import ExpandModal from '../components/ExpandModal'
+import TabStrip, { type TabStripItem } from '../components/TabStrip'
+const WorkoutGallery = lazy(() => import('../components/WorkoutGallery'))
+
+/** The sections under the charts. Social joins these next. */
+type DetailTab = 'notes' | 'gallery'
 import SessionProfile, { canProfile, type Tint } from '../components/SessionProfile'
 import SessionContext from '../components/SessionContext'
 import { sessionStanding } from '../lib/standing'
@@ -707,6 +711,26 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
   const [shading, setShading] = useState<Shading>('accent')
   /** What the no-route session drawing is coloured by. See SessionProfile. */
   const [tint, setTint] = useState<Tint>('hr')
+
+  /*
+   * The tabs under the charts.
+   *
+   * Not remembered across workouts. The obvious thing is to persist the choice,
+   * and it is wrong here: the tabs are not the same set on every workout — a
+   * shared one has no Notes — so a remembered tab is regularly a tab that is
+   * not there, and landing on Gallery every time would fetch photos for someone
+   * who opened the page to read the charts.
+   */
+  const [detailTab, setDetailTab] = useState<DetailTab>('notes')
+
+  // Notes belong to the owner alone and are stripped from a shared response, so
+  // there is nothing behind that tab for anyone else — and a viewer whose
+  // first tab does not exist would land on an empty panel, hence the fallback.
+  const detailTabs: TabStripItem<DetailTab>[] = [
+    ...(readOnly ? [] : [{ id: 'notes' as DetailTab, label: 'Notes', icon: <NotebookPen size={14} /> }]),
+    { id: 'gallery' as DetailTab, label: 'Gallery', icon: <Images size={14} /> },
+  ]
+  const activeTab = detailTabs.some(t => t.id === detailTab) ? detailTab : detailTabs[0].id
 
   useEffect(() => {
     if (!playing || w.duration <= 0) return
@@ -1550,16 +1574,34 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
           onOpenSettings={() => onOpenSettings?.()}
         />
 
-        {/* Notes are stripped from every response to a non-owner, so a shared
-            workout has none to show and no field to offer. */}
-        {readOnly
-          ? w.notes && (
-            <div className="card" style={{ marginTop: 16 }}>
-              <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Notes</h3>
-              <p className="notes-text">{w.notes}</p>
-            </div>
-          )
-          : <NotesCard workout={w} onSaved={setW} />}
+        {/* Everything about the workout that is not the workout: what you wrote
+            down, and what you photographed. Tabs rather than a stack of cards
+            because these grow — Social is next — and six panels nobody opened
+            is a page you scroll past rather than a page you use.
+
+            Notes are stripped from every response to a non-owner, so a shared
+            workout has no notes tab at all rather than an empty one. */}
+        <div className="card detail-tabs" style={{ marginTop: 16 }}>
+          <TabStrip
+            items={detailTabs}
+            value={activeTab}
+            onChange={setDetailTab}
+            ariaLabel="Workout sections"
+          />
+          <div className="detail-tab-body">
+            {activeTab === 'notes' && (readOnly
+              ? <p className="notes-text">{w.notes}</p>
+              : <NotesCard workout={w} onSaved={setW} />)}
+            {activeTab === 'gallery' && (
+              // Lazy, and mounted only while its tab is open: the photos are
+              // the heaviest thing on the page and nobody should pay for them
+              // by opening a workout.
+              <Suspense fallback={<div className="detail-loading"><LoaderCircle size={16} className="spin" /></div>}>
+                <WorkoutGallery workoutId={w.id} canEdit={!readOnly} />
+              </Suspense>
+            )}
+          </div>
+        </div>
 
         {!readOnly && (
         <div className="card" style={{ marginTop: 16 }}>

@@ -1,0 +1,185 @@
+package workout
+
+import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+)
+
+// The gallery's storage, against the real schema.
+//
+// Two things here are worth holding down. The scoping — every read and write
+// takes a workout id as well as a media id — is what stops a photo's URL from
+// one workout being a way into another's; a query that dropped it would still
+// pass any test that only ever used one workout. And the ordering is what the
+// grid renders in, computed by a MAX subquery that has an off-by-one waiting
+// in it and a NULL case on the first row.
+
+func mediaFor(workoutID string, caption string) Media {
+	return Media{
+		WorkoutID: workoutID,
+		UserID:    1,
+		Kind:      "photo",
+		Filename:  "photo.jpg",
+		MIME:      "image/jpeg",
+		Width:     1600,
+		Height:    1200,
+		Bytes:     240_000,
+		Caption:   caption,
+		CreatedAt: time.Now().UTC(),
+	}
+}
+
+func TestMediaRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	repo := NewSQLiteRepository(newTestDB(t))
+	svc := NewService(repo)
+	wk, err := svc.Create(ctx, 1, importInput("Track session", "hash-media"))
+	if err != nil {
+		t.Fatalf("create workout: %v", err)
+	}
+
+	saved, err := svc.AddPhoto(ctx, mediaFor(wk.ID, "at the turnaround"))
+	if err != nil {
+		t.Fatalf("AddPhoto: %v", err)
+	}
+	if saved.ID == "" {
+		t.Fatal("AddPhoto returned no id")
+	}
+
+	got, err := repo.GetMedia(ctx, wk.ID, saved.ID)
+	if err != nil {
+		t.Fatalf("GetMedia: %v", err)
+	}
+	// Every field, because they are read back by a positional scanner and a
+	// transposed pair — width for height, say — is a plausible-looking bug.
+	if got.Caption != "at the turnaround" || got.Width != 1600 || got.Height != 1200 ||
+		got.Bytes != 240_000 || got.MIME != "image/jpeg" || got.Filename != "photo.jpg" {
+		t.Errorf("round trip changed the row: %+v", got)
+	}
+}
+
+func TestMediaIsScopedToItsWorkout(t *testing.T) {
+	ctx := context.Background()
+	repo := NewSQLiteRepository(newTestDB(t))
+	svc := NewService(repo)
+	mine, _ := svc.Create(ctx, 1, importInput("Mine", "hash-mine"))
+	theirs, _ := svc.Create(ctx, 2, importInput("Theirs", "hash-theirs"))
+
+	photo, err := svc.AddPhoto(ctx, mediaFor(mine.ID, ""))
+	if err != nil {
+		t.Fatalf("AddPhoto: %v", err)
+	}
+
+	// The permission check lives in the handler, but this is the second lock:
+	// a real media id read through the wrong workout's URL must not resolve.
+	if _, err := repo.GetMedia(ctx, theirs.ID, photo.ID); !errors.Is(err, ErrMediaNotFound) {
+		t.Errorf("a photo was readable through another workout: %v", err)
+	}
+	if err := repo.DeleteMedia(ctx, theirs.ID, photo.ID); !errors.Is(err, ErrMediaNotFound) {
+		t.Errorf("a photo was deletable through another workout: %v", err)
+	}
+	// …and is still there.
+	if _, err := repo.GetMedia(ctx, mine.ID, photo.ID); err != nil {
+		t.Errorf("the photo was removed by a delete that should have missed: %v", err)
+	}
+}
+
+func TestMediaKeepsInsertionOrder(t *testing.T) {
+	ctx := context.Background()
+	repo := NewSQLiteRepository(newTestDB(t))
+	svc := NewService(repo)
+	wk, _ := svc.Create(ctx, 1, importInput("Ordered", "hash-order"))
+
+	for _, caption := range []string{"first", "second", "third"} {
+		if _, err := svc.AddPhoto(ctx, mediaFor(wk.ID, caption)); err != nil {
+			t.Fatalf("AddPhoto(%s): %v", caption, err)
+		}
+	}
+	items, err := repo.ListMedia(ctx, wk.ID)
+	if err != nil {
+		t.Fatalf("ListMedia: %v", err)
+	}
+	var order []string
+	for _, m := range items {
+		order = append(order, m.Caption)
+	}
+	if strings.Join(order, ",") != "first,second,third" {
+		t.Errorf("gallery order = %v, want first,second,third", order)
+	}
+	// Positions must be distinct, or the ORDER BY falls through to created_at
+	// and three photos uploaded in the same second come back arbitrarily.
+	if items[0].Position == items[1].Position {
+		t.Errorf("photos share a position: %d", items[0].Position)
+	}
+}
+
+func TestMediaCountAndDelete(t *testing.T) {
+	ctx := context.Background()
+	repo := NewSQLiteRepository(newTestDB(t))
+	svc := NewService(repo)
+	wk, _ := svc.Create(ctx, 1, importInput("Counted", "hash-count"))
+
+	a, _ := svc.AddPhoto(ctx, mediaFor(wk.ID, "a"))
+	if _, err := svc.AddPhoto(ctx, mediaFor(wk.ID, "b")); err != nil {
+		t.Fatalf("AddPhoto: %v", err)
+	}
+	if n, _ := repo.CountMedia(ctx, wk.ID); n != 2 {
+		t.Errorf("CountMedia = %d, want 2", n)
+	}
+	if err := repo.DeleteMedia(ctx, wk.ID, a.ID); err != nil {
+		t.Fatalf("DeleteMedia: %v", err)
+	}
+	if n, _ := repo.CountMedia(ctx, wk.ID); n != 1 {
+		t.Errorf("CountMedia after delete = %d, want 1", n)
+	}
+	// A repeat delete reports that there was nothing to delete rather than
+	// succeeding silently, so the handler can answer 404.
+	if err := repo.DeleteMedia(ctx, wk.ID, a.ID); !errors.Is(err, ErrMediaNotFound) {
+		t.Errorf("deleting twice = %v, want ErrMediaNotFound", err)
+	}
+}
+
+// The files are named by media id and live one directory per workout, so a
+// workout id that walked out of the media directory would read and delete
+// arbitrary paths. Ids are generated by this application, which is why this is
+// belt and braces rather than a live risk — and why it is one test rather than
+// a validation layer.
+func TestMediaStorePathStaysInsideItsDirectory(t *testing.T) {
+	root := t.TempDir()
+	store := NewMediaStore(root)
+	media := filepath.Join(root, "media")
+
+	for _, id := range []string{"../../etc", "..", "a/b/c", "w_normal"} {
+		path := store.Path(id, "m_1", false)
+		rel, err := filepath.Rel(media, path)
+		if err != nil || strings.HasPrefix(rel, "..") {
+			t.Errorf("workout id %q escaped the media directory: %s", id, path)
+		}
+	}
+}
+
+func TestMediaStoreSaveAndRemove(t *testing.T) {
+	store := NewMediaStore(t.TempDir())
+	if err := store.Save("w_1", "m_1", []byte("full"), []byte("thumb")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	for _, thumb := range []bool{false, true} {
+		if _, err := os.Stat(store.Path("w_1", "m_1", thumb)); err != nil {
+			t.Errorf("file missing after Save (thumb=%v): %v", thumb, err)
+		}
+	}
+	store.Remove("w_1", "m_1")
+	if _, err := os.Stat(store.Path("w_1", "m_1", false)); !os.IsNotExist(err) {
+		t.Error("the full image survived Remove")
+	}
+	if _, err := os.Stat(store.Path("w_1", "m_1", true)); !os.IsNotExist(err) {
+		t.Error("the thumbnail survived Remove")
+	}
+	// Removing what is already gone is the state wanted, not an error.
+	store.Remove("w_1", "m_1")
+}

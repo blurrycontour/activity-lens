@@ -76,3 +76,50 @@ func TestProcessAvatarRejectsGarbage(t *testing.T) {
 		t.Fatal("expected error for non-image input")
 	}
 }
+
+func TestProcessPhotoDownscalesAndThumbnails(t *testing.T) {
+	full, thumb, w, h, err := ProcessPhoto(makePNG(t, 4000, 3000))
+	if err != nil {
+		t.Fatalf("ProcessPhoto: %v", err)
+	}
+	if w != MaxPhotoDim || h != MaxPhotoDim*3/4 {
+		t.Errorf("stored dimensions = %dx%d, want %dx%d", w, h, MaxPhotoDim, MaxPhotoDim*3/4)
+	}
+	fw, fh := decodeDims(t, full)
+	if fw != w || fh != h {
+		t.Errorf("full image is %dx%d but the row says %dx%d", fw, fh, w, h)
+	}
+	tw, th := decodeDims(t, thumb)
+	if tw != MaxThumbDim {
+		t.Errorf("thumbnail width = %d, want %d", tw, MaxThumbDim)
+	}
+	// The tile is what almost every request fetches, so it being genuinely
+	// smaller is the whole point of generating it.
+	if len(thumb) >= len(full) {
+		t.Errorf("thumbnail (%d bytes) is not smaller than the full image (%d bytes)", len(thumb), len(full))
+	}
+	_ = th
+}
+
+// A photo already within bounds is still re-encoded, because that is what
+// strips the EXIF — and a phone photo's EXIF carries where it was taken. A
+// "leave small images alone" optimisation would silently publish the GPS
+// coordinates of every picture small enough to skip the resize.
+func TestProcessPhotoReencodesSmallImages(t *testing.T) {
+	full, _, w, h, err := ProcessPhoto(makePNG(t, 300, 200))
+	if err != nil {
+		t.Fatalf("ProcessPhoto: %v", err)
+	}
+	if w != 300 || h != 200 {
+		t.Errorf("dimensions = %dx%d, want 300x200", w, h)
+	}
+	if len(full) < 2 || full[0] != 0xFF || full[1] != 0xD8 {
+		t.Error("small image was not re-encoded as JPEG, so its metadata survived")
+	}
+}
+
+func TestProcessPhotoRejectsNonImages(t *testing.T) {
+	if _, _, _, _, err := ProcessPhoto([]byte("this is not a photograph")); err == nil {
+		t.Error("ProcessPhoto accepted bytes that are not an image")
+	}
+}

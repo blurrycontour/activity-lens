@@ -433,3 +433,25 @@ func TestPurgeUserShares(t *testing.T) {
 		t.Fatalf("recipients = %v, want none after the account was purged", recipients)
 	}
 }
+
+// Gallery storage is five straightforward statements against the real schema,
+// exercised in media_test.go for the same reason as the methods above: a
+// reimplementation here would test the fake.
+func (unimplementedSharing) ListMedia(context.Context, string) ([]Media, error) {
+	panic("gallery storage is exercised against the real schema; see media_test.go")
+}
+func (unimplementedSharing) GetMedia(context.Context, string, string) (Media, error) {
+	panic("gallery storage is exercised against the real schema; see media_test.go")
+}
+func (unimplementedSharing) CountMedia(context.Context, string) (int, error) {
+	panic("gallery storage is exercised against the real schema; see media_test.go")
+}
+func (unimplementedSharing) AddMedia(context.Context, Media) error {
+	panic("gallery storage is exercised against the real schema; see media_test.go")
+}
+func (unimplementedSharing) DeleteMedia(context.Context, string, string) error {
+	panic("gallery storage is exercised against the real schema; see media_test.go")
+}
+func (unimplementedSharing) DeleteMediaForUser(context.Context, int64) error {
+	panic("gallery storage is exercised against the real schema; see media_test.go")
+}

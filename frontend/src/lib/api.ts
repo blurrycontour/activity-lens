@@ -330,6 +330,20 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   return data as T
 }
 
+/** One photo in a workout's gallery. The bytes are fetched separately. */
+export interface WorkoutPhoto {
+  id: string
+  kind: string
+  filename?: string
+  mime: string
+  width: number
+  height: number
+  bytes: number
+  caption?: string
+  position: number
+  createdAt: string
+}
+
 /** A file downloaded from the API, with the name the server offered it under. */
 export interface DownloadedFile {
   blob: Blob
@@ -566,6 +580,31 @@ export const api = {
       body: parts,
     }),
   deleteWorkout: (id: string) => request<unknown>(`/api/workouts/${id}`, { method: 'DELETE' }),
+
+  // --- Gallery ---
+  //
+  // Listing is metadata only; the bytes come one request at a time through
+  // workoutPhoto, so the browser can cache, lazy-load and decode each on its
+  // own schedule. A dozen base64 photos inside the list would undo all three.
+  workoutPhotos: (id: string) =>
+    request<{ media: WorkoutPhoto[]; max: number }>(`/api/workouts/${id}/media`),
+  /**
+   * One photo's bytes.
+   *
+   * Fetched rather than pointed at with an <img src>, because these are behind
+   * authentication and the native app authenticates with a bearer token that an
+   * <img> would not send. The response still goes through the HTTP cache, so a
+   * second view is a 304 rather than a download.
+   */
+  workoutPhoto: (id: string, mediaID: string, thumb: boolean) =>
+    fetchFile(`/api/workouts/${id}/media/${mediaID}${thumb ? '?thumb=1' : ''}`),
+  uploadWorkoutPhoto: (id: string, file: File | Blob, filename: string) => {
+    const form = new FormData()
+    form.append('file', file, filename)
+    return request<WorkoutPhoto>(`/api/workouts/${id}/media`, { method: 'POST', raw: form })
+  },
+  deleteWorkoutPhoto: (id: string, mediaID: string) =>
+    request<unknown>(`/api/workouts/${id}/media/${mediaID}`, { method: 'DELETE' }),
   // `deferChecks` suppresses the post-import gear and goal evaluation, which
   // re-reads the whole library each time. A batch sets it on every file and
   // calls finalizeImport() once at the end.

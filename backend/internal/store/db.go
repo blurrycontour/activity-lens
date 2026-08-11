@@ -78,6 +78,9 @@ var workoutWeatherSchema string
 //go:embed migrations/0023_workout_tracks.sql
 var workoutTracksSchema string
 
+//go:embed migrations/0025_workout_media.sql
+var workoutMediaSchema string
+
 //go:embed migrations/0024_workout_pauses.sql
 var workoutPausesSchema string
 
@@ -149,6 +152,7 @@ func MigrateApp(ctx context.Context, db *sql.DB) error {
 		{"workout weather", workoutWeatherSchema},
 		{"workout tracks", workoutTracksSchema},
 		{"workout pauses", workoutPausesSchema},
+		{"workout media", workoutMediaSchema},
 	} {
 		if err := applyAlters(ctx, db, m.schema); err != nil {
 			return fmt.Errorf("apply %s schema: %w", m.name, err)

@@ -50,6 +50,24 @@ type Repository interface {
 	ListPublicSummary(ctx context.Context, viewerID int64) ([]Workout, error)
 	// ListSharedWithMeSummary returns workouts shared directly with viewerID.
 	ListSharedWithMeSummary(ctx context.Context, viewerID int64) ([]Workout, error)
+	// Gallery photos. Every one of these is scoped by workout id and carries
+	// no permission logic of its own — the caller establishes that the user may
+	// see (to read) or owns (to write) the workout first, exactly as the
+	// handlers for shares do.
+	ListMedia(ctx context.Context, workoutID string) ([]Media, error)
+	GetMedia(ctx context.Context, workoutID, mediaID string) (Media, error)
+	CountMedia(ctx context.Context, workoutID string) (int, error)
+	AddMedia(ctx context.Context, m Media) error
+	DeleteMedia(ctx context.Context, workoutID, mediaID string) error
+	// DeleteMediaForUser removes every photo a user added, wherever it lives.
+	// Rows on their own workouts go with the workout through the foreign key;
+	// this is for photos they added to somebody else's, which have no key back
+	// to the account. Nothing creates those yet — the upload path is
+	// owner-only — but the column exists so that it can, and an account
+	// deletion that leaves someone's photos behind is exactly the bug this
+	// would be.
+	DeleteMediaForUser(ctx context.Context, userID int64) error
+
 	// SetVisibility flips a workout the caller owns; ErrNotFound otherwise.
 	SetVisibility(ctx context.Context, ownerID int64, id string, v Visibility) error
 	// ShareRecipients lists the user ids a workout the caller owns is shared

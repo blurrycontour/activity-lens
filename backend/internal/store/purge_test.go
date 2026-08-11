@@ -30,6 +30,7 @@ func TestEveryUserScopedTableHasAnOwnerForPurging(t *testing.T) {
 		"push_subscriptions": "notify.Service.PurgeUser",
 		"user_prefs":         "settings.Store.PurgeUser",
 		"user_last_login":    "settings.Store.PurgeUser",
+		"workout_media":      "workout.Service.PurgeUserPhotos",
 	}
 
 	db := openTemp(t)
