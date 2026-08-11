@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useId, useMemo } from 'react'
 import { Activity, Heart, Sparkles } from 'lucide-react'
 import Dropdown from './Dropdown'
 import { hrZoneBuckets, hrZoneColor } from '../lib/hrZones'
@@ -38,6 +38,8 @@ interface SessionProfileProps {
   tint: Tint
   onTintChange: (t: Tint) => void
   onScrub: (t: number) => void
+  /** The same face the map's playback marker wears, when there is one. */
+  avatarUrl?: string
 }
 
 /** Widest at the launch, finest at the destination: that is the whole illusion. */
@@ -47,8 +49,11 @@ function widthAt(depth: number): number {
 
 export default function SessionProfile({
   id, duration, hrTimeline, cadenceTimeline, maxHR, pauses, currentTime,
-  tint, onTintChange, onScrub,
+  tint, onTintChange, onScrub, avatarUrl,
 }: SessionProfileProps) {
+  // Unique per mounted panel: two of these on one page would otherwise share a
+  // clip path, and whichever mounted last would own it.
+  const clipId = useId()
   const hasHR = hrTimeline.length > 1 && maxHR > 0
   const hasCadence = cadenceTimeline.length > 1
 
@@ -236,13 +241,33 @@ export default function SessionProfile({
           {/* Destination: a four-point sparkle, small because it is far away. */}
           <Sparkle x={sky.points[sky.points.length - 1].x} y={sky.points[sky.points.length - 1].y} r={7} />
 
-          {/* Where playback has reached. */}
-          {here && (
-            <g>
-              <circle cx={here.x} cy={here.y} r={widthAt(here.depth) * 0.9 + 2.4} fill="var(--text)" opacity="0.16" />
-              <circle cx={here.x} cy={here.y} r={widthAt(here.depth) * 0.55 + 1.2} fill="var(--text)" />
-            </g>
-          )}
+          {/* Where playback has reached, wearing the same face as the map's
+              marker so the drawing reads as "you, here" rather than as an
+              anonymous dot. It shrinks with the path — this is the one mark
+              whose size has to agree with the recession around it, or the
+              illusion goes with it. */}
+          {here && (() => {
+            const r = 10.5 - here.depth * 3.5
+            return (
+              <g>
+                <circle cx={here.x} cy={here.y} r={r + 3} fill="var(--text)" opacity="0.13" />
+                {avatarUrl ? (
+                  <>
+                    <clipPath id={clipId}><circle cx={here.x} cy={here.y} r={r} /></clipPath>
+                    <image
+                      href={avatarUrl}
+                      x={here.x - r} y={here.y - r} width={r * 2} height={r * 2}
+                      preserveAspectRatio="xMidYMid slice"
+                      clipPath={`url(#${clipId})`}
+                    />
+                    <circle cx={here.x} cy={here.y} r={r} fill="none" stroke="var(--primary)" strokeWidth="1.6" />
+                  </>
+                ) : (
+                  <circle cx={here.x} cy={here.y} r={r * 0.55} fill="var(--text)" stroke="var(--bg-2)" strokeWidth="1.2" />
+                )}
+              </g>
+            )
+          })()}
         </svg>
 
         <div className="session-sky-scale">

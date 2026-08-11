@@ -2850,8 +2850,23 @@ body:has(.overlay) .fab { display: none; }
   color: var(--text-3);
   pointer-events: none;
 }
-/* Over the drawing, in the corner the path has already left. */
+/* Over the drawing, in the corner the path has already left.
+
+   Shrunk from the standard trigger, which carries a 150px minimum meant for a
+   filter bar. The map can spare that much of itself; a panel a third of the
+   width cannot, and at full size the picker read as the subject of the panel
+   rather than a control on it. Translucent for the same reason — the sky has
+   to stay visible underneath. */
 .session-sky-picker { position: absolute; top: 8px; right: 8px; }
+.session-sky-picker .al-dropdown-trigger {
+  min-width: 0;
+  padding: 3px 7px;
+  font-size: 11px;
+  gap: 5px;
+  background: color-mix(in srgb, var(--bg-2) 82%, transparent);
+  backdrop-filter: blur(6px);
+}
+.session-sky-picker .al-dropdown-trigger svg { width: 12px; height: 12px; }
 
 /* Time in each zone. A row per zone rather than one stacked bar: the stacked
    version is prettier and unreadable below about 8% a segment, which is most
@@ -3733,7 +3748,12 @@ body:has(.overlay) .fab { display: none; }
   .stat-label { font-size: 10px; }
   .stat-value { font-size: 13px; }
 
-  .detail-top {
+  /* `.no-map` is listed explicitly because it outranks a bare `.detail-top`:
+     the two-column rule it sets for desktop is one class more specific than
+     this override and won a fight it was never meant to be in, leaving the
+     summary and the session drawing at half width each on a phone. */
+  .detail-top,
+  .detail-top.no-map {
     grid-template-columns: 1fr;
     grid-template-areas: "summary" "map";
   }
@@ -4506,8 +4526,37 @@ body:has(.overlay) .fab { display: none; }
 /* ── Workout detail: the tabbed sections under the charts ─────────────────
    Notes, Gallery, and Social to come. Cards below a certain number are just a
    page; past it they are a scroll, so these share one frame. */
-.detail-tabs { display: flex; flex-direction: column; gap: 14px; }
-.detail-tab-body { min-height: 60px; }
+/* ── Workout sections: notes, gallery, social ──────────────────────────────
+
+   The strip sits outside the panel and the two are joined, folder-fashion,
+   rather than the strip floating inside a card of its own. Inside a card, the
+   tabs read as a control that happens to be at the top of a box, and the box
+   looks the same whichever tab is up — so nothing on screen says which panel
+   belongs to which tab.
+
+   The join is made of things already here: the strip's ground is bg-3, the
+   panel's is bg-2, and an active tab is already bg-2. Squaring the active
+   tab's bottom corners and dropping the line between the two runs that bg-2
+   straight down into the panel, so the open tab and its page are visibly one
+   surface. No new colour, and nothing that needs to know which tab is open. */
+.detail-sections { margin-top: 16px; }
+.detail-sections .tab-strip {
+  padding: 4px 4px 0;
+  border-bottom: none;
+  border-radius: calc(var(--radius) * 1.5) calc(var(--radius) * 1.5) 0 0;
+}
+.detail-sections .tab-strip-item {
+  border-radius: var(--radius) var(--radius) 0 0;
+  padding-bottom: 10px;
+}
+/* The lift would cast a shadow onto the panel it is joined to. */
+.detail-sections .tab-strip-item.active { box-shadow: none; }
+.detail-tab-panel {
+  border-top: none;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+  min-height: 60px;
+}
 
 /* ── Gallery ──────────────────────────────────────────────────────────── */
 .gallery { display: flex; flex-direction: column; gap: 12px; }
@@ -4621,3 +4670,4 @@ body:has(.overlay) .fab { display: none; }
   .lightbox { padding: 12px; }
   .gallery-grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
 }
+

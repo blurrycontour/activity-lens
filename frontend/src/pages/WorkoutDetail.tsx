@@ -37,9 +37,10 @@ import type { Shading } from '../components/RouteMap'
 const RouteMap = lazy(() => import('../components/RouteMap'))
 import ExpandModal from '../components/ExpandModal'
 import TabStrip, { type TabStripItem } from '../components/TabStrip'
+import { inlineTicks } from '../lib/chartTicks'
 const WorkoutGallery = lazy(() => import('../components/WorkoutGallery'))
 
-/** The sections under the charts. Social joins these next. */
+/** The sections under the charts. */
 type DetailTab = 'notes' | 'gallery'
 import SessionProfile, { canProfile, type Tint } from '../components/SessionProfile'
 import SessionContext from '../components/SessionContext'
@@ -328,34 +329,6 @@ function MetricPanel({ icon, title, badge, info, stats, onExpand, children }: {
       <div className="metric-panel-plot">{children}</div>
     </div>
   )
-}
-
-/**
- * Two round values inside a domain, for the gridlines a phone draws in place of
- * a y axis.
- *
- * Two, not five: they exist to give the plot a sense of scale, not to be read
- * off. The axis they replace was taking about 44px of a 360px screen to say
- * five numbers nobody was measuring against.
- *
- * Rounded to a 1/2/5 step so they land on values a person would have chosen —
- * 140 and 160, not 137.4 and 158.2 — and dropped when the rounding pushes them
- * outside the domain or on top of each other, which happens on a flat series
- * where the whole range is narrower than one step.
- */
-function inlineTicks([lo, hi]: [number, number]): number[] {
-  const span = hi - lo
-  if (!Number.isFinite(span) || span <= 0) return []
-  const raw = span / 3
-  const magnitude = 10 ** Math.floor(Math.log10(raw))
-  const step = [1, 2, 5, 10].map(m => m * magnitude).find(s => s >= raw) ?? magnitude * 10
-  const out: number[] = []
-  for (let v = Math.ceil(lo / step) * step; v < hi; v += step) {
-    // Strictly inside: a line on the domain's edge sits under the plot's own
-    // boundary and its label would be half outside the drawing.
-    if (v > lo && !out.includes(v)) out.push(v)
-  }
-  return out.slice(0, 2)
 }
 
 /**
@@ -943,6 +916,16 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             seeking is what the scrub bar and the map are for. */}
         <AreaChart
           data={visible}
+          /* Off, and with it the two focus rectangles a tap used to leave
+             behind. Recharts turns this on by default, which makes the <svg>
+             a tab stop with role="application" and draws a box around the
+             plot when it takes focus. That is the right trade for a chart you
+             operate with the keyboard; this one is not operable at all any
+             more — there is no onClick, the tooltip comes on hover and touch
+             by itself, and seeking belongs to the scrub bar. Announcing it as
+             an application and boxing it on every tap was cost with nothing
+             bought. */
+          accessibilityLayer={false}
           // Edge to edge on a phone. The card's padding is gone from around the
           // plot, and the y axis with it — the numbers it carried are drawn on
           // the gridlines instead, inside the plot, where they cost nothing.
@@ -977,7 +960,10 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
                 fontSize: 9,
                 fill: 'var(--text-3)',
                 fontFamily: 'var(--font-mono)',
-                offset: 4,
+                // Held off the plot's left edge, which on a phone is the
+                // card's edge — at 4 the first glyph was touching it, and a
+                // minus sign was half gone.
+                offset: 9,
               }}
             />
           ))}
@@ -1034,7 +1020,9 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
     if (hrZoneStyle === 'histogram') {
       return (
         <ResponsiveContainer width="100%" height={height}>
-          <BarChart data={hrZonesPlayed} margin={{ top: 4, right: 18, left: -24, bottom: 14 }}>
+          {/* accessibilityLayer off for the same reason as the area charts —
+              see areaChart. */}
+          <BarChart data={hrZonesPlayed} accessibilityLayer={false} margin={{ top: 4, right: 18, left: -24, bottom: 14 }}>
             <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
             <XAxis
               dataKey="short" tick={{ fontSize: 11, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}
@@ -1070,7 +1058,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
           ))}
         </div>
         <ResponsiveContainer width="100%" height={height}>
-          <PieChart>
+          <PieChart accessibilityLayer={false}>
             <Pie data={arcs} dataKey="value" nameKey="name" innerRadius={height * 0.25} outerRadius={height * 0.44} paddingAngle={2} isAnimationActive={false}>
               {arcs.map(z => <Cell key={z.name} fill={z.color} />)}
             </Pie>
@@ -1321,6 +1309,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
                 tint={tint}
                 onTintChange={setTint}
                 onScrub={handleScrub}
+                avatarUrl={routeAvatar}
               />
             </div>
           )}
@@ -1498,7 +1487,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
               stats={<>Min {derived.hrMin ?? '—'} · Avg {w.avgHR} · Max {w.maxHR} bpm</>}
               onExpand={() => setExpanded('hr')}
             >
-              {hrChart(140)}
+              {hrChart(180)}
             </MetricPanel>
           )}
 
@@ -1509,7 +1498,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
               info="How the activity's time split across the five effort zones, as a share of recorded samples. Zones are percentages of your max HR: under 60% is recovery, 60-70% endurance, 70-80% tempo, 80-90% threshold, and above 90% is maximal. Switch between the histogram and donut under Settings → Charts."
               onExpand={() => setExpanded('hrzones')}
             >
-              {hrZoneChart(160)}
+              {hrZoneChart(190)}
             </MetricPanel>
           )}
 
@@ -1522,7 +1511,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
               stats={<>Min {derived.paceMin != null ? fmtPace(derived.paceMin) : '—'} · Avg {fmtPace(w.avgPace)} · Max {derived.paceMax != null ? fmtPace(derived.paceMax) : '—'} /km</>}
               onExpand={() => setExpanded('pace')}
             >
-              {paceChart(140)}
+              {paceChart(180)}
             </MetricPanel>
           )}
 
@@ -1535,7 +1524,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
               stats={<>Min {derived.speedMin?.toFixed(1) ?? '—'} · Avg {w.avgSpeed > 0 ? w.avgSpeed.toFixed(1) : '—'} · Max {derived.speedMax?.toFixed(1) ?? '—'} km/h</>}
               onExpand={() => setExpanded('speed')}
             >
-              {speedChart(140)}
+              {speedChart(180)}
             </MetricPanel>
           )}
 
@@ -1547,7 +1536,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
               stats={<>+{w.elevationGain} m gain · {derived.elevLoss} m loss</>}
               onExpand={() => setExpanded('elevation')}
             >
-              {elevChart(140)}
+              {elevChart(180)}
             </MetricPanel>
           )}
 
@@ -1559,7 +1548,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
               stats={<>Min {derived.cadMin ?? '—'} · Avg {derived.cadAvg ?? '—'} · Max {derived.cadMax ?? '—'} {cadenceUnit(w.type)}</>}
               onExpand={() => setExpanded('cadence')}
             >
-              {cadenceChart(140)}
+              {cadenceChart(180)}
             </MetricPanel>
           )}
         </div>
@@ -1573,35 +1562,6 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
           onSaved={setW}
           onOpenSettings={() => onOpenSettings?.()}
         />
-
-        {/* Everything about the workout that is not the workout: what you wrote
-            down, and what you photographed. Tabs rather than a stack of cards
-            because these grow — Social is next — and six panels nobody opened
-            is a page you scroll past rather than a page you use.
-
-            Notes are stripped from every response to a non-owner, so a shared
-            workout has no notes tab at all rather than an empty one. */}
-        <div className="card detail-tabs" style={{ marginTop: 16 }}>
-          <TabStrip
-            items={detailTabs}
-            value={activeTab}
-            onChange={setDetailTab}
-            ariaLabel="Workout sections"
-          />
-          <div className="detail-tab-body">
-            {activeTab === 'notes' && (readOnly
-              ? <p className="notes-text">{w.notes}</p>
-              : <NotesCard workout={w} onSaved={setW} />)}
-            {activeTab === 'gallery' && (
-              // Lazy, and mounted only while its tab is open: the photos are
-              // the heaviest thing on the page and nobody should pay for them
-              // by opening a workout.
-              <Suspense fallback={<div className="detail-loading"><LoaderCircle size={16} className="spin" /></div>}>
-                <WorkoutGallery workoutId={w.id} canEdit={!readOnly} />
-              </Suspense>
-            )}
-          </div>
-        </div>
 
         {!readOnly && (
         <div className="card" style={{ marginTop: 16 }}>
@@ -1674,6 +1634,41 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
           )}
         </div>
         )}
+
+        {/* Everything about the workout that is not the workout: what you wrote
+            down, what you photographed, and what people said about it. Tabs
+            rather than a stack of cards because these grow, and three panels
+            nobody opened is a page you scroll past rather than a page you use.
+
+            Last on the page, and after the equipment, because the workout and
+            its gear are the record — these are what accumulates around it.
+
+            The strip sits outside the panel and joins onto it; see
+            .detail-sections. Notes are stripped from every response to a
+            non-owner, so a shared workout has no notes tab rather than an
+            empty one, and activeTab falls back when the stored tab is one this
+            workout does not offer. */}
+        <div className="detail-sections">
+          <TabStrip
+            items={detailTabs}
+            value={activeTab}
+            onChange={setDetailTab}
+            ariaLabel="Workout sections"
+          />
+          <div className="card detail-tab-panel">
+            {activeTab === 'notes' && (readOnly
+              ? <p className="notes-text">{w.notes}</p>
+              : <NotesCard workout={w} onSaved={setW} />)}
+            {/* Lazy, and mounted only while its tab is open: the photos are the
+                heaviest thing on the page and nobody should pay for them by
+                opening a workout. The same goes for the thread. */}
+            {activeTab === 'gallery' && (
+              <Suspense fallback={<div className="detail-loading"><LoaderCircle size={16} className="spin" /></div>}>
+                <WorkoutGallery workoutId={w.id} canEdit={!readOnly} />
+              </Suspense>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Rendered once, wherever mapHolder currently is. The maximize button is
