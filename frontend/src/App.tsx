@@ -423,17 +423,26 @@ export default function App() {
   // Pull-to-refresh reloads the data each page registered, never the document.
   const { refresh } = useRefresh()
 
-  /**
-   * Where the page under any workout detail was scrolled to.
-   *
-   * Captured on every scroll rather than read when a workout opens: by the
-   * time an effect could run, the list has already been replaced and the
-   * container has clamped its scrollTop to the shorter content.
-   */
+  /** Where the page under any drill-in was scrolled to. */
   const listScroll = useRef(0)
+
+  /**
+   * Whether a drill-in is open over the current page.
+   *
+   * Two of them, and they behave identically: a workout detail over the
+   * workout list, and a settings category over the settings hub. Neither is a
+   * page change — both replace the content inside the same scrolling <main> —
+   * so the "start at the top" effect below never fires for either, and both
+   * need the level above them remembered by hand.
+   *
+   * A boolean rather than the value itself, so opening a second category from
+   * the hub is the same transition as opening the first.
+   */
+  const drilledIn = Boolean(selectedWorkout) || section != null
+
   const onMainScroll = useCallback(() => {
-    if (!selectedWorkout && mainEl) listScroll.current = mainEl.scrollTop
-  }, [selectedWorkout, mainEl])
+    if (!drilledIn && mainEl) listScroll.current = mainEl.scrollTop
+  }, [drilledIn, mainEl])
 
   // Start each page at the top. Without this a swipe from a scrolled page
   // animates the next one in already scrolled down, which reads as a glitch.
@@ -443,18 +452,20 @@ export default function App() {
   }, [page, mainEl])
 
   /**
-   * Opening a workout is not a page change — the detail replaces the list
-   * inside the same scrolling <main> — so the effect above never fired for it.
-   * The detail opened at whatever offset the list had been left at, and coming
-   * back put the list wherever the detail had been scrolled to.
+   * Drill in at the top; come back where you were.
+   *
+   * Captured on every scroll rather than read at the moment of the transition:
+   * by the time an effect could run, the content has already been replaced and
+   * the container has clamped its scrollTop to whatever the new content is
+   * tall enough for.
    *
    * useLayoutEffect so the restored offset is painted with the list rather than
    * a frame after it, which reads as a jump.
    */
   useLayoutEffect(() => {
     if (!mainEl) return
-    mainEl.scrollTo({ top: selectedWorkout ? 0 : listScroll.current })
-  }, [selectedWorkout, mainEl])
+    mainEl.scrollTo({ top: drilledIn ? 0 : listScroll.current })
+  }, [drilledIn, mainEl])
 
   const layoutClass = [
     'app-layout',

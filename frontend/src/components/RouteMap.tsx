@@ -785,9 +785,10 @@ export default function RouteMap({
       {glAvailable && <LayerSwitcher layer={layer} onChange={setLayer} offsetRight={maximizeButton ? 46 : 10} />}
       {legend && (
         <div className="map-legend" aria-label={`${legend.title} scale`}>
-          <span className="map-legend-title">{legend.title}</span>
           {'zones' in legend
             ? (
+              // One row: a zone's swatch and its name are a pair, and stacking
+              // them would be five two-line columns to say five short words.
               <div className="map-legend-zones">
                 {legend.zones.map((z, i) => (
                   <span key={z} className="map-legend-zone">
@@ -798,10 +799,15 @@ export default function RouteMap({
               </div>
             )
             : (
+              // Two rows: the ramp, then its ends underneath. Side by side, the
+              // numbers set the width and the bar got whatever was left, which
+              // on a phone was a gradient too short to read as one.
               <div className="map-legend-ramp">
-                <span>{legend.low}</span>
                 <i style={{ background: legend.ramp }} />
-                <span>{legend.high}</span>
+                <span>
+                  <span>{legend.low}</span>
+                  <span>{legend.high}</span>
+                </span>
               </div>
             )}
         </div>

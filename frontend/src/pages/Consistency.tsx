@@ -6,6 +6,7 @@ import RangeDropdown from '../components/RangeDropdown'
 import { useLocalStorage } from '../lib/useLocalStorage'
 import { filterByRange, rangeLabel, rangeStartDate, toDateKey } from '../lib/range'
 import { AXIS_TICK, GRID_PROPS, HOVER_FILL, recencyRamp } from '../lib/chartColors'
+import { useThemeTokens } from '../lib/useThemeTokens'
 import { recentWeekStarts, weekdayMatrix } from '../lib/insights'
 import ChartCard, { EmptyPlot } from '../components/ChartCard'
 import InfoTip from '../components/InfoTip'
@@ -220,7 +221,10 @@ export default function Consistency() {
   const yearlyStats = useMemo(() => rollup(filteredWorkouts, d => d.slice(0, 4)), [filteredWorkouts])
 
   // Resolved fresh each render rather than memoised, so switching the accent
-  // in Settings is reflected the next time this page draws.
+  // in Settings is reflected the next time this page draws — and subscribed to
+  // the theme, so "the next time" is now rather than whenever something else
+  // happens to cause a render. See useThemeTokens.
+  useThemeTokens()
   const yearRamp = recencyRamp(yoyYears.length)
   const cumulativeRamp = recencyRamp(cumulativeYears.length)
   const weekRamp = recencyRamp(wowWeeks.length)

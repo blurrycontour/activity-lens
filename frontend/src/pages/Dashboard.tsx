@@ -15,6 +15,7 @@ import InfoTip from '../components/InfoTip'
 import Sparkline from '../components/Sparkline'
 import { api, type Equipment } from '../lib/api'
 import { AXIS_TICK, GRID_PROPS, HOVER_FILL, recencyRamp } from '../lib/chartColors'
+import { useThemeTokens } from '../lib/useThemeTokens'
 import {
   DASHBOARD_CFG_KEY, defaultDashboardConfig, resolveGoalStyle, windowLabel,
   type DashboardConfig, type GoalStyle, type StatCardId,
@@ -679,7 +680,15 @@ export default function Dashboard({ onSelect }: { onSelect: (w: Workout) => void
     () => gearNudges(equipment, t => DEFAULT_RETIRE_KM[t] ?? 0),
     [equipment],
   )
-  const trendRamp = recencyRamp(d.trendWeeks.length)
+  // Recomputed when the theme or accent changes: the ramp resolves tokens to
+  // literal colours, and a literal cannot follow a token it has already been
+  // read from. See useThemeTokens.
+  const themeTokens = useThemeTokens()
+  const trendRamp = useMemo(
+    () => recencyRamp(d.trendWeeks.length),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [d.trendWeeks.length, themeTokens],
+  )
 
   const caption = windowLabel(cfg.windowDays)
   const spark = (valueOf: (w: Workout) => number) =>
@@ -921,8 +930,24 @@ export default function Dashboard({ onSelect }: { onSelect: (w: Workout) => void
                       wrapperStyle={{ fontSize: 10, paddingBottom: 4 }}
                       formatter={value => String(value) === d.trendWeeks[0] ? 'This week' : `w/c ${String(value).slice(5)}`}
                     />
-                    {d.trendWeeks.map((week, i) => (
-                      <Bar key={week} dataKey={week} fill={trendRamp[i]} radius={[3, 3, 0, 0]} isAnimationActive={false} />
+                    {/* Oldest on the left, this week on the right, because
+                        that is the direction time runs on every other chart in
+                        the app — and the eye lands on the newest bar last,
+                        which is where a trend is read.
+
+                        The colour is picked by the week's recency and not by
+                        its position, so reversing the order did not repaint
+                        anything: this week stays the strongest step wherever
+                        it sits. trendWeeks is newest-first, which is the
+                        ramp's own order. */}
+                    {[...d.trendWeeks].reverse().map((week, i) => (
+                      <Bar
+                        key={week}
+                        dataKey={week}
+                        fill={trendRamp[d.trendWeeks.length - 1 - i]}
+                        radius={[3, 3, 0, 0]}
+                        isAnimationActive={false}
+                      />
                     ))}
                   </BarChart>
                 </ResponsiveContainer>

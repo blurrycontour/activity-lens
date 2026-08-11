@@ -1299,10 +1299,12 @@ body {
 }
 .load-ratio {
   font-family: var(--font-mono);
-  font-size: 34px;
+  /* Big enough to be the card's headline, not so big it shouts. It sits beside
+     a 14px verdict, and 34px made the two look like different components. */
+  font-size: 24px;
   font-weight: 700;
   line-height: 1;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
 }
 .load-figure-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .load-figure-unit { font-size: 11px; color: var(--text-3); }
@@ -1943,6 +1945,19 @@ body:has(.overlay) .fab { display: none; }
 .glow { box-shadow: 0 0 0 1px var(--primary-glow), 0 0 24px var(--primary-glow); }
 
 .recharts-tooltip-wrapper { outline: none !important; }
+
+/* Recharts makes both the wrapper and the <svg> inside it focusable, so a tap
+   on a chart drew two nested focus rings — a bright box around the card's plot
+   area and a second one hugging the drawing itself. They are not an affordance
+   anyone asked for: there is nothing to activate here, and the tooltip already
+   says what was touched.
+
+   Suppressed for pointer focus only. :focus-visible still gets a ring, so a
+   chart reached by keyboard is still obviously the thing with focus. */
+.recharts-wrapper:focus,
+.recharts-surface:focus { outline: none; }
+.recharts-wrapper:focus-visible,
+.recharts-surface:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .custom-tooltip {
   background: var(--bg-2);
   border: 1px solid var(--border-strong);
@@ -2653,32 +2668,41 @@ body:has(.overlay) .fab { display: none; }
 }
 
 /* What the colours on the track mean, over the top-left of the map.
-   Translucent and small on purpose: it has to be readable without becoming a
-   panel that hides the corner of the route it sits on, so it is backed by a
-   blurred wash of the card surface rather than a solid one. The right-hand
-   corner is spoken for by the maximize button and the layer switcher. */
+
+   Translucent so it does not hide the corner of the route it sits on, but only
+   just: 88% of the card surface plus a blur, the same in both themes. At 72%
+   the dark theme read as a wash and the light one — white over a pale
+   basemap — read as solid, so the two looked like different components.
+
+   Text is --text-2, not --text-3. The muted ink is calibrated against a card,
+   and over aerial imagery there is no contrast left in it at all. The
+   right-hand corner is spoken for by the maximize button and the layer
+   switcher, hence the left. */
 .map-legend {
   position: absolute;
   top: 10px;
   left: 10px;
   z-index: 400;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
   padding: 6px 8px;
   border-radius: var(--radius);
-  border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--bg-2) 72%, transparent);
-  backdrop-filter: blur(6px);
+  border: 1px solid var(--border-strong);
+  background: color-mix(in srgb, var(--bg-2) 88%, transparent);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
   pointer-events: none;
-  max-width: 60%;
+  max-width: 62%;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-2);
 }
-.map-legend-title { font-size: 10px; font-weight: 600; color: var(--text-2); letter-spacing: 0.02em; }
-.map-legend-zones { display: flex; gap: 8px; }
-.map-legend-zone { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--text-3); font-family: var(--font-mono); }
+.map-legend-zones { display: flex; gap: 9px; }
+.map-legend-zone { display: flex; align-items: center; gap: 4px; }
 .map-legend-zone i { width: 8px; height: 8px; border-radius: 2px; }
-.map-legend-ramp { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--text-3); font-family: var(--font-mono); }
-.map-legend-ramp i { width: 64px; height: 8px; border-radius: 4px; }
+.map-legend-ramp { display: flex; flex-direction: column; gap: 3px; }
+.map-legend-ramp i { display: block; width: 92px; height: 7px; border-radius: 4px; }
+/* The two ends pushed apart under the bar they label, so each number sits over
+   the end of the ramp it belongs to. */
+.map-legend-ramp > span { display: flex; justify-content: space-between; gap: 10px; }
 
 /* MapLibre's popups and controls ship light and would otherwise be the one
    white surface in a dark app. */
@@ -2745,23 +2769,38 @@ body:has(.overlay) .fab { display: none; }
 }
 .detail-top > :first-child { grid-area: map; }
 .detail-top > :last-child { grid-area: summary; }
+/* On desktop this stretches to match the summary column beside it, so the
+   minimum only matters while the summary is short. */
+.detail-map-card {
+  padding: 0;
+  overflow: hidden;
+  position: relative;
+  background: var(--bg-3);
+  display: flex;
+  flex-direction: column;
+  min-height: 280px;
+}
 .playback-bar { display: flex; align-items: center; gap: 10px; }
 .playback-controls { display: flex; align-items: center; gap: 10px; }
 
-/* The scrub bar goes full width and the transport buttons and the clock drop
-   underneath it once there is not enough room for all three on one line.
-   Driven by the card's own width rather than the viewport: the viewport rule
-   further down assumes "narrow screen" and "narrow bar" are the same thing,
+/* The transport buttons and the clock on top, the scrub bar full width
+   underneath, once there is not enough room for all three on one line.
+
+   That order and not the reverse: the bar is what the thumb reaches for, so it
+   belongs at the near edge of the card, and the controls read as a header for
+   it rather than as a caption under it.
+
+   Driven by the card's own width rather than the viewport. The viewport rule
+   this replaced assumed "narrow screen" and "narrow bar" were the same thing,
    which they are not on a large phone in landscape or on a tablet — both are
    wider than the 768px breakpoint and still too tight for a one-line
-   transport, and both left the slider squeezed between the buttons and the
-   time. Measuring the container is the version that cannot be wrong. */
+   transport. Measuring the container is the version that cannot be wrong. */
 .playback-card { container-type: inline-size; }
 @container (max-width: 460px) {
   .playback-bar { display: grid; grid-template-columns: auto 1fr; gap: 8px; }
-  .playback-controls { grid-column: 1; grid-row: 2; }
-  .playback-bar input { grid-column: 1 / -1; grid-row: 1; width: 100%; }
-  .playback-bar > span { grid-column: 2; grid-row: 2; justify-self: end; align-self: center; }
+  .playback-controls { grid-column: 1; grid-row: 1; }
+  .playback-bar > span { grid-column: 2; grid-row: 1; justify-self: end; align-self: center; }
+  .playback-bar input { grid-column: 1 / -1; grid-row: 2; width: 100%; }
 }
 .workout-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
 
@@ -3424,8 +3463,16 @@ body:has(.overlay) .fab { display: none; }
   background: var(--row-accent);
 }
 /* The row's `overflow: hidden` would also clip a menu opened inside it, which
-   is where the share options live — so it is lifted for as long as one is up. */
-.workout-row:has(.options-menu) { overflow: visible; }
+   is where the share options live — so it is lifted for as long as one is up.
+
+   The z-index is the other half, and it fixes a flicker that only ever
+   happened with a mouse. `:hover` puts a transform on a row, and a transform
+   makes a stacking context — so moving the pointer down onto an open menu
+   hovered the row *underneath*, which then painted over the menu, which
+   un-hovered that row, which revealed the menu again, forty times a second.
+   Lifting the row that owns the menu above its transformed neighbours ends
+   the loop. A phone never saw it because a phone never hovers. */
+.workout-row:has(.options-menu) { overflow: visible; z-index: 2; }
 .workout-row-icon {
   width: 44px;
   height: 44px;
@@ -3574,6 +3621,12 @@ body:has(.overlay) .fab { display: none; }
     grid-template-columns: 1fr;
     grid-template-areas: "summary" "map";
   }
+  /* Taller once the map has the full width to itself. Stacked, it has no
+     summary column to match, so it fell back to the 280px minimum — a letterbox
+     on a phone, and the one panel where more height is always worth having.
+     Capped in pixels as well as in vh so a tall phone does not give the map the
+     whole screen and push everything else below the fold. */
+  .detail-map-card { min-height: min(56vh, 420px); }
   /* The playback bar's stacked layout used to live here. It is a container
      query now — see .playback-card — because the card's width, not the
      viewport's, is what decides whether the three parts fit on one line. */

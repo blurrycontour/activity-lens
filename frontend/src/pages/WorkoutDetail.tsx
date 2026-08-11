@@ -836,10 +836,15 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
     const strokeColor = strokeStops ? `url(#${gradId}_stroke)` : stroke
     return (
       <ResponsiveContainer width="100%" height={height}>
+        {/* No onClick. Tapping a chart used to seek the whole page to that
+            moment, which meant reading a value cost you your place: the map
+            marker jumped, every other chart's cursor moved, and the only way
+            back was the transport. Recharts shows the tooltip on hover and on
+            touch by itself, so inspecting a point now costs nothing, and
+            seeking is what the scrub bar and the map are for. */}
         <AreaChart
           data={visible}
           margin={{ top: 4, right: 18, left: -24, bottom: 14 }}
-          onClick={(e: any) => { if (e && e.activeLabel != null) handleScrub(Number(e.activeLabel)) }}
         >
           <defs>
             <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
@@ -1160,7 +1165,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             side on desktop; stacked on mobile so the map never gets
             squeezed. */}
         <div className="detail-top">
-          <div className="card" style={{ padding: 0, overflow: 'hidden', position: 'relative', background: 'var(--bg-3)', display: 'flex', flexDirection: 'column', minHeight: 280 }}>
+          <div className="card detail-map-card">
             {/* Empty on purpose: the map is portalled into a node this hosts.
                 See mapHolder. */}
             <div ref={setCardHost} style={{ flex: 1, minHeight: 0, position: 'relative' }} />
