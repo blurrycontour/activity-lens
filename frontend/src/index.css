@@ -1312,6 +1312,35 @@ body {
 .load-ratio.steady, .load-ratio.building,
 .load-verdict.steady, .load-verdict.building { color: var(--primary); }
 
+/* How far a manual folder scan has got. Reading and hashing a few hundred
+   files then uploading them is minutes of work, and a spinning glyph says only
+   that something is happening — not whether it is nearly done. */
+.scan-progress { margin-top: 12px; }
+.scan-progress-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text-3);
+  margin-bottom: 6px;
+}
+.scan-progress-count { font-family: var(--font-mono); }
+.scan-progress-track {
+  height: 5px;
+  border-radius: 3px;
+  background: var(--bg-3);
+  overflow: hidden;
+}
+.scan-progress-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 3px;
+  transition: width 0.2s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .scan-progress-fill { transition: none; }
+}
+
 /* Rows inside the "More" sheet. The sheet itself is the shared .sheet
    primitive; only the row styling is new. */
 .more-item {

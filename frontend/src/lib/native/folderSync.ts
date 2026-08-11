@@ -1,4 +1,4 @@
-import { registerPlugin } from '@capacitor/core'
+import { registerPlugin, type PluginListenerHandle } from '@capacitor/core'
 import { isNative } from '../serverConfig'
 
 /** Implemented by mobile/android/.../FolderSyncPlugin.java. */
@@ -10,6 +10,22 @@ interface FolderSyncPlugin {
   setInterval(options: { minutes: number }): Promise<void>
   requestBatteryExemption(): Promise<{ batteryUnrestricted: boolean }>
   removeFolder(options: { uri: string }): Promise<void>
+  addListener(event: 'scanProgress', handler: (p: ScanProgress) => void): Promise<PluginListenerHandle>
+}
+
+/**
+ * How far a manual scan has got.
+ *
+ * Emitted per file, per phase, and only for a scan started from Settings — the
+ * background job reports to nobody. Counts are per folder, so a scan of several
+ * folders restarts them; the phase label is what makes that read as progress
+ * rather than as a bar going backwards.
+ */
+export interface ScanProgress {
+  /** 'read' while files are being read and hashed, 'upload' while sending. */
+  phase: 'read' | 'upload'
+  done: number
+  total: number
 }
 
 export interface WatchedFolder {
@@ -100,6 +116,31 @@ export async function setFolderSyncEnabled(enabled: boolean): Promise<void> {
  */
 export async function scanFolderNow(force = false): Promise<ScanResult> {
   return FolderSync.scanNow({ force })
+}
+
+/**
+ * Subscribes to a running scan's progress. Returns a function that unsubscribes.
+ *
+ * Resolves to a no-op off Android, and — importantly — also on an older APK
+ * whose plugin has no such event to send. Neither is an error: the caller gets
+ * a scan with no progress reported, which is exactly what it had before.
+ */
+export function onScanProgress(handler: (p: ScanProgress) => void): () => void {
+  if (!isNative()) return () => {}
+  let handle: PluginListenerHandle | null = null
+  let cancelled = false
+  void FolderSync.addListener('scanProgress', handler)
+    .then(h => {
+      // Unsubscribed before the listener finished registering, which is a real
+      // ordering on a fast scan: honour it rather than leaking the handle.
+      if (cancelled) void h.remove()
+      else handle = h
+    })
+    .catch(() => {})
+  return () => {
+    cancelled = true
+    void handle?.remove()
+  }
 }
 
 /**

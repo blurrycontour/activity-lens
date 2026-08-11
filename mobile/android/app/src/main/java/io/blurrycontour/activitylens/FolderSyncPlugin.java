@@ -38,6 +38,11 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 @CapacitorPlugin(name = "FolderSync")
 public class FolderSyncPlugin extends Plugin {
 
+    /** Shortest gap between two scan-progress events — about eight updates a
+     *  second, which reads as a moving bar and is a small fraction of the rate
+     *  the scanner reports at. */
+    private static final long PROGRESS_INTERVAL_MS = 120;
+
     /**
      * Puts the background jobs back whenever the app starts.
      *
@@ -245,7 +250,29 @@ public class FolderSyncPlugin extends Plugin {
         boolean force = Boolean.TRUE.equals(call.getBoolean("force", false));
         // Off the main thread: this reads files and talks to the server.
         new Thread(() -> {
-            FolderScanner.Result result = FolderScanner.scan(getContext(), force);
+            // Progress is reported only for a scan someone is watching. The
+            // periodic job passes nothing, because there is no screen to draw
+            // it on and a background job should not pay for one.
+            //
+            // Rate limited, because the scanner reports per file and a folder
+            // of several hundred small files would otherwise cross the
+            // JavaScript bridge hundreds of times in a couple of seconds to
+            // move a bar by a pixel each time. The first and last of a phase
+            // always go through: those are the ones that show the bar and then
+            // complete it, and dropping either leaves it visibly wrong.
+            long[] lastSent = { 0 };
+            FolderScanner.Result result = FolderScanner.scan(getContext(), force, (phase, done, total) -> {
+                long now = System.currentTimeMillis();
+                if (done != 0 && done != total && now - lastSent[0] < PROGRESS_INTERVAL_MS) {
+                    return;
+                }
+                lastSent[0] = now;
+                JSObject event = new JSObject();
+                event.put("phase", phase);
+                event.put("done", done);
+                event.put("total", total);
+                notifyListeners("scanProgress", event);
+            });
             JSObject response = new JSObject();
             response.put("ok", result.ok);
             response.put("imported", result.imported);

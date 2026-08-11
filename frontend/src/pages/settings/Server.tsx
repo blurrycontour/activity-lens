@@ -39,7 +39,15 @@ export default function ServerSettings() {
       </Field>
 
       <div className="settings-actions">
-        <button className="btn btn-ghost" onClick={() => setConfirm(true)}>Disconnect</button>
+        {/* Danger ink on a ghost button, the same shape Equipment's Delete
+            uses: this signs you out and drops the server, and it sat looking
+            exactly like every harmless button on the page. Not a filled danger
+            button — the confirmation dialog behind it is where the weight
+            belongs, and a solid red block in a settings list reads as an
+            error message rather than as a control. */}
+        <button className="btn btn-ghost" style={{ color: 'var(--danger)' }} onClick={() => setConfirm(true)}>
+          Disconnect
+        </button>
       </div>
       <span className="field-hint">
         Disconnecting signs you out on this device and returns to the setup screen. Nothing on the

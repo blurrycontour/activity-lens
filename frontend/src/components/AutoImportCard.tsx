@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { BatteryWarning, FolderDown, FolderPlus, Folder, RefreshCw, RotateCcw, X } from 'lucide-react'
 import {
-  folderSyncStatus, pickSyncFolder, removeSyncFolder, requestBatteryExemption,
+  folderSyncStatus, onScanProgress, pickSyncFolder, removeSyncFolder, requestBatteryExemption,
   scanFolderNow, setFolderSyncEnabled, setFolderSyncInterval,
-  type FolderSyncStatus, type WatchedFolder,
+  type FolderSyncStatus, type ScanProgress, type WatchedFolder,
 } from '../lib/native/folderSync'
 import Field from './Field'
 import Dropdown, { type DropdownOption } from './Dropdown'
@@ -61,6 +61,8 @@ export default function AutoImportCard() {
   const [status, setStatus] = useState<FolderSyncStatus | null>(null)
   const [pending, setPending] = useState<Pending>(null)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  /** Live counts from the scan in progress, or null when none is running. */
+  const [progress, setProgress] = useState<ScanProgress | null>(null)
   const busy = pending !== null
 
   useEffect(() => {
@@ -90,13 +92,23 @@ export default function AutoImportCard() {
   })
 
   const scan = (force = false) => run(force ? 'rescan' : 'scan', async () => {
-    const result = await scanFolderNow(force)
-    setMsg({
-      ok: result.ok,
-      text: result.imported > 0
-        ? `Imported ${result.imported} workout${result.imported === 1 ? '' : 's'}.`
-        : result.message,
-    })
+    // Subscribed for the duration of this scan only. A listener that outlived
+    // it would leave the bar showing the last scan's numbers next time, before
+    // the first event of the new one arrived.
+    setProgress(null)
+    const stop = onScanProgress(setProgress)
+    try {
+      const result = await scanFolderNow(force)
+      setMsg({
+        ok: result.ok,
+        text: result.imported > 0
+          ? `Imported ${result.imported} workout${result.imported === 1 ? '' : 's'}.`
+          : result.message,
+      })
+    } finally {
+      stop()
+      setProgress(null)
+    }
   })
 
   // Resolves with the state read back after the dialog, so `run` refreshing the
@@ -217,6 +229,32 @@ export default function AutoImportCard() {
               {pending === 'rescan' ? 'Rescanning…' : 'Full rescan'}
             </button>
           </div>
+
+          {/* Only once the scan says how much there is. A bar that appears
+              empty and instantly vanishes on a folder with nothing new is
+              worse than no bar, and the first event does not arrive until the
+              folder has been listed. */}
+          {progress && progress.total > 0 && (
+            <div className="scan-progress" role="status" aria-live="polite">
+              <div className="scan-progress-head">
+                <span>{progress.phase === 'read' ? 'Reading files' : 'Uploading'}</span>
+                <span className="scan-progress-count">
+                  {progress.done} / {progress.total}
+                  {' · '}
+                  {Math.round((progress.done / progress.total) * 100)}%
+                </span>
+              </div>
+              {/* A native <progress> would be quicker to write and impossible
+                  to theme consistently — its appearance is drawn by the OS on
+                  Android and ignores every colour token here. */}
+              <div className="scan-progress-track">
+                <div
+                  className="scan-progress-fill"
+                  style={{ width: `${Math.min(100, (progress.done / progress.total) * 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
         </>
       )}
 
