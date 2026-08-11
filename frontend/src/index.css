@@ -2769,6 +2769,18 @@ body:has(.overlay) .fab { display: none; }
 }
 .detail-top > :first-child { grid-area: map; }
 .detail-top > :last-child { grid-area: summary; }
+/* Without a map, the hero has no reason to be the wider column: the effort
+   band and the standing panel both read fine at the summary's width, and a
+   700px-wide list of four facts reads like a mistake. So the two columns swap
+   emphasis rather than the hero stretching to fill a gap left for a map. */
+.detail-top.no-map { grid-template-columns: 1fr 1fr; }
+/* Nothing to put beside the summary at all. */
+.detail-top.solo { grid-template-columns: 1fr; grid-template-areas: "summary"; }
+
+/* The non-map heroes. No minimum height — they are as tall as they need to be,
+   and stretch to the summary beside them, which is the taller of the two. */
+.detail-hero-card { display: flex; flex-direction: column; }
+
 /* On desktop this stretches to match the summary column beside it, so the
    minimum only matters while the summary is short. */
 .detail-map-card {
@@ -2780,6 +2792,93 @@ body:has(.overlay) .fab { display: none; }
   flex-direction: column;
   min-height: 280px;
 }
+/* ── The no-route heroes ──────────────────────────────────────────────────
+   Both share a header, so a workout that has samples and one that has nothing
+   read as two states of one panel rather than as two different components. */
+.session-profile,
+.session-context { display: flex; flex-direction: column; gap: 12px; flex: 1; }
+.session-profile-head { display: flex; align-items: center; gap: 8px; }
+.session-profile-head h3 { font-size: 13px; font-weight: 600; }
+.session-profile-note {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+}
+
+/* The effort band: the whole workout as one strip of zone colour, with the
+   recording gaps painted in the page's own surface so they read as absence
+   rather than as a sixth zone. */
+.session-ribbon {
+  position: relative;
+  height: 68px;
+  border-radius: var(--radius);
+  overflow: hidden;
+  cursor: crosshair;
+  background: var(--bg-3);
+}
+.session-ribbon-cursor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--text);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--bg-2) 60%, transparent);
+  pointer-events: none;
+}
+.session-ribbon-scale {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-3);
+  margin-top: -6px;
+}
+
+/* Time in each zone. A row per zone rather than one stacked bar: the stacked
+   version is prettier and unreadable below about 8% a segment, which is most
+   of Zone 5 on most workouts. */
+.session-zones { display: flex; flex-direction: column; gap: 6px; }
+.session-zones li { display: grid; grid-template-columns: 34px 1fr 34px; align-items: center; gap: 8px; }
+.session-zone-key {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-3);
+}
+.session-zone-key i { width: 7px; height: 7px; border-radius: 2px; flex-shrink: 0; }
+.session-zone-bar { height: 6px; border-radius: 3px; background: var(--bg-3); overflow: hidden; }
+.session-zone-bar i { display: block; height: 100%; border-radius: 3px; }
+.session-zone-pct {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-2);
+  text-align: right;
+}
+
+/* The standing panel, for a workout with nothing recorded at all. */
+.session-context-body { display: flex; gap: 16px; align-items: flex-start; flex: 1; }
+.session-context-mark {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.session-context-facts { display: flex; flex-direction: column; gap: 12px; min-width: 0; flex: 1; }
+.session-context-facts dt { font-size: 11px; color: var(--text-3); margin-bottom: 2px; }
+.session-context-facts dd { margin: 0; font-size: 15px; font-weight: 600; }
+.session-context-facts dd span {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+}
+
 .playback-bar { display: flex; align-items: center; gap: 10px; }
 .playback-controls { display: flex; align-items: center; gap: 10px; }
 

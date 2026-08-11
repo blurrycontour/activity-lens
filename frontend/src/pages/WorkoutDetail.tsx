@@ -37,6 +37,9 @@ import type { Shading } from '../components/RouteMap'
  */
 const RouteMap = lazy(() => import('../components/RouteMap'))
 import ExpandModal from '../components/ExpandModal'
+import SessionProfile, { canProfile } from '../components/SessionProfile'
+import SessionContext from '../components/SessionContext'
+import { sessionStanding } from '../lib/standing'
 import RecalculateDialog from '../components/RecalculateDialog'
 import UserAvatar, { avatarUrl, userLabel } from '../components/UserAvatar'
 import MenuButton from '../components/MenuButton'
@@ -399,7 +402,7 @@ function preparePlot<T extends { t: number }>(data: T[], key: string): PlotSerie
 }
 
 export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSettings }: WorkoutDetailProps) {
-  const { updateWorkout, removeWorkout } = useWorkouts()
+  const { updateWorkout, removeWorkout, workouts: library } = useWorkouts()
   const { user } = useAuth()
   const [w, setW] = useState(w0)
   /*
@@ -555,6 +558,27 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
   }, [])
   const effectiveMaxHR = w.maxHR > 0 ? w.maxHR : prefMaxHr
   const hrZones = useMemo(() => hrZoneBuckets(w.hrTimeline, effectiveMaxHR), [w.hrTimeline, effectiveMaxHR])
+
+  /**
+   * What fills the panel beside the summary.
+   *
+   * A ladder rather than a branch on activity type: what a workout has is a
+   * fact about the file, and a treadmill run with a stray GPS fix should get a
+   * map exactly as an outdoor one does. Each rung asks only whether it has
+   * anything to say.
+   *
+   * The profile needs a maximum heart rate to name zones against, so a library
+   * whose owner has not set one — and whose watch did not report one — drops to
+   * the standing panel rather than colouring the whole band Zone 1.
+   */
+  /** Where this workout stands among the others of its sport. See standing.ts. */
+  const standing = useMemo(() => sessionStanding(library, w), [library, w])
+
+  const hero: 'map' | 'profile' | 'context' | 'none' =
+    w.route.length >= 2 || hydrating ? 'map'
+      : effectiveMaxHR > 0 && canProfile(w.duration, w.hrTimeline) ? 'profile'
+        : standing.length > 0 ? 'context'
+          : 'none'
 
   // Stats not directly reported by imports (per-point min/max, elevation
   // loss, step estimate) — derived here from the recorded timelines/route.
@@ -1161,15 +1185,44 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             </button>
           </div>
         )}
-        {/* Map (flexible width) + Summary card (fixed, narrower) side by
-            side on desktop; stacked on mobile so the map never gets
-            squeezed. */}
-        <div className="detail-top">
-          <div className="card detail-map-card">
-            {/* Empty on purpose: the map is portalled into a node this hosts.
-                See mapHolder. */}
-            <div ref={setCardHost} style={{ flex: 1, minHeight: 0, position: 'relative' }} />
-          </div>
+        {/* Hero (flexible width) + Summary card (fixed, narrower) side by
+            side on desktop; stacked on mobile so neither gets squeezed.
+
+            The hero is a ladder, not a branch: the map when there is a route,
+            the effort profile when there are samples but no route, and the
+            standing panel when there is neither. A treadmill run, a pool swim
+            and a strength session are complete records, and the page used to
+            greet all three with a grey rectangle reading "No route data".
+            One rule in one place, so no page has to know about treadmills.
+
+            A first-ever workout of its type has no rung left — nothing to
+            draw and nothing to compare — so the summary takes the width rather
+            than sharing it with an empty box. */}
+        <div className={`detail-top${hero === 'map' ? '' : hero === 'none' ? ' solo' : ' no-map'}`}>
+          {hero === 'map' && (
+            <div className="card detail-map-card">
+              {/* Empty on purpose: the map is portalled into a node this hosts.
+                  See mapHolder. */}
+              <div ref={setCardHost} style={{ flex: 1, minHeight: 0, position: 'relative' }} />
+            </div>
+          )}
+          {hero === 'profile' && (
+            <div className="card detail-hero-card">
+              <SessionProfile
+                duration={w.duration}
+                hrTimeline={w.hrTimeline}
+                maxHR={effectiveMaxHR}
+                pauses={pauses}
+                currentTime={currentTime}
+                onScrub={handleScrub}
+              />
+            </div>
+          )}
+          {hero === 'context' && (
+            <div className="card detail-hero-card">
+              <SessionContext workout={w} facts={standing} />
+            </div>
+          )}
 
           {/* Summary: every headline + derived stat grouped by category.
               Values that are not reported directly by the import (or that
@@ -1494,8 +1547,13 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
       </div>
 
       {/* Rendered once, wherever mapHolder currently is. The maximize button is
-          dropped while it is open — the modal's own header closes it. */}
-      {createPortal(
+          dropped while it is open — the modal's own header closes it.
+
+          Not rendered at all when the hero is something else: mapHolder is
+          never attached to the document then, and mounting a MapLibre instance
+          into a detached node is a GL context and a style download spent on a
+          map nobody will see. */}
+      {hero === 'map' && createPortal(
         hydrating && w.route.length < 2 ? (
           <div className="detail-loading">
             <LoaderCircle size={18} className="spin" />
