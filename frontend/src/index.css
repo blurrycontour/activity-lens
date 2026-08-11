@@ -2598,6 +2598,34 @@ body:has(.overlay) .fab { display: none; }
   border-bottom: 1px solid var(--border);
 }
 
+/* What the colours on the track mean, over the top-left of the map.
+   Translucent and small on purpose: it has to be readable without becoming a
+   panel that hides the corner of the route it sits on, so it is backed by a
+   blurred wash of the card surface rather than a solid one. The right-hand
+   corner is spoken for by the maximize button and the layer switcher. */
+.map-legend {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 400;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-2) 72%, transparent);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+  max-width: 60%;
+}
+.map-legend-title { font-size: 10px; font-weight: 600; color: var(--text-2); letter-spacing: 0.02em; }
+.map-legend-zones { display: flex; gap: 8px; }
+.map-legend-zone { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--text-3); font-family: var(--font-mono); }
+.map-legend-zone i { width: 8px; height: 8px; border-radius: 2px; }
+.map-legend-ramp { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--text-3); font-family: var(--font-mono); }
+.map-legend-ramp i { width: 64px; height: 8px; border-radius: 4px; }
+
 /* MapLibre's popups and controls ship light and would otherwise be the one
    white surface in a dark app. */
 .maplibregl-popup-content {
@@ -2618,6 +2646,24 @@ body:has(.overlay) .fab { display: none; }
   border: 1px solid var(--border);
 }
 .maplibregl-ctrl-group button + button { border-top-color: var(--border) !important; }
+/* The reset-zoom control and the zoom buttons are two MapLibre control groups
+   that have to read as one stack of three buttons, so the gap and the facing
+   corners between them are removed. Written against the group that follows it
+   rather than by nth-child, so it holds if anything else joins the corner. */
+.map-reset-ctrl.map-reset-ctrl {
+  margin-bottom: 0 !important;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.map-reset-ctrl + .maplibregl-ctrl-group {
+  margin-top: 0 !important;
+  border-top: none;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+/* The glyph is our own inline SVG, not one of MapLibre's inverted background
+   images, so it takes the theme's ink directly. */
+.map-reset-ctrl button { color: var(--text); display: flex; align-items: center; justify-content: center; }
 .maplibregl-ctrl-group button span { filter: invert(var(--map-ctrl-invert, 1)); }
 .maplibregl-ctrl-attrib {
   background: color-mix(in srgb, var(--bg-2) 82%, transparent) !important;

@@ -5,7 +5,7 @@ import PageHeader from '../components/PageHeader'
 import ExpandModal from '../components/ExpandModal'
 import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
-import { LayerSwitcher, MAP_LAYERS, MAP_LAYER_KEY, hasWebGL, type MapLayerId } from '../components/RouteMap'
+import { LayerSwitcher, MAP_LAYERS, MAP_LAYER_KEY, ResetViewControl, hasWebGL, type MapLayerId } from '../components/RouteMap'
 import { TYPE_COLOR, type WorkoutType } from '../data/workouts'
 import { api, type Track } from '../lib/api'
 import { useLocalStorage } from '../lib/useLocalStorage'
@@ -282,6 +282,13 @@ export default function MapPage() {
         dragRotate: false,
       })
       map.touchZoomRotate.disableRotation()
+      // Before the zoom buttons, so it sits on top of them. routeBounds reads
+      // the routes through a ref, so this re-frames what is on the map now
+      // rather than what was on it when the map was built.
+      map.addControl(new ResetViewControl(() => {
+        const b = routeBounds()
+        if (b) mapRef.current?.fitBounds(b, { padding: 48, maxZoom: 14, duration: 400 })
+      }), 'bottom-right')
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right')
       mapRef.current = map
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as maplibregl from 'maplibre-gl'
 // NOTE: maplibre-gl.css is imported in main.tsx, not here — see the comment
 // there. It has to load before index.css, which overrides several of its rules.
@@ -16,7 +16,7 @@ import * as maplibregl from 'maplibre-gl'
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import { Activity, Gauge, Heart, Layers, Mountain, Route } from 'lucide-react'
 import Dropdown from './Dropdown'
-import { hrZoneColor } from '../lib/hrZones'
+import { HR_ZONE_COLORS, HR_ZONE_SHORT, hrZoneColor } from '../lib/hrZones'
 import { fmtDist, fmtDuration, fmtPace, type Workout } from '../data/workouts'
 import type { Playhead } from '../lib/playhead'
 import { cachedURL, installTileCache } from '../lib/tileCache'
@@ -104,6 +104,51 @@ export const MAP_LAYERS: Record<MapLayerId, { label: string; style: string | map
     ),
     maxZoom: 19,
   },
+}
+
+/**
+ * A "back to the whole thing" button, sitting directly on top of MapLibre's own
+ * zoom buttons.
+ *
+ * Panning and zooming a map is easy to do and hard to undo — a few pinches in
+ * and there is no way back to the view the page opened on short of reloading
+ * it. Every map here has one obvious framing (the route, or every route), so
+ * the way back is one button rather than a navigation problem.
+ *
+ * A MapLibre IControl rather than an absolutely positioned button of our own,
+ * so it inherits the corner, the stacking and the theming the zoom buttons
+ * already have, and so it cannot drift away from them at some viewport size.
+ * Added *before* NavigationControl: controls stack in the order they are added,
+ * which in a bottom corner means top to bottom.
+ */
+export class ResetViewControl implements maplibregl.IControl {
+  private container: HTMLDivElement | null = null
+
+  constructor(private readonly reset: () => void) {}
+
+  onAdd(): HTMLElement {
+    const el = document.createElement('div')
+    el.className = 'maplibregl-ctrl maplibregl-ctrl-group map-reset-ctrl'
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.title = 'Reset zoom'
+    button.setAttribute('aria-label', 'Reset zoom')
+    // Inline SVG stroked with currentColor, not MapLibre's own background-image
+    // span: those glyphs are dark artwork for a light map and are inverted by a
+    // filter in index.css, which this would then have to fight.
+    button.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+      + '<path d="M8 3H5a2 2 0 0 0-2 2v3" /><path d="M21 8V5a2 2 0 0 0-2-2h-3" />'
+      + '<path d="M3 16v3a2 2 0 0 0 2 2h3" /><path d="M16 21h3a2 2 0 0 0 2-2v-3" /></svg>'
+    button.addEventListener('click', () => this.reset())
+    el.appendChild(button)
+    this.container = el
+    return el
+  }
+
+  onRemove(): void {
+    this.container?.remove()
+    this.container = null
+  }
 }
 
 export function LayerSwitcher({ layer, onChange, offsetRight = 46 }: {
@@ -429,6 +474,50 @@ export default function RouteMap({
   }, [route, shading, hrTimeline, paceTimeline, elevTimeline, cadenceTimeline, duration, color, maxHR])
 
   /**
+   * What the colours on the track mean, or null when they mean nothing.
+   *
+   * Only for the non-default shadings. On "Default" the track is one accent
+   * colour that stands for the route and not for a value, so a legend would be
+   * a box explaining that green means green — and it would cost a corner of the
+   * map on every workout to say it.
+   *
+   * Heart rate gets discrete swatches because its scale is discrete: five named
+   * zones with hard boundaries, exactly as the HR chart and the donut show
+   * them. The other three are continuous, so they get the ramp itself with the
+   * ends labelled — the numbers are what make a gradient readable, and they are
+   * this workout's own range rather than an absolute scale.
+   */
+  type Legend =
+    | { title: string; zones: string[] }
+    | { title: string; ramp: string; low: string; high: string }
+  const legend = useMemo<Legend | null>(() => {
+    if (shading === 'accent') return null
+    const series = {
+      hr: hrTimeline.map(p => p.hr),
+      pace: paceTimeline.map(p => p.pace),
+      elevation: elevTimeline.map(p => p.elev),
+      cadence: cadenceTimeline.map(p => p.cad),
+    }[shading]
+    if (series.length === 0) return null
+    if (shading === 'hr') return { title: 'Heart rate', zones: HR_ZONE_SHORT }
+    const min = Math.min(...series)
+    const max = Math.max(...series)
+    // The same 210°→20° sweep the segments are coloured with, as a CSS
+    // gradient. Kept in step by hand, which is safe because both live in this
+    // file and there is nowhere else for either to be used.
+    const ramp = `linear-gradient(to right, hsl(210 78% 52%), hsl(115 78% 52%), hsl(20 78% 52%))`
+    // Faster is a lower number, so the pace ramp reads high-to-low; labelling
+    // the ends by value rather than by "min"/"max" is what keeps that honest.
+    const fmt = shading === 'pace'
+      ? (v: number) => `${fmtPace(v)}/km`
+      : shading === 'elevation'
+        ? (v: number) => `${Math.round(v)} m`
+        : (v: number) => `${Math.round(v)} ${cadenceLabel}`
+    const title = shading === 'pace' ? 'Pace' : shading === 'elevation' ? 'Elevation' : 'Cadence'
+    return { title, ramp, low: fmt(min), high: fmt(max) }
+  }, [shading, hrTimeline, paceTimeline, elevTimeline, cadenceTimeline, cadenceLabel])
+
+  /**
    * The track as GeoJSON, one feature per shaded segment, carrying its colour
    * as a property so a single line layer can draw the lot.
    *
@@ -503,6 +592,9 @@ export default function RouteMap({
       touchZoomRotate: true,
     })
     map.touchZoomRotate.disableRotation()
+    // Before the zoom buttons, so it sits on top of them: MapLibre stacks a
+    // corner's controls in the order they were added.
+    map.addControl(new ResetViewControl(() => fitRef.current(true)), 'bottom-right')
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right')
     map.on('click', (e: maplibregl.MapMouseEvent) => {
       const { route: r, duration: d, onScrub: scrub, selected } = clickData.current
@@ -590,14 +682,33 @@ export default function RouteMap({
     return () => { start.remove(); finish.remove(); marker.remove(); markerRef.current = null }
   }, [route, markerElement])
 
-  // Frame the whole route when it changes.
-  useEffect(() => {
+  // The current route, for the handlers below that are bound once — the reset
+  // control and the per-frame playback subscriber. Both are built when the map
+  // is, and a direct reference would pin them to the route of that render.
+  const routeRef = useRef(route)
+  routeRef.current = route
+
+  /**
+   * Frames the whole route.
+   *
+   * Shared by the effect below and the reset control, so the button lands on
+   * exactly the view the page opened with rather than an approximation of it.
+   * Reads the route through a ref because the control is built once, when the
+   * map is, and a direct reference would frame whatever the route was then.
+   */
+  const fitRoute = useCallback((animate: boolean) => {
     const map = mapRef.current
-    if (!map || route.length < 2) return
+    const r = routeRef.current
+    if (!map || r.length < 2) return
     const bounds = new maplibregl.LngLatBounds()
-    for (const [lat, lng] of route) bounds.extend([lng, lat])
-    map.fitBounds(bounds, { padding: 28, duration: 0 })
-  }, [route])
+    for (const [lat, lng] of r) bounds.extend([lng, lat])
+    map.fitBounds(bounds, { padding: 28, duration: animate ? 400 : 0 })
+  }, [])
+  const fitRef = useRef(fitRoute)
+  fitRef.current = fitRoute
+
+  // Frame the whole route when it changes.
+  useEffect(() => { fitRoute(false) }, [route, fitRoute])
 
   const fraction = duration > 0 ? Math.max(0, Math.min(1, currentTime / duration)) : 0
   // Where playback is between two fixes, not at the nearer of the two.
@@ -614,11 +725,6 @@ export default function RouteMap({
   // Computed before the "no route" return below, because the effects that use
   // it are hooks and cannot be skipped — so it has to hold up with no route at
   // all, which is the state this page is in while the workout loads.
-  // Read inside the per-frame subscriber below, which must not be resubscribed
-  // for a new route array — that would tear down and rebuild the subscription
-  // on every render which produced one.
-  const routeRef = useRef(route)
-  routeRef.current = route
 
   const current = positionAt(route, fraction)
   const sampleAt = <T extends { t: number }>(samples: T[], index: number) => samples.reduce<T | null>((closest, sample) => !closest || Math.abs(sample.t - timeAt(index)) < Math.abs(closest.t - timeAt(index)) ? sample : closest, null)
@@ -677,6 +783,29 @@ export default function RouteMap({
     <div style={{ width: '100%', height, position: 'relative' }}>
       {maximizeButton}
       {glAvailable && <LayerSwitcher layer={layer} onChange={setLayer} offsetRight={maximizeButton ? 46 : 10} />}
+      {legend && (
+        <div className="map-legend" aria-label={`${legend.title} scale`}>
+          <span className="map-legend-title">{legend.title}</span>
+          {'zones' in legend
+            ? (
+              <div className="map-legend-zones">
+                {legend.zones.map((z, i) => (
+                  <span key={z} className="map-legend-zone">
+                    <i style={{ background: HR_ZONE_COLORS[i] }} />
+                    {z}
+                  </span>
+                ))}
+              </div>
+            )
+            : (
+              <div className="map-legend-ramp">
+                <span>{legend.low}</span>
+                <i style={{ background: legend.ramp }} />
+                <span>{legend.high}</span>
+              </div>
+            )}
+        </div>
+      )}
       <div className="map-shade-picker">
         <Dropdown
           value={shading}
