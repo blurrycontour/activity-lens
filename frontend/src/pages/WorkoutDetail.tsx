@@ -1257,7 +1257,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
         </div>
 
         {/* Playback controls: drives the map marker + chart cursors below */}
-        <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card playback-card" style={{ marginBottom: 16 }}>
           <PlaybackBar
             playing={playing}
             currentTime={currentTime}

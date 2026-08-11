@@ -2693,6 +2693,22 @@ body:has(.overlay) .fab { display: none; }
 .detail-top > :last-child { grid-area: summary; }
 .playback-bar { display: flex; align-items: center; gap: 10px; }
 .playback-controls { display: flex; align-items: center; gap: 10px; }
+
+/* The scrub bar goes full width and the transport buttons and the clock drop
+   underneath it once there is not enough room for all three on one line.
+   Driven by the card's own width rather than the viewport: the viewport rule
+   further down assumes "narrow screen" and "narrow bar" are the same thing,
+   which they are not on a large phone in landscape or on a tablet — both are
+   wider than the 768px breakpoint and still too tight for a one-line
+   transport, and both left the slider squeezed between the buttons and the
+   time. Measuring the container is the version that cannot be wrong. */
+.playback-card { container-type: inline-size; }
+@container (max-width: 460px) {
+  .playback-bar { display: grid; grid-template-columns: auto 1fr; gap: 8px; }
+  .playback-controls { grid-column: 1; grid-row: 2; }
+  .playback-bar input { grid-column: 1 / -1; grid-row: 1; width: 100%; }
+  .playback-bar > span { grid-column: 2; grid-row: 2; justify-self: end; align-self: center; }
+}
 .workout-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
 
 .spin { animation: spin 0.8s linear infinite; }
@@ -3504,10 +3520,9 @@ body:has(.overlay) .fab { display: none; }
     grid-template-columns: 1fr;
     grid-template-areas: "summary" "map";
   }
-  .playback-bar { display: grid; grid-template-columns: auto 1fr; gap: 8px; }
-  .playback-controls { grid-column: 1; grid-row: 2; }
-  .playback-bar input { grid-column: 1 / -1; grid-row: 1; width: 100%; }
-  .playback-bar > span { grid-column: 2; grid-row: 2; justify-self: end; align-self: center; }
+  /* The playback bar's stacked layout used to live here. It is a container
+     query now — see .playback-card — because the card's width, not the
+     viewport's, is what decides whether the three parts fit on one line. */
   .workout-search {
     flex-basis: 100%;
     width: 100%;
