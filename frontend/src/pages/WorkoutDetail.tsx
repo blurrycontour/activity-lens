@@ -298,6 +298,45 @@ function PlaybackBar({
  * ended up in a different place in one of them.
  */
 /**
+ * A time label that does not hang off the end of the plot.
+ *
+ * The first and last tick sit exactly on the domain's edges, and a centred
+ * label there puts half of "0:00" outside the drawing — which on a phone, where
+ * the plot runs to the card's edge, means half of it is simply cut off. Recharts
+ * nudges end labels inward on a *category* axis, by measuring them; this is a
+ * numeric axis, where it does not, which is why the margin added earlier did
+ * not help.
+ *
+ * So the two ends anchor to their own edge instead of to their centre, and
+ * every label in between stays centred where it belongs.
+ */
+function EdgeTick(props: {
+  // Supplied by Recharts, which passes the axis's own formatter down with them.
+  x?: number
+  y?: number
+  index?: number
+  visibleTicksCount?: number
+  payload?: { value: number }
+  tickFormatter?: (value: number, index: number) => string
+}) {
+  const { x, y, payload, index = 0, visibleTicksCount = 0 } = props
+  if (!payload) return null
+  const last = index === visibleTicksCount - 1
+  const anchor = index === 0 ? 'start' : last ? 'end' : 'middle'
+  return (
+    <text
+      x={x} y={y} dy={10}
+      textAnchor={anchor}
+      fontSize={10}
+      fontFamily="var(--font-mono)"
+      fill="var(--text-3)"
+    >
+      {props.tickFormatter ? props.tickFormatter(payload.value, index) : payload.value}
+    </text>
+  )
+}
+
+/**
  * The tab a deep link asked for, read once when the page mounts.
  *
  * Validated against the known set rather than trusted: this comes from a URL,
@@ -1020,13 +1059,11 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
           // Edge to edge on a phone. The card's padding is gone from around the
           // plot, and the y axis with it — the numbers it carried are drawn on
           // the gridlines instead, inside the plot, where they cost nothing.
-          // The 8px at each end is for the first and last time label, not for
-          // the plot. Recharts nudges those two inward so they cannot be
-          // clipped, but with no margin there was nowhere to nudge into and
-          // they ended up flush against the card's edge. Eight pixels of a
-          // plot that has already gained the card's whole 32px gutter.
+          // Edge to edge on a phone: the end labels are kept inside by
+          // anchoring them rather than by reserving margin for them, so the
+          // plot keeps the full width. See EdgeTick.
           margin={mobile
-            ? { top: 4, right: 8, left: 8, bottom: 14 }
+            ? { top: 4, right: 0, left: 0, bottom: 14 }
             : { top: 4, right: 18, left: -24, bottom: 14 }}
         >
           <defs>
@@ -1076,7 +1113,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
           ))}
           <XAxis
             dataKey="t" type="number" domain={[0, w.duration || 1]}
-            tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}
+            tick={<EdgeTick />}
             axisLine={false} tickLine={false} tickFormatter={fmtClock} interval="preserveStartEnd"
             label={xLabel('Elapsed time (h:mm)')}
           />

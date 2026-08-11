@@ -21,7 +21,9 @@
 
 /** The coordinate space the path is built in. Rendered at any size. */
 export const FIELD_W = 400
-export const FIELD_H = 200
+/* Close to the panel's own proportions, so the drawing very nearly fills it
+   rather than sitting in a letterbox of sky. */
+export const FIELD_H = 250
 
 /** How the trajectory leaves and arrives, picked per workout from its id. */
 export const VARIANTS = ['ascent', 'swing', 'loop', 'orbit'] as const
@@ -148,10 +150,22 @@ export function buildConstellation(seed: string, samples: number[], count = 110)
     const bx = bezier(x0, p1x, p2x, x1, t)
     const by = bezier(y0, p1y, p2y, y1, t)
 
-    // The tangent, from a short step along the curve, to get a normal.
-    const e = Math.min(t + 0.004, 1)
-    const nx = bezier(y0, p1y, p2y, y1, e) - by
-    const ny = -(bezier(x0, p1x, p2x, x1, e) - bx)
+    /*
+     * The tangent, from a short step along the curve, to get a normal.
+     *
+     * The step goes backwards on the last point. Forwards, `Math.min(t + s, 1)`
+     * collapses to t itself at t = 1, so the tangent is zero, the normal is
+     * zero, and the swerve silently drops to nothing — the final point snapped
+     * back onto the bare curve while its neighbour a quarter of a percent
+     * earlier kept its full push. That was the sharp kick at the finish line,
+     * and it appeared on every workout regardless of what the metric did there.
+     */
+    const step = 0.004
+    const back = t + step > 1
+    const e = back ? t - step : t + step
+    const dir = back ? -1 : 1
+    const nx = (bezier(y0, p1y, p2y, y1, e) - by) * dir
+    const ny = -(bezier(x0, p1x, p2x, x1, e) - bx) * dir
     const len = Math.hypot(nx, ny) || 1
 
     // Centred on the middle of the range so an average stretch sits on the

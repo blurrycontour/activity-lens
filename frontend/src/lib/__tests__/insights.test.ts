@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  goalProgress, newGoal, parseDateKey, periodKeyOf, periodLabel, weekStartKey, type Goal,
+  goalProgress, newGoal, parseDateKey, periodKeyOf, periodLabel, sparkAverages, weekStartKey, type Goal,
 } from '../insights'
 import type { Workout } from '../../data/workouts'
 
@@ -205,5 +205,49 @@ describe('multi-period windows', () => {
     )
     expect(p.current).toBe(1)
     expect(p.streak).toBe(3)
+  })
+})
+
+
+/**
+ * The heart-rate stat card had no sparkline at all, because the summing
+ * version would have drawn one that meant nothing — a total of everyone's
+ * average bpm. These are the three things the averaging version has to get
+ * right for the line to be honest.
+ */
+describe('sparkAverages', () => {
+  function hrWorkout(date: string, hr: number): Workout {
+    return { ...workout(date, 5000), avgHR: hr }
+  }
+
+  it('averages within a bucket rather than adding', () => {
+    const now = new Date(2026, 6, 29)
+    // Two buckets over eight days: two runs in the first, one in the second.
+    const out = sparkAverages(
+      [hrWorkout('2026-07-22', 140), hrWorkout('2026-07-23', 160), hrWorkout('2026-07-28', 150)],
+      8, 2, w => w.avgHR, now,
+    )
+    expect(out).toEqual([150, 150])
+  })
+
+  it('carries a quiet bucket forward instead of dropping to zero', () => {
+    const now = new Date(2026, 6, 29)
+    // A rest week in the middle must not draw a plunge to the floor and back;
+    // that is a collapse that never happened.
+    const out = sparkAverages(
+      [hrWorkout('2026-07-22', 140), hrWorkout('2026-07-28', 150)],
+      8, 4, w => w.avgHR, now,
+    )
+    expect(out.every(v => v > 0)).toBe(true)
+    expect(out[0]).toBe(140)
+    expect(out[out.length - 1]).toBe(150)
+  })
+
+  it('says nothing when there is barely anything to say', () => {
+    const now = new Date(2026, 6, 29)
+    // One reading is a straight line pretending to be a trend, and a workout
+    // with no monitor reports 0, which is "not measured" rather than a value.
+    expect(sparkAverages([hrWorkout('2026-07-28', 150)], 8, 4, w => w.avgHR, now)).toEqual([])
+    expect(sparkAverages([hrWorkout('2026-07-22', 0), hrWorkout('2026-07-28', 0)], 8, 4, w => w.avgHR, now)).toEqual([])
   })
 })

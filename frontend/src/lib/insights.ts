@@ -456,6 +456,58 @@ export function sparkBuckets(workouts: Workout[], windowDays: number, buckets: n
   return out
 }
 
+/**
+ * The same buckets, averaged rather than summed.
+ *
+ * A heart-rate sparkline cannot be a total: adding up everyone's average bpm
+ * across a fortnight produces a number with no meaning and a line whose shape
+ * is "how much did I train", which is the distance card's job. This is the
+ * mean of the workouts that reported one, so the line is what the metric
+ * actually did.
+ *
+ * A bucket with nothing in it carries the previous value forward rather than
+ * reading zero. Zero would draw a plunge to the floor of the chart and back on
+ * every rest week — a collapse that never happened. A flat stretch is the
+ * honest shape for "no new information", and leading gaps take the first value
+ * that does exist.
+ *
+ * Returns nothing when fewer than two buckets have any data: a sparkline drawn
+ * through one real reading is a straight line pretending to be a trend.
+ */
+export function sparkAverages(workouts: Workout[], windowDays: number, buckets: number, valueOf: (w: Workout) => number, now = new Date()): number[] {
+  const days = windowDays > 0 ? windowDays : 8 * 7
+  const end = new Date(now)
+  end.setHours(0, 0, 0, 0)
+  const start = new Date(end)
+  start.setDate(start.getDate() - days + 1)
+  const span = days / buckets
+
+  const sums = Array(buckets).fill(0)
+  const counts = Array(buckets).fill(0)
+  for (const w of workouts) {
+    const value = valueOf(w)
+    // Zero is "not reported" for every metric this is used with, and averaging
+    // it in would drag the line down for workouts that simply had no monitor.
+    if (!(value > 0)) continue
+    const offset = (parseDateKey(w.date).getTime() - start.getTime()) / 86400000
+    if (offset < 0 || offset >= days) continue
+    const i = Math.min(buckets - 1, Math.floor(offset / span))
+    sums[i] += value
+    counts[i]++
+  }
+
+  const filled = counts.filter(c => c > 0).length
+  if (filled < 2) return []
+
+  const out: number[] = []
+  let last = sums[counts.findIndex(c => c > 0)] / counts[counts.findIndex(c => c > 0)]
+  for (let i = 0; i < buckets; i++) {
+    if (counts[i] > 0) last = sums[i] / counts[i]
+    out.push(last)
+  }
+  return out
+}
+
 // ── Personal bests ───────────────────────────────────────────────────────────
 
 export interface PersonalBest {

@@ -201,6 +201,58 @@ export default function SessionProfile({
     onScrub(best * duration)
   }
 
+  /**
+   * Everything that does not move, built once.
+   *
+   * Playback re-renders this component on every animation frame, and without
+   * this React reconciles a hundred and ten <path> elements sixty times a
+   * second to change nothing about them — which is why the marker moved in
+   * lurches while the map's, driven imperatively, did not. Held in a memo, the
+   * frame's work is the playhead and only the playhead.
+   */
+  const drawing = useMemo(() => (
+    <>
+      {sky.stars.map((s, i) => (
+        <circle key={i} cx={s.x} cy={s.y} r={s.r} fill="var(--text-2)" opacity={s.o} />
+      ))}
+
+      {sky.planet && (
+        <g opacity="0.22">
+          <circle cx={sky.planet.x} cy={sky.planet.y} r={sky.planet.r} fill="var(--text-3)" />
+          {sky.planet.ringed && (
+            <ellipse
+              cx={sky.planet.x} cy={sky.planet.y}
+              rx={sky.planet.r * 1.85} ry={sky.planet.r * 0.42}
+              fill="none" stroke="var(--text-3)" strokeWidth="1.4"
+              transform={`rotate(-18 ${sky.planet.x} ${sky.planet.y})`}
+            />
+          )}
+        </g>
+      )}
+
+      {segments.map((s, i) => (
+        <path
+          key={i}
+          d={s.d}
+          stroke={s.paused ? 'var(--text-3)' : s.color}
+          strokeWidth={s.paused ? s.width * 0.45 : s.width}
+          strokeLinecap="round"
+          strokeDasharray={s.paused ? '1 4' : undefined}
+          opacity={s.paused ? 0.5 : s.opacity}
+          fill="none"
+        />
+      ))}
+
+      {/* Launch: a filled mark with a ring around it, the biggest thing on
+          the path because it is the nearest. */}
+      <circle cx={sky.points[0].x} cy={sky.points[0].y} r="4.6" fill="var(--success)" />
+      <circle cx={sky.points[0].x} cy={sky.points[0].y} r="8.5" fill="none" stroke="var(--success)" strokeWidth="1.2" opacity="0.5" />
+
+      {/* Destination: a four-point sparkle, small because it is far away. */}
+      <Sparkle x={sky.points[sky.points.length - 1].x} y={sky.points[sky.points.length - 1].y} r={7} />
+    </>
+  ), [sky, segments])
+
   const options = [
     ...(hasHR ? [{ value: 'hr' as Tint, label: 'Heart rate zones', glyph: <Heart size={14} color="var(--text-3)" aria-hidden /> }] : []),
     ...(hasCadence ? [{ value: 'cadence' as Tint, label: 'Cadence', glyph: <Activity size={14} color="var(--text-3)" aria-hidden /> }] : []),
@@ -234,44 +286,7 @@ export default function SessionProfile({
 
           <rect x="0" y="0" width={FIELD_W} height={FIELD_H} fill="url(#al-sky)" />
 
-          {sky.stars.map((s, i) => (
-            <circle key={i} cx={s.x} cy={s.y} r={s.r} fill="var(--text-2)" opacity={s.o} />
-          ))}
-
-          {sky.planet && (
-            <g opacity="0.22">
-              <circle cx={sky.planet.x} cy={sky.planet.y} r={sky.planet.r} fill="var(--text-3)" />
-              {sky.planet.ringed && (
-                <ellipse
-                  cx={sky.planet.x} cy={sky.planet.y}
-                  rx={sky.planet.r * 1.85} ry={sky.planet.r * 0.42}
-                  fill="none" stroke="var(--text-3)" strokeWidth="1.4"
-                  transform={`rotate(-18 ${sky.planet.x} ${sky.planet.y})`}
-                />
-              )}
-            </g>
-          )}
-
-          {segments.map((s, i) => (
-            <path
-              key={i}
-              d={s.d}
-              stroke={s.paused ? 'var(--text-3)' : s.color}
-              strokeWidth={s.paused ? s.width * 0.45 : s.width}
-              strokeLinecap="round"
-              strokeDasharray={s.paused ? '1 4' : undefined}
-              opacity={s.paused ? 0.5 : s.opacity}
-              fill="none"
-            />
-          ))}
-
-          {/* Launch: a filled mark with a ring around it, the biggest thing on
-              the path because it is the nearest. */}
-          <circle cx={sky.points[0].x} cy={sky.points[0].y} r="4.6" fill="var(--success)" />
-          <circle cx={sky.points[0].x} cy={sky.points[0].y} r="8.5" fill="none" stroke="var(--success)" strokeWidth="1.2" opacity="0.5" />
-
-          {/* Destination: a four-point sparkle, small because it is far away. */}
-          <Sparkle x={sky.points[sky.points.length - 1].x} y={sky.points[sky.points.length - 1].y} r={7} />
+          {drawing}
 
           {/* Where playback has reached, wearing the same face as the map's
               marker so the drawing reads as "you, here" rather than as an

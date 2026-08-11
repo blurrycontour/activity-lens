@@ -22,7 +22,7 @@ import {
 } from '../lib/dashboardConfig'
 import {
   deltaPct, describeGoal, describeGoalMinimum, formatGoalAmount, formReading, gearNudges, goalFromApi, goalProgress,
-  goalUnit, periodLabel, recentPersonalBests, recentWeekStarts, sparkBuckets, totalsOf, weekdayMatrix,
+  goalUnit, periodLabel, recentPersonalBests, recentWeekStarts, sparkAverages, sparkBuckets, totalsOf, weekdayMatrix,
   windowSlices, type Goal, type GoalProgress,
 } from '../lib/insights'
 
@@ -699,6 +699,11 @@ export default function Dashboard({ onSelect }: { onSelect: (w: Workout) => void
   const caption = windowLabel(cfg.windowDays)
   const spark = (valueOf: (w: Workout) => number) =>
     showSparklines ? sparkBuckets(workouts, cfg.windowDays, 8, valueOf) : undefined
+  // Heart rate is the one stat that is an average rather than a total, so its
+  // sparkline has to be one too — see sparkAverages. It had no sparkline at
+  // all, because the summing version would have drawn a meaningless line.
+  const sparkAvg = (valueOf: (w: Workout) => number) =>
+    showSparklines ? sparkAverages(workouts, cfg.windowDays, 8, valueOf) : undefined
   const delta = (pick: (t: typeof d.now) => number) =>
     showDeltas && d.before ? deltaPct(pick(d.now), pick(d.before)) : undefined
 
@@ -707,7 +712,7 @@ export default function Dashboard({ onSelect }: { onSelect: (w: Workout) => void
     time: <StatCard key="time" icon={<Clock size={14} />} label="Total Time" value={Math.floor(d.now.duration / 3600).toString()} unit="hrs" sub={caption} delta={delta(t => t.duration)} spark={spark(w => w.duration)} color="var(--purple)" />,
     elevation: <StatCard key="elevation" icon={<Mountain size={14} />} label="Elevation" value={(d.now.elevation / 1000).toFixed(1)} unit="km" sub={`total gain · ${caption}`} delta={delta(t => t.elevation)} spark={spark(w => w.elevationGain)} color="var(--hike)" />,
     calories: <StatCard key="calories" icon={<Flame size={14} />} label="Calories" value={(d.now.calories / 1000).toFixed(1)} unit="kcal ×1k" sub={`energy expended · ${caption}`} delta={delta(t => t.calories)} spark={spark(w => w.calories)} color="var(--accent)" />,
-    avgHr: <StatCard key="avgHr" icon={<Heart size={14} />} label="Avg Heart Rate" value={d.now.avgHR.toString()} unit="bpm" sub={caption} delta={delta(t => t.avgHR)} />,
+    avgHr: <StatCard key="avgHr" icon={<Heart size={14} />} label="Avg Heart Rate" value={d.now.avgHR.toString()} unit="bpm" sub={caption} delta={delta(t => t.avgHR)} spark={sparkAvg(w => w.avgHR)} color="var(--danger)" />,
     activities: <StatCard key="activities" icon={<Zap size={14} />} label="Activities" value={d.now.count.toString()} unit="" sub={`${Object.keys(d.typeCount).length} sport types · ${caption}`} delta={delta(t => t.count)} spark={spark(() => 1)} color="var(--blue)" />,
   }
 

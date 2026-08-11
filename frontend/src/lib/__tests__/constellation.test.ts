@@ -128,3 +128,23 @@ describe('pointAt', () => {
     expect(pointAt([], 0.5)).toBeNull()
   })
 })
+
+describe('the finish', () => {
+  it('does not kick at the last point', () => {
+    // The bug: the tangent was taken by stepping forward, which at t = 1 is a
+    // step of nothing — so the normal was zero, the swerve vanished, and the
+    // final point snapped back onto the bare curve while its neighbour kept a
+    // full push. It showed as a sharp drop at the finish on every workout,
+    // whatever the metric was doing there.
+    const high = Array.from({ length: 110 }, () => 1)
+    for (const id of ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']) {
+      const { points } = buildConstellation(id, high)
+      const n = points.length
+      const gap = (i: number) => Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y)
+      // The last step must be in the same league as the ones before it, not a
+      // jump back to the curve.
+      const typical = (gap(n - 5) + gap(n - 4) + gap(n - 3)) / 3
+      expect(gap(n - 1)).toBeLessThan(typical * 3 + 1)
+    }
+  })
+})

@@ -2795,17 +2795,27 @@ body:has(.overlay) .fab { display: none; }
 }
 .detail-top > :first-child { grid-area: map; }
 .detail-top > :last-child { grid-area: summary; }
-/* Without a map, the hero has no reason to be the wider column: the effort
-   band and the standing panel both read fine at the summary's width, and a
-   700px-wide list of four facts reads like a mistake. So the two columns swap
-   emphasis rather than the hero stretching to fill a gap left for a map. */
-.detail-top.no-map { grid-template-columns: 1fr 1fr; }
+/* The summary keeps its 380px whatever is beside it. It was sharing the width
+   evenly when there was no map, which made the same card two different sizes
+   depending on whether the workout had GPS — and the panel beside it wants the
+   room more than the summary does. */
 /* Nothing to put beside the summary at all. */
 .detail-top.solo { grid-template-columns: 1fr; grid-template-areas: "summary"; }
 
-/* The non-map heroes. No minimum height — they are as tall as they need to be,
-   and stretch to the summary beside them, which is the taller of the two. */
-.detail-hero-card { display: flex; flex-direction: column; }
+/* The non-map heroes.
+   Side and bottom padding go, so the drawing has the card's full width and
+   runs to its bottom edge — the same deal the map card gets. Only the title
+   keeps its inset, and it supplies its own. The minimum matches the map's, so
+   a workout without GPS gets a panel the same size as one with it. */
+.detail-hero-card {
+  display: flex;
+  flex-direction: column;
+  padding: 14px 0 0;
+  min-height: 280px;
+}
+.detail-hero-card .session-profile-head,
+.detail-hero-card .session-context-body { padding: 0 16px; }
+.detail-hero-card .session-context-body { padding-bottom: 16px; }
 
 /* On desktop this stretches to match the summary column beside it, so the
    minimum only matters while the summary is short. */
@@ -2832,20 +2842,27 @@ body:has(.overlay) .fab { display: none; }
   font-family: var(--font-mono);
 }
 
-/* The sky the session is drawn in. A fixed aspect ratio rather than a fixed
-   height: the drawing is a picture, and letting it stretch would tilt a
-   trajectory whose whole meaning is that it recedes from lower left to upper
-   right. */
+/* The sky the session is drawn in.
+   It takes whatever height the card has left rather than holding an aspect
+   ratio, and the drawing inside keeps its own proportions and centres — see
+   preserveAspectRatio in SessionProfile. Letting the drawing stretch would
+   tilt a trajectory whose whole meaning is that it recedes from lower left to
+   upper right; letting the box stretch costs nothing, because the extra space
+   is sky and sky is what is drawn there anyway.
+   Square-cornered and edge to edge: the card's own radius and border are the
+   frame now. */
 .session-sky {
   position: relative;
-  border-radius: var(--radius);
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
   background:
     radial-gradient(120% 90% at 12% 100%, color-mix(in srgb, var(--primary) 9%, transparent), transparent 60%),
     var(--bg-3);
-  border: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 var(--radius) var(--radius);
 }
-.session-sky svg { display: block; width: 100%; height: auto; cursor: crosshair; }
+.session-sky svg { display: block; width: 100%; height: 100%; cursor: crosshair; }
 /* The maximise button, the same place and the same control the map's is. The
    destination glyph is drawn short of this corner so it never sits under it —
    see the anchors in constellation.ts. */
@@ -2861,21 +2878,32 @@ body:has(.overlay) .fab { display: none; }
    The key sits above the control it explains, so the pair reads downward. */
 .session-sky-controls {
   position: absolute;
+  /* Both edges, not just the right one: anchored only on the right, a legend
+     wider than the panel grew leftward out of the box instead of wrapping.
+     With both sides pinned it has a real width to fit into, and align-items
+     keeps the pair against the right edge as before. */
+  left: 8px;
   right: 8px;
   bottom: 8px;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 6px;
-  max-width: calc(100% - 16px);
+  pointer-events: none;
 }
+.session-sky-controls > * { pointer-events: auto; }
 /* Borrows .map-legend whole — same shapes, same vocabulary — and only undoes
    the absolute placement, which here comes from the stack above. */
 .session-sky-legend {
   position: static;
   top: auto;
   left: auto;
+  max-width: 100%;
 }
+/* The ramp bar gives up its fixed 92px when there is not 92px to give. */
+.session-sky-legend .map-legend-ramp i { width: min(92px, 100%); }
+/* Five zone chips wrap rather than run off a narrow panel. */
+.session-sky-legend .map-legend-zones { flex-wrap: wrap; justify-content: flex-end; }
 /* Cut down from the standard trigger, which carries a 150px minimum meant for
    a filter bar. The map can spare that much of itself; a panel a third of the
    width cannot, and at full size the picker read as the subject of the panel
@@ -3747,12 +3775,7 @@ body:has(.overlay) .fab { display: none; }
   .stat-label { font-size: 10px; }
   .stat-value { font-size: 13px; }
 
-  /* `.no-map` is listed explicitly because it outranks a bare `.detail-top`:
-     the two-column rule it sets for desktop is one class more specific than
-     this override and won a fight it was never meant to be in, leaving the
-     summary and the session drawing at half width each on a phone. */
-  .detail-top,
-  .detail-top.no-map {
+  .detail-top {
     grid-template-columns: 1fr;
     grid-template-areas: "summary" "map";
   }
@@ -3761,7 +3784,9 @@ body:has(.overlay) .fab { display: none; }
      on a phone, and the one panel where more height is always worth having.
      Capped in pixels as well as in vh so a tall phone does not give the map the
      whole screen and push everything else below the fold. */
-  .detail-map-card { min-height: min(56vh, 420px); }
+  .detail-map-card,
+  /* The routeless panel gets the same height as the map it stands in for. */
+  .detail-hero-card { min-height: min(56vh, 420px); }
   /* The playback bar's stacked layout used to live here. It is a container
      query now — see .playback-card — because the card's width, not the
      viewport's, is what decides whether the three parts fit on one line. */
