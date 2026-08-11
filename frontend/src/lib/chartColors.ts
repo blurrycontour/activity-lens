@@ -32,9 +32,11 @@ function blend(a: string, b: string, t: number): string {
 
 /**
  * Sequential accent ramp for `n` ordered series, strongest first. Steps blend
- * the accent toward the muted text colour rather than toward transparency, so
- * the faint end stays visible on both the light and dark surfaces — and because
- * the whole ramp is one hue, it can never clash with whichever accent is set.
+ * the accent toward an ink token rather than toward transparency, so the faint
+ * end stays visible on both the light and dark surfaces — and because the whole
+ * ramp is one hue, it can never clash with whichever accent is set.
+ *
+ * Which ink, and why it matters, is the comment inside.
  *
  * Colours are resolved to concrete rgb() here rather than emitted as
  * `color-mix(var(--primary) …)`: these values end up on SVG `fill`/`stroke`
@@ -42,16 +44,55 @@ function blend(a: string, b: string, t: number): string {
  * given browser handles CSS colour functions there.
  */
 export function recencyRamp(n: number): string[] {
-  const accent = readVar('--primary', '#00e87a')
-  const neutral = readVar('--text-3', '#6b7280')
+  return rampFrom(
+    readVar('--primary', '#00e87a'),
+    [readVar('--text', '#e8eaed'), readVar('--text-2', '#9ca3af'), readVar('--text-3', '#6b7280')],
+    n,
+  )
+}
+
+/**
+ * The ramp itself, given the colours rather than reading them off the document.
+ *
+ * Split out so it can be tested: whether adjacent steps are actually
+ * distinguishable is the whole point of this function and the one thing that
+ * fails silently, and asserting it should not need a DOM to set tokens in.
+ *
+ * @param inks the theme's ink tokens, in any order.
+ */
+export function rampFrom(accent: string, inks: string[], n: number): string[] {
   if (n <= 1) return [accent]
-  // Hand-picked stops rather than a linear sweep: the drop from full accent has
-  // to be large enough to read as a different bar at a glance.
-  const weights = [1, 0.74, 0.53, 0.36, 0.23, 0.14]
-  return Array.from({ length: n }, (_, i) => {
-    const w = weights[Math.min(i, weights.length - 1)]
-    return w >= 1 ? accent : blend(accent, neutral, w)
-  })
+  /*
+   * The far end of the ramp is whichever of the theme's three ink tokens sits
+   * furthest from the accent in lightness.
+   *
+   * That choice is what makes this a sequential ramp rather than a set of
+   * near-identical bars, and it is why the endpoint is chosen rather than
+   * fixed. Fading toward a grey that happens to be as light as the accent
+   * drains the chroma and leaves the lightness alone — and lightness is what
+   * the eye separates first. Three weeks of the old ramp came out as #00e87a,
+   * #1cc97c, #32b17d, which is the "very hard to read" this replaces.
+   *
+   * Picking by distance also settles it per theme and per accent without a
+   * table: the dark theme's inks run light and the light theme's run dark, and
+   * the six accents sit at very different lightnesses among them. A blue on
+   * dark ends at near-white; a green on dark, already bright, ends at the
+   * muted grey instead.
+   */
+  const far = inks.reduce((best, ink) =>
+    Math.abs(lightness(ink) - lightness(accent)) > Math.abs(lightness(best) - lightness(accent)) ? ink : best)
+
+  // Evenly spaced, and the last step is that ink exactly. The earlier version
+  // approached it asymptotically, which spent most of the range on the first
+  // step and crushed the tail together — so the more series there were the
+  // worse the crowding, which is backwards.
+  return Array.from({ length: n }, (_, i) => blend(accent, far, 1 - i / (n - 1)))
+}
+
+/** Rec. 709 relative lightness, 0–255. Only ever used to compare two colours. */
+function lightness(hex: string): number {
+  const [r, g, b] = parseHex(hex)
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b
 }
 
 /**

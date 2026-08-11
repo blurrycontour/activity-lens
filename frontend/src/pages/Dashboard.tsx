@@ -802,12 +802,23 @@ export default function Dashboard({ onSelect }: { onSelect: (w: Workout) => void
                       label="Training Load"
                       text="Compares your average daily effort over the last 7 days with the last 28. Around 1.0 means this week matches what your body is used to; higher means you're building, lower means you're easing off. It only appears once you have six weeks of history and a dozen heart-rate activities, because below that a single session swings it wildly. Treat it as a description of your load, not a medical verdict — the injury-risk thresholds this metric is known for are debated in the research."
                     />
-                    <span className="chart-card-actions" style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: form.verdict === 'ramping' ? 'var(--danger)' : form.verdict === 'detraining' ? 'var(--text-3)' : 'var(--primary)' }}>
-                      {form.ratio.toFixed(2)}
-                    </span>
                   </div>
                   <p className="chart-card-desc" style={{ marginBottom: 10 }}>7-day load against your 28-day average.</p>
-                  <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>{form.headline}</div>
+
+                  {/* The ratio is what this card is for, so it is the biggest
+                      thing on it rather than a 12px chip in the corner beside
+                      the title — where it sat, at the size of an axis label,
+                      as far from its own explanation as the card allowed.
+                      The word beside it carries the same verdict the colour
+                      does, so the reading never depends on telling red from
+                      accent. */}
+                  <div className="load-figure">
+                    <span className={`load-ratio ${form.verdict}`}>{form.ratio.toFixed(2)}</span>
+                    <span className="load-figure-text">
+                      <span className={`load-verdict ${form.verdict}`}>{form.headline}</span>
+                      <span className="load-figure-unit">acute / chronic load</span>
+                    </span>
+                  </div>
                   <p style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.55 }}>{form.detail}</p>
                 </div>
               )}
