@@ -1946,18 +1946,26 @@ body:has(.overlay) .fab { display: none; }
 
 .recharts-tooltip-wrapper { outline: none !important; }
 
-/* Recharts makes both the wrapper and the <svg> inside it focusable, so a tap
-   on a chart drew two nested focus rings — a bright box around the card's plot
-   area and a second one hugging the drawing itself. They are not an affordance
-   anyone asked for: there is nothing to activate here, and the tooltip already
-   says what was touched.
+/* No focus ring anywhere inside a chart.
 
-   Suppressed for pointer focus only. :focus-visible still gets a ring, so a
-   chart reached by keyboard is still obviously the thing with focus. */
+   A tap drew two boxes: one around the plot and a second around the tooltip's
+   own container. Turning off Recharts' accessibility layer took the first —
+   that is what made the <svg> a tab stop — but not the second, because the
+   tooltip container carries tabindex="-1" and Recharts focuses it itself when
+   the tooltip opens. A tabindex="-1" element is not reachable by keyboard; it
+   is focused programmatically, and the browser rings it anyway.
+
+   So this suppresses by container rather than by naming the elements. There is
+   nothing in here to activate — the charts stopped being clickable when
+   click-to-seek was removed, and the tooltip already says what was touched —
+   so a ring on any of it is pointing at something that is not a control. The
+   :not(button) keeps the ring on the expand button, which is one. */
 .recharts-wrapper:focus,
-.recharts-surface:focus { outline: none; }
+.recharts-wrapper *:not(button):focus,
 .recharts-wrapper:focus-visible,
-.recharts-surface:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.recharts-wrapper *:not(button):focus-visible,
+.recharts-tooltip-wrapper:focus,
+.recharts-tooltip-wrapper:focus-visible { outline: none; }
 .custom-tooltip {
   background: var(--bg-2);
   border: 1px solid var(--border-strong);
@@ -2838,27 +2846,41 @@ body:has(.overlay) .fab { display: none; }
   border: 1px solid var(--border);
 }
 .session-sky svg { display: block; width: 100%; height: auto; cursor: crosshair; }
-.session-sky-scale {
+/* The maximise button, the same place and the same control the map's is. The
+   destination glyph is drawn short of this corner so it never sits under it —
+   see the anchors in constellation.ts. */
+.session-sky-expand {
   position: absolute;
-  left: 10px;
-  right: 10px;
-  bottom: 7px;
-  display: flex;
-  justify-content: space-between;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--text-3);
-  pointer-events: none;
+  top: 8px;
+  right: 8px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
 }
-/* Over the drawing, in the corner the path has already left.
 
-   Shrunk from the standard trigger, which carries a 150px minimum meant for a
-   filter bar. The map can spare that much of itself; a panel a third of the
+/* The picker and its key, stacked in the corner the path has already left.
+   The key sits above the control it explains, so the pair reads downward. */
+.session-sky-controls {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: calc(100% - 16px);
+}
+/* Borrows .map-legend whole — same shapes, same vocabulary — and only undoes
+   the absolute placement, which here comes from the stack above. */
+.session-sky-legend {
+  position: static;
+  top: auto;
+  left: auto;
+}
+/* Cut down from the standard trigger, which carries a 150px minimum meant for
+   a filter bar. The map can spare that much of itself; a panel a third of the
    width cannot, and at full size the picker read as the subject of the panel
-   rather than a control on it. Translucent for the same reason — the sky has
-   to stay visible underneath. */
-.session-sky-picker { position: absolute; top: 8px; right: 8px; }
-.session-sky-picker .al-dropdown-trigger {
+   rather than a control on it. */
+.session-sky-controls .al-dropdown-trigger {
   min-width: 0;
   padding: 3px 7px;
   font-size: 11px;
@@ -2866,30 +2888,7 @@ body:has(.overlay) .fab { display: none; }
   background: color-mix(in srgb, var(--bg-2) 82%, transparent);
   backdrop-filter: blur(6px);
 }
-.session-sky-picker .al-dropdown-trigger svg { width: 12px; height: 12px; }
-
-/* Time in each zone. A row per zone rather than one stacked bar: the stacked
-   version is prettier and unreadable below about 8% a segment, which is most
-   of Zone 5 on most workouts. */
-.session-zones { display: flex; flex-direction: column; gap: 6px; }
-.session-zones li { display: grid; grid-template-columns: 34px 1fr 34px; align-items: center; gap: 8px; }
-.session-zone-key {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--text-3);
-}
-.session-zone-key i { width: 7px; height: 7px; border-radius: 2px; flex-shrink: 0; }
-.session-zone-bar { height: 6px; border-radius: 3px; background: var(--bg-3); overflow: hidden; }
-.session-zone-bar i { display: block; height: 100%; border-radius: 3px; }
-.session-zone-pct {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--text-2);
-  text-align: right;
-}
+.session-sky-controls .al-dropdown-trigger svg { width: 12px; height: 12px; }
 
 /* The standing panel, for a workout with nothing recorded at all. */
 .session-context-body { display: flex; gap: 16px; align-items: flex-start; flex: 1; }
@@ -4556,6 +4555,13 @@ body:has(.overlay) .fab { display: none; }
   border-top-left-radius: 0;
   border-top-right-radius: 0;
   min-height: 60px;
+  /* The floor TabPanel holds during a switch is eased off rather than dropped,
+     so a shorter tab settles instead of snapping. Growing is not animated —
+     content arriving should appear at once. */
+  transition: min-height 0.22s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .detail-tab-panel { transition: none; }
 }
 
 /* ── Gallery ──────────────────────────────────────────────────────────── */
@@ -4683,18 +4689,25 @@ body:has(.overlay) .fab { display: none; }
   gap: 10px;
   flex-wrap: wrap;
 }
-/* The whole set, always visible. Six emoji is small enough to show outright,
-   and behind a menu the cheapest gesture on the page would cost two taps. */
+/* One button, and the tray behind it. The tray is absolute so opening it does
+   not reflow the reactions beside it — a row that jumps sideways as you reach
+   for it is a row you miss. */
+.social-picker-wrap { position: relative; display: inline-flex; }
+.social-picker-btn.open { color: var(--primary); border-color: var(--primary); }
 .social-picker {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 5;
   display: flex;
   align-items: center;
   gap: 2px;
   padding: 3px 6px;
-  background: var(--bg-3);
-  border: 1px solid var(--border);
+  background: var(--bg-2);
+  border: 1px solid var(--border-strong);
   border-radius: 999px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
-.social-picker-mark { color: var(--text-3); margin-right: 2px; flex-shrink: 0; }
 .social-emoji {
   border: none;
   background: transparent;
@@ -4766,7 +4779,17 @@ body:has(.overlay) .fab { display: none; }
   overflow-wrap: anywhere;
 }
 
+/* The box and its send button, on one line at every width — a single icon
+   button needs no room of its own, so this no longer stacks on a phone. */
 .social-compose { display: flex; gap: 8px; align-items: flex-end; }
+.social-send {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  color: var(--primary);
+  border: 1px solid var(--border);
+}
+.social-send:disabled { color: var(--text-3); opacity: 0.6; }
 .social-box {
   flex: 1;
   min-width: 0;
@@ -4800,8 +4823,4 @@ body:has(.overlay) .fab { display: none; }
   text-align: center;
 }
 
-@media (max-width: 480px) {
-  /* The button under the box rather than beside it: at 340px the two together
-     leave the box about twelve characters wide. */
-  .social-compose { flex-direction: column; align-items: stretch; }
-}
+

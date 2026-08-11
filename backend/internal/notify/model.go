@@ -32,6 +32,11 @@ const (
 	// which is why it is rate limited hard and stops entirely when the training
 	// does. See checkNoGoals.
 	KindGoalNoneSet Kind = "goal_none_set"
+	// KindWorkoutSocial: someone commented on, or reacted to, a workout you
+	// own or are part of the conversation on. One kind for both, because they
+	// are one feature and nobody wants "reactions" and "comments" as separate
+	// switches for a page they either follow or do not.
+	KindWorkoutSocial Kind = "workout_social"
 	// KindFeedback: someone filed feedback. Only ever sent to administrators —
 	// it is the one kind that reports on the instance rather than on the
 	// recipient's own training, which is why Settings hides its switch from
@@ -40,7 +45,7 @@ const (
 )
 
 // AllKinds is every kind, in the order Settings lists them.
-var AllKinds = []Kind{KindWorkoutShared, KindGearWorn, KindGoalMet, KindGoalAtRisk, KindGoalNoneSet, KindWorkoutImported, KindFeedback}
+var AllKinds = []Kind{KindWorkoutShared, KindWorkoutSocial, KindGearWorn, KindGoalMet, KindGoalAtRisk, KindGoalNoneSet, KindWorkoutImported, KindFeedback}
 
 // ValidKind reports whether k is a known kind.
 func ValidKind(k Kind) bool {

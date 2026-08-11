@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { LoaderCircle, MessageSquare, Pencil, SmilePlus, Trash2 } from 'lucide-react'
+import { LoaderCircle, MessageSquare, Pencil, SendHorizontal, SmilePlus, Trash2 } from 'lucide-react'
 import ConfirmDialog from './ConfirmDialog'
 import UserAvatar, { userLabel } from './UserAvatar'
 import { useAuth } from '../context/AuthContext'
@@ -36,6 +36,10 @@ export default function WorkoutSocial({ workoutId, isOwner }: WorkoutSocialProps
   const [editing, setEditing] = useState<{ id: string; body: string } | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<WorkoutComment | null>(null)
   const [deleting, setDeleting] = useState(false)
+  // The tray is closed until asked for. Six emoji laid out permanently is a
+  // row of controls competing with the reactions people actually left, which
+  // are the thing worth looking at.
+  const [picking, setPicking] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -55,6 +59,7 @@ export default function WorkoutSocial({ workoutId, isOwner }: WorkoutSocialProps
     const next = social.myReaction === emoji ? '' : emoji
     try {
       setSocial(await api.setWorkoutReaction(workoutId, next))
+      setPicking(false)
       setError(null)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not save that reaction.')
@@ -132,23 +137,37 @@ export default function WorkoutSocial({ workoutId, isOwner }: WorkoutSocialProps
   return (
     <div className="social">
       <div className="social-reactions">
-        {/* The picker is the whole set, always visible: six emoji is small
-            enough to show outright, and hiding them behind a menu would make
-            the cheapest gesture on the page cost two taps. */}
-        <div className="social-picker" role="group" aria-label="React to this workout">
-          <SmilePlus size={15} className="social-picker-mark" aria-hidden />
-          {social.emojis.map(e => (
-            <button
-              key={e}
-              type="button"
-              className={`social-emoji${social.myReaction === e ? ' mine' : ''}`}
-              onClick={() => void react(e)}
-              aria-pressed={social.myReaction === e}
-              aria-label={social.myReaction === e ? `Remove your ${e} reaction` : `React with ${e}`}
-            >
-              {e}
-            </button>
-          ))}
+        {/* One button, and the set behind it. The tray closes on a pick and on
+            a second press of the button, so reacting is two taps and changing
+            your mind is two more — but the resting state is one control rather
+            than a row of six competing with the reactions people left. */}
+        <div className="social-picker-wrap">
+          <button
+            type="button"
+            className={`btn-icon social-picker-btn${picking ? ' open' : ''}`}
+            onClick={() => setPicking(p => !p)}
+            aria-expanded={picking}
+            aria-label={picking ? 'Close the reactions' : 'React to this workout'}
+            title="React"
+          >
+            <SmilePlus size={16} />
+          </button>
+          {picking && (
+            <div className="social-picker" role="group" aria-label="Pick a reaction">
+              {social.emojis.map(e => (
+                <button
+                  key={e}
+                  type="button"
+                  className={`social-emoji${social.myReaction === e ? ' mine' : ''}`}
+                  onClick={() => void react(e)}
+                  aria-pressed={social.myReaction === e}
+                  aria-label={social.myReaction === e ? `Remove your ${e} reaction` : `React with ${e}`}
+                >
+                  {e}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         {counts.length > 0 && (
           <ul className="social-tally">
@@ -244,8 +263,14 @@ export default function WorkoutSocial({ workoutId, isOwner }: WorkoutSocialProps
           ariaLabel="Write a comment"
           placeholder="Say something…"
         />
-        <button className="btn btn-primary" onClick={() => void post()} disabled={!draft.trim() || posting}>
-          {posting ? <><LoaderCircle size={14} className="spin" /> Posting…</> : 'Comment'}
+        <button
+          className="btn-icon social-send"
+          onClick={() => void post()}
+          disabled={!draft.trim() || posting}
+          title="Post comment"
+          aria-label="Post comment"
+        >
+          {posting ? <LoaderCircle size={16} className="spin" /> : <SendHorizontal size={16} />}
         </button>
       </div>
 

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { type RecalcParts, type Workout, type WorkoutType, fmtClock, fmtDuration, fmtDist, fmtPace, TYPE_COLOR } from '../data/workouts'
 import TypeIcon from '../components/TypeIcon'
@@ -297,6 +297,70 @@ function PlaybackBar({
  * The six charts were six copies of this markup, which is how the expand button
  * ended up in a different place in one of them.
  */
+/**
+ * The tab a deep link asked for, read once when the page mounts.
+ *
+ * Validated against the known set rather than trusted: this comes from a URL,
+ * and an unknown value would leave the strip with no tab selected at all. An
+ * absent or unrecognised parameter means the default, which is what every
+ * ordinary visit gets.
+ */
+function initialTab(): DetailTab {
+  const asked = new URLSearchParams(window.location.search).get('tab')
+  return asked === 'gallery' || asked === 'social' || asked === 'notes' ? asked : 'notes'
+}
+
+/** Whether this page was opened at a particular tab, and so should scroll to it. */
+function wantsTabScroll(): boolean {
+  return new URLSearchParams(window.location.search).has('tab')
+}
+
+/**
+ * The tab body, which does not collapse when the tab changes.
+ *
+ * Switching used to drop the page to nothing and then push it back out: the
+ * panel's contents are lazily loaded and then fetch their own data, so for a
+ * moment there is a spinner where a gallery used to be, and everything below
+ * jumps up and back down. The content is not the problem — the height is.
+ *
+ * So the panel holds the height the last tab occupied while the next one
+ * arrives, and eases off it afterwards. Measured rather than guessed, because
+ * a fixed minimum is either too tall for the notes or too short for a gallery.
+ * The floor is released on a timer rather than on a load event, because there
+ * is no single event to wait for — a lazy chunk, then a request, then images —
+ * and holding a little too long is invisible while releasing too early is the
+ * jump this exists to remove.
+ */
+function TabPanel({ tabKey, children }: { tabKey: string; children: React.ReactNode }) {
+  const box = useRef<HTMLDivElement>(null)
+  const natural = useRef(0)
+  const [floor, setFloor] = useState(0)
+
+  useLayoutEffect(() => {
+    setFloor(natural.current)
+    const t = setTimeout(() => setFloor(0), 600)
+    return () => clearTimeout(t)
+  }, [tabKey])
+
+  // Measured on the inner box, which never carries the floor — measuring the
+  // element the minimum is applied to would only read the minimum back.
+  useEffect(() => {
+    const el = box.current
+    if (!el) return
+    const obs = new ResizeObserver(() => {
+      if (el.offsetHeight > 0) natural.current = el.offsetHeight
+    })
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [])
+
+  return (
+    <div className="card detail-tab-panel" style={floor ? { minHeight: floor } : undefined}>
+      <div ref={box}>{children}</div>
+    </div>
+  )
+}
+
 function MetricPanel({ icon, title, badge, info, stats, onExpand, children }: {
   icon: React.ReactNode
   title: string
@@ -679,7 +743,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
     [w.hrTimeline, effectiveMaxHR],
   )
   const hrZonesPlayed = useMemo(() => countZonesTo(currentTime), [countZonesTo, currentTime])
-  const [expanded, setExpanded] = useState<null | 'map' | Metric | 'hrzones'>(null)
+  const [expanded, setExpanded] = useState<null | 'map' | 'session' | Metric | 'hrzones'>(null)
   // Lives here rather than in RouteMap: expanding the map mounts a second one,
   // and a choice held inside it was lost on the way.
   const [shading, setShading] = useState<Shading>('accent')
@@ -695,7 +759,8 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
    * not there, and landing on Gallery every time would fetch photos for someone
    * who opened the page to read the charts.
    */
-  const [detailTab, setDetailTab] = useState<DetailTab>('notes')
+  const [detailTab, setDetailTab] = useState<DetailTab>(() => initialTab())
+  const sectionsRef = useRef<HTMLDivElement>(null)
 
   // Notes belong to the owner alone and are stripped from a shared response, so
   // there is nothing behind that tab for anyone else — and a viewer whose
@@ -710,6 +775,26 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
     ...(w.shared ? [{ id: 'social' as DetailTab, label: 'Social', icon: <MessageSquare size={14} /> }] : []),
   ]
   const activeTab = detailTabs.some(t => t.id === detailTab) ? detailTab : detailTabs[0].id
+
+  /*
+   * A notification links straight to the tab it happened in, so opening one
+   * has to land on the conversation rather than on the charts above it.
+   *
+   * A passive effect and not a layout one: App scrolls the page to the top
+   * when you drill into a workout, from a layout effect in the parent, which
+   * runs after every layout effect down here. Passive effects run after all of
+   * those, so this is the last word rather than something silently undone.
+   *
+   * The parameter is then stripped, so a reload — or a back and forward — is
+   * the page you were on rather than the tab a notification once pointed at.
+   */
+  useEffect(() => {
+    if (!wantsTabScroll()) return
+    const url = new URL(window.location.href)
+    url.searchParams.delete('tab')
+    window.history.replaceState(null, '', url.pathname + url.search)
+    sectionsRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  }, [])
 
   useEffect(() => {
     if (!playing || w.duration <= 0) return
@@ -935,8 +1020,13 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
           // Edge to edge on a phone. The card's padding is gone from around the
           // plot, and the y axis with it — the numbers it carried are drawn on
           // the gridlines instead, inside the plot, where they cost nothing.
+          // The 8px at each end is for the first and last time label, not for
+          // the plot. Recharts nudges those two inward so they cannot be
+          // clipped, but with no margin there was nowhere to nudge into and
+          // they ended up flush against the card's edge. Eight pixels of a
+          // plot that has already gained the card's whole 32px gutter.
           margin={mobile
-            ? { top: 4, right: 0, left: 0, bottom: 14 }
+            ? { top: 4, right: 8, left: 8, bottom: 14 }
             : { top: 4, right: 18, left: -24, bottom: 14 }}
         >
           <defs>
@@ -1316,6 +1406,8 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
                 onTintChange={setTint}
                 onScrub={handleScrub}
                 avatarUrl={routeAvatar}
+                cadenceLabel={cadenceUnit(w.type)}
+                onExpand={() => setExpanded('session')}
               />
             </div>
           )}
@@ -1654,14 +1746,14 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             non-owner, so a shared workout has no notes tab rather than an
             empty one, and activeTab falls back when the stored tab is one this
             workout does not offer. */}
-        <div className="detail-sections">
+        <div className="detail-sections" ref={sectionsRef}>
           <TabStrip
             items={detailTabs}
             value={activeTab}
             onChange={setDetailTab}
             ariaLabel="Workout sections"
           />
-          <div className="card detail-tab-panel">
+          <TabPanel tabKey={activeTab}>
             {activeTab === 'notes' && (readOnly
               ? <p className="notes-text">{w.notes}</p>
               : <NotesCard workout={w} onSaved={setW} />)}
@@ -1678,7 +1770,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
                 <WorkoutSocial workoutId={w.id} isOwner={!readOnly} />
               </Suspense>
             )}
-          </div>
+          </TabPanel>
         </div>
       </div>
 
@@ -1721,6 +1813,30 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
         <ExpandModal title="Route" onClose={() => setExpanded(null)} variant="map">
           <div ref={setModalHost} className="modal-immersive-map" />
           <div className="modal-immersive-foot">
+            <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onEnd={handleEnd} onScrub={handleScrub} />
+          </div>
+        </ExpandModal>
+      )}
+      {/* The routeless hero, full size. The same panel with its expand button
+          dropped — the modal's own header closes it — beside the transport,
+          exactly as the map's is. */}
+      {expanded === 'session' && (
+        <ExpandModal title="The session" onClose={() => setExpanded(null)}>
+          <SessionProfile
+            id={w.id}
+            duration={w.duration}
+            hrTimeline={w.hrTimeline}
+            cadenceTimeline={cadenceTimeline}
+            maxHR={effectiveMaxHR}
+            pauses={pauses}
+            currentTime={currentTime}
+            tint={tint}
+            onTintChange={setTint}
+            onScrub={handleScrub}
+            avatarUrl={routeAvatar}
+            cadenceLabel={cadenceUnit(w.type)}
+          />
+          <div style={{ marginTop: 12 }}>
             <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onEnd={handleEnd} onScrub={handleScrub} />
           </div>
         </ExpandModal>

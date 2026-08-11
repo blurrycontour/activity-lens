@@ -122,8 +122,12 @@ export function buildConstellation(seed: string, samples: number[], count = 110)
   const [c1x, c1y, c2x, c2y] = SHAPES[variant]
 
   // Launch and destination, inset so the glyphs at either end are not clipped.
+  // The destination is short of the top-right corner rather than in it: the
+  // maximise button sits there, and a finish glyph underneath a button is a
+  // finish nobody can see. It still reads as "far away and up and to the
+  // right", which is the only thing the position has to say.
   const x0 = FIELD_W * 0.10, y0 = FIELD_H * 0.86
-  const x1 = FIELD_W * 0.90, y1 = FIELD_H * 0.16
+  const x1 = FIELD_W * 0.86, y1 = FIELD_H * 0.27
 
   // A per-workout nudge to the middle of the curve, so two workouts sharing a
   // variant still differ. Small enough that the variant still reads.
@@ -234,5 +238,58 @@ export function normalise<T>(
     while (cursor < series.length - 1 && Math.abs(timeOf(series[cursor + 1]) - t) <= Math.abs(timeOf(series[cursor]) - t)) cursor++
     out.push((values[cursor] - min) / span)
   }
-  return out
+  return smooth(out)
+}
+
+/**
+ * A moving average, because the raw signal makes the path scribble.
+ *
+ * Heart rate wanders a few beats either side from one second to the next, and
+ * sampling it at 110 points turned every one of those into a kink. The drawing
+ * is about the shape of the session — where the hard parts were and how long
+ * they ran — and at that scale beat-to-beat noise is not shape, it is texture
+ * on top of it.
+ *
+ * A window of nine, about eight per cent of the session: wide enough that a
+ * minute of wobble flattens, narrow enough that a four-minute interval still
+ * pushes the path out. The window shrinks at the ends rather than the series
+ * being padded, so a workout that starts hard still starts hard — padding with
+ * the first value would drag the opening toward the middle.
+ */
+export function smooth(values: number[], window = 9): number[] {
+  // A series no longer than the window is left alone: averaging every point
+  // against every other one does not smooth a shape, it erases it.
+  if (values.length <= window || window < 3) return values
+  const half = Math.floor(window / 2)
+  return values.map((_, i) => {
+    const from = Math.max(0, i - half)
+    const to = Math.min(values.length - 1, i + half)
+    let sum = 0
+    for (let j = from; j <= to; j++) sum += values[j]
+    return sum / (to - from + 1)
+  })
+}
+
+/**
+ * The point at a fraction of the way along the path, interpolated.
+ *
+ * The playhead used to snap to the nearest of the 110 stored points, which at
+ * a quarter of a second per step is visible stepping — next to the map's marker,
+ * which moves continuously, it looked broken. Reading between them costs one
+ * lerp and makes the two panels behave alike.
+ */
+export function pointAt(points: PathPoint[], at: number): PathPoint | null {
+  if (points.length === 0) return null
+  const pos = clamp(at, 0, 1) * (points.length - 1)
+  const i = Math.min(Math.floor(pos), points.length - 2)
+  if (i < 0) return points[0]
+  const f = pos - i
+  const a = points[i]
+  const b = points[i + 1]
+  return {
+    x: a.x + (b.x - a.x) * f,
+    y: a.y + (b.y - a.y) * f,
+    depth: a.depth + (b.depth - a.depth) * f,
+    t: a.t + (b.t - a.t) * f,
+  }
 }

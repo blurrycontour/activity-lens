@@ -47,3 +47,15 @@ func TestGoalNoneSetIsAKnownKind(t *testing.T) {
 		t.Error("a new user would never be reminded to set a goal")
 	}
 }
+
+// The social kind fires from a request path rather than from a background
+// pass, so a registration slip here is a comment that stores fine and tells
+// nobody — which looks like the notification being slow rather than absent.
+func TestWorkoutSocialIsAKnownKind(t *testing.T) {
+	if !ValidKind(KindWorkoutSocial) {
+		t.Fatal("workout_social is not in AllKinds, so Notify will discard it")
+	}
+	if !DefaultPrefs().Wants(KindWorkoutSocial) {
+		t.Error("a new user would hear nothing about comments on their workouts")
+	}
+}

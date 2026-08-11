@@ -2,8 +2,10 @@ package httpapi
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/blurrycontour/activity-lens/backend/internal/workout"
 
@@ -176,6 +178,10 @@ func (s *Server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 	if ref, err := s.lookupUser(r, user.ID); err == nil && ref != nil {
 		c.Author = ref
 	}
+	// After the comment is stored, so the author counts as a participant and a
+	// reply reaches everyone already in the thread. No dedupe key: every
+	// comment is a distinct thing somebody said.
+	s.notifySocial(r, *user, ctx.workout, actorName(*user)+" commented on a workout", excerpt(c.Body), "")
 	writeJSON(w, http.StatusCreated, c)
 }
 
@@ -258,6 +264,14 @@ func (s *Server) handleSetReaction(w http.ResponseWriter, r *http.Request) {
 	} else if err := s.workout.SetReaction(r.Context(), ctx.workout.ID, user.ID, req.Emoji); err != nil {
 		s.writeWorkoutError(w, err)
 		return
+	} else {
+		// Keyed on the person and the workout, so switching emoji or tapping
+		// twice tells everyone once. A reaction is a gesture, not a message;
+		// hearing about each revision of one would be noise.
+		s.notifySocial(r, *user, ctx.workout,
+			actorName(*user)+" reacted "+req.Emoji,
+			ctx.workout.Name,
+			fmt.Sprintf("social-reaction:%s:%d", ctx.workout.ID, user.ID))
 	}
 	// The whole tab back, so the client never has to merge a reaction into a
 	// list it is also re-sorting — the counts and "who reacted" both change.
@@ -273,4 +287,18 @@ func (s *Server) writeSocialError(w http.ResponseWriter, err error) {
 		return
 	}
 	s.writeWorkoutError(w, err)
+}
+
+// excerpt is a comment's opening, for a notification body.
+//
+// Cut on a rune boundary, not a byte one: half a character is a mojibake box in
+// a push notification, on someone else's phone, where nothing can fix it.
+func excerpt(body string) string {
+	const limit = 120
+	body = strings.Join(strings.Fields(body), " ")
+	runes := []rune(body)
+	if len(runes) <= limit {
+		return body
+	}
+	return strings.TrimSpace(string(runes[:limit])) + "…"
 }

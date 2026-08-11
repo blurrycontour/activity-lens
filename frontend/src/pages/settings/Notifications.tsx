@@ -17,6 +17,9 @@ import StatusMsg, { type Msg } from '../../components/StatusMsg'
  */
 const NOTIFY_KINDS: { id: NotificationKind; label: string; adminOnly?: boolean }[] = [
   { id: 'workout_shared', label: 'Someone shares a workout with me' },
+  // One switch for comments and reactions together: they are one feature, and
+  // a page is either one you follow or one you do not.
+  { id: 'workout_social', label: 'Someone comments on or reacts to a workout' },
   { id: 'gear_worn', label: 'Gear reaches its replacement distance' },
   { id: 'goal_met', label: 'I complete a training goal' },
   { id: 'goal_at_risk', label: "A goal's period is nearly over and I'm short" },

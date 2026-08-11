@@ -1,9 +1,9 @@
 import { useId, useMemo } from 'react'
-import { Activity, Heart, Sparkles } from 'lucide-react'
+import { Activity, Heart, Maximize2, Sparkles } from 'lucide-react'
 import Dropdown from './Dropdown'
-import { hrZoneBuckets, hrZoneColor } from '../lib/hrZones'
-import { FIELD_H, FIELD_W, buildConstellation, normalise } from '../lib/constellation'
-import { fmtDuration, type CadencePoint, type HeartRatePoint, type Pause } from '../data/workouts'
+import { HR_ZONE_COLORS, HR_ZONE_SHORT, hrZoneColor } from '../lib/hrZones'
+import { FIELD_H, FIELD_W, buildConstellation, normalise, pointAt } from '../lib/constellation'
+import type { CadencePoint, HeartRatePoint, Pause } from '../data/workouts'
 
 /**
  * A workout with no route, drawn as a journey rather than as a chart.
@@ -26,6 +26,15 @@ import { fmtDuration, type CadencePoint, type HeartRatePoint, type Pause } from 
 
 export type Tint = 'hr' | 'cadence' | 'none'
 
+/**
+ * The two shapes a colour key takes, spelled out as a union rather than one
+ * object with everything optional — `'zones' in legend` then narrows it, and
+ * neither branch can read a field the other owns.
+ */
+type SkyLegend =
+  | { zones: string[] }
+  | { ramp: string; low: string; high: string }
+
 interface SessionProfileProps {
   /** Seeds the geometry. The workout's id. */
   id: string
@@ -40,6 +49,10 @@ interface SessionProfileProps {
   onScrub: (t: number) => void
   /** The same face the map's playback marker wears, when there is one. */
   avatarUrl?: string
+  /** The label cadence is measured in, for the legend. */
+  cadenceLabel?: string
+  /** Omitted while the panel is already expanded, exactly as the map's is. */
+  onExpand?: () => void
 }
 
 /** Widest at the launch, finest at the destination: that is the whole illusion. */
@@ -49,7 +62,7 @@ function widthAt(depth: number): number {
 
 export default function SessionProfile({
   id, duration, hrTimeline, cadenceTimeline, maxHR, pauses, currentTime,
-  tint, onTintChange, onScrub, avatarUrl,
+  tint, onTintChange, onScrub, avatarUrl, cadenceLabel = 'spm', onExpand,
 }: SessionProfileProps) {
   // Unique per mounted panel: two of these on one page would otherwise share a
   // clip path, and whichever mounted last would own it.
@@ -145,13 +158,32 @@ export default function SessionProfile({
     return out.reverse()
   }, [sky, effective, hrTimeline, cadenceTimeline, maxHR, duration, pauses])
 
-  const zones = useMemo(
-    () => (hasHR ? hrZoneBuckets(hrTimeline, maxHR).filter(z => z.pct > 0) : []),
-    [hasHR, hrTimeline, maxHR],
-  )
+  /**
+   * What the colours mean, in the map's own vocabulary.
+   *
+   * The same two shapes the track legend uses — named zones on one row, or a
+   * ramp with its two ends underneath — because this panel stands in for the
+   * map and a second way of saying "blue is slow" would be a second thing to
+   * learn. Absent on a plain path, exactly as the map's is on the default
+   * shading: there is nothing to explain.
+   */
+  const legend = useMemo<SkyLegend | null>(() => {
+    if (effective === 'hr') return { zones: HR_ZONE_SHORT }
+    if (effective !== 'cadence' || cadenceTimeline.length === 0) return null
+    const values = cadenceTimeline.map(p => p.cad)
+    return {
+      // The same 210°→20° sweep the segments are drawn with, as a gradient.
+      ramp: 'linear-gradient(to right, hsl(210 78% 52%), hsl(115 78% 52%), hsl(20 78% 52%))',
+      low: `${Math.round(Math.min(...values))} ${cadenceLabel}`,
+      high: `${Math.round(Math.max(...values))} ${cadenceLabel}`,
+    }
+  }, [effective, cadenceTimeline, cadenceLabel])
 
   const played = duration > 0 ? Math.max(0, Math.min(1, currentTime / duration)) : 0
-  const here = sky.points[Math.round(played * (sky.points.length - 1))]
+  // Interpolated rather than snapped to the nearest stored point: at 110 points
+  // an hour-long session moves the marker in visible steps, and the map's
+  // marker beside it does not.
+  const here = pointAt(sky.points, played)
 
   /** A click anywhere on the sky is the moment nearest the pointer's path position. */
   function scrubFrom(e: React.MouseEvent<SVGSVGElement>) {
@@ -270,34 +302,51 @@ export default function SessionProfile({
           })()}
         </svg>
 
-        <div className="session-sky-scale">
-          <span>0:00</span>
-          <span>{fmtDuration(duration)}</span>
-        </div>
-
-        {options.length > 1 && (
-          <div className="session-sky-picker">
-            <Dropdown value={effective} onChange={onTintChange} dropUp ariaLabel="Path colour" options={options} />
-          </div>
+        {onExpand && (
+          <button
+            className="btn-icon session-sky-expand"
+            onClick={onExpand}
+            title="Expand"
+            aria-label="Expand the session"
+          >
+            <Maximize2 size={14} />
+          </button>
         )}
-      </div>
 
-      {zones.length > 0 && (
-        <ul className="session-zones">
-          {zones.map(z => (
-            <li key={z.short}>
-              <span className="session-zone-key">
-                <i style={{ background: z.color }} />
-                {z.short}
-              </span>
-              <span className="session-zone-bar">
-                <i style={{ width: `${z.pct}%`, background: z.color }} />
-              </span>
-              <span className="session-zone-pct">{z.pct}%</span>
-            </li>
-          ))}
-        </ul>
-      )}
+        {/* Legend and picker stack in the same corner, the legend above: they
+            are one control and its key, and putting the key on the opposite
+            side of the drawing would mean reading across the picture to find
+            out what the colours mean. */}
+        <div className="session-sky-controls">
+          {legend && (
+            <div className="map-legend session-sky-legend" aria-label="Colour scale">
+              {'zones' in legend
+                ? (
+                  <div className="map-legend-zones">
+                    {legend.zones.map((z, i) => (
+                      <span key={z} className="map-legend-zone">
+                        <i style={{ background: HR_ZONE_COLORS[i] }} />
+                        {z}
+                      </span>
+                    ))}
+                  </div>
+                )
+                : (
+                  <div className="map-legend-ramp">
+                    <i style={{ background: legend.ramp }} />
+                    <span>
+                      <span>{legend.low}</span>
+                      <span>{legend.high}</span>
+                    </span>
+                  </div>
+                )}
+            </div>
+          )}
+          {options.length > 1 && (
+            <Dropdown value={effective} onChange={onTintChange} dropUp ariaLabel="Path colour" options={options} />
+          )}
+        </div>
+      </div>
     </div>
   )
 }

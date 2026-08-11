@@ -14,6 +14,7 @@ const MAX_BADGE = 9
 
 const KIND_ICON: Record<NotificationKind, React.ReactNode> = {
   workout_shared: <Share2 size={14} />,
+  workout_social: <MessageSquare size={14} />,
   gear_worn: <Footprints size={14} />,
   goal_met: <Trophy size={14} />,
   goal_at_risk: <Clock size={14} />,

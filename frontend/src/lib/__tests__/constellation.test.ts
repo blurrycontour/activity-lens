@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { FIELD_H, FIELD_W, VARIANTS, buildConstellation, normalise } from '../constellation'
+import { FIELD_H, FIELD_W, VARIANTS, buildConstellation, normalise, pointAt, smooth } from '../constellation'
 
 /**
  * Two promises this makes that nothing else can check: the same workout always
@@ -82,5 +82,49 @@ describe('normalise', () => {
 
   it('returns nothing to modulate with when there is no series', () => {
     expect(normalise([], 100, () => 0, () => 0)).toEqual([])
+  })
+})
+
+describe('smooth', () => {
+  it('takes the jitter out and leaves the shape in', () => {
+    // A slow rise with a one-point spike on every step: the rise has to
+    // survive and the spike has to go, which is the whole trade.
+    const noisy = Array.from({ length: 60 }, (_, i) => i / 59 + (i % 2 ? 0.25 : -0.25))
+    const out = smooth(noisy)
+    // Still rising overall.
+    expect(out[50]).toBeGreaterThan(out[10])
+    // And no longer alternating: every step is small compared with the ±0.5
+    // swing the raw series had.
+    for (let i = 1; i < out.length; i++) {
+      expect(Math.abs(out[i] - out[i - 1])).toBeLessThan(0.1)
+    }
+  })
+
+  it('leaves a series no longer than the window alone', () => {
+    // Averaging every point against every other one does not smooth a shape,
+    // it erases it — and normalise() is called with as few as three points.
+    expect(smooth([0, 0.5, 1])).toEqual([0, 0.5, 1])
+  })
+})
+
+describe('pointAt', () => {
+  it('reads between the stored points', () => {
+    // The playhead used to snap to the nearest of 110, which next to the map's
+    // continuously moving marker looked broken.
+    const { points } = buildConstellation('a', [])
+    const a = pointAt(points, 0.5)!
+    const b = pointAt(points, 0.5 + 1 / (points.length - 1) / 2)!
+    expect(b.x).not.toBe(a.x)
+    // And strictly between its two neighbours, not past them.
+    const i = Math.floor(0.5 * (points.length - 1))
+    expect(a.x).toBeGreaterThanOrEqual(Math.min(points[i].x, points[i + 1].x))
+    expect(a.x).toBeLessThanOrEqual(Math.max(points[i].x, points[i + 1].x))
+  })
+
+  it('clamps to the ends rather than running off them', () => {
+    const { points } = buildConstellation('a', [])
+    expect(pointAt(points, -1)).toEqual(points[0])
+    expect(pointAt(points, 2)).toEqual(points[points.length - 1])
+    expect(pointAt([], 0.5)).toBeNull()
   })
 })

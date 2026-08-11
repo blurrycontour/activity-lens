@@ -289,12 +289,16 @@ export default function App() {
    * assigned to location.href so the SPA routes without a full reload.
    */
   const openLink = useCallback((link: string) => {
-    const loc = parseLocation(new URL(link, window.location.origin).pathname)
+    const target = new URL(link, window.location.origin)
+    const loc = parseLocation(target.pathname)
     if (loc.workoutId) {
       api.getWorkout(loc.workoutId)
         .then(w => {
           setSelectedWorkout(w)
-          window.history.pushState(null, '', `/workouts/${w.id}`)
+          // The query string comes along, exactly as it does for a page below:
+          // a social notification links to "?tab=social", and dropping it would
+          // land on the charts and leave the reader to find the comment.
+          window.history.pushState(null, '', `/workouts/${w.id}${target.search}`)
         })
         // A workout that has since been unshared or deleted: land on the list
         // rather than a dead end.
@@ -312,8 +316,7 @@ export default function App() {
     // The query string is kept, not dropped: a notification links to a filtered
     // list ("/workouts?source=autoimport"), and pathForPage alone would land on
     // the unfiltered page and leave the user hunting.
-    const url = new URL(link, window.location.origin)
-    window.history.pushState(null, '', pathForPage(loc.page, loc.section) + url.search)
+    window.history.pushState(null, '', pathForPage(loc.page, loc.section) + target.search)
     // The destination page may already be mounted, in which case nothing about
     // it re-renders and a filter in the query string would be ignored. This says
     // "the URL changed" to whoever cares.
