@@ -1,111 +1,260 @@
 import { useMemo } from 'react'
-import { Activity } from 'lucide-react'
+import { Activity, Heart, Sparkles } from 'lucide-react'
+import Dropdown from './Dropdown'
 import { hrZoneBuckets, hrZoneColor } from '../lib/hrZones'
-import { fmtDuration, type HeartRatePoint, type Pause } from '../data/workouts'
+import { FIELD_H, FIELD_W, buildConstellation, normalise } from '../lib/constellation'
+import { fmtDuration, type CadencePoint, type HeartRatePoint, type Pause } from '../data/workouts'
 
 /**
- * The shape of a session, for a workout with no route to draw.
+ * A workout with no route, drawn as a journey rather than as a chart.
  *
  * The map answers "where did this happen", and a treadmill run, a pool swim or
- * a turbo session has no answer to that — but every one of them can answer
- * "how hard, and when", which is the question the map was standing in for
- * anyway. So the same slot gets a band of the workout's whole duration,
- * coloured by heart-rate zone, with the recording gaps cut out of it.
+ * a turbo session has no answer — but it does have a shape, and the shape is
+ * what the map was really showing. So the same slot gets a flight path:
+ * launching from the lower left, receding toward the upper right, swerving
+ * where the effort did, coloured by the same scale the map's track uses.
  *
- * It is not a second heart-rate chart. The chart below plots bpm against time
- * and is read by following a line; this is read at a glance — where the hard
- * parts were, how many there were, how long the easy stretch in the middle
- * lasted. Hence a band of colour rather than a line, and time-in-zone
- * underneath rather than min/avg/max.
+ * Deliberately not a third view of the heart-rate number. The chart below plots
+ * bpm against time and the donut totals the zones; nothing on the page showed
+ * the session as one object you could take in at a glance, and the strip of
+ * zone colour that used to live here was the same chart drawn shorter.
  *
- * Scrubbable, like the map it stands in for, so the charts below still follow
- * the same cursor.
+ * The geometry — which way it curves, where the stars fall, whether there is a
+ * planet — is seeded from the workout's id, so every workout gets its own sky
+ * and always the same one. See constellation.ts.
  */
 
-/** Slices the band is drawn from. More is smoother and costs nothing here. */
-const SEGMENTS = 160
+export type Tint = 'hr' | 'cadence' | 'none'
 
 interface SessionProfileProps {
+  /** Seeds the geometry. The workout's id. */
+  id: string
   duration: number
   hrTimeline: HeartRatePoint[]
+  cadenceTimeline: CadencePoint[]
   maxHR: number
   pauses: Pause[]
   currentTime: number
+  tint: Tint
+  onTintChange: (t: Tint) => void
   onScrub: (t: number) => void
 }
 
+/** Widest at the launch, finest at the destination: that is the whole illusion. */
+function widthAt(depth: number): number {
+  return 5.4 - depth * 3.8
+}
+
 export default function SessionProfile({
-  duration, hrTimeline, maxHR, pauses, currentTime, onScrub,
+  id, duration, hrTimeline, cadenceTimeline, maxHR, pauses, currentTime,
+  tint, onTintChange, onScrub,
 }: SessionProfileProps) {
-  /**
-   * The band, as one CSS gradient with hard stops.
+  const hasHR = hrTimeline.length > 1 && maxHR > 0
+  const hasCadence = cadenceTimeline.length > 1
+
+  /*
+   * The choice, resolved against what this workout actually has.
    *
-   * A gradient and not 160 elements: this is a single node the browser paints
-   * in one go, where the element-per-slice version was a flex container the
-   * layout engine had to measure on every resize of a panel that is already the
-   * widest thing on the page.
-   *
-   * The colours come from the sample nearest each slice's midpoint, found by
-   * walking a cursor through the timeline rather than searching per slice —
-   * the same reason the map's track shading is capped and stepped.
+   * The setting is remembered across workouts, so it will regularly name a
+   * scale the workout in front of you cannot offer — heart-rate zones on a
+   * session with no heart rate, or with no max HR to measure it against. Falling
+   * back here rather than resetting the state means moving to a workout that
+   * does have it puts it back, which is what someone who picked it once wants.
    */
-  const band = useMemo(() => {
-    if (duration <= 0 || hrTimeline.length === 0) return null
-    const width = duration / SEGMENTS
+  const effective: Tint =
+    tint === 'hr' && !hasHR ? (hasCadence ? 'cadence' : 'none')
+      : tint === 'cadence' && !hasCadence ? 'none'
+        : tint
+
+  /**
+   * What bends the path.
+   *
+   * Heart rate when there is any, whatever the path is coloured by — the
+   * swerves are the session's effort, and turning them off with the colour
+   * would leave a smooth arc that says nothing. Cadence stands in when there is
+   * no heart rate, and a workout with neither gets the bare curve, which is the
+   * honest drawing of a workout that recorded nothing.
+   */
+  const modulation = useMemo(() => {
+    if (hrTimeline.length > 1) return normalise(hrTimeline, duration, p => p.t, p => p.hr)
+    if (cadenceTimeline.length > 1) return normalise(cadenceTimeline, duration, p => p.t, p => p.cad)
+    return []
+  }, [hrTimeline, cadenceTimeline, duration])
+
+  const sky = useMemo(() => buildConstellation(id, modulation), [id, modulation])
+
+  /**
+   * The path as coloured segments.
+   *
+   * One <path> per segment rather than one gradient-stroked path: the colour
+   * scale is a step function of zones, not a blend, and the stroke also has to
+   * taper — neither of which a single stroke can do. Segments are drawn from
+   * the far end forward so the near, wider ones overlap the far ones and the
+   * recession reads correctly where the path folds over itself.
+   */
+  const segments = useMemo(() => {
+    /*
+     * Colours for every segment in one pass over the timeline, with a cursor
+     * that only ever moves forward. Looking each one up independently is
+     * O(segments × samples), which on an hour of one-second samples is a third
+     * of a million comparisons per render — the same trap the map's track
+     * shading was written to avoid.
+     */
+    const useHR = effective === 'hr'
+    const useCadence = effective === 'cadence'
+    const series: Array<{ t: number }> = useHR ? hrTimeline : useCadence ? cadenceTimeline : []
+    const values = useHR ? hrTimeline.map(p => p.hr) : useCadence ? cadenceTimeline.map(p => p.cad) : []
+    const min = values.length > 0 ? Math.min(...values) : 0
+    const span = values.length > 0 ? Math.max(Math.max(...values) - min, 1) : 1
     let cursor = 0
-    const stops: string[] = []
-    for (let i = 0; i < SEGMENTS; i++) {
-      const t = (i + 0.5) * width
-      while (cursor < hrTimeline.length - 1 && Math.abs(hrTimeline[cursor + 1].t - t) <= Math.abs(hrTimeline[cursor].t - t)) cursor++
-      // A slice inside a pause is drawn as a gap. Painting it the colour of the
-      // sample either side would invent an effort that never happened, and the
-      // gaps are half of what the band is for.
-      const paused = pauses.some(p => t >= p.from && t <= p.to)
-      const color = paused ? 'var(--bg-3)' : hrZoneColor(hrTimeline[cursor].hr, maxHR)
-      const from = ((i / SEGMENTS) * 100).toFixed(3)
-      const to = (((i + 1) / SEGMENTS) * 100).toFixed(3)
-      stops.push(`${color} ${from}%`, `${color} ${to}%`)
+
+    const out: Array<{ d: string; color: string; width: number; opacity: number; paused: boolean }> = []
+    for (let i = 0; i < sky.points.length - 1; i++) {
+      const a = sky.points[i]
+      const b = sky.points[i + 1]
+      const mid = ((a.t + b.t) / 2) * duration
+
+      let color = 'var(--primary)'
+      if (series.length > 0) {
+        while (cursor < series.length - 1 && Math.abs(series[cursor + 1].t - mid) <= Math.abs(series[cursor].t - mid)) cursor++
+        color = useHR
+          ? hrZoneColor(values[cursor], maxHR)
+          // The same 210°→20° sweep the map uses for its non-zone shadings.
+          : `hsl(${210 - ((values[cursor] - min) / span) * 190} 78% 55%)`
+      }
+
+      out.push({
+        d: `M ${a.x.toFixed(2)} ${a.y.toFixed(2)} L ${b.x.toFixed(2)} ${b.y.toFixed(2)}`,
+        color,
+        width: widthAt((a.depth + b.depth) / 2),
+        // Fading into the distance, but never to nothing: the destination has
+        // to stay findable.
+        opacity: 0.95 - ((a.depth + b.depth) / 2) * 0.35,
+        // A stretch nothing was recorded through is drawn as a ghost rather
+        // than skipped, so the journey stays continuous while the gap shows.
+        paused: pauses.some(p => mid >= p.from && mid <= p.to),
+      })
     }
-    return `linear-gradient(to right, ${stops.join(',')})`
-  }, [duration, hrTimeline, maxHR, pauses])
+    // Drawn far-to-near, so the wider near segments overlap the finer far ones
+    // where the path folds back over itself.
+    return out.reverse()
+  }, [sky, effective, hrTimeline, cadenceTimeline, maxHR, duration, pauses])
 
   const zones = useMemo(
-    () => hrZoneBuckets(hrTimeline, maxHR).filter(z => z.pct > 0),
-    [hrTimeline, maxHR],
+    () => (hasHR ? hrZoneBuckets(hrTimeline, maxHR).filter(z => z.pct > 0) : []),
+    [hasHR, hrTimeline, maxHR],
   )
 
   const played = duration > 0 ? Math.max(0, Math.min(1, currentTime / duration)) : 0
+  const here = sky.points[Math.round(played * (sky.points.length - 1))]
 
-  /** Turns a click anywhere on the band into the moment under the pointer. */
-  function scrubFrom(e: React.MouseEvent<HTMLDivElement>) {
+  /** A click anywhere on the sky is the moment nearest the pointer's path position. */
+  function scrubFrom(e: React.MouseEvent<SVGSVGElement>) {
     const rect = e.currentTarget.getBoundingClientRect()
     if (rect.width <= 0 || duration <= 0) return
-    onScrub(Math.max(0, Math.min(duration, ((e.clientX - rect.left) / rect.width) * duration)))
+    // Into the field's own coordinates, then the nearest point on the path.
+    const px = ((e.clientX - rect.left) / rect.width) * FIELD_W
+    const py = ((e.clientY - rect.top) / rect.height) * FIELD_H
+    let best = 0
+    let bestD = Infinity
+    for (const p of sky.points) {
+      const d = (p.x - px) ** 2 + (p.y - py) ** 2
+      if (d < bestD) { bestD = d; best = p.t }
+    }
+    onScrub(best * duration)
   }
+
+  const options = [
+    ...(hasHR ? [{ value: 'hr' as Tint, label: 'Heart rate zones', glyph: <Heart size={14} color="var(--text-3)" aria-hidden /> }] : []),
+    ...(hasCadence ? [{ value: 'cadence' as Tint, label: 'Cadence', glyph: <Activity size={14} color="var(--text-3)" aria-hidden /> }] : []),
+    { value: 'none' as Tint, label: 'Plain', glyph: <Sparkles size={14} color="var(--text-3)" aria-hidden /> },
+  ]
 
   return (
     <div className="session-profile">
       <div className="session-profile-head">
-        <Activity size={14} style={{ color: 'var(--danger)' }} />
-        <h3>Effort</h3>
+        <Sparkles size={14} style={{ color: 'var(--primary)' }} />
+        <h3>The session</h3>
         <span className="session-profile-note">No route recorded</span>
       </div>
 
-      <div
-        className="session-ribbon"
-        style={band ? { backgroundImage: band } : undefined}
-        onClick={scrubFrom}
-        role="presentation"
-        title="Click to move the playhead"
-      >
-        {/* Over the band rather than part of it, so moving it repaints one
-            element instead of rebuilding the gradient. */}
-        <span className="session-ribbon-cursor" style={{ left: `${played * 100}%` }} />
-      </div>
+      <div className="session-sky">
+        <svg
+          viewBox={`0 0 ${FIELD_W} ${FIELD_H}`}
+          onClick={scrubFrom}
+          role="img"
+          aria-label="This session drawn as a journey, from its start at the lower left to its finish at the upper right"
+        >
+          <defs>
+            {/* The ground haze: the field's own surface, lifting toward the
+                horizon, which is what stops the stars reading as confetti. */}
+            <linearGradient id="al-sky" x1="0" y1="1" x2="0.35" y2="0">
+              <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.10" />
+              <stop offset="55%" stopColor="var(--primary)" stopOpacity="0.02" />
+              <stop offset="100%" stopColor="var(--primary)" stopOpacity="0" />
+            </linearGradient>
+          </defs>
 
-      <div className="session-ribbon-scale">
-        <span>0:00</span>
-        <span>{fmtDuration(duration)}</span>
+          <rect x="0" y="0" width={FIELD_W} height={FIELD_H} fill="url(#al-sky)" />
+
+          {sky.stars.map((s, i) => (
+            <circle key={i} cx={s.x} cy={s.y} r={s.r} fill="var(--text-2)" opacity={s.o} />
+          ))}
+
+          {sky.planet && (
+            <g opacity="0.22">
+              <circle cx={sky.planet.x} cy={sky.planet.y} r={sky.planet.r} fill="var(--text-3)" />
+              {sky.planet.ringed && (
+                <ellipse
+                  cx={sky.planet.x} cy={sky.planet.y}
+                  rx={sky.planet.r * 1.85} ry={sky.planet.r * 0.42}
+                  fill="none" stroke="var(--text-3)" strokeWidth="1.4"
+                  transform={`rotate(-18 ${sky.planet.x} ${sky.planet.y})`}
+                />
+              )}
+            </g>
+          )}
+
+          {segments.map((s, i) => (
+            <path
+              key={i}
+              d={s.d}
+              stroke={s.paused ? 'var(--text-3)' : s.color}
+              strokeWidth={s.paused ? s.width * 0.45 : s.width}
+              strokeLinecap="round"
+              strokeDasharray={s.paused ? '1 4' : undefined}
+              opacity={s.paused ? 0.5 : s.opacity}
+              fill="none"
+            />
+          ))}
+
+          {/* Launch: a filled mark with a ring around it, the biggest thing on
+              the path because it is the nearest. */}
+          <circle cx={sky.points[0].x} cy={sky.points[0].y} r="4.6" fill="var(--success)" />
+          <circle cx={sky.points[0].x} cy={sky.points[0].y} r="8.5" fill="none" stroke="var(--success)" strokeWidth="1.2" opacity="0.5" />
+
+          {/* Destination: a four-point sparkle, small because it is far away. */}
+          <Sparkle x={sky.points[sky.points.length - 1].x} y={sky.points[sky.points.length - 1].y} r={7} />
+
+          {/* Where playback has reached. */}
+          {here && (
+            <g>
+              <circle cx={here.x} cy={here.y} r={widthAt(here.depth) * 0.9 + 2.4} fill="var(--text)" opacity="0.16" />
+              <circle cx={here.x} cy={here.y} r={widthAt(here.depth) * 0.55 + 1.2} fill="var(--text)" />
+            </g>
+          )}
+        </svg>
+
+        <div className="session-sky-scale">
+          <span>0:00</span>
+          <span>{fmtDuration(duration)}</span>
+        </div>
+
+        {options.length > 1 && (
+          <div className="session-sky-picker">
+            <Dropdown value={effective} onChange={onTintChange} dropUp ariaLabel="Path colour" options={options} />
+          </div>
+        )}
       </div>
 
       {zones.length > 0 && (
@@ -128,7 +277,16 @@ export default function SessionProfile({
   )
 }
 
-/** Whether there is enough recorded for the profile to say anything. */
-export function canProfile(duration: number, hrTimeline: HeartRatePoint[]): boolean {
-  return duration > 0 && hrTimeline.length > 1
+/** The destination mark: a four-point star, drawn from two crossed lenses. */
+function Sparkle({ x, y, r }: { x: number; y: number; r: number }) {
+  const d = `M ${x} ${y - r} Q ${x + r * 0.22} ${y - r * 0.22} ${x + r} ${y}`
+    + ` Q ${x + r * 0.22} ${y + r * 0.22} ${x} ${y + r}`
+    + ` Q ${x - r * 0.22} ${y + r * 0.22} ${x - r} ${y}`
+    + ` Q ${x - r * 0.22} ${y - r * 0.22} ${x} ${y - r} Z`
+  return <path d={d} fill="var(--warning)" />
+}
+
+/** Whether there is enough for the drawing to be about this workout. */
+export function canProfile(duration: number, hrTimeline: HeartRatePoint[], cadenceTimeline: CadencePoint[]): boolean {
+  return duration > 0 && (hrTimeline.length > 1 || cadenceTimeline.length > 1)
 }

@@ -309,6 +309,7 @@ func (s *Server) sweep(ctx context.Context) {
 			continue
 		}
 		s.checkGoalsAtRisk(ctx, u.ID)
+		s.checkNoGoals(ctx, u.ID)
 	}
 
 	// Cheap enough to run on the same hourly tick as everything else: one

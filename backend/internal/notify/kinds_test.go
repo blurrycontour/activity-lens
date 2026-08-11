@@ -34,3 +34,16 @@ func TestKindMissingFromSavedPrefsDefaultsOn(t *testing.T) {
 		t.Error("an explicitly disabled kind must stay disabled")
 	}
 }
+
+// The goal nudge is the one kind that fires on nothing having happened, so a
+// registration slip here is not "a notification is missing" but "the app never
+// nudges anyone" — invisible from the outside, since its absence looks exactly
+// like the rate limiting working.
+func TestGoalNoneSetIsAKnownKind(t *testing.T) {
+	if !ValidKind(KindGoalNoneSet) {
+		t.Fatal("goal_none_set is not in AllKinds, so Notify will discard it")
+	}
+	if !DefaultPrefs().Wants(KindGoalNoneSet) {
+		t.Error("a new user would never be reminded to set a goal")
+	}
+}

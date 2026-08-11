@@ -193,6 +193,79 @@ func (s *Server) checkGoalsAtRisk(ctx context.Context, userID int64) {
 	}
 }
 
+// Bounds on the "you have no goals" nudge. See checkNoGoals.
+const (
+	// noGoalsMinWorkouts is how much history someone needs before the nudge
+	// makes sense. Suggesting a weekly target to an account with two imports is
+	// advice about a training habit that has not been established yet.
+	noGoalsMinWorkouts = 5
+
+	// noGoalsActiveDays is how recently they must have trained. This is what
+	// stops the nudge running forever: it is the only kind that fires on
+	// nothing happening, so it needs something to switch it off, and someone
+	// who is not training does not want to be told to set a target.
+	noGoalsActiveDays = 14
+
+	// noGoalsMinPeriod and noGoalsPeriodSpread set the cadence: every two or
+	// three days, which of the two being fixed per user. A single interval
+	// would land every instance's users on the same day; the jitter is per
+	// account and constant, so the rhythm is steady rather than surprising.
+	noGoalsMinPeriod    = 2
+	noGoalsPeriodSpread = 2
+)
+
+// checkNoGoals nudges someone who trains regularly and has set no goals.
+//
+// The only notification in the app that reports on nothing having happened,
+// which makes it the only one that can become nagging — so it is bounded three
+// ways: enough history to have a habit worth measuring, recent enough activity
+// that they are still training, and a dedupe key that admits one message every
+// two or three days. Beyond that it is a kind like any other and the Settings
+// switch turns it off.
+//
+// No new state. The cadence comes out of the dedupe key: the day number is
+// divided into buckets, and every run inside one bucket produces the same key,
+// which Notify already discards.
+func (s *Server) checkNoGoals(ctx context.Context, userID int64) {
+	prefs, err := s.settings.UserPreferences(ctx, userID)
+	if err != nil || len(prefs.Goals) > 0 {
+		return
+	}
+	workouts, err := s.workout.ListSummary(ctx, userID)
+	if err != nil || len(workouts) < noGoalsMinWorkouts {
+		return
+	}
+
+	now := time.Now()
+	cutoff := now.AddDate(0, 0, -noGoalsActiveDays)
+	recent := false
+	for _, w := range workouts {
+		if w.StartTime.After(cutoff) {
+			recent = true
+			break
+		}
+	}
+	if !recent {
+		return
+	}
+
+	// Days since the epoch, bucketed. The offset staggers accounts so a shared
+	// instance does not remind everyone on the same morning.
+	day := now.Unix() / 86400
+	period := noGoalsMinPeriod + userID%noGoalsPeriodSpread
+	bucket := (day + userID) / period
+
+	s.notify.Notify(ctx, notify.Event{
+		UserID: userID,
+		Kind:   notify.KindGoalNoneSet,
+		Title:  "Set a training goal",
+		Body:   "You have been training steadily. A weekly or monthly target gives the dashboard something to measure it against.",
+		Link:   "/settings/goals",
+		// One per bucket, so the cadence is the bucket width.
+		DedupeKey: fmt.Sprintf("goal-none:%d", bucket),
+	})
+}
+
 // progressTowardGoal sums the goal's metric over the qualifying activities in
 // its current window: activities, kilometres, or hours.
 //

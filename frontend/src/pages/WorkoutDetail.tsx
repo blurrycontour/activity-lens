@@ -37,7 +37,7 @@ import type { Shading } from '../components/RouteMap'
  */
 const RouteMap = lazy(() => import('../components/RouteMap'))
 import ExpandModal from '../components/ExpandModal'
-import SessionProfile, { canProfile } from '../components/SessionProfile'
+import SessionProfile, { canProfile, type Tint } from '../components/SessionProfile'
 import SessionContext from '../components/SessionContext'
 import { sessionStanding } from '../lib/standing'
 import RecalculateDialog from '../components/RecalculateDialog'
@@ -303,7 +303,12 @@ function MetricPanel({ icon, title, badge, info, stats, onExpand, children }: {
   children: React.ReactNode
 }) {
   return (
-    <div className="card">
+    // The header keeps the card's padding; the plot does not. It runs to the
+    // card's own edges and is clipped by its corner radius, so the area fill
+    // becomes part of the card rather than a picture placed on it — and on a
+    // phone that is nearly half again the plot width, taken back from a gutter
+    // that was drawing nothing. See metric-panel-plot.
+    <div className="card metric-panel">
       <div className="metric-panel-head">
         <h3 className="metric-panel-title">
           {icon}
@@ -316,9 +321,37 @@ function MetricPanel({ icon, title, badge, info, stats, onExpand, children }: {
         </button>
       </div>
       {stats && <div className="metric-panel-stats">{stats}</div>}
-      {children}
+      <div className="metric-panel-plot">{children}</div>
     </div>
   )
+}
+
+/**
+ * Two round values inside a domain, for the gridlines a phone draws in place of
+ * a y axis.
+ *
+ * Two, not five: they exist to give the plot a sense of scale, not to be read
+ * off. The axis they replace was taking about 44px of a 360px screen to say
+ * five numbers nobody was measuring against.
+ *
+ * Rounded to a 1/2/5 step so they land on values a person would have chosen —
+ * 140 and 160, not 137.4 and 158.2 — and dropped when the rounding pushes them
+ * outside the domain or on top of each other, which happens on a flat series
+ * where the whole range is narrower than one step.
+ */
+function inlineTicks([lo, hi]: [number, number]): number[] {
+  const span = hi - lo
+  if (!Number.isFinite(span) || span <= 0) return []
+  const raw = span / 3
+  const magnitude = 10 ** Math.floor(Math.log10(raw))
+  const step = [1, 2, 5, 10].map(m => m * magnitude).find(s => s >= raw) ?? magnitude * 10
+  const out: number[] = []
+  for (let v = Math.ceil(lo / step) * step; v < hi; v += step) {
+    // Strictly inside: a line on the domain's edge sits under the plot's own
+    // boundary and its label would be half outside the drawing.
+    if (v > lo && !out.includes(v)) out.push(v)
+  }
+  return out.slice(0, 2)
 }
 
 /**
@@ -571,12 +604,27 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
    * whose owner has not set one — and whose watch did not report one — drops to
    * the standing panel rather than colouring the whole band Zone 1.
    */
+  /**
+   * Whether there is anything for the playhead to drive.
+   *
+   * The transport moves a marker along a route and a cursor along the charts.
+   * A workout entered by hand, or imported with nothing but a duration, has
+   * neither — so the controls were a play button that made a number count up
+   * and nothing else move. Hidden rather than disabled: a disabled control is
+   * a promise that something would happen if only you were allowed, and here
+   * there is nothing to allow.
+   */
+  const hasSeries =
+    w.hrTimeline.length > 0 || w.paceTimeline.length > 0 || speedTimeline.length > 0
+    || w.elevTimeline.length > 0 || cadenceTimeline.length > 0
+  const playable = w.route.length >= 2 || hasSeries || hydrating
+
   /** Where this workout stands among the others of its sport. See standing.ts. */
   const standing = useMemo(() => sessionStanding(library, w), [library, w])
 
   const hero: 'map' | 'profile' | 'context' | 'none' =
     w.route.length >= 2 || hydrating ? 'map'
-      : effectiveMaxHR > 0 && canProfile(w.duration, w.hrTimeline) ? 'profile'
+      : canProfile(w.duration, w.hrTimeline, cadenceTimeline) ? 'profile'
         : standing.length > 0 ? 'context'
           : 'none'
 
@@ -657,6 +705,8 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
   // Lives here rather than in RouteMap: expanding the map mounts a second one,
   // and a choice held inside it was lost on the way.
   const [shading, setShading] = useState<Shading>('accent')
+  /** What the no-route session drawing is coloured by. See SessionProfile. */
+  const [tint, setTint] = useState<Tint>('hr')
 
   useEffect(() => {
     if (!playing || w.duration <= 0) return
@@ -846,6 +896,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
     maxHRForZones?: number
   }) {
     const { series, dataKey, stroke, gradId, unit, reversed, yTickFormatter, height, valueFormatter, hrZoneStroke, maxHRForZones } = opts
+    const mobile = isMobile
     const data = series.points
     const visible = visibleUpTo(data, currentTime)
     // From the extremes measured once when the series was prepared. This used
@@ -868,7 +919,12 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             seeking is what the scrub bar and the map are for. */}
         <AreaChart
           data={visible}
-          margin={{ top: 4, right: 18, left: -24, bottom: 14 }}
+          // Edge to edge on a phone. The card's padding is gone from around the
+          // plot, and the y axis with it — the numbers it carried are drawn on
+          // the gridlines instead, inside the plot, where they cost nothing.
+          margin={mobile
+            ? { top: 4, right: 0, left: 0, bottom: 14 }
+            : { top: 4, right: 18, left: -24, bottom: 14 }}
         >
           <defs>
             <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
@@ -881,7 +937,26 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
               </linearGradient>
             )}
           </defs>
-          <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
+          {/* On a phone the gridlines come from the labelled reference lines
+              below instead, so that there is one line per value rather than
+              two nearly-coincident ones. */}
+          {!mobile && <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />}
+          {mobile && inlineTicks(yDomain).map(v => (
+            <ReferenceLine
+              key={v}
+              y={v}
+              stroke="var(--border)"
+              strokeDasharray="2 4"
+              label={{
+                value: (yTickFormatter ?? String)(v),
+                position: 'insideTopLeft',
+                fontSize: 9,
+                fill: 'var(--text-3)',
+                fontFamily: 'var(--font-mono)',
+                offset: 4,
+              }}
+            />
+          ))}
           {/* Before the axes and the series, so the shading sits behind them
               rather than over the line it is meant to explain. */}
           {showPauses && pauses.map(p => (
@@ -899,7 +974,10 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             axisLine={false} tickLine={false} tickFormatter={fmtClock} interval="preserveStartEnd"
             label={xLabel('Elapsed time (h:mm)')}
           />
+          {/* Hidden and not removed on a phone: the axis is what owns the
+              domain, and dropping it would let the plot rescale itself. */}
           <YAxis
+            hide={mobile}
             tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}
             axisLine={false} tickLine={false} domain={yDomain} reversed={reversed} tickFormatter={yTickFormatter}
           />
@@ -1209,11 +1287,15 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
           {hero === 'profile' && (
             <div className="card detail-hero-card">
               <SessionProfile
+                id={w.id}
                 duration={w.duration}
                 hrTimeline={w.hrTimeline}
+                cadenceTimeline={cadenceTimeline}
                 maxHR={effectiveMaxHR}
                 pauses={pauses}
                 currentTime={currentTime}
+                tint={tint}
+                onTintChange={setTint}
                 onScrub={handleScrub}
               />
             </div>
@@ -1314,20 +1396,25 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
           </div>
         </div>
 
-        {/* Playback controls: drives the map marker + chart cursors below */}
-        <div className="card playback-card" style={{ marginBottom: 16 }}>
-          <PlaybackBar
-            playing={playing}
-            currentTime={currentTime}
-            duration={w.duration}
-            onPlayPause={handlePlayPause}
-            onReset={handleReset}
-            onEnd={handleEnd}
-            onScrub={handleScrub}
-          />
-        </div>
+        {/* Playback controls: drives the map marker + chart cursors below.
+            Absent entirely when there is neither — see `playable`. */}
+        {playable && (
+          <div className="card playback-card" style={{ marginBottom: 16 }}>
+            <PlaybackBar
+              playing={playing}
+              currentTime={currentTime}
+              duration={w.duration}
+              onPlayPause={handlePlayPause}
+              onReset={handleReset}
+              onEnd={handleEnd}
+              onScrub={handleScrub}
+            />
+          </div>
+        )}
 
-        {/* Metric toggle row */}
+        {/* Metric toggle row. Its two switches are about the charts, so with no
+            charts to configure the row goes with them. */}
+        {hasSeries && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
           {([
             { id: 'hr' as Metric, label: 'Heart Rate', color: 'var(--danger)', available: w.hrTimeline.length > 0 },
@@ -1367,6 +1454,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             </label>
           )}
         </div>
+        )}
 
         {/* Charts */}
         <div className="charts-grid">
@@ -1382,7 +1470,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             <MetricPanel
               icon={<Heart size={14} color="var(--danger)" />}
               title="Heart Rate"
-              info="Every heart-rate sample the file recorded, plotted against elapsed time. The line is coloured by training zone using your max HR — from Settings when the activity doesn't report its own. Click anywhere on the chart to move the playback cursor and the map marker to that moment."
+              info="Every heart-rate sample the file recorded, plotted against elapsed time. The line is coloured by training zone using your max HR — from Settings when the activity doesn't report its own. Hover or tap the line to read a moment; the playback cursor is moved from the scrub bar or the map."
               stats={<>Min {derived.hrMin ?? '—'} · Avg {w.avgHR} · Max {w.maxHR} bpm</>}
               onExpand={() => setExpanded('hr')}
             >

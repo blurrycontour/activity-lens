@@ -1994,6 +1994,24 @@ body:has(.overlay) .fab { display: none; }
   margin: 4px 0 10px;
 }
 
+/* The plot runs to the card's own edges while the header keeps its padding.
+
+   Negative margins rather than an unpadded card with a padded header, because
+   the card's padding is one number in one place and every other card on the
+   page depends on it — pulling the plot back out by the same amount keeps that
+   single definition. The card clips, so the area fill takes its corner radius
+   and the chart reads as part of the card rather than as a picture set into it.
+
+   The gain is entirely on mobile, where the plot was inside a card inside a
+   page gutter and then gave a third of what was left to axis furniture. On
+   desktop there is width to spare, so only the bottom bleed applies — the plot
+   keeps its side padding and its y axis. */
+.metric-panel { overflow: hidden; }
+.metric-panel-plot { margin-bottom: -16px; }
+@media (max-width: 768px) {
+  .metric-panel-plot { margin-left: -16px; margin-right: -16px; }
+}
+
 /* ── Chart card: title row, info tip, description ── */
 .chart-card-head {
   display: flex;
@@ -2806,35 +2824,34 @@ body:has(.overlay) .fab { display: none; }
   font-family: var(--font-mono);
 }
 
-/* The effort band: the whole workout as one strip of zone colour, with the
-   recording gaps painted in the page's own surface so they read as absence
-   rather than as a sixth zone. */
-.session-ribbon {
+/* The sky the session is drawn in. A fixed aspect ratio rather than a fixed
+   height: the drawing is a picture, and letting it stretch would tilt a
+   trajectory whose whole meaning is that it recedes from lower left to upper
+   right. */
+.session-sky {
   position: relative;
-  height: 68px;
   border-radius: var(--radius);
   overflow: hidden;
-  cursor: crosshair;
-  background: var(--bg-3);
+  background:
+    radial-gradient(120% 90% at 12% 100%, color-mix(in srgb, var(--primary) 9%, transparent), transparent 60%),
+    var(--bg-3);
+  border: 1px solid var(--border);
 }
-.session-ribbon-cursor {
+.session-sky svg { display: block; width: 100%; height: auto; cursor: crosshair; }
+.session-sky-scale {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  margin-left: -1px;
-  background: var(--text);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--bg-2) 60%, transparent);
-  pointer-events: none;
-}
-.session-ribbon-scale {
+  left: 10px;
+  right: 10px;
+  bottom: 7px;
   display: flex;
   justify-content: space-between;
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--text-3);
-  margin-top: -6px;
+  pointer-events: none;
 }
+/* Over the drawing, in the corner the path has already left. */
+.session-sky-picker { position: absolute; top: 8px; right: 8px; }
 
 /* Time in each zone. A row per zone rather than one stacked bar: the stacked
    version is prettier and unreadable below about 8% a segment, which is most

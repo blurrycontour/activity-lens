@@ -241,9 +241,12 @@ function GoalBar({ p, needle }: { p: GoalProgress; needle: boolean }) {
   )
 }
 
+/** How far past target a period must go to earn its "+". */
+const OVERSHOOT = 1.25
+
 /**
  * The run of recent windows: pass/fail per period, with a "+" where the target
- * was beaten. Shared by every style, at two densities — the compact one keeps
+ * was clearly beaten. Shared by every style, at two densities — the compact one keeps
  * the ledger and the rings from turning into a chart.
  */
 function GoalHistory({ p, showPeriods, compact }: {
@@ -254,9 +257,12 @@ function GoalHistory({ p, showPeriods, compact }: {
   return (
     <div className={`goal-history${compact ? ' compact' : ''}`}>
       {p.history.map(h => {
-        // A period that beat its target is worth more than a filled bar, so it
-        // is marked. Meeting it exactly is not "exceeded".
-        const over = p.goal.target > 0 && h.value > p.goal.target
+        // A period that comfortably beat its target is worth more than a filled
+        // bar, so it is marked — but only comfortably. Any margin at all put a
+        // "+" on almost every met period, which made the mark mean "met", which
+        // the filled bar already said. A quarter again is a week you would
+        // notice having had.
+        const over = p.goal.target > 0 && h.value >= p.goal.target * OVERSHOOT
         return (
           <span className="goal-history-cell" key={h.key}>
             <span
@@ -264,7 +270,7 @@ function GoalHistory({ p, showPeriods, compact }: {
               style={{ '--goal-hue': goalColor(p.goal.type) } as React.CSSProperties}
               title={`From ${h.key}: ${formatGoalAmount(p.goal, h.value)}${
                 p.goal.metric === 'count' ? (h.value === 1 ? ' activity' : ' activities') : ''
-              }${over ? ' — target beaten' : ''}`}
+              }${over ? ' — target beaten by a quarter or more' : ''}`}
             >
               {over && !compact ? '+' : ''}
             </span>
