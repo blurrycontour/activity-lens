@@ -2723,13 +2723,12 @@ body:has(.overlay) .fab { display: none; }
   font-size: 10px;
   color: var(--text-2);
 }
-.map-legend-zones { display: flex; gap: 16px; }
-.map-legend-zone { display: flex; align-items: center; gap: 5px; }
-/* A short bar rather than a dot. The ramp variant beside it grew to 150px and
-   this one only gained the space between its chips, so the two legends came
-   out visibly different lengths for the same job. A wider swatch also reads as
-   a piece of the scale, which is what it is. */
-.map-legend-zone i { width: 16px; height: 8px; border-radius: 2px; }
+/* Left at its original size: five named zones read fine this compact, and it
+   is only the ramp — a gradient you have to see a length of — that needed
+   more room. */
+.map-legend-zones { display: flex; gap: 9px; }
+.map-legend-zone { display: flex; align-items: center; gap: 4px; }
+.map-legend-zone i { width: 8px; height: 8px; border-radius: 2px; }
 .map-legend-ramp { display: flex; flex-direction: column; gap: 3px; }
 /* Long enough to read as a gradient. At 92px the middle of a three-stop ramp
    was about thirty pixels wide, which is not enough of it to see. */
@@ -2971,9 +2970,16 @@ body:has(.overlay) .fab { display: none; }
   left: auto;
   max-width: 100%;
 }
-/* The one concession to a narrow panel: the parts wrap rather than run off the
-   edge. Nothing here changes their size. */
-.session-sky-legend .map-legend-ramp i { width: min(150px, 100%); }
+/* No width override on the ramp — the base 150px applies.
+   `min(150px, 100%)` was silently collapsing this to about 110px: the legend
+   is a shrink-to-fit box, so a percentage width on a child contributes nothing
+   to the parent's intrinsic size and then resolves against whatever the rest
+   of the content asked for — which is the two end labels under the bar. The
+   ramp came out as wide as its own captions instead of 150px, and only in the
+   drawing, because the map's rule is a plain length.
+
+   The one concession to a narrow panel is below: the zone chips wrap rather
+   than run off the edge. Nothing here changes their size. */
 .session-sky-legend .map-legend-zones { flex-wrap: wrap; justify-content: flex-end; }
 /* The map's control at the map's type size and padding — the same control,
    not a smaller copy of it — with one thing dropped: the 150px minimum, which
