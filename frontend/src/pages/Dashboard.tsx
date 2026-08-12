@@ -187,14 +187,37 @@ function goalTitle(g: GoalProgress['goal']): string {
  * number people come back for, and it has no reason to depend on which layout
  * is selected.
  */
-function GoalBadges({ p, compact }: { p: GoalProgress; compact?: boolean }) {
+/**
+ * The phase offset for one medal's animations, from its place in the list.
+ *
+ * An inline custom property rather than nth-child rules, which is what this
+ * replaced. Those keyed on the position of a goal's *row* inside three named
+ * containers — so a fourth layout, or a container with a footer among its
+ * children, silently fell back to no offset at all and every medal flashed
+ * together. The index is the thing the stagger is actually about, so it is
+ * what gets passed.
+ *
+ * Wrapped rather than repeated at 0.7s intervals: a whole number of these
+ * inside the shine's three-second cycle would put a fifth medal back in step
+ * with the first, so the step is deliberately not a factor of the period.
+ */
+function awardPhase(index: number): React.CSSProperties {
+  return { '--award-delay': `${((index * 0.7) % 2.4).toFixed(2)}s` } as React.CSSProperties
+}
+
+function GoalBadges({ p, compact, index = 0 }: { p: GoalProgress; compact?: boolean; index?: number }) {
   const met = p.current >= p.goal.target
   const unit = streakUnit(p.goal)
   if (!met && p.streak <= 0) return null
   return (
     <span className="goal-badges">
       {met && (
-        <span className="goal-award" title={`Target met this ${unit}`} aria-label="Target met">
+        <span
+          className="goal-award"
+          title={`Target met this ${unit}`}
+          aria-label="Target met"
+          style={awardPhase(index)}
+        >
           <Trophy size={compact ? 11 : 13} strokeWidth={2.25} />
         </span>
       )}
@@ -314,7 +337,7 @@ function daysLeft(p: GoalProgress): number {
  * Four rows: the mark, the figures and the verdict; then the description with
  * the trophy and streak; then the bar; then the history.
  */
-function GoalTileStandard({ p, opts }: { p: GoalProgress; opts: GoalViewOpts }) {
+function GoalTileStandard({ p, opts, index = 0 }: { p: GoalProgress; opts: GoalViewOpts; index?: number }) {
   const met = p.current >= p.goal.target
   const v = paceVerdict(p)
   return (
@@ -338,7 +361,7 @@ function GoalTileStandard({ p, opts }: { p: GoalProgress; opts: GoalViewOpts }) 
           <span className="goal-std-slash mono" aria-hidden="true">/</span>
           <span className="goal-std-tot mono">{formatGoalAmount(p.goal, p.goal.target)}</span>
         </span>
-        <GoalBadges p={p} />
+        <GoalBadges p={p} index={index} />
       </div>
 
       <GoalBar p={p} needle />
@@ -402,13 +425,13 @@ function GoalToday({ progress, opts }: { progress: GoalProgress[]; opts: GoalVie
       {because && <p className="goal-today-because">{because}</p>}
 
       <div className="goal-today-strip">
-        {progress.map(p => {
+        {progress.map((p, i) => {
           const v = paceVerdict(p)
           return (
             <div className="goal-today-item" key={p.goal.id} title={goalTitle(p.goal)}>
               <GoalSportMark type={p.goal.type} size={13} />
               <span className="goal-today-name">{describeGoal(p.goal)}</span>
-              <GoalBadges p={p} compact />
+              <GoalBadges p={p} compact index={i} />
               <span className={`goal-verdict ${v.tone}`}>{v.text}</span>
               <span className="goal-today-amt mono">
                 {formatGoalAmount(p.goal, p.current, true)}/{formatGoalAmount(p.goal, p.goal.target)}
@@ -426,7 +449,7 @@ function GoalToday({ progress, opts }: { progress: GoalProgress[]; opts: GoalVie
 function GoalRings({ progress, opts }: { progress: GoalProgress[]; opts: GoalViewOpts }) {
   return (
     <div className="goal-rings">
-      {progress.map(p => {
+      {progress.map((p, i) => {
         const met = p.current >= p.goal.target
         const pct = p.goal.target > 0 ? Math.min(1, p.current / p.goal.target) : 0
         const R = 46
@@ -460,7 +483,7 @@ function GoalRings({ progress, opts }: { progress: GoalProgress[]; opts: GoalVie
                 <span className="goal-ring-of mono">of {formatGoalAmount(p.goal, p.goal.target)}</span>
               </span>
               {met && (
-                <span className="goal-ring-award" title={`Target met this ${streakUnit(p.goal)}`}>
+                <span className="goal-ring-award" title={`Target met this ${streakUnit(p.goal)}`} style={awardPhase(i)}>
                   <Trophy size={11} strokeWidth={2.25} />
                 </span>
               )}
@@ -501,7 +524,7 @@ function GoalLedger({ progress, opts }: { progress: GoalProgress[]; opts: GoalVi
   )
   return (
     <div className="goal-ledger">
-      {progress.map(p => {
+      {progress.map((p, i) => {
         const v = paceVerdict(p)
         return (
           <div className="goal-ledger-row" key={p.goal.id}>
@@ -515,7 +538,7 @@ function GoalLedger({ progress, opts }: { progress: GoalProgress[]; opts: GoalVi
                 two holes; the figure keeps a fixed width of its own, which is
                 all that has to line up down the card. */}
             <span className="goal-ledger-right">
-              <GoalBadges p={p} compact />
+              <GoalBadges p={p} compact index={i} />
               <span className={`goal-verdict ${v.tone}`}>{v.text}</span>
               <span className="goal-ledger-val mono">
                 {formatGoalAmount(p.goal, p.current, true)}/{formatGoalAmount(p.goal, p.goal.target)}
@@ -546,7 +569,7 @@ function GoalPanel({ progress, opts }: { progress: GoalProgress[]; opts: GoalVie
   if (opts.style === 'today') return <GoalToday progress={progress} opts={opts} />
   return (
     <div className="goal-panel-stack">
-      {progress.map(p => <GoalTileStandard key={p.goal.id} p={p} opts={opts} />)}
+      {progress.map((p, i) => <GoalTileStandard key={p.goal.id} p={p} opts={opts} index={i} />)}
     </div>
   )
 }

@@ -4115,7 +4115,9 @@ body:has(.overlay) .fab { display: none; }
   box-shadow:
     0 0 0 2px var(--primary-dim),
     0 0 14px var(--primary-glow);
-  animation: goal-award-in 0.45s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+  /* Struck, then flipped into place. The delay is per-goal — see awardPhase —
+     so a row of medals lands one after another rather than all at once. */
+  animation: goal-award-flip 0.85s cubic-bezier(0.25, 0.9, 0.3, 1) var(--award-delay, 0s) both;
   position: relative;
   /* Clips the shine to the disc. An element's own box-shadow is drawn outside
      the border box and is not clipped by overflow, so the halo survives. */
@@ -4137,18 +4139,24 @@ body:has(.overlay) .fab { display: none; }
     transparent
   );
   transform: translateX(-260%) skewX(-18deg);
+  /* Out of phase with its neighbours, and starting only once the coin has
+     landed — a band of light crossing a disc that is still spinning reads as a
+     rendering fault rather than as shine. The offset comes from the goal's
+     index as a custom property, because the nth-child rules this replaces
+     keyed on a row's position inside three named containers: a layout not on
+     that list, or a container with a footer among its children, fell back to
+     no offset and every medal flashed in unison. */
   animation: goal-award-shine 3s ease-in-out infinite;
+  animation-delay: calc(var(--award-delay, 0s) + 0.9s);
 }
-/* Staggered, so several met goals don't flash in unison. */
-:is(.goal-panel-stack, .goal-rings, .goal-ledger) > :nth-child(3n + 2) .goal-award::after {
-  animation-delay: 1s;
-}
-:is(.goal-panel-stack, .goal-rings, .goal-ledger) > :nth-child(3n) .goal-award::after {
-  animation-delay: 2s;
-}
-@keyframes goal-award-in {
-  from { transform: scale(0.4); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
+/* The coin flip. Three turns about the vertical axis, through a perspective so
+   the disc narrows and widens instead of merely squashing — that foreshortening
+   is the whole difference between a flipping coin and a shrinking circle. It
+   plays once, on arrival, and hands over to the shine. */
+@keyframes goal-award-flip {
+  0% { transform: perspective(420px) rotateY(0deg) scale(0.4); opacity: 0; }
+  30% { opacity: 1; }
+  100% { transform: perspective(420px) rotateY(1080deg) scale(1); opacity: 1; }
 }
 /* Most of the cycle is the rest between sweeps; the sweep itself is the tail. */
 @keyframes goal-award-shine {
@@ -4156,7 +4164,8 @@ body:has(.overlay) .fab { display: none; }
   100% { transform: translateX(320%) skewX(-18deg); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .goal-award { animation: none; }
+  .goal-award,
+  .goal-ring-award { animation: none; }
   .goal-award::after { display: none; }
 }
 
@@ -4458,6 +4467,7 @@ body:has(.overlay) .fab { display: none; }
 }
 /* On the dial rather than under it, for the same reason. */
 .goal-ring-award {
+  animation: goal-award-flip 0.85s cubic-bezier(0.25, 0.9, 0.3, 1) var(--award-delay, 0s) both;
   position: absolute;
   top: 2px;
   right: 2px;
