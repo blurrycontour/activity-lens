@@ -1874,12 +1874,11 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
           dropped — the modal's own header closes it — beside the transport,
           exactly as the map's is. */}
       {expanded === 'session' && (
-        <ExpandModal title="The session" onClose={() => setExpanded(null)}>
-          {/* variant="map" would be the immersive full-bleed treatment; this
-              wants the ordinary modal, just with room. The class gives the sky
-              a real height to fill — inside the modal there is no card to
-              stretch against. */}
-          <div className="session-expanded">
+        // The map's immersive treatment, because this is standing in for the
+        // map: edge to edge, the whole viewport on a phone, and the transport
+        // on its own foot below.
+        <ExpandModal title="The session" onClose={() => setExpanded(null)} variant="map">
+          <div className="modal-immersive-map session-expanded">
           <SessionProfile
             id={w.id}
             duration={w.duration}
@@ -1896,7 +1895,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             cadenceLabel={cadenceUnit(w.type)}
           />
           </div>
-          <div style={{ marginTop: 12 }}>
+          <div className="modal-immersive-foot">
             <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onEnd={handleEnd} onScrub={handleScrub} />
           </div>
         </ExpandModal>

@@ -2806,7 +2806,10 @@ body:has(.overlay) .fab { display: none; }
    Side and bottom padding go, so the drawing has the card's full width and
    runs to its bottom edge — the same deal the map card gets. Only the title
    keeps its inset, and it supplies its own. The minimum matches the map's, so
-   a workout without GPS gets a panel the same size as one with it. */
+   a workout without GPS gets a panel the same size as one with it.
+
+   The title bar is inside the drawing now — see .session-sky-bar — so this
+   card carries no padding at all: it is a frame around a picture. */
 .detail-hero-card {
   display: flex;
   flex-direction: column;
@@ -2837,8 +2840,14 @@ body:has(.overlay) .fab { display: none; }
 /* ── The no-route heroes ──────────────────────────────────────────────────
    Both share a header, so a workout that has samples and one that has nothing
    read as two states of one panel rather than as two different components. */
+/* `min-height: 0` is load-bearing, not tidiness. A flex item's automatic
+   minimum size is its content's, and the content here is an <svg> with a
+   viewBox — which has an intrinsic aspect ratio, so at the panel's width it
+   claims an intrinsic *height* of several hundred pixels. Without this the
+   card could not shrink below that and grew past the summary column beside
+   it, which is exactly the "taller than the summary" bug. */
 .session-profile,
-.session-context { display: flex; flex-direction: column; gap: 12px; flex: 1; }
+.session-context { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; }
 .session-profile-head { display: flex; align-items: center; gap: 8px; }
 .session-profile-head h3 { font-size: 13px; font-weight: 600; }
 .session-profile-note {
@@ -4880,12 +4889,10 @@ body:has(.overlay) .fab { display: none; }
 
 
 
-/* The session panel inside its expand modal.
-
-   The modal supplies the title, so the panel's own header is suppressed and
-   this is only about height: with no card to stretch against, the sky would
-   collapse to nothing. Taller than the inline panel, which is the whole point
-   of expanding it — capped in vh so the transport below stays on screen. */
-.session-expanded { display: flex; height: min(64vh, 560px); }
-.session-expanded .session-profile { flex: 1; min-width: 0; }
-.session-expanded .session-sky { border-radius: var(--radius); border: 1px solid var(--border); overflow: hidden; }
+/* The session panel inside its expand modal: the map's immersive treatment,
+   edge to edge, with the transport on the modal's own foot. Square-cornered
+   and unframed, because at this size the drawing is the window rather than
+   something sitting in one. */
+.session-expanded { display: flex; }
+.session-expanded .session-profile { flex: 1; min-width: 0; min-height: 0; }
+.session-expanded .session-sky { border-radius: 0; border: none; }

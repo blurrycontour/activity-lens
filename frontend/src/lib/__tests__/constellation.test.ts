@@ -155,7 +155,9 @@ describe('a field built to the panel', () => {
     // bottom edge instead of floating above the controls. Every position is a
     // fraction of the field, so this has to hold at any height.
     const spikes = Array.from({ length: 110 }, (_, i) => (i % 2 === 0 ? 0 : 1))
-    for (const h of [140, 200, 250, 360]) {
+    // The full range the panel can ask for: a wide desktop card at one end,
+    // a phone in the expanded full-viewport view at the other.
+    for (const h of [60, 140, 250, 360, 900]) {
       const { points } = buildConstellation('a', spikes, 110, h)
       for (const p of points) {
         expect(p.y).toBeGreaterThanOrEqual(0)
@@ -175,12 +177,12 @@ describe('a very wide panel', () => {
     // A desktop panel beside the summary column is over three times as wide as
     // it is tall, so the field it is built to is short. The trajectory has to
     // survive that: it is the one thing that makes the drawing readable.
-    const { points } = buildConstellation('a', flat, 110, 90)
+    const { points } = buildConstellation('a', flat, 110, 60)
     expect(points[0].x).toBeLessThan(points[points.length - 1].x)
     expect(points[0].y).toBeGreaterThan(points[points.length - 1].y)
     for (const p of points) {
       expect(p.y).toBeGreaterThanOrEqual(0)
-      expect(p.y).toBeLessThanOrEqual(90)
+      expect(p.y).toBeLessThanOrEqual(60)
     }
   })
 })

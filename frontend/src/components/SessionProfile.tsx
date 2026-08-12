@@ -119,11 +119,15 @@ export default function SessionProfile({
    * short of them. Every position in the geometry is a fraction of the field,
    * so re-proportioning it simply fills the panel.
    *
-   * Rounded to the nearest ten and bounded: this feeds the seeded builder, and
-   * rebuilding a hundred and ten points on every pixel of a window drag would
-   * be a resize handler doing real work. The bounds are wide — a desktop panel
-   * beside the summary column is over three times as wide as it is tall, and a
-   * tighter floor here would put the letterbox back.
+   * Rounded to the nearest ten, which is only there to stop a window drag from
+   * rebuilding a hundred and ten points on every pixel.
+   *
+   * The bounds are deliberately wider than any panel: whatever the field does
+   * not cover is letterboxed as empty sky, and a bound that bites is a bound
+   * that shows as a blank band. The shapes to clear are a desktop panel beside
+   * the summary column, over three times as wide as it is tall, and the
+   * expanded view on a phone, which is taller than it is wide by nearly as
+   * much the other way.
    */
   const skyBox = useRef<HTMLDivElement>(null)
   const [fieldH, setFieldH] = useState(FIELD_H)
@@ -134,7 +138,7 @@ export default function SessionProfile({
       const { width, height } = el.getBoundingClientRect()
       if (width <= 0 || height <= 0) return
       const wanted = Math.round((FIELD_W * height) / width / 10) * 10
-      setFieldH(Math.max(90, Math.min(420, wanted)))
+      setFieldH(Math.max(60, Math.min(900, wanted)))
     }
     measure()
     const obs = new ResizeObserver(measure)
