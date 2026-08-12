@@ -2,14 +2,16 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Plus, Watch, Bike, Shirt, Package, SportShoe, Pencil, Trash2, X, ChevronRight,
   ArrowLeft, AlertTriangle, Search, SlidersHorizontal, ArrowUpDown, Layers,
-  ArrowDownAZ, Activity, Route, Gauge, Shapes,
+  ArrowDownAZ, Activity, Route, Gauge, Shapes, Check,
 } from 'lucide-react'
 import { api, type Equipment, type EquipmentInput, type LinkedWorkout } from '../lib/api'
 import { useRefreshHandler } from '../context/RefreshContext'
+import { useWorkouts } from '../context/WorkoutsContext'
 import { useIsMobile } from '../lib/useIsMobile'
 import Dropdown, { type DropdownOption } from '../components/Dropdown'
 import FilterSheet from '../components/FilterSheet'
-import { fmtDuration, fmtDist } from '../data/workouts'
+import { searchWorkouts } from '../lib/workoutFilters'
+import { fmtDuration, fmtDist, type Workout } from '../data/workouts'
 
 interface EquipmentPageProps {
   onSelectWorkout: (id: string) => void
@@ -332,6 +334,125 @@ export default function EquipmentPage({ onSelectWorkout }: EquipmentPageProps) {
   )
 }
 
+/**
+ * Picks workouts to link to a piece of equipment, by searching the library.
+ *
+ * The other direction of this already existed — open a workout, add its gear —
+ * which is the right shape when you have just imported one run. It is the wrong
+ * shape for a new pair of shoes you have already run twenty times in, where you
+ * are thinking about the gear and the workouts are the list.
+ *
+ * Searching rather than scrolling because the library is the whole history: a
+ * picker listing all of it is not something anyone reads. It runs against the
+ * workouts already in memory, so it answers on the keystroke and works offline.
+ */
+function LinkWorkoutsPanel({ equipmentId, linked, onLinked, onClose }: {
+  equipmentId: string
+  /** Already on this equipment, so the picker does not offer them again. */
+  linked: ReadonlySet<string>
+  onLinked: (updated: Equipment & { workouts: LinkedWorkout[] }) => void
+  onClose: () => void
+}) {
+  const { workouts, refresh } = useWorkouts()
+  const [query, setQuery] = useState('')
+  const [picked, setPicked] = useState<string[]>([])
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Anything picked stays visible while the query moves on, so a selection
+  // built across two or three searches can still be reviewed before saving —
+  // and can be un-picked without retyping the search that found it.
+  const results = useMemo(() => {
+    const found = searchWorkouts(workouts, query, linked)
+    const chosen = picked
+      .map(id => workouts.find(w => w.id === id))
+      .filter((w): w is Workout => !!w && !found.some(f => f.id === w.id))
+    return [...chosen, ...found]
+  }, [workouts, query, linked, picked])
+
+  const toggle = (id: string) =>
+    setPicked(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]))
+
+  async function save() {
+    setSaving(true)
+    setError(null)
+    try {
+      onLinked(await api.linkEquipmentWorkouts(equipmentId, picked))
+      // Those workouts now carry this gear, and the cache behind every other
+      // page still says they do not. Cheaper to reload the list once here than
+      // to leave the workout page disagreeing with the one you just used.
+      void refresh()
+      onClose()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'could not link workouts')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="card" style={{ padding: 14, marginBottom: 8 }}>
+      <div style={{ position: 'relative', marginBottom: 10 }}>
+        <Search size={14} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', pointerEvents: 'none' }} />
+        <input
+          className="input"
+          placeholder="Search workouts by name, sport or date…"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          style={{ paddingLeft: 30, width: '100%' }}
+          autoFocus
+          aria-label="Search workouts to link"
+        />
+      </div>
+
+      {error && <p style={{ fontSize: 12, color: 'var(--danger)', marginBottom: 8 }}>{error}</p>}
+
+      <div className="link-picker-list">
+        {results.length === 0 ? (
+          <p style={{ fontSize: 13, color: 'var(--text-3)', padding: '10px 2px' }}>
+            {workouts.length === 0
+              ? 'No workouts yet.'
+              : query
+                ? 'No workouts match that.'
+                : 'Every workout already uses this.'}
+          </p>
+        ) : results.map(w => {
+          const on = picked.includes(w.id)
+          return (
+            <button
+              key={w.id}
+              type="button"
+              className={`link-picker-row${on ? ' on' : ''}`}
+              onClick={() => toggle(w.id)}
+              aria-pressed={on}
+            >
+              <span className="link-picker-check">{on && <Check size={12} />}</span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span className="link-picker-name">{w.name}</span>
+                <span className="link-picker-meta">
+                  {new Date(w.date).toLocaleDateString()} · {w.type} · {fmtDist(w.distance)}
+                </span>
+              </span>
+            </button>
+          )
+        })}
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end', alignItems: 'center' }}>
+        {picked.length > 0 && (
+          <span style={{ fontSize: 12, color: 'var(--text-3)', marginRight: 'auto' }}>
+            {picked.length} selected
+          </span>
+        )}
+        <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={onClose} disabled={saving}>Cancel</button>
+        <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={() => void save()} disabled={saving || picked.length === 0}>
+          {saving ? 'Adding…' : `Add${picked.length > 0 ? ` ${picked.length}` : ''}`}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function EquipmentDetail({ id, reloadToken, onBack, onSelectWorkout, onEdit, onDeleted }: {
   id: string
   /** Bumped by the page when an edit is saved; any change refetches. */
@@ -343,6 +464,12 @@ function EquipmentDetail({ id, reloadToken, onBack, onSelectWorkout, onEdit, onD
 }) {
   const [data, setData] = useState<(Equipment & { workouts: LinkedWorkout[] }) | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [linking, setLinking] = useState(false)
+  const { refresh: refreshWorkouts } = useWorkouts()
+
+  // What the picker must not offer again. Kept as a set because it is read once
+  // per candidate row on every keystroke.
+  const linkedIds = useMemo(() => new Set((data?.workouts ?? []).map(w => w.id)), [data])
 
   const load = useCallback(async () => {
     setData(await api.getEquipment(id))
@@ -362,6 +489,18 @@ function EquipmentDetail({ id, reloadToken, onBack, onSelectWorkout, onEdit, onD
   async function doDelete() {
     await api.deleteEquipment(id)
     onDeleted()
+  }
+
+  // The response carries the whole detail back, so the count and the wear
+  // figures move with the list rather than a beat behind it.
+  async function unlink(workoutID: string) {
+    try {
+      setData(await api.unlinkEquipmentWorkout(id, workoutID))
+      void refreshWorkouts()
+    } catch {
+      // Nothing changed server-side; a refetch is the honest recovery.
+      void load()
+    }
   }
 
   if (!data) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-3)' }}>Loading…</div>
@@ -414,11 +553,28 @@ function EquipmentDetail({ id, reloadToken, onBack, onSelectWorkout, onEdit, onD
         {data.notes && <div style={{ marginTop: 14, fontSize: 14, color: 'var(--text-2)', whiteSpace: 'pre-wrap' }}>{data.notes}</div>}
       </div>
 
-      <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>
-        Linked workouts <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>({data.workouts.length})</span>
-      </h2>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
+        <h2 style={{ fontSize: 15, fontWeight: 600 }}>
+          Linked workouts <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>({data.workouts.length})</span>
+        </h2>
+        {!linking && (
+          <button className="btn btn-ghost" style={{ fontSize: 12, padding: '4px 10px' }} onClick={() => setLinking(true)}>
+            <Plus size={14} /> Add workouts
+          </button>
+        )}
+      </div>
+
+      {linking && (
+        <LinkWorkoutsPanel
+          equipmentId={data.id}
+          linked={linkedIds}
+          onLinked={setData}
+          onClose={() => setLinking(false)}
+        />
+      )}
+
       {data.workouts.length === 0 ? (
-        <div className="card" style={{ padding: 24, textAlign: 'center', color: 'var(--text-3)' }}>No workouts use this equipment yet.</div>
+        !linking && <div className="card" style={{ padding: 24, textAlign: 'center', color: 'var(--text-3)' }}>No workouts use this equipment yet.</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {data.workouts.map(w => (
@@ -433,6 +589,17 @@ function EquipmentDetail({ id, reloadToken, onBack, onSelectWorkout, onEdit, onD
                 <div>{fmtDist(w.distance)}</div>
                 <div style={{ color: 'var(--text-3)' }}>{fmtDuration(w.duration)}</div>
               </div>
+              {/* Linking from here without being able to unlink from here would
+                  send you to the workout page to undo a mistake made on this
+                  one. stopPropagation because the row itself opens the workout. */}
+              <button
+                className="icon-btn"
+                title="Remove from this equipment"
+                aria-label={`Remove ${w.name} from this equipment`}
+                onClick={e => { e.stopPropagation(); void unlink(w.id) }}
+              >
+                <X size={14} />
+              </button>
               <ChevronRight size={16} style={{ color: 'var(--text-3)' }} />
             </div>
           ))}

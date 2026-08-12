@@ -87,6 +87,46 @@ export function applyWorkoutFilters(list: Workout[], f: WorkoutFilters): Workout
 }
 
 /**
+ * Workouts matching a free-text query, for picking one out of a library.
+ *
+ * Searched against the whole list already in memory rather than against the
+ * server: every page renders from that cache, so a query costs nothing, answers
+ * on the keystroke, and works offline — a search endpoint would have been a
+ * round trip and a rate limit to say the same thing.
+ *
+ * Name, sport and date all match, because none of the three alone finds the
+ * workout you are thinking of: "the ride in March" and "Morning Run" are both
+ * things a person types. The date is matched in ISO form, which is what makes
+ * "2026-03" narrow to a month.
+ *
+ * Newest first and capped, since this feeds a picker: a list of every workout
+ * ever recorded is not a search result, and scrolling one is slower than typing
+ * another word.
+ */
+export function searchWorkouts(
+  list: Workout[],
+  query: string,
+  exclude: ReadonlySet<string> = new Set(),
+  limit = 40,
+): Workout[] {
+  const needle = query.trim().toLowerCase()
+  const out: Workout[] = []
+  // Sorted first, so the cap keeps the newest matches rather than whichever
+  // ones happen to come first in the cache.
+  for (const w of [...list].sort(compareBySort('date-desc'))) {
+    if (exclude.has(w.id)) continue
+    if (needle && !(
+      w.name.toLowerCase().includes(needle)
+      || w.type.toLowerCase().includes(needle)
+      || w.date.includes(needle)
+    )) continue
+    out.push(w)
+    if (out.length >= limit) break
+  }
+  return out
+}
+
+/**
  * Reads the auto-import handoff out of a URL query string.
  *
  * Returns null when there is nothing to claim, so a caller can tell "no link"

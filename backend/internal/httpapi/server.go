@@ -228,6 +228,8 @@ func (s *Server) apiRoutes() http.Handler {
 	mux.Handle("GET /api/equipment/{id}", s.authed(s.handleGetEquipment))
 	mux.Handle("PATCH /api/equipment/{id}", s.authedCSRF(s.handlePatchEquipment))
 	mux.Handle("DELETE /api/equipment/{id}", s.authedCSRF(s.handleDeleteEquipment))
+	mux.Handle("POST /api/equipment/{id}/workouts", s.authedCSRF(s.handleLinkWorkouts))
+	mux.Handle("DELETE /api/equipment/{id}/workouts/{workoutId}", s.authedCSRF(s.handleUnlinkWorkout))
 
 	// Feedback: anyone may file one, only admins may read them.
 	mux.Handle("POST /api/feedback", s.authedCSRF(s.handleCreateFeedback))

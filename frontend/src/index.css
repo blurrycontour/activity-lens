@@ -924,6 +924,71 @@ body {
 .stat-chip .value { font-size: 18px; font-weight: 700; font-family: var(--font-mono); color: var(--text); letter-spacing: -0.03em; }
 .stat-chip .unit  { font-size: 12px; color: var(--text-2); font-weight: 400; }
 
+/* Picking workouts to link to a piece of equipment, on the gear page.
+
+   The list scrolls inside the card rather than growing it: the picker sits
+   between the heading and the linked workouts below, and a search that matched
+   forty runs would otherwise push the rest of the page out of reach while you
+   are still choosing. The height is a little over six rows, so it always reads
+   as a list that continues. */
+.link-picker-list {
+  max-height: 280px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+.link-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.link-picker-row:hover { background: var(--bg-3); }
+.link-picker-row.on { background: var(--primary-dim); border-color: var(--primary); }
+.link-picker-check {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--bg);
+}
+.link-picker-row.on .link-picker-check { background: var(--primary); border-color: var(--primary); }
+.link-picker-name { display: block; font-size: 13px; font-weight: 600; }
+.link-picker-meta { display: block; font-size: 11px; color: var(--text-3); margin-top: 1px; }
+
+/* A quiet control that only asserts itself on approach — it sits on a row whose
+   whole job is to open the workout, so it must not read as the row's action. */
+.icon-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s, border-color 0.12s;
+}
+.icon-btn:hover { color: var(--danger); background: var(--bg-3); border-color: var(--border); }
+
 .page-header { padding: 24px 24px 16px; border-bottom: 1px solid var(--border); }
 /* Only the PageHeader component's own layout. Five pages hand-roll this markup
    with their own inline flex rules under the same .page-header class, so

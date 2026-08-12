@@ -120,6 +120,40 @@ func (s *Service) SetForWorkout(ctx context.Context, userID int64, workoutID str
 	return s.repo.SetWorkoutEquipment(ctx, userID, workoutID, ids)
 }
 
+// MaxLinkBatch caps one call to LinkWorkouts. Adding gear to a whole season at
+// once is a reasonable thing to want; a list long enough to hold the statement
+// open on the single write connection is not.
+const MaxLinkBatch = 200
+
+// LinkWorkouts adds workouts to a piece of equipment, leaving whatever else
+// those workouts already carry alone.
+func (s *Service) LinkWorkouts(ctx context.Context, userID int64, id string, workoutIDs []string) (int, error) {
+	// Duplicates in the request would each be counted, and the count is what
+	// the page reports back to the user.
+	seen := make(map[string]struct{}, len(workoutIDs))
+	ids := make([]string, 0, len(workoutIDs))
+	for _, w := range workoutIDs {
+		w = strings.TrimSpace(w)
+		if w == "" {
+			continue
+		}
+		if _, dup := seen[w]; dup {
+			continue
+		}
+		seen[w] = struct{}{}
+		ids = append(ids, w)
+	}
+	if len(ids) > MaxLinkBatch {
+		return 0, fmt.Errorf("%w: at most %d workouts at a time", ErrInvalid, MaxLinkBatch)
+	}
+	return s.repo.LinkWorkouts(ctx, userID, id, ids)
+}
+
+// UnlinkWorkout removes one workout from a piece of equipment.
+func (s *Service) UnlinkWorkout(ctx context.Context, userID int64, id, workoutID string) error {
+	return s.repo.UnlinkWorkout(ctx, userID, id, workoutID)
+}
+
 // ForWorkout returns the equipment linked to a workout.
 func (s *Service) ForWorkout(ctx context.Context, userID int64, workoutID string) ([]Equipment, error) {
 	return s.repo.ForWorkout(ctx, userID, workoutID)
