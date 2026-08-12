@@ -116,8 +116,13 @@ const SHAPES: Record<Variant, [number, number, number, number]> = {
  *                recorded nothing but a duration — a straight arc is honest.
  * @param count   points along the path. The default is smooth at any size the
  *                card reaches and cheap enough to build on every render.
+ * @param fieldH  the height of the coordinate space, so the drawing can be
+ *                built to the shape of the panel it will be shown in rather
+ *                than sitting in a letterbox inside it. Every position here is
+ *                a fraction of the field, so this simply re-proportions the
+ *                whole picture — see the note on the viewBox in SessionProfile.
  */
-export function buildConstellation(seed: string, samples: number[], count = 110): Constellation {
+export function buildConstellation(seed: string, samples: number[], count = 110, fieldH = FIELD_H): Constellation {
   const h = hash(seed)
   const random = rng(h)
   const variant = VARIANTS[h % VARIANTS.length]
@@ -128,21 +133,21 @@ export function buildConstellation(seed: string, samples: number[], count = 110)
   // maximise button sits there, and a finish glyph underneath a button is a
   // finish nobody can see. It still reads as "far away and up and to the
   // right", which is the only thing the position has to say.
-  const x0 = FIELD_W * 0.10, y0 = FIELD_H * 0.86
-  const x1 = FIELD_W * 0.86, y1 = FIELD_H * 0.27
+  const x0 = FIELD_W * 0.10, y0 = fieldH * 0.86
+  const x1 = FIELD_W * 0.86, y1 = fieldH * 0.27
 
   // A per-workout nudge to the middle of the curve, so two workouts sharing a
   // variant still differ. Small enough that the variant still reads.
   const jitterX = (random() - 0.5) * FIELD_W * 0.10
-  const jitterY = (random() - 0.5) * FIELD_H * 0.14
+  const jitterY = (random() - 0.5) * fieldH * 0.14
 
-  const p1x = FIELD_W * c1x + jitterX, p1y = FIELD_H * c1y + jitterY
-  const p2x = FIELD_W * c2x + jitterX, p2y = FIELD_H * c2y + jitterY
+  const p1x = FIELD_W * c1x + jitterX, p1y = fieldH * c1y + jitterY
+  const p2x = FIELD_W * c2x + jitterX, p2y = fieldH * c2y + jitterY
 
   // How hard the effort pushes the path off its curve. Perpendicular to the
   // direction of travel, so a spike reads as a swerve rather than as height —
   // height is already spoken for by the recession into the distance.
-  const swerve = FIELD_H * 0.17
+  const swerve = fieldH * 0.17
 
   const points: PathPoint[] = []
   for (let i = 0; i < count; i++) {
@@ -180,7 +185,7 @@ export function buildConstellation(seed: string, samples: number[], count = 110)
     // enough: the swerve is qualitative, and nothing here is read off an axis.
     points.push({
       x: clamp(bx + (nx / len) * push, MARGIN, FIELD_W - MARGIN),
-      y: clamp(by + (ny / len) * push, MARGIN, FIELD_H - MARGIN),
+      y: clamp(by + (ny / len) * push, MARGIN, fieldH - MARGIN),
       depth: t,
       t,
     })
@@ -191,8 +196,8 @@ export function buildConstellation(seed: string, samples: number[], count = 110)
   const stars: Star[] = []
   for (let i = 0; i < 46; i++) {
     const x = random() * FIELD_W
-    const y = random() * FIELD_H
-    const nearGround = y / FIELD_H
+    const y = random() * fieldH
+    const nearGround = y / fieldH
     if (random() < nearGround * 0.55) continue
     stars.push({
       x,
@@ -207,7 +212,7 @@ export function buildConstellation(seed: string, samples: number[], count = 110)
   const planet = random() < 0.5
     ? {
       x: FIELD_W * (0.12 + random() * 0.22),
-      y: FIELD_H * (0.10 + random() * 0.18),
+      y: fieldH * (0.10 + random() * 0.18),
       r: 9 + random() * 9,
       ringed: random() < 0.45,
     }

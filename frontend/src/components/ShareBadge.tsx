@@ -1,0 +1,35 @@
+import { Globe, Users } from 'lucide-react'
+import type { Workout } from '../data/workouts'
+
+/**
+ * Marks a workout you have made public or shared with someone.
+ *
+ * Shared by the list and the detail page, which know slightly different things
+ * about the same fact: a list row carries the recipient count, computed for the
+ * whole library in one grouped query, while the detail response carries a plain
+ * `shared` flag because counting recipients per page view would be a query
+ * bought for a number nobody reads there. Both mean "somebody else can see
+ * this", so both get the same mark — with the count when there is one.
+ *
+ * It lived inside the list page and was invisible on the workout itself, which
+ * is the one place you would go to check.
+ */
+export default function ShareBadge({ workout: w }: { workout: Workout }) {
+  const count = w.sharedWithCount ?? 0
+  const isPublic = w.visibility === 'public'
+  if (!isPublic && count === 0 && !w.shared) return null
+  return (
+    <span
+      className="share-badge"
+      title={[
+        isPublic ? 'Visible to everyone on this instance' : null,
+        count > 0
+          ? `Shared with ${count} ${count === 1 ? 'person' : 'people'}`
+          : !isPublic ? 'Shared with someone' : null,
+      ].filter(Boolean).join(' · ')}
+    >
+      {isPublic ? <Globe size={10} /> : <Users size={10} />}
+      {count > 0 && count}
+    </span>
+  )
+}

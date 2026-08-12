@@ -148,3 +148,24 @@ describe('the finish', () => {
     }
   })
 })
+
+describe('a field built to the panel', () => {
+  it('fills whatever height it is given, and stays inside it', () => {
+    // The viewBox now tracks the panel's shape so the drawing reaches the
+    // bottom edge instead of floating above the controls. Every position is a
+    // fraction of the field, so this has to hold at any height.
+    const spikes = Array.from({ length: 110 }, (_, i) => (i % 2 === 0 ? 0 : 1))
+    for (const h of [140, 200, 250, 360]) {
+      const { points } = buildConstellation('a', spikes, 110, h)
+      for (const p of points) {
+        expect(p.y).toBeGreaterThanOrEqual(0)
+        expect(p.y).toBeLessThanOrEqual(h)
+      }
+      // And still a journey from the lower left to the upper right.
+      expect(points[0].y).toBeGreaterThan(points[points.length - 1].y)
+      expect(points[0].x).toBeLessThan(points[points.length - 1].x)
+      // Using the height it was given, not a fixed one.
+      expect(Math.max(...points.map(p => p.y))).toBeGreaterThan(h * 0.5)
+    }
+  })
+})

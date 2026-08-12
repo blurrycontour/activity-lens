@@ -1,9 +1,10 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { fmtDuration, fmtDist, fmtRate, TYPE_COLOR, ALL_WORKOUT_TYPES, type WorkoutType, type Workout } from '../data/workouts'
 import TypeIcon from '../components/TypeIcon'
+import ShareBadge from '../components/ShareBadge'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useRefreshHandler } from '../context/RefreshContext'
-import { Search, Clock, Mountain, Flame, Download, Plus, Grid2X2, List, Navigation, Library, Inbox, Globe, Users, Share2, SlidersHorizontal, X, Trash2, Check, CheckCheck, LoaderCircle, Handshake, Layers, Image as ImageIcon, MoreVertical, Copy } from 'lucide-react'
+import { Search, Clock, Mountain, Flame, Download, Plus, Grid2X2, List, Navigation, Library, Inbox, Globe, Share2, SlidersHorizontal, X, Trash2, Check, CheckCheck, LoaderCircle, Handshake, Layers, Image as ImageIcon, MoreVertical, Copy } from 'lucide-react'
 import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
 import SortDropdown, { SORT_OPTIONS, type SortKey } from '../components/SortDropdown'
@@ -716,24 +717,6 @@ function EmptyScopeIcon({ busy, scope }: { busy: boolean; scope: Scope }) {
       style={{ margin: '0 auto 12px' }}
       aria-hidden
     />
-  )
-}
-
-/** Marks a workout you have made public or shared with someone. */
-function ShareBadge({ workout: w }: { workout: Workout }) {
-  const count = w.sharedWithCount ?? 0
-  if (w.visibility !== 'public' && count === 0) return null
-  return (
-    <span
-      className="share-badge"
-      title={[
-        w.visibility === 'public' ? 'Visible to everyone on this instance' : null,
-        count > 0 ? `Shared with ${count} ${count === 1 ? 'person' : 'people'}` : null,
-      ].filter(Boolean).join(' · ')}
-    >
-      {w.visibility === 'public' ? <Globe size={10} /> : <Users size={10} />}
-      {count > 0 && count}
-    </span>
   )
 }
 

@@ -1,8 +1,9 @@
-import { useId, useMemo } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Activity, Heart, Maximize2, Sparkles } from 'lucide-react'
 import Dropdown from './Dropdown'
 import { HR_ZONE_COLORS, HR_ZONE_SHORT, hrZoneColor } from '../lib/hrZones'
 import { FIELD_H, FIELD_W, buildConstellation, normalise, pointAt } from '../lib/constellation'
+import type { Playhead } from '../lib/playhead'
 import type { CadencePoint, HeartRatePoint, Pause } from '../data/workouts'
 
 /**
@@ -43,7 +44,15 @@ interface SessionProfileProps {
   cadenceTimeline: CadencePoint[]
   maxHR: number
   pauses: Pause[]
-  currentTime: number
+  /**
+   * The exact playback position, subscribed to rather than rendered from.
+   *
+   * Not the throttled `currentTime` every other consumer takes: that is
+   * published to React ten times a second, which is plenty for a chart cursor
+   * and visibly jerky for a marker. The map's marker has always bypassed React
+   * for exactly this reason — see lib/playhead — and this one now does too.
+   */
+  playhead: Playhead
   tint: Tint
   onTintChange: (t: Tint) => void
   onScrub: (t: number) => void
@@ -53,6 +62,8 @@ interface SessionProfileProps {
   cadenceLabel?: string
   /** Omitted while the panel is already expanded, exactly as the map's is. */
   onExpand?: () => void
+  /** The modal supplies its own title, so the panel's would be the second one. */
+  hideHeader?: boolean
 }
 
 /** Widest at the launch, finest at the destination: that is the whole illusion. */
@@ -61,8 +72,8 @@ function widthAt(depth: number): number {
 }
 
 export default function SessionProfile({
-  id, duration, hrTimeline, cadenceTimeline, maxHR, pauses, currentTime,
-  tint, onTintChange, onScrub, avatarUrl, cadenceLabel = 'spm', onExpand,
+  id, duration, hrTimeline, cadenceTimeline, maxHR, pauses, playhead,
+  tint, onTintChange, onScrub, avatarUrl, cadenceLabel = 'spm', onExpand, hideHeader,
 }: SessionProfileProps) {
   // Unique per mounted panel: two of these on one page would otherwise share a
   // clip path, and whichever mounted last would own it.
@@ -99,7 +110,38 @@ export default function SessionProfile({
     return []
   }, [hrTimeline, cadenceTimeline, duration])
 
-  const sky = useMemo(() => buildConstellation(id, modulation), [id, modulation])
+  /**
+   * The field is built to the shape of the panel, not to a fixed ratio.
+   *
+   * The alternative was a fixed viewBox letterboxed inside the box, which left
+   * a band of empty sky under the drawing — exactly where the legend and the
+   * picker sit, so the controls floated over nothing while the path stopped
+   * short of them. Every position in the geometry is a fraction of the field,
+   * so re-proportioning it simply fills the panel.
+   *
+   * Rounded to the nearest ten and bounded: this feeds the seeded builder, and
+   * rebuilding a hundred and ten points on every pixel of a window drag would
+   * be a resize handler doing real work. The bounds stop a very wide or very
+   * short panel from flattening the trajectory out of legibility.
+   */
+  const skyBox = useRef<HTMLDivElement>(null)
+  const [fieldH, setFieldH] = useState(FIELD_H)
+  useEffect(() => {
+    const el = skyBox.current
+    if (!el) return
+    const measure = () => {
+      const { width, height } = el.getBoundingClientRect()
+      if (width <= 0 || height <= 0) return
+      const wanted = Math.round((FIELD_W * height) / width / 10) * 10
+      setFieldH(Math.max(140, Math.min(360, wanted)))
+    }
+    measure()
+    const obs = new ResizeObserver(measure)
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [])
+
+  const sky = useMemo(() => buildConstellation(id, modulation, 110, fieldH), [id, modulation, fieldH])
 
   /**
    * The path as coloured segments.
@@ -179,11 +221,23 @@ export default function SessionProfile({
     }
   }, [effective, cadenceTimeline, cadenceLabel])
 
-  const played = duration > 0 ? Math.max(0, Math.min(1, currentTime / duration)) : 0
-  // Interpolated rather than snapped to the nearest stored point: at 110 points
-  // an hour-long session moves the marker in visible steps, and the map's
-  // marker beside it does not.
-  const here = pointAt(sky.points, played)
+  /**
+   * The marker, moved by hand on every frame.
+   *
+   * One attribute write per frame and no render at all — the same deal the
+   * map's marker gets. Everything about the mark is drawn once at the origin
+   * at unit size, so the whole of "where is it and how big is it there" is a
+   * single transform: translate to the point, scale by the width the recession
+   * calls for at that depth.
+   */
+  const markerRef = useRef<SVGGElement>(null)
+  useEffect(() => playhead.subscribe(t => {
+    const g = markerRef.current
+    if (!g) return
+    const at = pointAt(sky.points, duration > 0 ? t / duration : 0)
+    if (!at) return
+    g.setAttribute('transform', `translate(${at.x.toFixed(2)} ${at.y.toFixed(2)}) scale(${(10.5 - at.depth * 3.5).toFixed(2)})`)
+  }), [playhead, sky, duration])
 
   /** A click anywhere on the sky is the moment nearest the pointer's path position. */
   function scrubFrom(e: React.MouseEvent<SVGSVGElement>) {
@@ -191,7 +245,7 @@ export default function SessionProfile({
     if (rect.width <= 0 || duration <= 0) return
     // Into the field's own coordinates, then the nearest point on the path.
     const px = ((e.clientX - rect.left) / rect.width) * FIELD_W
-    const py = ((e.clientY - rect.top) / rect.height) * FIELD_H
+    const py = ((e.clientY - rect.top) / rect.height) * fieldH
     let best = 0
     let bestD = Infinity
     for (const p of sky.points) {
@@ -261,15 +315,17 @@ export default function SessionProfile({
 
   return (
     <div className="session-profile">
-      <div className="session-profile-head">
-        <Sparkles size={14} style={{ color: 'var(--primary)' }} />
-        <h3>The session</h3>
-        <span className="session-profile-note">No route recorded</span>
-      </div>
+      {!hideHeader && (
+        <div className="session-profile-head">
+          <Sparkles size={14} style={{ color: 'var(--primary)' }} />
+          <h3>The session</h3>
+          <span className="session-profile-note">No route recorded</span>
+        </div>
+      )}
 
-      <div className="session-sky">
+      <div className="session-sky" ref={skyBox}>
         <svg
-          viewBox={`0 0 ${FIELD_W} ${FIELD_H}`}
+          viewBox={`0 0 ${FIELD_W} ${fieldH}`}
           onClick={scrubFrom}
           role="img"
           aria-label="This session drawn as a journey, from its start at the lower left to its finish at the upper right"
@@ -284,37 +340,34 @@ export default function SessionProfile({
             </linearGradient>
           </defs>
 
-          <rect x="0" y="0" width={FIELD_W} height={FIELD_H} fill="url(#al-sky)" />
+          <rect x="0" y="0" width={FIELD_W} height={fieldH} fill="url(#al-sky)" />
 
           {drawing}
 
           {/* Where playback has reached, wearing the same face as the map's
               marker so the drawing reads as "you, here" rather than as an
-              anonymous dot. It shrinks with the path — this is the one mark
-              whose size has to agree with the recession around it, or the
-              illusion goes with it. */}
-          {here && (() => {
-            const r = 10.5 - here.depth * 3.5
-            return (
-              <g>
-                <circle cx={here.x} cy={here.y} r={r + 3} fill="var(--text)" opacity="0.13" />
-                {avatarUrl ? (
-                  <>
-                    <clipPath id={clipId}><circle cx={here.x} cy={here.y} r={r} /></clipPath>
-                    <image
-                      href={avatarUrl}
-                      x={here.x - r} y={here.y - r} width={r * 2} height={r * 2}
-                      preserveAspectRatio="xMidYMid slice"
-                      clipPath={`url(#${clipId})`}
-                    />
-                    <circle cx={here.x} cy={here.y} r={r} fill="none" stroke="var(--primary)" strokeWidth="1.6" />
-                  </>
-                ) : (
-                  <circle cx={here.x} cy={here.y} r={r * 0.55} fill="var(--text)" stroke="var(--bg-2)" strokeWidth="1.2" />
-                )}
-              </g>
-            )
-          })()}
+              anonymous dot. Drawn at the origin at unit size and placed by the
+              transform above; it shrinks with the path, because this is the one
+              mark whose size has to agree with the recession around it or the
+              illusion goes with it. The strokes opt out of the scale, so a mark
+              in the distance is not also drawn with a thinner pen. */}
+          <g ref={markerRef}>
+            <circle r="1.3" fill="var(--text)" opacity="0.13" />
+            {avatarUrl ? (
+              <>
+                <clipPath id={clipId}><circle r="1" /></clipPath>
+                <image
+                  href={avatarUrl}
+                  x="-1" y="-1" width="2" height="2"
+                  preserveAspectRatio="xMidYMid slice"
+                  clipPath={`url(#${clipId})`}
+                />
+                <circle r="1" fill="none" stroke="var(--primary)" strokeWidth="1.6" vectorEffect="non-scaling-stroke" />
+              </>
+            ) : (
+              <circle r="0.55" fill="var(--text)" stroke="var(--bg-2)" strokeWidth="1.2" vectorEffect="non-scaling-stroke" />
+            )}
+          </g>
         </svg>
 
         {onExpand && (

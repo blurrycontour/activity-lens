@@ -2900,23 +2900,14 @@ body:has(.overlay) .fab { display: none; }
   left: auto;
   max-width: 100%;
 }
-/* The ramp bar gives up its fixed 92px when there is not 92px to give. */
+/* The one concession to a narrow panel: the parts wrap rather than run off the
+   edge. Nothing here changes their size. */
 .session-sky-legend .map-legend-ramp i { width: min(92px, 100%); }
-/* Five zone chips wrap rather than run off a narrow panel. */
 .session-sky-legend .map-legend-zones { flex-wrap: wrap; justify-content: flex-end; }
-/* Cut down from the standard trigger, which carries a 150px minimum meant for
-   a filter bar. The map can spare that much of itself; a panel a third of the
-   width cannot, and at full size the picker read as the subject of the panel
-   rather than a control on it. */
-.session-sky-controls .al-dropdown-trigger {
-  min-width: 0;
-  padding: 3px 7px;
-  font-size: 11px;
-  gap: 5px;
-  background: color-mix(in srgb, var(--bg-2) 82%, transparent);
-  backdrop-filter: blur(6px);
-}
-.session-sky-controls .al-dropdown-trigger svg { width: 12px; height: 12px; }
+/* No size overrides: the picker and the key are the map's, at the map's size.
+   They were cut down when this panel was the narrow column; it is the wide one
+   now, and two differently-sized copies of one control is the thing worth
+   avoiding. */
 
 /* The standing panel, for a workout with nothing recorded at all. */
 .session-context-body { display: flex; gap: 16px; align-items: flex-start; flex: 1; }
@@ -4849,3 +4840,13 @@ body:has(.overlay) .fab { display: none; }
 }
 
 
+
+/* The session panel inside its expand modal.
+
+   The modal supplies the title, so the panel's own header is suppressed and
+   this is only about height: with no card to stretch against, the sky would
+   collapse to nothing. Taller than the inline panel, which is the whole point
+   of expanding it — capped in vh so the transport below stays on screen. */
+.session-expanded { display: flex; height: min(64vh, 560px); }
+.session-expanded .session-profile { flex: 1; min-width: 0; }
+.session-expanded .session-sky { border-radius: var(--radius); border: 1px solid var(--border); }

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { type RecalcParts, type Workout, type WorkoutType, fmtClock, fmtDuration, fmtDist, fmtPace, TYPE_COLOR } from '../data/workouts'
 import TypeIcon from '../components/TypeIcon'
@@ -37,6 +37,7 @@ import type { Shading } from '../components/RouteMap'
 const RouteMap = lazy(() => import('../components/RouteMap'))
 import ExpandModal from '../components/ExpandModal'
 import TabStrip, { type TabStripItem } from '../components/TabStrip'
+import ShareBadge from '../components/ShareBadge'
 import { inlineTicks } from '../lib/chartTicks'
 const WorkoutGallery = lazy(() => import('../components/WorkoutGallery'))
 const WorkoutSocial = lazy(() => import('../components/WorkoutSocial'))
@@ -374,12 +375,24 @@ function TabPanel({ tabKey, children }: { tabKey: string; children: React.ReactN
   const box = useRef<HTMLDivElement>(null)
   const natural = useRef(0)
   const [floor, setFloor] = useState(0)
+  const [held, setHeld] = useState(tabKey)
 
-  useLayoutEffect(() => {
+  // Set during render, not in an effect. From an effect the floor arrives one
+  // commit late, so the browser paints a frame with the panel collapsed and
+  // then a frame with it propped back up — which is a page that visibly jumps
+  // and, if you were scrolled down, takes the scroll position with it. React
+  // re-renders this component immediately on a render-phase update, so nothing
+  // in between is ever shown.
+  if (held !== tabKey) {
+    setHeld(tabKey)
     setFloor(natural.current)
+  }
+
+  useEffect(() => {
+    if (!floor) return
     const t = setTimeout(() => setFloor(0), 600)
     return () => clearTimeout(t)
-  }, [tabKey])
+  }, [floor, tabKey])
 
   // Measured on the inner box, which never carries the floor — measuring the
   // element the minimum is applied to would only read the minimum back.
@@ -1361,6 +1374,10 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <h1 style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em' }}>{w.name}</h1>
               <span className={`badge tag-${w.type.toLowerCase()}`}><TypeIcon type={w.type} size={12} /> {w.type}</span>
+              {/* The same mark the list row carries. It was only ever on the
+                  list, which meant the one page you would open to check
+                  whether a workout is shared was the one that did not say. */}
+              <ShareBadge workout={w} />
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
               {new Date(w.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
@@ -1438,7 +1455,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
                 cadenceTimeline={cadenceTimeline}
                 maxHR={effectiveMaxHR}
                 pauses={pauses}
-                currentTime={currentTime}
+                playhead={playhead}
                 tint={tint}
                 onTintChange={setTint}
                 onScrub={handleScrub}
@@ -1859,6 +1876,11 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
           exactly as the map's is. */}
       {expanded === 'session' && (
         <ExpandModal title="The session" onClose={() => setExpanded(null)}>
+          {/* variant="map" would be the immersive full-bleed treatment; this
+              wants the ordinary modal, just with room. The class gives the sky
+              a real height to fill — inside the modal there is no card to
+              stretch against. */}
+          <div className="session-expanded">
           <SessionProfile
             id={w.id}
             duration={w.duration}
@@ -1866,13 +1888,15 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             cadenceTimeline={cadenceTimeline}
             maxHR={effectiveMaxHR}
             pauses={pauses}
-            currentTime={currentTime}
+            playhead={playhead}
             tint={tint}
+            hideHeader
             onTintChange={setTint}
             onScrub={handleScrub}
             avatarUrl={routeAvatar}
             cadenceLabel={cadenceUnit(w.type)}
           />
+          </div>
           <div style={{ marginTop: 12 }}>
             <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onEnd={handleEnd} onScrub={handleScrub} />
           </div>
