@@ -7,7 +7,7 @@ import Dropdown from '../components/Dropdown'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ReferenceDot, ReferenceArea, BarChart, Bar } from 'recharts'
 import {
   ArrowLeft, Heart, Mountain, Zap, Clock, TrendingUp, Navigation, Download, Pencil, Trash2, Gauge,
-  Check, X as XIcon, Play, Pause as PauseIcon, LoaderCircle, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, AlertTriangle, Activity, Share2, Lock, FileDown, Plus, Image as ImageIcon, NotebookPen, Images, MessageSquare, ClipboardList } from 'lucide-react'
+  Check, X as XIcon, Play, Pause as PauseIcon, LoaderCircle, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, AlertTriangle, Activity, Share2, Lock, FileDown, Plus, Image as ImageIcon, NotebookPen, Images, MessageSquare, ClipboardList, Watch } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
@@ -134,9 +134,13 @@ function OptionsMenu({ onEdit, onExport, onDownloadOriginal, onShare, onShareCar
  * write, rather than a field that only appears once a note exists.
  *
  * Notes never leave the owner: the API redacts them from every response to
- * anyone else, which is why this card is not rendered at all in read-only mode.
+ * anyone else, which is why this panel is not rendered at all in read-only mode.
+ *
+ * It lives inside the Notes tab, which already names it and draws the surface
+ * around it — so no card and no heading here, only the one thing the tab label
+ * cannot say: that what you write stays yours.
  */
-function NotesCard({ workout: w, onSaved }: { workout: Workout; onSaved: (w: Workout) => void }) {
+function NotesPanel({ workout: w, onSaved }: { workout: Workout; onSaved: (w: Workout) => void }) {
   const { updateWorkout } = useWorkouts()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(w.notes ?? '')
@@ -170,15 +174,11 @@ function NotesCard({ workout: w, onSaved }: { workout: Workout; onSaved: (w: Wor
   const hasNotes = (w.notes ?? '').trim().length > 0
 
   return (
-    <div className="card" style={{ marginTop: 16 }}>
+    <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
-        <h3 className="card-title">
-          <NotebookPen size={15} style={{ color: 'var(--primary)' }} />
-          Notes
-          <span className="notes-private" title="Notes stay private — they are never included when a workout is shared or made public">
-            <Lock size={10} /> Private
-          </span>
-        </h3>
+        <span className="notes-private" title="Notes stay private — they are never included when a workout is shared or made public">
+          <Lock size={10} /> Private
+        </span>
         {!editing && (
           <button className="btn btn-ghost" style={{ fontSize: 12, padding: '4px 10px' }} onClick={start}>
             {hasNotes ? 'Edit' : 'Add note'}
@@ -1719,7 +1719,9 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
         {!readOnly && (
         <div className="card" style={{ marginTop: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-            <h3 className="card-title"><Footprints size={15} style={{ color: 'var(--primary)' }} /> Equipment</h3>
+            {/* The same mark the sidebar puts on the Equipment page — gear is
+                gear wherever you meet it. */}
+            <h3 className="card-title"><Watch size={15} style={{ color: 'var(--primary)' }} /> Equipment</h3>
             {!editingEquip && !readOnly && (
               <button className="btn btn-ghost" style={{ fontSize: 12, padding: '4px 10px' }} onClick={startEditEquip}>
                 {(w.equipment ?? []).length > 0 ? 'Edit' : 'Add'}
@@ -1811,7 +1813,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
           <TabPanel>
             {activeTab === 'notes' && (readOnly
               ? <p className="notes-text">{w.notes}</p>
-              : <NotesCard workout={w} onSaved={setW} />)}
+              : <NotesPanel workout={w} onSaved={setW} />)}
             {/* Lazy, and mounted only while its tab is open: the photos are the
                 heaviest thing on the page and nobody should pay for them by
                 opening a workout. The same goes for the thread. */}
