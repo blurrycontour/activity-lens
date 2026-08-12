@@ -30,6 +30,9 @@ func TestEveryUserScopedTableHasAnOwnerForPurging(t *testing.T) {
 		"push_subscriptions": "notify.Service.PurgeUser",
 		"user_prefs":         "settings.Store.PurgeUser",
 		"user_last_login":    "settings.Store.PurgeUser",
+		"workout_media":      "workout.Service.PurgeUserPhotos",
+		"workout_comments":   "workout.Service.PurgeUserComments (rows on own workouts cascade from workouts)",
+		"workout_reactions":  "workout.Service.PurgeUserReactions (rows on own workouts cascade from workouts)",
 	}
 
 	db := openTemp(t)

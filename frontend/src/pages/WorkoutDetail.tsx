@@ -7,8 +7,7 @@ import Dropdown from '../components/Dropdown'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ReferenceDot, ReferenceArea, BarChart, Bar } from 'recharts'
 import {
   ArrowLeft, Heart, Mountain, Zap, Clock, TrendingUp, Navigation, Download, Pencil, Trash2, Gauge,
-  Check, X as XIcon, Play, Pause as PauseIcon, LoaderCircle, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, AlertTriangle, Activity, Share2, Lock, FileDown, Plus, Image as ImageIcon,
-} from 'lucide-react'
+  Check, X as XIcon, Play, Pause as PauseIcon, LoaderCircle, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, AlertTriangle, Activity, Share2, Lock, FileDown, Plus, Image as ImageIcon, NotebookPen, Images, MessageSquare, ClipboardList } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
@@ -37,6 +36,17 @@ import type { Shading } from '../components/RouteMap'
  */
 const RouteMap = lazy(() => import('../components/RouteMap'))
 import ExpandModal from '../components/ExpandModal'
+import TabStrip, { type TabStripItem } from '../components/TabStrip'
+import ShareBadge from '../components/ShareBadge'
+import { inlineTicks } from '../lib/chartTicks'
+const WorkoutGallery = lazy(() => import('../components/WorkoutGallery'))
+const WorkoutSocial = lazy(() => import('../components/WorkoutSocial'))
+
+/** The sections under the charts. */
+type DetailTab = 'notes' | 'gallery' | 'social'
+import SessionProfile, { canProfile, type Tint } from '../components/SessionProfile'
+import SessionContext from '../components/SessionContext'
+import { sessionStanding } from '../lib/standing'
 import RecalculateDialog from '../components/RecalculateDialog'
 import UserAvatar, { avatarUrl, userLabel } from '../components/UserAvatar'
 import MenuButton from '../components/MenuButton'
@@ -162,7 +172,8 @@ function NotesCard({ workout: w, onSaved }: { workout: Workout; onSaved: (w: Wor
   return (
     <div className="card" style={{ marginTop: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
-        <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <h3 className="card-title">
+          <NotebookPen size={15} style={{ color: 'var(--primary)' }} />
           Notes
           <span className="notes-private" title="Notes stay private — they are never included when a workout is shared or made public">
             <Lock size={10} /> Private
@@ -288,6 +299,120 @@ function PlaybackBar({
  * The six charts were six copies of this markup, which is how the expand button
  * ended up in a different place in one of them.
  */
+/**
+ * A time label that does not hang off the end of the plot.
+ *
+ * The first and last tick sit exactly on the domain's edges, and a centred
+ * label there puts half of "0:00" outside the drawing — which on a phone, where
+ * the plot runs to the card's edge, means half of it is simply cut off. Recharts
+ * nudges end labels inward on a *category* axis, by measuring them; this is a
+ * numeric axis, where it does not, which is why the margin added earlier did
+ * not help.
+ *
+ * So the two ends anchor to their own edge instead of to their centre, and
+ * every label in between stays centred where it belongs.
+ */
+function EdgeTick(props: {
+  // Supplied by Recharts, which passes the axis's own formatter down with them.
+  x?: number
+  y?: number
+  index?: number
+  visibleTicksCount?: number
+  payload?: { value: number }
+  tickFormatter?: (value: number, index: number) => string
+}) {
+  const { x, y, payload, index = 0, visibleTicksCount = 0 } = props
+  if (!payload) return null
+  const last = index === visibleTicksCount - 1
+  const anchor = index === 0 ? 'start' : last ? 'end' : 'middle'
+  return (
+    <text
+      x={x} y={y} dy={10}
+      textAnchor={anchor}
+      fontSize={10}
+      fontFamily="var(--font-mono)"
+      fill="var(--text-3)"
+    >
+      {props.tickFormatter ? props.tickFormatter(payload.value, index) : payload.value}
+    </text>
+  )
+}
+
+/**
+ * The tab a deep link asked for, read once when the page mounts.
+ *
+ * Validated against the known set rather than trusted: this comes from a URL,
+ * and an unknown value would leave the strip with no tab selected at all. An
+ * absent or unrecognised parameter means the default, which is what every
+ * ordinary visit gets.
+ */
+function initialTab(): DetailTab {
+  const asked = new URLSearchParams(window.location.search).get('tab')
+  return asked === 'gallery' || asked === 'social' || asked === 'notes' ? asked : 'notes'
+}
+
+/** Whether this page was opened at a particular tab, and so should scroll to it. */
+function wantsTabScroll(): boolean {
+  return new URLSearchParams(window.location.search).has('tab')
+}
+
+/**
+ * The tab body, whose top edge never moves.
+ *
+ * The panels are different sizes and load at different times, so switching
+ * used to change the page's height twice — down to a spinner, then up to the
+ * content. This is the last section on the page, so those changes do not push
+ * anything below them around; what they do is make the *document* shorter,
+ * and a reader scrolled near the bottom then has their scroll position
+ * clamped by the browser. That is not a layout shift you can see the cause of.
+ * It reads as the page sliding out from under you, and it was worst switching
+ * to Social because Social differs most in height from the other two.
+ *
+ * So the panel keeps a high-water mark: the tallest its content has been on
+ * this workout, applied as a minimum and never lowered. Every switch after the
+ * first therefore grows the panel or leaves it alone, and the page never gets
+ * shorter while you are reading it.
+ *
+ * The mark is bounded by the viewport, which is the one concession. Without a
+ * bound, opening a gallery of thirty photos would leave that much blank space
+ * under a three-line note forever. Below the bound — where all three panels
+ * normally sit — nothing moves at all; above it the page is already longer
+ * than the screen, so the tab strip is not on it to be watched.
+ *
+ * Measured on an inner element that never carries the minimum. Measuring the
+ * element the minimum is applied to would just read the minimum back and the
+ * mark could only ever grow.
+ */
+function TabPanel({ children }: { children: React.ReactNode }) {
+  const box = useRef<HTMLDivElement>(null)
+  const [floor, setFloor] = useState(0)
+
+  useEffect(() => {
+    const el = box.current
+    if (!el) return
+    const bump = () => {
+      const cap = Math.round(window.innerHeight * 0.8)
+      const height = Math.min(el.offsetHeight, cap)
+      setFloor(prev => (height > prev ? height : prev))
+    }
+    bump()
+    const obs = new ResizeObserver(bump)
+    obs.observe(el)
+    // A rotation or a window drag changes the cap, not just the content.
+    window.addEventListener('resize', bump)
+    return () => {
+      obs.disconnect()
+      window.removeEventListener('resize', bump)
+    }
+  }, [])
+
+  return (
+    <div className="card detail-tab-panel" style={floor ? { minHeight: floor } : undefined}>
+      <div ref={box}>{children}</div>
+    </div>
+  )
+}
+
 function MetricPanel({ icon, title, badge, info, stats, onExpand, children }: {
   icon: React.ReactNode
   title: string
@@ -300,7 +425,12 @@ function MetricPanel({ icon, title, badge, info, stats, onExpand, children }: {
   children: React.ReactNode
 }) {
   return (
-    <div className="card">
+    // The header keeps the card's padding; the plot does not. It runs to the
+    // card's own edges and is clipped by its corner radius, so the area fill
+    // becomes part of the card rather than a picture placed on it — and on a
+    // phone that is nearly half again the plot width, taken back from a gutter
+    // that was drawing nothing. See metric-panel-plot.
+    <div className="card metric-panel">
       <div className="metric-panel-head">
         <h3 className="metric-panel-title">
           {icon}
@@ -313,7 +443,7 @@ function MetricPanel({ icon, title, badge, info, stats, onExpand, children }: {
         </button>
       </div>
       {stats && <div className="metric-panel-stats">{stats}</div>}
-      {children}
+      <div className="metric-panel-plot">{children}</div>
     </div>
   )
 }
@@ -399,7 +529,7 @@ function preparePlot<T extends { t: number }>(data: T[], key: string): PlotSerie
 }
 
 export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSettings }: WorkoutDetailProps) {
-  const { updateWorkout, removeWorkout } = useWorkouts()
+  const { updateWorkout, removeWorkout, workouts: library } = useWorkouts()
   const { user } = useAuth()
   const [w, setW] = useState(w0)
   /*
@@ -556,6 +686,42 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
   const effectiveMaxHR = w.maxHR > 0 ? w.maxHR : prefMaxHr
   const hrZones = useMemo(() => hrZoneBuckets(w.hrTimeline, effectiveMaxHR), [w.hrTimeline, effectiveMaxHR])
 
+  /**
+   * What fills the panel beside the summary.
+   *
+   * A ladder rather than a branch on activity type: what a workout has is a
+   * fact about the file, and a treadmill run with a stray GPS fix should get a
+   * map exactly as an outdoor one does. Each rung asks only whether it has
+   * anything to say.
+   *
+   * The profile needs a maximum heart rate to name zones against, so a library
+   * whose owner has not set one — and whose watch did not report one — drops to
+   * the standing panel rather than colouring the whole band Zone 1.
+   */
+  /**
+   * Whether there is anything for the playhead to drive.
+   *
+   * The transport moves a marker along a route and a cursor along the charts.
+   * A workout entered by hand, or imported with nothing but a duration, has
+   * neither — so the controls were a play button that made a number count up
+   * and nothing else move. Hidden rather than disabled: a disabled control is
+   * a promise that something would happen if only you were allowed, and here
+   * there is nothing to allow.
+   */
+  const hasSeries =
+    w.hrTimeline.length > 0 || w.paceTimeline.length > 0 || speedTimeline.length > 0
+    || w.elevTimeline.length > 0 || cadenceTimeline.length > 0
+  const playable = w.route.length >= 2 || hasSeries || hydrating
+
+  /** Where this workout stands among the others of its sport. See standing.ts. */
+  const standing = useMemo(() => sessionStanding(library, w), [library, w])
+
+  const hero: 'map' | 'profile' | 'context' | 'none' =
+    w.route.length >= 2 || hydrating ? 'map'
+      : canProfile(w.duration, w.hrTimeline, cadenceTimeline) ? 'profile'
+        : standing.length > 0 ? 'context'
+          : 'none'
+
   // Stats not directly reported by imports (per-point min/max, elevation
   // loss, step estimate) — derived here from the recorded timelines/route.
   const derived = useMemo(() => {
@@ -629,10 +795,58 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
     [w.hrTimeline, effectiveMaxHR],
   )
   const hrZonesPlayed = useMemo(() => countZonesTo(currentTime), [countZonesTo, currentTime])
-  const [expanded, setExpanded] = useState<null | 'map' | Metric | 'hrzones'>(null)
+  const [expanded, setExpanded] = useState<null | 'map' | 'session' | Metric | 'hrzones'>(null)
   // Lives here rather than in RouteMap: expanding the map mounts a second one,
   // and a choice held inside it was lost on the way.
   const [shading, setShading] = useState<Shading>('accent')
+  /** What the no-route session drawing is coloured by. See SessionProfile. */
+  const [tint, setTint] = useState<Tint>('hr')
+
+  /*
+   * The tabs under the charts.
+   *
+   * Not remembered across workouts. The obvious thing is to persist the choice,
+   * and it is wrong here: the tabs are not the same set on every workout — a
+   * shared one has no Notes — so a remembered tab is regularly a tab that is
+   * not there, and landing on Gallery every time would fetch photos for someone
+   * who opened the page to read the charts.
+   */
+  const [detailTab, setDetailTab] = useState<DetailTab>(() => initialTab())
+  const sectionsRef = useRef<HTMLDivElement>(null)
+
+  // Notes belong to the owner alone and are stripped from a shared response, so
+  // there is nothing behind that tab for anyone else — and a viewer whose
+  // first tab does not exist would land on an empty panel, hence the fallback.
+  const detailTabs: TabStripItem<DetailTab>[] = [
+    ...(readOnly ? [] : [{ id: 'notes' as DetailTab, label: 'Notes', icon: <NotebookPen size={14} /> }]),
+    { id: 'gallery' as DetailTab, label: 'Gallery', icon: <Images size={14} /> },
+    // Only on a workout somebody else can see. A private one has no audience,
+    // so there is no conversation to be had — and offering an empty tab that
+    // refuses every comment would be worse than not offering it. A viewer is
+    // always past this check: they are looking at it, which is the proof.
+    ...(w.shared ? [{ id: 'social' as DetailTab, label: 'Social', icon: <MessageSquare size={14} /> }] : []),
+  ]
+  const activeTab = detailTabs.some(t => t.id === detailTab) ? detailTab : detailTabs[0].id
+
+  /*
+   * A notification links straight to the tab it happened in, so opening one
+   * has to land on the conversation rather than on the charts above it.
+   *
+   * A passive effect and not a layout one: App scrolls the page to the top
+   * when you drill into a workout, from a layout effect in the parent, which
+   * runs after every layout effect down here. Passive effects run after all of
+   * those, so this is the last word rather than something silently undone.
+   *
+   * The parameter is then stripped, so a reload — or a back and forward — is
+   * the page you were on rather than the tab a notification once pointed at.
+   */
+  useEffect(() => {
+    if (!wantsTabScroll()) return
+    const url = new URL(window.location.href)
+    url.searchParams.delete('tab')
+    window.history.replaceState(null, '', url.pathname + url.search)
+    sectionsRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  }, [])
 
   useEffect(() => {
     if (!playing || w.duration <= 0) return
@@ -822,6 +1036,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
     maxHRForZones?: number
   }) {
     const { series, dataKey, stroke, gradId, unit, reversed, yTickFormatter, height, valueFormatter, hrZoneStroke, maxHRForZones } = opts
+    const mobile = isMobile
     const data = series.points
     const visible = visibleUpTo(data, currentTime)
     // From the extremes measured once when the series was prepared. This used
@@ -836,10 +1051,33 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
     const strokeColor = strokeStops ? `url(#${gradId}_stroke)` : stroke
     return (
       <ResponsiveContainer width="100%" height={height}>
+        {/* No onClick. Tapping a chart used to seek the whole page to that
+            moment, which meant reading a value cost you your place: the map
+            marker jumped, every other chart's cursor moved, and the only way
+            back was the transport. Recharts shows the tooltip on hover and on
+            touch by itself, so inspecting a point now costs nothing, and
+            seeking is what the scrub bar and the map are for. */}
         <AreaChart
           data={visible}
-          margin={{ top: 4, right: 18, left: -24, bottom: 14 }}
-          onClick={(e: any) => { if (e && e.activeLabel != null) handleScrub(Number(e.activeLabel)) }}
+          /* Off, and with it the two focus rectangles a tap used to leave
+             behind. Recharts turns this on by default, which makes the <svg>
+             a tab stop with role="application" and draws a box around the
+             plot when it takes focus. That is the right trade for a chart you
+             operate with the keyboard; this one is not operable at all any
+             more — there is no onClick, the tooltip comes on hover and touch
+             by itself, and seeking belongs to the scrub bar. Announcing it as
+             an application and boxing it on every tap was cost with nothing
+             bought. */
+          accessibilityLayer={false}
+          // Edge to edge on a phone. The card's padding is gone from around the
+          // plot, and the y axis with it — the numbers it carried are drawn on
+          // the gridlines instead, inside the plot, where they cost nothing.
+          // Edge to edge on a phone: the end labels are kept inside by
+          // anchoring them rather than by reserving margin for them, so the
+          // plot keeps the full width. See EdgeTick.
+          margin={mobile
+            ? { top: 4, right: 0, left: 0, bottom: 14 }
+            : { top: 4, right: 18, left: -24, bottom: 14 }}
         >
           <defs>
             <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
@@ -852,7 +1090,29 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
               </linearGradient>
             )}
           </defs>
-          <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
+          {/* On a phone the gridlines come from the labelled reference lines
+              below instead, so that there is one line per value rather than
+              two nearly-coincident ones. */}
+          {!mobile && <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />}
+          {mobile && inlineTicks(yDomain).map(v => (
+            <ReferenceLine
+              key={v}
+              y={v}
+              stroke="var(--border)"
+              strokeDasharray="2 4"
+              label={{
+                value: (yTickFormatter ?? String)(v),
+                position: 'insideTopLeft',
+                fontSize: 9,
+                fill: 'var(--text-3)',
+                fontFamily: 'var(--font-mono)',
+                // Held off the plot's left edge, which on a phone is the
+                // card's edge — at 4 the first glyph was touching it, and a
+                // minus sign was half gone.
+                offset: 9,
+              }}
+            />
+          ))}
           {/* Before the axes and the series, so the shading sits behind them
               rather than over the line it is meant to explain. */}
           {showPauses && pauses.map(p => (
@@ -866,11 +1126,14 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
           ))}
           <XAxis
             dataKey="t" type="number" domain={[0, w.duration || 1]}
-            tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}
+            tick={<EdgeTick />}
             axisLine={false} tickLine={false} tickFormatter={fmtClock} interval="preserveStartEnd"
             label={xLabel('Elapsed time (h:mm)')}
           />
+          {/* Hidden and not removed on a phone: the axis is what owns the
+              domain, and dropping it would let the plot rescale itself. */}
           <YAxis
+            hide={mobile}
             tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}
             axisLine={false} tickLine={false} domain={yDomain} reversed={reversed} tickFormatter={yTickFormatter}
           />
@@ -903,7 +1166,9 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
     if (hrZoneStyle === 'histogram') {
       return (
         <ResponsiveContainer width="100%" height={height}>
-          <BarChart data={hrZonesPlayed} margin={{ top: 4, right: 18, left: -24, bottom: 14 }}>
+          {/* accessibilityLayer off for the same reason as the area charts —
+              see areaChart. */}
+          <BarChart data={hrZonesPlayed} accessibilityLayer={false} margin={{ top: 4, right: 18, left: -24, bottom: 14 }}>
             <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
             <XAxis
               dataKey="short" tick={{ fontSize: 11, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}
@@ -939,7 +1204,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
           ))}
         </div>
         <ResponsiveContainer width="100%" height={height}>
-          <PieChart>
+          <PieChart accessibilityLayer={false}>
             <Pie data={arcs} dataKey="value" nameKey="name" innerRadius={height * 0.25} outerRadius={height * 0.44} paddingAngle={2} isAnimationActive={false}>
               {arcs.map(z => <Cell key={z.name} fill={z.color} />)}
             </Pie>
@@ -1107,8 +1372,12 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
           <button className="btn-icon" onClick={onBack}><ArrowLeft size={18} /></button>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <h1 style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em' }}>{w.name}</h1>
+              <h1 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>{w.name}</h1>
               <span className={`badge tag-${w.type.toLowerCase()}`}><TypeIcon type={w.type} size={12} /> {w.type}</span>
+              {/* The same mark the list row carries. It was only ever on the
+                  list, which meant the one page you would open to check
+                  whether a workout is shared was the one that did not say. */}
+              <ShareBadge workout={w} />
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
               {new Date(w.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
@@ -1156,15 +1425,51 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             </button>
           </div>
         )}
-        {/* Map (flexible width) + Summary card (fixed, narrower) side by
-            side on desktop; stacked on mobile so the map never gets
-            squeezed. */}
-        <div className="detail-top">
-          <div className="card" style={{ padding: 0, overflow: 'hidden', position: 'relative', background: 'var(--bg-3)', display: 'flex', flexDirection: 'column', minHeight: 280 }}>
-            {/* Empty on purpose: the map is portalled into a node this hosts.
-                See mapHolder. */}
-            <div ref={setCardHost} style={{ flex: 1, minHeight: 0, position: 'relative' }} />
-          </div>
+        {/* Hero (flexible width) + Summary card (fixed, narrower) side by
+            side on desktop; stacked on mobile so neither gets squeezed.
+
+            The hero is a ladder, not a branch: the map when there is a route,
+            the effort profile when there are samples but no route, and the
+            standing panel when there is neither. A treadmill run, a pool swim
+            and a strength session are complete records, and the page used to
+            greet all three with a grey rectangle reading "No route data".
+            One rule in one place, so no page has to know about treadmills.
+
+            A first-ever workout of its type has no rung left — nothing to
+            draw and nothing to compare — so the summary takes the width rather
+            than sharing it with an empty box. */}
+        <div className={`detail-top${hero === 'map' ? '' : hero === 'none' ? ' solo' : ' no-map'}`}>
+          {hero === 'map' && (
+            <div className="card detail-map-card">
+              {/* Empty on purpose: the map is portalled into a node this hosts.
+                  See mapHolder. */}
+              <div ref={setCardHost} style={{ flex: 1, minHeight: 0, position: 'relative' }} />
+            </div>
+          )}
+          {hero === 'profile' && (
+            <div className="card detail-hero-card">
+              <SessionProfile
+                id={w.id}
+                duration={w.duration}
+                hrTimeline={w.hrTimeline}
+                cadenceTimeline={cadenceTimeline}
+                maxHR={effectiveMaxHR}
+                pauses={pauses}
+                playhead={playhead}
+                tint={tint}
+                onTintChange={setTint}
+                onScrub={handleScrub}
+                avatarUrl={routeAvatar}
+                cadenceLabel={cadenceUnit(w.type)}
+                onExpand={() => setExpanded('session')}
+              />
+            </div>
+          )}
+          {hero === 'context' && (
+            <div className="card detail-hero-card">
+              <SessionContext workout={w} facts={standing} />
+            </div>
+          )}
 
           {/* Summary: every headline + derived stat grouped by category.
               Values that are not reported directly by the import (or that
@@ -1173,7 +1478,8 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
               reported directly by the source) carry a small calculated
               indicator. */}
           <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <h3 className="card-title">
+              <ClipboardList size={15} style={{ color: 'var(--primary)' }} />
               Summary
               {/* The headline figures come with the list row; the ones derived
                   from the samples — min and max HR, elevation loss — arrive
@@ -1256,20 +1562,25 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
           </div>
         </div>
 
-        {/* Playback controls: drives the map marker + chart cursors below */}
-        <div className="card" style={{ marginBottom: 16 }}>
-          <PlaybackBar
-            playing={playing}
-            currentTime={currentTime}
-            duration={w.duration}
-            onPlayPause={handlePlayPause}
-            onReset={handleReset}
-            onEnd={handleEnd}
-            onScrub={handleScrub}
-          />
-        </div>
+        {/* Playback controls: drives the map marker + chart cursors below.
+            Absent entirely when there is neither — see `playable`. */}
+        {playable && (
+          <div className="card playback-card" style={{ marginBottom: 16 }}>
+            <PlaybackBar
+              playing={playing}
+              currentTime={currentTime}
+              duration={w.duration}
+              onPlayPause={handlePlayPause}
+              onReset={handleReset}
+              onEnd={handleEnd}
+              onScrub={handleScrub}
+            />
+          </div>
+        )}
 
-        {/* Metric toggle row */}
+        {/* Metric toggle row. Its two switches are about the charts, so with no
+            charts to configure the row goes with them. */}
+        {hasSeries && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
           {([
             { id: 'hr' as Metric, label: 'Heart Rate', color: 'var(--danger)', available: w.hrTimeline.length > 0 },
@@ -1309,6 +1620,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             </label>
           )}
         </div>
+        )}
 
         {/* Charts */}
         <div className="charts-grid">
@@ -1324,11 +1636,11 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             <MetricPanel
               icon={<Heart size={14} color="var(--danger)" />}
               title="Heart Rate"
-              info="Every heart-rate sample the file recorded, plotted against elapsed time. The line is coloured by training zone using your max HR — from Settings when the activity doesn't report its own. Click anywhere on the chart to move the playback cursor and the map marker to that moment."
+              info="Every heart-rate sample the file recorded, plotted against elapsed time. The line is coloured by training zone using your max HR — from Settings when the activity doesn't report its own. Hover or tap the line to read a moment; the playback cursor is moved from the scrub bar or the map."
               stats={<>Min {derived.hrMin ?? '—'} · Avg {w.avgHR} · Max {w.maxHR} bpm</>}
               onExpand={() => setExpanded('hr')}
             >
-              {hrChart(140)}
+              {hrChart(180)}
             </MetricPanel>
           )}
 
@@ -1339,7 +1651,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
               info="How the activity's time split across the five effort zones, as a share of recorded samples. Zones are percentages of your max HR: under 60% is recovery, 60-70% endurance, 70-80% tempo, 80-90% threshold, and above 90% is maximal. Switch between the histogram and donut under Settings → Charts."
               onExpand={() => setExpanded('hrzones')}
             >
-              {hrZoneChart(160)}
+              {hrZoneChart(190)}
             </MetricPanel>
           )}
 
@@ -1352,7 +1664,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
               stats={<>Min {derived.paceMin != null ? fmtPace(derived.paceMin) : '—'} · Avg {fmtPace(w.avgPace)} · Max {derived.paceMax != null ? fmtPace(derived.paceMax) : '—'} /km</>}
               onExpand={() => setExpanded('pace')}
             >
-              {paceChart(140)}
+              {paceChart(180)}
             </MetricPanel>
           )}
 
@@ -1365,7 +1677,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
               stats={<>Min {derived.speedMin?.toFixed(1) ?? '—'} · Avg {w.avgSpeed > 0 ? w.avgSpeed.toFixed(1) : '—'} · Max {derived.speedMax?.toFixed(1) ?? '—'} km/h</>}
               onExpand={() => setExpanded('speed')}
             >
-              {speedChart(140)}
+              {speedChart(180)}
             </MetricPanel>
           )}
 
@@ -1377,7 +1689,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
               stats={<>+{w.elevationGain} m gain · {derived.elevLoss} m loss</>}
               onExpand={() => setExpanded('elevation')}
             >
-              {elevChart(140)}
+              {elevChart(180)}
             </MetricPanel>
           )}
 
@@ -1389,7 +1701,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
               stats={<>Min {derived.cadMin ?? '—'} · Avg {derived.cadAvg ?? '—'} · Max {derived.cadMax ?? '—'} {cadenceUnit(w.type)}</>}
               onExpand={() => setExpanded('cadence')}
             >
-              {cadenceChart(140)}
+              {cadenceChart(180)}
             </MetricPanel>
           )}
         </div>
@@ -1404,21 +1716,10 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
           onOpenSettings={() => onOpenSettings?.()}
         />
 
-        {/* Notes are stripped from every response to a non-owner, so a shared
-            workout has none to show and no field to offer. */}
-        {readOnly
-          ? w.notes && (
-            <div className="card" style={{ marginTop: 16 }}>
-              <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Notes</h3>
-              <p className="notes-text">{w.notes}</p>
-            </div>
-          )
-          : <NotesCard workout={w} onSaved={setW} />}
-
         {!readOnly && (
         <div className="card" style={{ marginTop: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-            <h3 style={{ fontSize: 13, fontWeight: 600 }}>Equipment</h3>
+            <h3 className="card-title"><Footprints size={15} style={{ color: 'var(--primary)' }} /> Equipment</h3>
             {!editingEquip && !readOnly && (
               <button className="btn btn-ghost" style={{ fontSize: 12, padding: '4px 10px' }} onClick={startEditEquip}>
                 {(w.equipment ?? []).length > 0 ? 'Edit' : 'Add'}
@@ -1486,11 +1787,56 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
           )}
         </div>
         )}
+
+        {/* Everything about the workout that is not the workout: what you wrote
+            down, what you photographed, and what people said about it. Tabs
+            rather than a stack of cards because these grow, and three panels
+            nobody opened is a page you scroll past rather than a page you use.
+
+            Last on the page, and after the equipment, because the workout and
+            its gear are the record — these are what accumulates around it.
+
+            The strip sits outside the panel and joins onto it; see
+            .detail-sections. Notes are stripped from every response to a
+            non-owner, so a shared workout has no notes tab rather than an
+            empty one, and activeTab falls back when the stored tab is one this
+            workout does not offer. */}
+        <div className="detail-sections" ref={sectionsRef}>
+          <TabStrip
+            items={detailTabs}
+            value={activeTab}
+            onChange={setDetailTab}
+            ariaLabel="Workout sections"
+          />
+          <TabPanel>
+            {activeTab === 'notes' && (readOnly
+              ? <p className="notes-text">{w.notes}</p>
+              : <NotesCard workout={w} onSaved={setW} />)}
+            {/* Lazy, and mounted only while its tab is open: the photos are the
+                heaviest thing on the page and nobody should pay for them by
+                opening a workout. The same goes for the thread. */}
+            {activeTab === 'gallery' && (
+              <Suspense fallback={<div className="detail-loading"><LoaderCircle size={16} className="spin" /></div>}>
+                <WorkoutGallery workoutId={w.id} canEdit={!readOnly} />
+              </Suspense>
+            )}
+            {activeTab === 'social' && (
+              <Suspense fallback={<div className="detail-loading"><LoaderCircle size={16} className="spin" /></div>}>
+                <WorkoutSocial workoutId={w.id} isOwner={!readOnly} />
+              </Suspense>
+            )}
+          </TabPanel>
+        </div>
       </div>
 
       {/* Rendered once, wherever mapHolder currently is. The maximize button is
-          dropped while it is open — the modal's own header closes it. */}
-      {createPortal(
+          dropped while it is open — the modal's own header closes it.
+
+          Not rendered at all when the hero is something else: mapHolder is
+          never attached to the document then, and mounting a MapLibre instance
+          into a detached node is a GL context and a style download spent on a
+          map nobody will see. */}
+      {hero === 'map' && createPortal(
         hydrating && w.route.length < 2 ? (
           <div className="detail-loading">
             <LoaderCircle size={18} className="spin" />
@@ -1521,6 +1867,36 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
       {expanded === 'map' && (
         <ExpandModal title="Route" onClose={() => setExpanded(null)} variant="map">
           <div ref={setModalHost} className="modal-immersive-map" />
+          <div className="modal-immersive-foot">
+            <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onEnd={handleEnd} onScrub={handleScrub} />
+          </div>
+        </ExpandModal>
+      )}
+      {/* The routeless hero, full size. The same panel with its expand button
+          dropped — the modal's own header closes it — beside the transport,
+          exactly as the map's is. */}
+      {expanded === 'session' && (
+        // The map's immersive treatment, because this is standing in for the
+        // map: edge to edge, the whole viewport on a phone, and the transport
+        // on its own foot below.
+        <ExpandModal title="The session" onClose={() => setExpanded(null)} variant="map">
+          <div className="modal-immersive-map session-expanded">
+          <SessionProfile
+            id={w.id}
+            duration={w.duration}
+            hrTimeline={w.hrTimeline}
+            cadenceTimeline={cadenceTimeline}
+            maxHR={effectiveMaxHR}
+            pauses={pauses}
+            playhead={playhead}
+            tint={tint}
+            hideHeader
+            onTintChange={setTint}
+            onScrub={handleScrub}
+            avatarUrl={routeAvatar}
+            cadenceLabel={cadenceUnit(w.type)}
+          />
+          </div>
           <div className="modal-immersive-foot">
             <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onEnd={handleEnd} onScrub={handleScrub} />
           </div>

@@ -50,6 +50,52 @@ type Repository interface {
 	ListPublicSummary(ctx context.Context, viewerID int64) ([]Workout, error)
 	// ListSharedWithMeSummary returns workouts shared directly with viewerID.
 	ListSharedWithMeSummary(ctx context.Context, viewerID int64) ([]Workout, error)
+	// Gallery photos. Every one of these is scoped by workout id and carries
+	// no permission logic of its own — the caller establishes that the user may
+	// see (to read) or owns (to write) the workout first, exactly as the
+	// handlers for shares do.
+	ListMedia(ctx context.Context, workoutID string) ([]Media, error)
+	GetMedia(ctx context.Context, workoutID, mediaID string) (Media, error)
+	CountMedia(ctx context.Context, workoutID string) (int, error)
+	AddMedia(ctx context.Context, m Media) error
+	DeleteMedia(ctx context.Context, workoutID, mediaID string) error
+	// DeleteMediaForUser removes every photo a user added, wherever it lives.
+	// Rows on their own workouts go with the workout through the foreign key;
+	// this is for photos they added to somebody else's, which have no key back
+	// to the account. Nothing creates those yet — the upload path is
+	// owner-only — but the column exists so that it can, and an account
+	// deletion that leaves someone's photos behind is exactly the bug this
+	// would be.
+	DeleteMediaForUser(ctx context.Context, userID int64) error
+
+	// Comments and reactions. Same contract as the gallery: scoped by workout
+	// id, no permission logic of their own. The caller has established both
+	// that the user may see the workout and that it is shared — see social.go.
+	ListComments(ctx context.Context, workoutID string) ([]Comment, error)
+	GetComment(ctx context.Context, workoutID, commentID string) (Comment, error)
+	AddComment(ctx context.Context, c Comment) error
+	// UpdateComment only matches a comment authorID wrote; anyone else's is
+	// ErrCommentNotFound, which is also what a missing id returns.
+	UpdateComment(ctx context.Context, workoutID, commentID string, authorID int64, body string) (Comment, error)
+	// DeleteComment is author-scoped unless allowAny, which the workout's
+	// owner gets so they can moderate their own page.
+	DeleteComment(ctx context.Context, workoutID, commentID string, requesterID int64, allowAny bool) error
+	// DeleteCommentsForUser removes every comment an account wrote, including
+	// the ones on other people's workouts, which have no key back to it.
+	DeleteCommentsForUser(ctx context.Context, userID int64) error
+
+	ListReactions(ctx context.Context, workoutID string) ([]Reaction, error)
+	// SetReaction replaces whatever the user had; one each is a property of
+	// the primary key, not of the caller.
+	SetReaction(ctx context.Context, workoutID string, userID int64, emoji string) error
+	ClearReaction(ctx context.Context, workoutID string, userID int64) error
+	DeleteReactionsForUser(ctx context.Context, userID int64) error
+
+	// IsShared reports whether a workout the owner holds is visible to anyone
+	// else — public, or shared with at least one person. It is the gate the
+	// whole Social tab hangs on.
+	IsShared(ctx context.Context, ownerID int64, workoutID string) (bool, error)
+
 	// SetVisibility flips a workout the caller owns; ErrNotFound otherwise.
 	SetVisibility(ctx context.Context, ownerID int64, id string, v Visibility) error
 	// ShareRecipients lists the user ids a workout the caller owns is shared

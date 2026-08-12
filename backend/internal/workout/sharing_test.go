@@ -433,3 +433,63 @@ func TestPurgeUserShares(t *testing.T) {
 		t.Fatalf("recipients = %v, want none after the account was purged", recipients)
 	}
 }
+
+// Gallery storage is five straightforward statements against the real schema,
+// exercised in media_test.go for the same reason as the methods above: a
+// reimplementation here would test the fake.
+func (unimplementedSharing) ListMedia(context.Context, string) ([]Media, error) {
+	panic("gallery storage is exercised against the real schema; see media_test.go")
+}
+func (unimplementedSharing) GetMedia(context.Context, string, string) (Media, error) {
+	panic("gallery storage is exercised against the real schema; see media_test.go")
+}
+func (unimplementedSharing) CountMedia(context.Context, string) (int, error) {
+	panic("gallery storage is exercised against the real schema; see media_test.go")
+}
+func (unimplementedSharing) AddMedia(context.Context, Media) error {
+	panic("gallery storage is exercised against the real schema; see media_test.go")
+}
+func (unimplementedSharing) DeleteMedia(context.Context, string, string) error {
+	panic("gallery storage is exercised against the real schema; see media_test.go")
+}
+func (unimplementedSharing) DeleteMediaForUser(context.Context, int64) error {
+	panic("gallery storage is exercised against the real schema; see media_test.go")
+}
+
+// Comments and reactions are exercised against the real schema, in
+// social_test.go, for the same reason the gallery is: their rules live in SQL —
+// an author check in a WHERE clause, an upsert on a primary key — and a fake
+// that reimplemented them would only prove the fake works.
+func (unimplementedSharing) ListComments(context.Context, string) ([]Comment, error) {
+	panic("comments are exercised against the real schema; see social_test.go")
+}
+func (unimplementedSharing) GetComment(context.Context, string, string) (Comment, error) {
+	panic("comments are exercised against the real schema; see social_test.go")
+}
+func (unimplementedSharing) AddComment(context.Context, Comment) error {
+	panic("comments are exercised against the real schema; see social_test.go")
+}
+func (unimplementedSharing) UpdateComment(context.Context, string, string, int64, string) (Comment, error) {
+	panic("comments are exercised against the real schema; see social_test.go")
+}
+func (unimplementedSharing) DeleteComment(context.Context, string, string, int64, bool) error {
+	panic("comments are exercised against the real schema; see social_test.go")
+}
+func (unimplementedSharing) DeleteCommentsForUser(context.Context, int64) error {
+	panic("comments are exercised against the real schema; see social_test.go")
+}
+func (unimplementedSharing) ListReactions(context.Context, string) ([]Reaction, error) {
+	panic("reactions are exercised against the real schema; see social_test.go")
+}
+func (unimplementedSharing) SetReaction(context.Context, string, int64, string) error {
+	panic("reactions are exercised against the real schema; see social_test.go")
+}
+func (unimplementedSharing) ClearReaction(context.Context, string, int64) error {
+	panic("reactions are exercised against the real schema; see social_test.go")
+}
+func (unimplementedSharing) DeleteReactionsForUser(context.Context, int64) error {
+	panic("reactions are exercised against the real schema; see social_test.go")
+}
+func (unimplementedSharing) IsShared(context.Context, int64, string) (bool, error) {
+	panic("sharedness is exercised against the real schema; see social_test.go")
+}

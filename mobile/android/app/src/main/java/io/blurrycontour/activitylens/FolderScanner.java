@@ -61,6 +61,31 @@ final class FolderScanner {
 
     private static final int TIMEOUT_MS = 30_000;
 
+    /**
+     * How far along a scan is, for the Settings screen to draw.
+     *
+     * A scan of a folder holding a few hundred files reads and hashes every one
+     * of them and then uploads over the network, which is minutes of a button
+     * that says "Scanning…" and nothing else — indistinguishable from one that
+     * has hung. The counts are what make it obviously alive.
+     *
+     * Called from the scanning thread, never the main one. The only
+     * implementation forwards to a Capacitor event, which is safe from any
+     * thread; anything heavier belongs on the receiving side.
+     *
+     * Null everywhere except the manual scan: the background job has nobody
+     * watching, and reporting to nobody costs work on a battery budget.
+     */
+    interface Progress {
+        /**
+         * @param phase  "read" while files are being read and hashed, "upload"
+         *               while new ones are being sent.
+         * @param done   how many of this phase's files are finished.
+         * @param total  how many there are in this phase, for this folder.
+         */
+        void update(String phase, int done, int total);
+    }
+
     /** What happened, for the Settings screen and the job's return value. */
     static final class Result {
         final boolean ok;
@@ -76,8 +101,9 @@ final class FolderScanner {
         }
     }
 
+    /** The background job's entry point: never forced, and watched by nobody. */
     static Result scan(Context context) {
-        return scan(context, false);
+        return scan(context, false, null);
     }
 
     /**
@@ -89,7 +115,7 @@ final class FolderScanner {
      * overall result is a failure only if nothing succeeded, because that is
      * what decides whether WorkManager retries.
      */
-    static Result scan(Context context, boolean force) {
+    static Result scan(Context context, boolean force, Progress progress) {
         List<FolderSync.Folder> folders = FolderSync.folders(context);
         if (folders.isEmpty()) {
             return new Result(false, 0, 0, "No folder chosen");
@@ -105,7 +131,7 @@ final class FolderScanner {
         int failed = 0;
         String firstProblem = null;
         for (FolderSync.Folder folder : folders) {
-            Result one = scanFolder(context, folder, force);
+            Result one = scanFolder(context, folder, force, progress);
             imported += one.imported;
             skipped += one.skipped;
             if (!one.ok) {
@@ -138,7 +164,7 @@ final class FolderScanner {
      * the server's content-hash check still keeps what is genuinely still there
      * from being imported twice.
      */
-    private static Result scanFolder(Context context, FolderSync.Folder folder, boolean force) {
+    private static Result scanFolder(Context context, FolderSync.Folder folder, boolean force, Progress progress) {
         Uri tree = folder.uri;
         String token = ServerConfig.token(context);
 
@@ -181,8 +207,11 @@ final class FolderScanner {
         List<byte[]> contents = new ArrayList<>();
         List<DocumentFile> readable = new ArrayList<>();
         Set<String> processed = new HashSet<>();
+        report(progress, "read", 0, candidates.size());
+        int readDone = 0;
         for (DocumentFile file : candidates) {
             byte[] data = read(context, file);
+            report(progress, "read", ++readDone, candidates.size());
             if (data == null) {
                 processed.add(fingerprint(file));
                 skipped++;
@@ -195,7 +224,25 @@ final class FolderScanner {
 
         try {
             Set<String> known = known(context, token, hashes);
+            // Only the files the server has never seen are uploaded, so that —
+            // not the candidate count — is what the upload bar is measured
+            // against. Counting all of them would show a bar that leapt to the
+            // end as the already-known ones were skipped in an instant.
+            int toUpload = 0;
+            for (int i = 0; i < readable.size(); i++) {
+                if (!known.contains(hashes.get(i))) {
+                    toUpload++;
+                }
+            }
+            toUpload = Math.min(toUpload, MAX_UPLOADS_PER_SCAN);
+            report(progress, "upload", 0, toUpload);
+
             int imported = 0;
+            // Uploads attempted, which is what the bar counts — an upload that
+            // failed is still a file this scan has been through. The loop's own
+            // bound stays on `imported`, deliberately: a failure is usually the
+            // network, and it must not use up the scan's upload budget.
+            int attempted = 0;
             for (int i = 0; i < readable.size() && imported < MAX_UPLOADS_PER_SCAN; i++) {
                 DocumentFile file = readable.get(i);
                 if (known.contains(hashes.get(i))) {
@@ -204,7 +251,9 @@ final class FolderScanner {
                     processed.add(fingerprint(file));
                     continue;
                 }
-                if (upload(context, token, file.getName(), contents.get(i))) {
+                boolean sent = upload(context, token, file.getName(), contents.get(i));
+                report(progress, "upload", ++attempted, toUpload);
+                if (sent) {
                     processed.add(fingerprint(file));
                     imported++;
                 } else {
@@ -229,6 +278,24 @@ final class FolderScanner {
             String message = "Could not reach the server";
             FolderSync.recordScan(context, tree, message);
             return new Result(false, 0, skipped, message);
+        }
+    }
+
+    /**
+     * Reports progress, if anyone asked for it.
+     *
+     * A listener that throws must not take the scan down with it: the import is
+     * the job and the bar is decoration, and losing the workouts because the UI
+     * had gone away mid-scan would be the worst possible trade.
+     */
+    private static void report(Progress progress, String phase, int done, int total) {
+        if (progress == null) {
+            return;
+        }
+        try {
+            progress.update(phase, done, total);
+        } catch (Exception e) {
+            Log.w(TAG, "progress listener failed", e);
         }
     }
 

@@ -391,7 +391,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
 }
 .settings-card.danger .settings-card-title { color: var(--danger); }
@@ -1045,9 +1045,12 @@ body {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
-  color: var(--text-2);
+  /* Primary ink, like every other card heading. It was the one title in the
+     app set in the secondary colour, which read as a disabled card rather than
+     a quiet one. */
+  color: var(--text);
 }
 /* Five values on one line, each behind its own icon so the row can be scanned
    rather than read. They wrap to a second line on a narrow phone. */
@@ -1285,6 +1288,62 @@ body {
   background: color-mix(in srgb, var(--warning) 9%, transparent);
   border-radius: var(--radius);
   color: var(--text-2);
+}
+
+/* The training-load ratio, as the headline figure of its own card.
+   Four verdicts, three colours: "steady" and "building" are both the accent
+   because both are the thing you want, and the word beside the number is what
+   tells them apart — the colour is never the only signal. */
+.load-figure {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.load-ratio {
+  font-family: var(--font-mono);
+  /* Big enough to be the card's headline, not so big it shouts. It sits beside
+     a 14px verdict, and 34px made the two look like different components. */
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+.load-figure-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.load-figure-unit { font-size: 11px; color: var(--text-3); }
+.load-verdict { font-size: 14px; font-weight: 700; line-height: 1.3; }
+.load-ratio.ramping, .load-verdict.ramping { color: var(--danger); }
+.load-ratio.detraining, .load-verdict.detraining { color: var(--text-3); }
+.load-ratio.steady, .load-ratio.building,
+.load-verdict.steady, .load-verdict.building { color: var(--primary); }
+
+/* How far a manual folder scan has got. Reading and hashing a few hundred
+   files then uploading them is minutes of work, and a spinning glyph says only
+   that something is happening — not whether it is nearly done. */
+.scan-progress { margin-top: 12px; }
+.scan-progress-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text-3);
+  margin-bottom: 6px;
+}
+.scan-progress-count { font-family: var(--font-mono); }
+.scan-progress-track {
+  height: 5px;
+  border-radius: 3px;
+  background: var(--bg-3);
+  overflow: hidden;
+}
+.scan-progress-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 3px;
+  transition: width 0.2s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .scan-progress-fill { transition: none; }
 }
 
 /* Rows inside the "More" sheet. The sheet itself is the shared .sheet
@@ -1889,6 +1948,27 @@ body:has(.overlay) .fab { display: none; }
 .glow { box-shadow: 0 0 0 1px var(--primary-glow), 0 0 24px var(--primary-glow); }
 
 .recharts-tooltip-wrapper { outline: none !important; }
+
+/* No focus ring anywhere inside a chart.
+
+   A tap drew two boxes: one around the plot and a second around the tooltip's
+   own container. Turning off Recharts' accessibility layer took the first —
+   that is what made the <svg> a tab stop — but not the second, because the
+   tooltip container carries tabindex="-1" and Recharts focuses it itself when
+   the tooltip opens. A tabindex="-1" element is not reachable by keyboard; it
+   is focused programmatically, and the browser rings it anyway.
+
+   So this suppresses by container rather than by naming the elements. There is
+   nothing in here to activate — the charts stopped being clickable when
+   click-to-seek was removed, and the tooltip already says what was touched —
+   so a ring on any of it is pointing at something that is not a control. The
+   :not(button) keeps the ring on the expand button, which is one. */
+.recharts-wrapper:focus,
+.recharts-wrapper *:not(button):focus,
+.recharts-wrapper:focus-visible,
+.recharts-wrapper *:not(button):focus-visible,
+.recharts-tooltip-wrapper:focus,
+.recharts-tooltip-wrapper:focus-visible { outline: none; }
 .custom-tooltip {
   background: var(--bg-2);
   border: 1px solid var(--border-strong);
@@ -1914,7 +1994,7 @@ body:has(.overlay) .fab { display: none; }
   align-items: center;
   gap: 6px;
   min-width: 0;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
 }
 /* Its own line, directly under the title. */
@@ -1925,6 +2005,43 @@ body:has(.overlay) .fab { display: none; }
   margin: 4px 0 10px;
 }
 
+/* The plot runs to the card's own edges while the header keeps its padding.
+
+   Negative margins rather than an unpadded card with a padded header, because
+   the card's padding is one number in one place and every other card on the
+   page depends on it — pulling the plot back out by the same amount keeps that
+   single definition. The card clips, so the area fill takes its corner radius
+   and the chart reads as part of the card rather than as a picture set into it.
+
+   The gain is entirely on mobile, where the plot was inside a card inside a
+   page gutter and then gave a third of what was left to axis furniture. On
+   desktop there is width to spare, so only the bottom bleed applies — the plot
+   keeps its side padding and its y axis. */
+.metric-panel { overflow: hidden; }
+.metric-panel-plot { margin-bottom: -16px; }
+@media (max-width: 768px) {
+  .metric-panel-plot { margin-left: -16px; margin-right: -16px; }
+}
+
+/* ── Card titles ───────────────────────────────────────────────────────────
+   One size and one colour for the heading of any card on a page, wherever it
+   is. They had drifted to 13px in some places, 14 in others, and one of them —
+   the weather card — to the secondary ink, so the same kind of heading looked
+   like three different kinds of thing.
+
+   Dialog and sheet headers are deliberately not in here. Those are the title
+   of a surface that took over the screen, not of a card sitting in a page, and
+   they are larger and heavier on purpose. */
+.card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
 /* ── Chart card: title row, info tip, description ── */
 .chart-card-head {
   display: flex;
@@ -1933,7 +2050,7 @@ body:has(.overlay) .fab { display: none; }
   flex-wrap: wrap;
   margin-bottom: 4px;
 }
-.chart-card-title { font-size: 13px; font-weight: 600; }
+.chart-card-title { font-size: 15px; font-weight: 600; }
 .chart-card-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .chart-card-desc {
   font-size: 11px;
@@ -2598,6 +2715,50 @@ body:has(.overlay) .fab { display: none; }
   border-bottom: 1px solid var(--border);
 }
 
+/* What the colours on the track mean, over the top-left of the map.
+
+   Translucent so it does not hide the corner of the route it sits on, but only
+   just: 88% of the card surface plus a blur, the same in both themes. At 72%
+   the dark theme read as a wash and the light one — white over a pale
+   basemap — read as solid, so the two looked like different components.
+
+   Text is --text-2, not --text-3. The muted ink is calibrated against a card,
+   and over aerial imagery there is no contrast left in it at all. The
+   right-hand corner is spoken for by the maximize button and the layer
+   switcher, hence the left. */
+.map-legend {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 400;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  background: color-mix(in srgb, var(--bg-2) 88%, transparent);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+  /* Room for five zone chips or a 150px ramp without wrapping, while still
+     leaving most of the map visible behind it. */
+  max-width: 72%;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-2);
+}
+/* Left at its original size: five named zones read fine this compact, and it
+   is only the ramp — a gradient you have to see a length of — that needed
+   more room. */
+.map-legend-zones { display: flex; gap: 9px; }
+.map-legend-zone { display: flex; align-items: center; gap: 4px; }
+.map-legend-zone i { width: 8px; height: 8px; border-radius: 2px; }
+.map-legend-ramp { display: flex; flex-direction: column; gap: 3px; }
+/* Long enough to read as a gradient. At 92px the middle of a three-stop ramp
+   was about thirty pixels wide, which is not enough of it to see. */
+.map-legend-ramp i { display: block; width: 150px; height: 7px; border-radius: 4px; }
+/* The two ends pushed apart under the bar they label, so each number sits over
+   the end of the ramp it belongs to. */
+.map-legend-ramp > span { display: flex; justify-content: space-between; gap: 10px; }
+
 /* MapLibre's popups and controls ship light and would otherwise be the one
    white surface in a dark app. */
 .maplibregl-popup-content {
@@ -2618,6 +2779,24 @@ body:has(.overlay) .fab { display: none; }
   border: 1px solid var(--border);
 }
 .maplibregl-ctrl-group button + button { border-top-color: var(--border) !important; }
+/* The reset-zoom control and the zoom buttons are two MapLibre control groups
+   that have to read as one stack of three buttons, so the gap and the facing
+   corners between them are removed. Written against the group that follows it
+   rather than by nth-child, so it holds if anything else joins the corner. */
+.map-reset-ctrl.map-reset-ctrl {
+  margin-bottom: 0 !important;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.map-reset-ctrl + .maplibregl-ctrl-group {
+  margin-top: 0 !important;
+  border-top: none;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+/* The glyph is our own inline SVG, not one of MapLibre's inverted background
+   images, so it takes the theme's ink directly. */
+.map-reset-ctrl button { color: var(--text); display: flex; align-items: center; justify-content: center; }
 .maplibregl-ctrl-group button span { filter: invert(var(--map-ctrl-invert, 1)); }
 .maplibregl-ctrl-attrib {
   background: color-mix(in srgb, var(--bg-2) 82%, transparent) !important;
@@ -2645,8 +2824,242 @@ body:has(.overlay) .fab { display: none; }
 }
 .detail-top > :first-child { grid-area: map; }
 .detail-top > :last-child { grid-area: summary; }
+/* The summary keeps its 380px whatever is beside it. It was sharing the width
+   evenly when there was no map, which made the same card two different sizes
+   depending on whether the workout had GPS — and the panel beside it wants the
+   room more than the summary does. */
+/* Nothing to put beside the summary at all. */
+.detail-top.solo { grid-template-columns: 1fr; grid-template-areas: "summary"; }
+
+/* The non-map heroes.
+   Side and bottom padding go, so the drawing has the card's full width and
+   runs to its bottom edge — the same deal the map card gets. Only the title
+   keeps its inset, and it supplies its own. The minimum matches the map's, so
+   a workout without GPS gets a panel the same size as one with it.
+
+   The title bar is inside the drawing now — see .session-sky-bar — so this
+   card carries no padding at all: it is a frame around a picture. */
+.detail-hero-card {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  /* Stretched to the summary column beside it, exactly as the map card is.
+     There is no cap any more: the field is built to the panel's measured
+     proportions, so a taller card is a taller drawing rather than a drawing
+     with empty sky above it — which is what the cap was there to avoid and
+     what made the two panels different sizes for no reason a reader could
+     see. The minimum only matters while the summary is short. */
+  min-height: 280px;
+}
+/* The standing panel is words rather than a picture, so it keeps its inset. */
+.detail-hero-card .session-context { padding: 16px; }
+
+/* On desktop this stretches to match the summary column beside it, so the
+   minimum only matters while the summary is short. */
+.detail-map-card {
+  padding: 0;
+  overflow: hidden;
+  position: relative;
+  background: var(--bg-3);
+  display: flex;
+  flex-direction: column;
+  min-height: 280px;
+}
+/* ── The no-route heroes ──────────────────────────────────────────────────
+   Both share a header, so a workout that has samples and one that has nothing
+   read as two states of one panel rather than as two different components. */
+/* `min-height: 0` is load-bearing, not tidiness. A flex item's automatic
+   minimum size is its content's, and the content here is an <svg> with a
+   viewBox — which has an intrinsic aspect ratio, so at the panel's width it
+   claims an intrinsic *height* of several hundred pixels. Without this the
+   card could not shrink below that and grew past the summary column beside
+   it, which is exactly the "taller than the summary" bug. */
+.session-profile,
+.session-context { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; }
+.session-profile-head { display: flex; align-items: center; gap: 8px; }
+.session-profile-head h3 { font-size: 15px; font-weight: 600; }
+.session-profile-note {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+}
+
+/* The sky the session is drawn in.
+   It takes whatever height the card has left rather than holding an aspect
+   ratio, and the drawing inside keeps its own proportions and centres — see
+   preserveAspectRatio in SessionProfile. Letting the drawing stretch would
+   tilt a trajectory whose whole meaning is that it recedes from lower left to
+   upper right; letting the box stretch costs nothing, because the extra space
+   is sky and sky is what is drawn there anyway.
+   Square-cornered and edge to edge: the card's own radius and border are the
+   frame now. */
+.session-sky {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  /* The ground haze lives here rather than as a <rect> inside the drawing.
+     The field's height is rounded to the nearest ten, so the viewBox almost
+     never matches the box's aspect exactly and the svg letterboxes by a few
+     pixels — which was invisible until the drawing painted its own background,
+     and then showed as a thin band along the bottom where the haze stopped
+     short of the card. Painting it on the container instead means the sky is
+     continuous whatever the drawing's aspect does. */
+  background:
+    linear-gradient(to top, color-mix(in srgb, var(--primary) 10%, transparent), transparent 55%),
+    radial-gradient(120% 90% at 12% 100%, color-mix(in srgb, var(--primary) 9%, transparent), transparent 60%),
+    var(--bg-3);
+}
+
+/* The title bar, floating on the drawing rather than sitting above it.
+   The panel is a picture and gets the whole card; the words go on top of it,
+   under a scrim so they stay readable over a bright launch or a dense patch of
+   stars. Only the button in it takes pointer events, so the rest of the bar is
+   still sky you can scrub through. */
+.session-sky-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 12px 20px;
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--bg-2) 82%, transparent), transparent);
+  pointer-events: none;
+}
+.session-sky-bar > button { pointer-events: auto; }
+.session-sky-bar h3 { font-size: 15px; font-weight: 600; white-space: nowrap; }
+.session-sky-bar .session-profile-note { white-space: nowrap; }
+.session-sky-bar .session-profile-note { margin-left: auto; }
+.session-sky-bar .session-sky-expand { margin-left: 10px; }
+/* The direct child only. This sizes the drawing, and the title bar now lives
+   inside the sky too — with a bare `svg` selector the lucide glyphs in that bar
+   inherited "fill the panel", and a 14px sparkle became the whole card. */
+/* Out of flow, and that is the point rather than a detail of placement.
+   An <svg> with a viewBox has an intrinsic aspect ratio, so in normal flow it
+   claims an intrinsic *height* from the width it is given — a third of a
+   screen, sometimes more — and every ancestor's automatic minimum size grew to
+   fit it. That is what made this card taller than the summary column beside
+   it, twice, through two different attempts to constrain it. Absolutely
+   positioned, it contributes no height at all and the card is exactly as tall
+   as the grid row makes it.
+   The direct child only: the title bar lives inside the sky too, and a bare
+   `svg` selector here once told a 14px lucide glyph to fill the panel. */
+.session-sky > svg {
+  display: block;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+}
+/* The maximise control, the same one the map carries. It rides in the title
+   bar rather than floating in the corner, which is also why the destination
+   glyph no longer has to dodge it. */
+.session-sky-expand {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+/* The picker and its key, stacked in the corner the path has already left.
+   The key sits above the control it explains, so the pair reads downward. */
+.session-sky-controls {
+  position: absolute;
+  /* Both edges, not just the right one: anchored only on the right, a legend
+     wider than the panel grew leftward out of the box instead of wrapping.
+     With both sides pinned it has a real width to fit into, and align-items
+     keeps the pair against the right edge as before. */
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  pointer-events: none;
+}
+.session-sky-controls > * { pointer-events: auto; }
+/* Borrows .map-legend whole — same shapes, same vocabulary — and only undoes
+   the absolute placement, which here comes from the stack above. */
+.session-sky-legend {
+  position: static;
+  top: auto;
+  left: auto;
+  max-width: 100%;
+}
+/* No width override on the ramp — the base 150px applies.
+   `min(150px, 100%)` was silently collapsing this to about 110px: the legend
+   is a shrink-to-fit box, so a percentage width on a child contributes nothing
+   to the parent's intrinsic size and then resolves against whatever the rest
+   of the content asked for — which is the two end labels under the bar. The
+   ramp came out as wide as its own captions instead of 150px, and only in the
+   drawing, because the map's rule is a plain length.
+
+   The one concession to a narrow panel is below: the zone chips wrap rather
+   than run off the edge. Nothing here changes their size. */
+.session-sky-legend .map-legend-zones { flex-wrap: wrap; justify-content: flex-end; }
+/* The map's control at the map's type size and padding — the same control,
+   not a smaller copy of it — with one thing dropped: the 150px minimum, which
+   exists so a row of filter dropdowns lines up and buys nothing for a single
+   picker sitting on a drawing. Without it the trigger is as wide as its label
+   and no wider. */
+.session-sky-controls .al-dropdown-trigger {
+  /* No 150px minimum — that exists so a row of filter dropdowns lines up, and
+     buys nothing for a single picker on a drawing. But dropping it let the
+     trigger shrink until "Heart rate zones" wrapped onto three lines and the
+     control became a tall box, which is what looked massive: it was too
+     narrow, not too wide. nowrap is the other half of the change. */
+  min-width: 0;
+  white-space: nowrap;
+}
+
+/* The standing panel, for a workout with nothing recorded at all. */
+.session-context-body { display: flex; gap: 16px; align-items: flex-start; flex: 1; }
+.session-context-mark {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.session-context-facts { display: flex; flex-direction: column; gap: 12px; min-width: 0; flex: 1; }
+.session-context-facts dt { font-size: 11px; color: var(--text-3); margin-bottom: 2px; }
+.session-context-facts dd { margin: 0; font-size: 15px; font-weight: 600; }
+.session-context-facts dd span {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+}
+
 .playback-bar { display: flex; align-items: center; gap: 10px; }
 .playback-controls { display: flex; align-items: center; gap: 10px; }
+
+/* The transport buttons and the clock on top, the scrub bar full width
+   underneath, once there is not enough room for all three on one line.
+
+   That order and not the reverse: the bar is what the thumb reaches for, so it
+   belongs at the near edge of the card, and the controls read as a header for
+   it rather than as a caption under it.
+
+   Driven by the card's own width rather than the viewport. The viewport rule
+   this replaced assumed "narrow screen" and "narrow bar" were the same thing,
+   which they are not on a large phone in landscape or on a tablet — both are
+   wider than the 768px breakpoint and still too tight for a one-line
+   transport. Measuring the container is the version that cannot be wrong. */
+.playback-card { container-type: inline-size; }
+@container (max-width: 460px) {
+  .playback-bar { display: grid; grid-template-columns: auto 1fr; gap: 8px; }
+  .playback-controls { grid-column: 1; grid-row: 1; }
+  .playback-bar > span { grid-column: 2; grid-row: 1; justify-self: end; align-self: center; }
+  .playback-bar input { grid-column: 1 / -1; grid-row: 2; width: 100%; }
+}
 .workout-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
 
 .spin { animation: spin 0.8s linear infinite; }
@@ -3308,8 +3721,16 @@ body:has(.overlay) .fab { display: none; }
   background: var(--row-accent);
 }
 /* The row's `overflow: hidden` would also clip a menu opened inside it, which
-   is where the share options live — so it is lifted for as long as one is up. */
-.workout-row:has(.options-menu) { overflow: visible; }
+   is where the share options live — so it is lifted for as long as one is up.
+
+   The z-index is the other half, and it fixes a flicker that only ever
+   happened with a mouse. `:hover` puts a transform on a row, and a transform
+   makes a stacking context — so moving the pointer down onto an open menu
+   hovered the row *underneath*, which then painted over the menu, which
+   un-hovered that row, which revealed the menu again, forty times a second.
+   Lifting the row that owns the menu above its transformed neighbours ends
+   the loop. A phone never saw it because a phone never hovers. */
+.workout-row:has(.options-menu) { overflow: visible; z-index: 2; }
 .workout-row-icon {
   width: 44px;
   height: 44px;
@@ -3458,10 +3879,18 @@ body:has(.overlay) .fab { display: none; }
     grid-template-columns: 1fr;
     grid-template-areas: "summary" "map";
   }
-  .playback-bar { display: grid; grid-template-columns: auto 1fr; gap: 8px; }
-  .playback-controls { grid-column: 1; grid-row: 2; }
-  .playback-bar input { grid-column: 1 / -1; grid-row: 1; width: 100%; }
-  .playback-bar > span { grid-column: 2; grid-row: 2; justify-self: end; align-self: center; }
+  /* Taller once the map has the full width to itself. Stacked, it has no
+     summary column to match, so it fell back to the 280px minimum — a letterbox
+     on a phone, and the one panel where more height is always worth having.
+     Capped in pixels as well as in vh so a tall phone does not give the map the
+     whole screen and push everything else below the fold. */
+  /* Stacked, both are a row of their own rather than a column matching a
+     summary beside them, so both take a share of the screen instead. */
+  .detail-map-card,
+  .detail-hero-card { min-height: min(56vh, 420px); }
+  /* The playback bar's stacked layout used to live here. It is a container
+     query now — see .playback-card — because the card's width, not the
+     viewport's, is what decides whether the three parts fit on one line. */
   .workout-search {
     flex-basis: 100%;
     width: 100%;
@@ -3726,7 +4155,10 @@ body:has(.overlay) .fab { display: none; }
   box-shadow:
     0 0 0 2px var(--primary-dim),
     0 0 14px var(--primary-glow);
-  animation: goal-award-in 0.45s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+  /* Struck, then flipped into place. A short per-goal delay — see awardPhase —
+     so a row lands one after another rather than all at once, without the last
+     one keeping you waiting. */
+  animation: goal-award-flip 0.8s cubic-bezier(0.25, 0.9, 0.3, 1) var(--award-in-delay, 0s) both;
   position: relative;
   /* Clips the shine to the disc. An element's own box-shadow is drawn outside
      the border box and is not clipped by overflow, so the halo survives. */
@@ -3748,18 +4180,24 @@ body:has(.overlay) .fab { display: none; }
     transparent
   );
   transform: translateX(-260%) skewX(-18deg);
+  /* Out of phase with its neighbours, and starting only once the coin has
+     landed — a band of light crossing a disc that is still spinning reads as a
+     rendering fault rather than as shine. The offset comes from the goal's
+     index as a custom property, because the nth-child rules this replaces
+     keyed on a row's position inside three named containers: a layout not on
+     that list, or a container with a footer among its children, fell back to
+     no offset and every medal flashed in unison. */
   animation: goal-award-shine 3s ease-in-out infinite;
+  animation-delay: calc(var(--award-delay, 0s) + 1s);
 }
-/* Staggered, so several met goals don't flash in unison. */
-:is(.goal-panel-stack, .goal-rings, .goal-ledger) > :nth-child(3n + 2) .goal-award::after {
-  animation-delay: 1s;
-}
-:is(.goal-panel-stack, .goal-rings, .goal-ledger) > :nth-child(3n) .goal-award::after {
-  animation-delay: 2s;
-}
-@keyframes goal-award-in {
-  from { transform: scale(0.4); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
+/* The coin flip. Three turns about the vertical axis, through a perspective so
+   the disc narrows and widens instead of merely squashing — that foreshortening
+   is the whole difference between a flipping coin and a shrinking circle. It
+   plays once, on arrival, and hands over to the shine. */
+@keyframes goal-award-flip {
+  0% { transform: perspective(420px) rotateY(0deg) scale(0.4); opacity: 0; }
+  30% { opacity: 1; }
+  100% { transform: perspective(420px) rotateY(1080deg) scale(1); opacity: 1; }
 }
 /* Most of the cycle is the rest between sweeps; the sweep itself is the tail. */
 @keyframes goal-award-shine {
@@ -3767,7 +4205,8 @@ body:has(.overlay) .fab { display: none; }
   100% { transform: translateX(320%) skewX(-18deg); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .goal-award { animation: none; }
+  .goal-award,
+  .goal-ring-award { animation: none; }
   .goal-award::after { display: none; }
 }
 
@@ -4069,6 +4508,7 @@ body:has(.overlay) .fab { display: none; }
 }
 /* On the dial rather than under it, for the same reason. */
 .goal-ring-award {
+  animation: goal-award-flip 0.8s cubic-bezier(0.25, 0.9, 0.3, 1) var(--award-in-delay, 0s) both;
   position: absolute;
   top: 2px;
   right: 2px;
@@ -4218,3 +4658,313 @@ body:has(.overlay) .fab { display: none; }
   /* Eight labels at 9px is already dense; below this they would collide. */
   .goal-history-label { font-size: 8px; }
 }
+
+/* ── Workout detail: the tabbed sections under the charts ─────────────────
+   Notes, Gallery, and Social to come. Cards below a certain number are just a
+   page; past it they are a scroll, so these share one frame. */
+/* ── Workout sections: notes, gallery, social ──────────────────────────────
+
+   The strip sits outside the panel and the two are joined, folder-fashion,
+   rather than the strip floating inside a card of its own. Inside a card, the
+   tabs read as a control that happens to be at the top of a box, and the box
+   looks the same whichever tab is up — so nothing on screen says which panel
+   belongs to which tab.
+
+   The join is made of things already here: the strip's ground is bg-3, the
+   panel's is bg-2, and an active tab is already bg-2. Squaring the active
+   tab's bottom corners and dropping the line between the two runs that bg-2
+   straight down into the panel, so the open tab and its page are visibly one
+   surface. No new colour, and nothing that needs to know which tab is open. */
+.detail-sections { margin-top: 16px; }
+.detail-sections .tab-strip {
+  padding: 4px 4px 0;
+  border-bottom: none;
+  border-radius: calc(var(--radius) * 1.5) calc(var(--radius) * 1.5) 0 0;
+}
+.detail-sections .tab-strip-item {
+  border-radius: var(--radius) var(--radius) 0 0;
+  padding-bottom: 10px;
+}
+/* The lift would cast a shadow onto the panel it is joined to. */
+.detail-sections .tab-strip-item.active { box-shadow: none; }
+.detail-tab-panel {
+  border-top: none;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+  /* A floor for the very first paint, before TabPanel has measured anything.
+     From then on the minimum is the high-water mark it keeps — see TabPanel,
+     which is where the reason this section must never shrink is written down. */
+  min-height: 240px;
+}
+
+/* ── Gallery ──────────────────────────────────────────────────────────── */
+.gallery { display: flex; flex-direction: column; gap: 12px; }
+.gallery-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.gallery-count { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); }
+.gallery-error { font-size: 12px; color: var(--danger); }
+.gallery-empty {
+  display: grid;
+  place-items: center;
+  min-height: 80px;
+  font-size: 13px;
+  color: var(--text-3);
+  text-align: center;
+}
+
+/* auto-fill and a minimum, not a fixed column count: the same rule gives two
+   across on a phone and five on a wide desktop, and nothing has to name a
+   breakpoint to say so. */
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+}
+.gallery-grid > li { position: relative; min-width: 0; }
+.gallery-tile {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--bg-3);
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.gallery-tile:hover { border-color: var(--border-strong); transform: translateY(-1px); }
+/* Tiles are square whatever the photo is, so the grid stays a grid. The
+   lightbox is where a photo gets its own shape. */
+.gallery-tile .gallery-img { aspect-ratio: 1 / 1 !important; }
+.gallery-tile img { object-fit: cover; }
+
+.gallery-img {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  background: var(--bg-3);
+  color: var(--text-3);
+}
+.gallery-img img { display: block; width: 100%; height: 100%; }
+.gallery-img-failed { font-size: 10px; }
+
+.gallery-tile-remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-2) 82%, transparent);
+  backdrop-filter: blur(6px);
+  color: var(--danger);
+  cursor: pointer;
+}
+
+/* The full-size view. Its own layer over everything, portalled out of the
+   swipe pager — which is a stacking context, so no z-index from inside the
+   page can clear the top and bottom bars. */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: color-mix(in srgb, #000 78%, transparent);
+  backdrop-filter: blur(4px);
+}
+.lightbox-body {
+  max-width: min(100%, 1100px);
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.lightbox-body .gallery-img {
+  background: transparent;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.lightbox-body img { max-height: 78vh; width: auto; max-width: 100%; object-fit: contain; }
+.lightbox-caption { font-size: 12px; color: #e8eaed; text-align: center; }
+.lightbox-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  cursor: pointer;
+}
+@media (max-width: 768px) {
+  .lightbox { padding: 12px; }
+  .gallery-grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+}
+
+/* ── Social: reactions and comments ───────────────────────────────────────
+   Reactions above the thread, because leaving one is the cheap gesture most
+   visits make and nothing else — putting them past a scroll of comments would
+   put the common case last. */
+.social { display: flex; flex-direction: column; gap: 16px; }
+
+.social-reactions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+/* One button, and the tray behind it. The tray is absolute so opening it does
+   not reflow the reactions beside it — a row that jumps sideways as you reach
+   for it is a row you miss. */
+.social-picker-wrap { position: relative; display: inline-flex; }
+.social-picker-btn.open { color: var(--primary); border-color: var(--primary); }
+/* A grid of six columns, so the set reads as rows rather than as one long
+   strip: the first row is the six that mean "well done", the second the ones
+   that are a joke. A pill shape stopped making sense at two rows. */
+.social-picker {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: repeat(6, auto);
+  gap: 2px;
+  padding: 5px;
+  background: var(--bg-2);
+  border: 1px solid var(--border-strong);
+  border-radius: calc(var(--radius) * 1.5);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.social-emoji {
+  border: none;
+  background: transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  /* A 32px target: an emoji glyph is about half that, and a control you tap
+     with a thumb has to be bigger than the thing drawn in it. */
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  transition: background 0.15s, transform 0.15s;
+}
+.social-emoji:hover { background: var(--bg-2); }
+.social-emoji:active { transform: scale(0.9); }
+.social-emoji.mine { background: var(--primary-dim); box-shadow: inset 0 0 0 1px var(--primary); }
+
+/* What everyone else left, counted. */
+.social-tally { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.social-tally li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 14px;
+  line-height: 1;
+  cursor: default;
+}
+.social-tally li.mine { border-color: var(--primary); background: var(--primary-dim); }
+.social-tally b {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.social-thread { display: flex; flex-direction: column; gap: 14px; }
+.social-comment { display: flex; gap: 10px; align-items: flex-start; }
+.social-comment-body { flex: 1; min-width: 0; }
+.social-comment-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 3px;
+  flex-wrap: wrap;
+}
+.social-comment-head b { font-size: 13px; font-weight: 600; }
+.social-comment-head time { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); }
+.social-edited { font-size: 11px; color: var(--text-3); font-style: italic; }
+/* Pushed to the far end of the row, and only visible on hover on a desktop —
+   a phone has no hover, so there they simply stay. */
+.social-comment-actions { margin-left: auto; display: flex; gap: 2px; }
+@media (hover: hover) {
+  .social-comment-actions { opacity: 0; transition: opacity 0.15s; }
+  .social-comment:hover .social-comment-actions,
+  .social-comment-actions:focus-within { opacity: 1; }
+}
+/* pre-wrap, so the line breaks somebody typed survive; overflow-wrap, so a
+   pasted URL cannot push the panel wider than the page. */
+.social-comment-text {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* The box and its send button, on one line at every width — a single icon
+   button needs no room of its own, so this no longer stacks on a phone. */
+.social-compose { display: flex; gap: 8px; align-items: flex-end; }
+.social-send {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  color: var(--primary);
+  border: 1px solid var(--border);
+}
+.social-send:disabled { color: var(--text-3); opacity: 0.6; }
+.social-box {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  padding: 9px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-3);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  /* Height is set from scrollHeight in WorkoutSocial; this is only the floor
+     for the first, empty line. */
+  min-height: 38px;
+}
+.social-box:focus { outline: none; border-color: var(--primary); }
+.social-edit { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.social-edit-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.social-edit-actions .btn { font-size: 12px; padding: 5px 12px; }
+
+.social-error { font-size: 12px; color: var(--danger); }
+.social-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 60px;
+  font-size: 13px;
+  color: var(--text-3);
+  text-align: center;
+}
+
+
+
+/* The session panel inside its expand modal: the map's immersive treatment,
+   edge to edge, with the transport on the modal's own foot. Square-cornered
+   and unframed, because at this size the drawing is the window rather than
+   something sitting in one. */
+.session-expanded { display: flex; }
+.session-expanded .session-profile { flex: 1; min-width: 0; min-height: 0; }
+.session-expanded .session-sky { border-radius: 0; border: none; }

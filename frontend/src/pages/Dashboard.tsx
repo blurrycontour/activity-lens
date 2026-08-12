@@ -15,13 +15,14 @@ import InfoTip from '../components/InfoTip'
 import Sparkline from '../components/Sparkline'
 import { api, type Equipment } from '../lib/api'
 import { AXIS_TICK, GRID_PROPS, HOVER_FILL, recencyRamp } from '../lib/chartColors'
+import { useThemeTokens } from '../lib/useThemeTokens'
 import {
   DASHBOARD_CFG_KEY, defaultDashboardConfig, resolveGoalStyle, windowLabel,
   type DashboardConfig, type GoalStyle, type StatCardId,
 } from '../lib/dashboardConfig'
 import {
   deltaPct, describeGoal, describeGoalMinimum, formatGoalAmount, formReading, gearNudges, goalFromApi, goalProgress,
-  goalUnit, periodLabel, recentPersonalBests, recentWeekStarts, sparkBuckets, totalsOf, weekdayMatrix,
+  goalUnit, periodLabel, recentPersonalBests, recentWeekStarts, sparkAverages, sparkBuckets, totalsOf, weekdayMatrix,
   windowSlices, type Goal, type GoalProgress,
 } from '../lib/insights'
 
@@ -186,14 +187,47 @@ function goalTitle(g: GoalProgress['goal']): string {
  * number people come back for, and it has no reason to depend on which layout
  * is selected.
  */
-function GoalBadges({ p, compact }: { p: GoalProgress; compact?: boolean }) {
+/**
+ * Timings for one medal, from its place in the list.
+ *
+ * Two offsets, because the two animations want opposite things from a stagger.
+ *
+ * The flip is an arrival: a short cascade down the card reads as one gesture,
+ * and anything longer reads as medals that forgot to show up — at 0.7s apiece
+ * the third was still waiting most of a second after the first had landed.
+ * A tenth of a second each keeps the run under half a second whatever the
+ * count.
+ *
+ * The shine is a loop, and wants the opposite: the offsets should be spread as
+ * widely as possible inside its three-second period so no two medals flash
+ * together. The step is deliberately not a factor of that period, or every
+ * fourth medal would come back into step with the first.
+ *
+ * Inline custom properties rather than nth-child rules, which is what this
+ * replaced: those keyed on a row's position inside three named containers, so
+ * any other layout silently fell back to no offset and everything flashed in
+ * unison.
+ */
+function awardPhase(index: number): React.CSSProperties {
+  return {
+    '--award-in-delay': `${(index * 0.1).toFixed(2)}s`,
+    '--award-delay': `${((index * 0.77) % 3).toFixed(2)}s`,
+  } as React.CSSProperties
+}
+
+function GoalBadges({ p, compact, index = 0 }: { p: GoalProgress; compact?: boolean; index?: number }) {
   const met = p.current >= p.goal.target
   const unit = streakUnit(p.goal)
   if (!met && p.streak <= 0) return null
   return (
     <span className="goal-badges">
       {met && (
-        <span className="goal-award" title={`Target met this ${unit}`} aria-label="Target met">
+        <span
+          className="goal-award"
+          title={`Target met this ${unit}`}
+          aria-label="Target met"
+          style={awardPhase(index)}
+        >
           <Trophy size={compact ? 11 : 13} strokeWidth={2.25} />
         </span>
       )}
@@ -240,9 +274,12 @@ function GoalBar({ p, needle }: { p: GoalProgress; needle: boolean }) {
   )
 }
 
+/** How far past target a period must go to earn its "+". */
+const OVERSHOOT = 1.25
+
 /**
  * The run of recent windows: pass/fail per period, with a "+" where the target
- * was beaten. Shared by every style, at two densities — the compact one keeps
+ * was clearly beaten. Shared by every style, at two densities — the compact one keeps
  * the ledger and the rings from turning into a chart.
  */
 function GoalHistory({ p, showPeriods, compact }: {
@@ -253,9 +290,12 @@ function GoalHistory({ p, showPeriods, compact }: {
   return (
     <div className={`goal-history${compact ? ' compact' : ''}`}>
       {p.history.map(h => {
-        // A period that beat its target is worth more than a filled bar, so it
-        // is marked. Meeting it exactly is not "exceeded".
-        const over = p.goal.target > 0 && h.value > p.goal.target
+        // A period that comfortably beat its target is worth more than a filled
+        // bar, so it is marked — but only comfortably. Any margin at all put a
+        // "+" on almost every met period, which made the mark mean "met", which
+        // the filled bar already said. A quarter again is a week you would
+        // notice having had.
+        const over = p.goal.target > 0 && h.value >= p.goal.target * OVERSHOOT
         return (
           <span className="goal-history-cell" key={h.key}>
             <span
@@ -263,7 +303,7 @@ function GoalHistory({ p, showPeriods, compact }: {
               style={{ '--goal-hue': goalColor(p.goal.type) } as React.CSSProperties}
               title={`From ${h.key}: ${formatGoalAmount(p.goal, h.value)}${
                 p.goal.metric === 'count' ? (h.value === 1 ? ' activity' : ' activities') : ''
-              }${over ? ' — target beaten' : ''}`}
+              }${over ? ' — target beaten by a quarter or more' : ''}`}
             >
               {over && !compact ? '+' : ''}
             </span>
@@ -307,7 +347,7 @@ function daysLeft(p: GoalProgress): number {
  * Four rows: the mark, the figures and the verdict; then the description with
  * the trophy and streak; then the bar; then the history.
  */
-function GoalTileStandard({ p, opts }: { p: GoalProgress; opts: GoalViewOpts }) {
+function GoalTileStandard({ p, opts, index = 0 }: { p: GoalProgress; opts: GoalViewOpts; index?: number }) {
   const met = p.current >= p.goal.target
   const v = paceVerdict(p)
   return (
@@ -331,7 +371,7 @@ function GoalTileStandard({ p, opts }: { p: GoalProgress; opts: GoalViewOpts }) 
           <span className="goal-std-slash mono" aria-hidden="true">/</span>
           <span className="goal-std-tot mono">{formatGoalAmount(p.goal, p.goal.target)}</span>
         </span>
-        <GoalBadges p={p} />
+        <GoalBadges p={p} index={index} />
       </div>
 
       <GoalBar p={p} needle />
@@ -395,13 +435,13 @@ function GoalToday({ progress, opts }: { progress: GoalProgress[]; opts: GoalVie
       {because && <p className="goal-today-because">{because}</p>}
 
       <div className="goal-today-strip">
-        {progress.map(p => {
+        {progress.map((p, i) => {
           const v = paceVerdict(p)
           return (
             <div className="goal-today-item" key={p.goal.id} title={goalTitle(p.goal)}>
               <GoalSportMark type={p.goal.type} size={13} />
               <span className="goal-today-name">{describeGoal(p.goal)}</span>
-              <GoalBadges p={p} compact />
+              <GoalBadges p={p} compact index={i} />
               <span className={`goal-verdict ${v.tone}`}>{v.text}</span>
               <span className="goal-today-amt mono">
                 {formatGoalAmount(p.goal, p.current, true)}/{formatGoalAmount(p.goal, p.goal.target)}
@@ -419,7 +459,7 @@ function GoalToday({ progress, opts }: { progress: GoalProgress[]; opts: GoalVie
 function GoalRings({ progress, opts }: { progress: GoalProgress[]; opts: GoalViewOpts }) {
   return (
     <div className="goal-rings">
-      {progress.map(p => {
+      {progress.map((p, i) => {
         const met = p.current >= p.goal.target
         const pct = p.goal.target > 0 ? Math.min(1, p.current / p.goal.target) : 0
         const R = 46
@@ -453,7 +493,7 @@ function GoalRings({ progress, opts }: { progress: GoalProgress[]; opts: GoalVie
                 <span className="goal-ring-of mono">of {formatGoalAmount(p.goal, p.goal.target)}</span>
               </span>
               {met && (
-                <span className="goal-ring-award" title={`Target met this ${streakUnit(p.goal)}`}>
+                <span className="goal-ring-award" title={`Target met this ${streakUnit(p.goal)}`} style={awardPhase(i)}>
                   <Trophy size={11} strokeWidth={2.25} />
                 </span>
               )}
@@ -494,7 +534,7 @@ function GoalLedger({ progress, opts }: { progress: GoalProgress[]; opts: GoalVi
   )
   return (
     <div className="goal-ledger">
-      {progress.map(p => {
+      {progress.map((p, i) => {
         const v = paceVerdict(p)
         return (
           <div className="goal-ledger-row" key={p.goal.id}>
@@ -508,7 +548,7 @@ function GoalLedger({ progress, opts }: { progress: GoalProgress[]; opts: GoalVi
                 two holes; the figure keeps a fixed width of its own, which is
                 all that has to line up down the card. */}
             <span className="goal-ledger-right">
-              <GoalBadges p={p} compact />
+              <GoalBadges p={p} compact index={i} />
               <span className={`goal-verdict ${v.tone}`}>{v.text}</span>
               <span className="goal-ledger-val mono">
                 {formatGoalAmount(p.goal, p.current, true)}/{formatGoalAmount(p.goal, p.goal.target)}
@@ -539,7 +579,7 @@ function GoalPanel({ progress, opts }: { progress: GoalProgress[]; opts: GoalVie
   if (opts.style === 'today') return <GoalToday progress={progress} opts={opts} />
   return (
     <div className="goal-panel-stack">
-      {progress.map(p => <GoalTileStandard key={p.goal.id} p={p} opts={opts} />)}
+      {progress.map((p, i) => <GoalTileStandard key={p.goal.id} p={p} opts={opts} index={i} />)}
     </div>
   )
 }
@@ -679,11 +719,24 @@ export default function Dashboard({ onSelect }: { onSelect: (w: Workout) => void
     () => gearNudges(equipment, t => DEFAULT_RETIRE_KM[t] ?? 0),
     [equipment],
   )
-  const trendRamp = recencyRamp(d.trendWeeks.length)
+  // Recomputed when the theme or accent changes: the ramp resolves tokens to
+  // literal colours, and a literal cannot follow a token it has already been
+  // read from. See useThemeTokens.
+  const themeTokens = useThemeTokens()
+  const trendRamp = useMemo(
+    () => recencyRamp(d.trendWeeks.length),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [d.trendWeeks.length, themeTokens],
+  )
 
   const caption = windowLabel(cfg.windowDays)
   const spark = (valueOf: (w: Workout) => number) =>
     showSparklines ? sparkBuckets(workouts, cfg.windowDays, 8, valueOf) : undefined
+  // Heart rate is the one stat that is an average rather than a total, so its
+  // sparkline has to be one too — see sparkAverages. It had no sparkline at
+  // all, because the summing version would have drawn a meaningless line.
+  const sparkAvg = (valueOf: (w: Workout) => number) =>
+    showSparklines ? sparkAverages(workouts, cfg.windowDays, 8, valueOf) : undefined
   const delta = (pick: (t: typeof d.now) => number) =>
     showDeltas && d.before ? deltaPct(pick(d.now), pick(d.before)) : undefined
 
@@ -692,7 +745,7 @@ export default function Dashboard({ onSelect }: { onSelect: (w: Workout) => void
     time: <StatCard key="time" icon={<Clock size={14} />} label="Total Time" value={Math.floor(d.now.duration / 3600).toString()} unit="hrs" sub={caption} delta={delta(t => t.duration)} spark={spark(w => w.duration)} color="var(--purple)" />,
     elevation: <StatCard key="elevation" icon={<Mountain size={14} />} label="Elevation" value={(d.now.elevation / 1000).toFixed(1)} unit="km" sub={`total gain · ${caption}`} delta={delta(t => t.elevation)} spark={spark(w => w.elevationGain)} color="var(--hike)" />,
     calories: <StatCard key="calories" icon={<Flame size={14} />} label="Calories" value={(d.now.calories / 1000).toFixed(1)} unit="kcal ×1k" sub={`energy expended · ${caption}`} delta={delta(t => t.calories)} spark={spark(w => w.calories)} color="var(--accent)" />,
-    avgHr: <StatCard key="avgHr" icon={<Heart size={14} />} label="Avg Heart Rate" value={d.now.avgHR.toString()} unit="bpm" sub={caption} delta={delta(t => t.avgHR)} />,
+    avgHr: <StatCard key="avgHr" icon={<Heart size={14} />} label="Avg Heart Rate" value={d.now.avgHR.toString()} unit="bpm" sub={caption} delta={delta(t => t.avgHR)} spark={sparkAvg(w => w.avgHR)} color="var(--danger)" />,
     activities: <StatCard key="activities" icon={<Zap size={14} />} label="Activities" value={d.now.count.toString()} unit="" sub={`${Object.keys(d.typeCount).length} sport types · ${caption}`} delta={delta(t => t.count)} spark={spark(() => 1)} color="var(--blue)" />,
   }
 
@@ -802,12 +855,23 @@ export default function Dashboard({ onSelect }: { onSelect: (w: Workout) => void
                       label="Training Load"
                       text="Compares your average daily effort over the last 7 days with the last 28. Around 1.0 means this week matches what your body is used to; higher means you're building, lower means you're easing off. It only appears once you have six weeks of history and a dozen heart-rate activities, because below that a single session swings it wildly. Treat it as a description of your load, not a medical verdict — the injury-risk thresholds this metric is known for are debated in the research."
                     />
-                    <span className="chart-card-actions" style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: form.verdict === 'ramping' ? 'var(--danger)' : form.verdict === 'detraining' ? 'var(--text-3)' : 'var(--primary)' }}>
-                      {form.ratio.toFixed(2)}
-                    </span>
                   </div>
                   <p className="chart-card-desc" style={{ marginBottom: 10 }}>7-day load against your 28-day average.</p>
-                  <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>{form.headline}</div>
+
+                  {/* The ratio is what this card is for, so it is the biggest
+                      thing on it rather than a 12px chip in the corner beside
+                      the title — where it sat, at the size of an axis label,
+                      as far from its own explanation as the card allowed.
+                      The word beside it carries the same verdict the colour
+                      does, so the reading never depends on telling red from
+                      accent. */}
+                  <div className="load-figure">
+                    <span className={`load-ratio ${form.verdict}`}>{form.ratio.toFixed(2)}</span>
+                    <span className="load-figure-text">
+                      <span className={`load-verdict ${form.verdict}`}>{form.headline}</span>
+                      <span className="load-figure-unit">acute / chronic load</span>
+                    </span>
+                  </div>
                   <p style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.55 }}>{form.detail}</p>
                 </div>
               )}
@@ -910,8 +974,24 @@ export default function Dashboard({ onSelect }: { onSelect: (w: Workout) => void
                       wrapperStyle={{ fontSize: 10, paddingBottom: 4 }}
                       formatter={value => String(value) === d.trendWeeks[0] ? 'This week' : `w/c ${String(value).slice(5)}`}
                     />
-                    {d.trendWeeks.map((week, i) => (
-                      <Bar key={week} dataKey={week} fill={trendRamp[i]} radius={[3, 3, 0, 0]} isAnimationActive={false} />
+                    {/* Oldest on the left, this week on the right, because
+                        that is the direction time runs on every other chart in
+                        the app — and the eye lands on the newest bar last,
+                        which is where a trend is read.
+
+                        The colour is picked by the week's recency and not by
+                        its position, so reversing the order did not repaint
+                        anything: this week stays the strongest step wherever
+                        it sits. trendWeeks is newest-first, which is the
+                        ramp's own order. */}
+                    {[...d.trendWeeks].reverse().map((week, i) => (
+                      <Bar
+                        key={week}
+                        dataKey={week}
+                        fill={trendRamp[d.trendWeeks.length - 1 - i]}
+                        radius={[3, 3, 0, 0]}
+                        isAnimationActive={false}
+                      />
                     ))}
                   </BarChart>
                 </ResponsiveContainer>

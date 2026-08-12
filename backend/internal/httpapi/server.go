@@ -29,9 +29,12 @@ type Server struct {
 	equipment  *equipment.Service
 	settings   *settings.Store
 	rawUploads *workout.RawUploadStore
-	notify     *notify.Service
-	feedback   *feedback.Service
-	build      BuildInfo
+	// Gallery photos on disk. Always present; unlike raw uploads there is no
+	// setting for it, because a photo exists only because someone added it.
+	media    *workout.MediaStore
+	notify   *notify.Service
+	feedback *feedback.Service
+	build    BuildInfo
 	// apk is the Android app bundled into this image, or nil when there is
 	// none. Resolved once at startup; see androidapp.go.
 	apk *bundledAPK
@@ -56,7 +59,7 @@ type Server struct {
 
 // New constructs a Server and its auth middleware/OIDC handler.
 func New(cfg config.Config, authSvc *auth.Service, workoutSvc *workout.Service, equipmentSvc *equipment.Service, settingsStore *settings.Store, rawUploads *workout.RawUploadStore, notifySvc *notify.Service, feedbackSvc *feedback.Service, build BuildInfo) *Server {
-	s := &Server{cfg: cfg, auth: authSvc, workout: workoutSvc, equipment: equipmentSvc, settings: settingsStore, rawUploads: rawUploads, notify: notifySvc, feedback: feedbackSvc, build: build}
+	s := &Server{cfg: cfg, auth: authSvc, workout: workoutSvc, equipment: equipmentSvc, settings: settingsStore, rawUploads: rawUploads, media: workout.NewMediaStore(cfg.DataDir), notify: notifySvc, feedback: feedbackSvc, build: build}
 	s.apk = loadBundledAPK(cfg.AndroidAPKDir)
 	s.nativeCodes = newNativeAuthCodes()
 	s.weatherWake = make(chan struct{}, 1)
@@ -163,6 +166,19 @@ func (s *Server) apiRoutes() http.Handler {
 	mux.Handle("PATCH /api/workouts/{id}", s.authedCSRF(s.handlePatchWorkout))
 	mux.Handle("DELETE /api/workouts/{id}", s.authedCSRF(s.handleDeleteWorkout))
 	mux.Handle("GET /api/workouts/{id}/original", s.authed(s.handleDownloadOriginal))
+	// The gallery. Reading follows the workout's visibility, writing needs
+	// ownership — see media.go, where both checks live.
+	mux.Handle("GET /api/workouts/{id}/media", s.authed(s.handleListMedia))
+	mux.Handle("POST /api/workouts/{id}/media", s.authedCSRF(s.handleUploadMedia))
+	mux.Handle("GET /api/workouts/{id}/media/{mediaID}", s.authed(s.handleServeMedia))
+	mux.Handle("DELETE /api/workouts/{id}/media/{mediaID}", s.authedCSRF(s.handleDeleteMedia))
+	// Comments and reactions, readable by anyone who can see the workout and
+	// writable only while it is shared — see social.go, where both gates live.
+	mux.Handle("GET /api/workouts/{id}/social", s.authed(s.handleGetSocial))
+	mux.Handle("POST /api/workouts/{id}/comments", s.authedCSRF(s.handleAddComment))
+	mux.Handle("PATCH /api/workouts/{id}/comments/{commentID}", s.authedCSRF(s.handleEditComment))
+	mux.Handle("DELETE /api/workouts/{id}/comments/{commentID}", s.authedCSRF(s.handleDeleteComment))
+	mux.Handle("PUT /api/workouts/{id}/reaction", s.authedCSRF(s.handleSetReaction))
 	mux.Handle("POST /api/workouts/{id}/recalculate", s.authedCSRF(s.handleRecalculateWorkout))
 	// Weather a person typed in, for when the grid average is not good enough.
 	mux.Handle("PUT /api/workouts/{id}/weather", s.authedCSRF(s.handleSetWorkoutWeather))

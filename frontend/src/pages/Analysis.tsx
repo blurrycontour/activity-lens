@@ -564,7 +564,7 @@ export default function Analysis() {
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
               <Award size={16} color="var(--primary)" />
-              <h3 style={{ fontSize: 14, fontWeight: 600 }}>Personal Records</h3>
+              <h3 className="card-title">Personal Records</h3>
               <InfoTip text={`Your best single activity in each category, within the ${scope}. Widen the time range to see all-time bests — these follow the page filter, so a 30-day window shows your best month, not your best ever.`} label="Personal Records" />
             </div>
             {/* The gap to the chart below belongs to the section, not to the

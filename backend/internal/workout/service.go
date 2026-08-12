@@ -586,3 +586,64 @@ func newID() string {
 	_, _ = rand.Read(b)
 	return "w_" + hex.EncodeToString(b)
 }
+
+// ── Gallery ───────────────────────────────────────────────────────────────
+//
+// Thin pass-throughs. The permission decision belongs to the handler, which is
+// the only layer that knows whether this request is a read by a viewer or a
+// write by the owner — and putting a half-check here would invite the handler
+// to skip its own.
+
+// Photos returns a workout's gallery in display order.
+func (s *Service) Photos(ctx context.Context, workoutID string) ([]Media, error) {
+	return s.repo.ListMedia(ctx, workoutID)
+}
+
+// Photo returns one gallery entry, scoped to its workout.
+func (s *Service) Photo(ctx context.Context, workoutID, mediaID string) (Media, error) {
+	return s.repo.GetMedia(ctx, workoutID, mediaID)
+}
+
+// PhotoCount is how the upload path enforces MaxMediaPerWorkout.
+func (s *Service) PhotoCount(ctx context.Context, workoutID string) (int, error) {
+	return s.repo.CountMedia(ctx, workoutID)
+}
+
+// AddPhoto records an already-stored photo.
+//
+// The id normally arrives already set, from NewPhotoID: the file on disk is
+// named after it, so it has to exist before the bytes are written. Generating
+// one here covers a caller that has no file to name.
+func (s *Service) AddPhoto(ctx context.Context, m Media) (Media, error) {
+	if m.ID == "" {
+		id, err := newMediaID()
+		if err != nil {
+			return Media{}, err
+		}
+		m.ID = id
+	}
+	if m.CreatedAt.IsZero() {
+		m.CreatedAt = time.Now().UTC()
+	}
+	if m.Kind == "" {
+		m.Kind = "photo"
+	}
+	if err := s.repo.AddMedia(ctx, m); err != nil {
+		return Media{}, err
+	}
+	return m, nil
+}
+
+// RemovePhoto deletes a gallery entry's row.
+func (s *Service) RemovePhoto(ctx context.Context, workoutID, mediaID string) error {
+	return s.repo.DeleteMedia(ctx, workoutID, mediaID)
+}
+
+// PurgeUserPhotos removes every gallery row a user added, for account deletion.
+func (s *Service) PurgeUserPhotos(ctx context.Context, userID int64) error {
+	return s.repo.DeleteMediaForUser(ctx, userID)
+}
+
+// NewPhotoID hands out an id before the bytes are written, so the file can be
+// named after the row it is about to have.
+func (s *Service) NewPhotoID() (string, error) { return newMediaID() }

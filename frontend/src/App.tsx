@@ -38,6 +38,7 @@ import { consumeShareParam, takeSharedFiles } from './lib/shareTarget'
 import { onNativeIncomingFiles, takeNativeIncomingFiles } from './lib/native/incomingFiles'
 import { applySystemBars } from './lib/native/systemBars'
 import { onPushMessage } from './lib/native/unifiedPush'
+import { LoaderCircle } from 'lucide-react'
 import { api } from './lib/api'
 
 /** Fired when openLink changes the URL without unmounting the page it lands on. */
@@ -76,6 +77,16 @@ export default function App() {
   // The open category within a hub page (settings, admin), or null for the hub.
   const [section, setSection] = useState<string | null>(initialLocation.section)
   const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null)
+  /**
+   * True while a workout named in the URL is still being fetched.
+   *
+   * Reloading /workouts/abc used to show the workout *list* for as long as the
+   * request took, then swap it for the workout — a page you did not ask for,
+   * arriving first and leaving. The deep link is known synchronously from the
+   * path; only the data is late. This is what lets the app say "the workout is
+   * coming" instead of guessing wrong in the meantime.
+   */
+  const [openingWorkout, setOpeningWorkout] = useState(Boolean(initialLocation.workoutId))
   /**
    * The last workout that was open, kept so the back gesture can put it back on
    * screen at once rather than through a round trip. A ref and not state: it
@@ -143,7 +154,10 @@ export default function App() {
     let cancelled = false
     api.getWorkout(initialLocation.workoutId)
       .then(w => { if (!cancelled) setSelectedWorkout(w) })
+      // Deleted, or no longer shared with you: fall back to the list rather
+      // than leaving a spinner on screen for a workout that is not coming.
       .catch(() => { if (!cancelled) window.history.replaceState(null, '', pathForPage('workouts')) })
+      .finally(() => { if (!cancelled) setOpeningWorkout(false) })
     return () => { cancelled = true }
     // Only run once, when auth resolves.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -289,12 +303,16 @@ export default function App() {
    * assigned to location.href so the SPA routes without a full reload.
    */
   const openLink = useCallback((link: string) => {
-    const loc = parseLocation(new URL(link, window.location.origin).pathname)
+    const target = new URL(link, window.location.origin)
+    const loc = parseLocation(target.pathname)
     if (loc.workoutId) {
       api.getWorkout(loc.workoutId)
         .then(w => {
           setSelectedWorkout(w)
-          window.history.pushState(null, '', `/workouts/${w.id}`)
+          // The query string comes along, exactly as it does for a page below:
+          // a social notification links to "?tab=social", and dropping it would
+          // land on the charts and leave the reader to find the comment.
+          window.history.pushState(null, '', `/workouts/${w.id}${target.search}`)
         })
         // A workout that has since been unshared or deleted: land on the list
         // rather than a dead end.
@@ -312,8 +330,7 @@ export default function App() {
     // The query string is kept, not dropped: a notification links to a filtered
     // list ("/workouts?source=autoimport"), and pathForPage alone would land on
     // the unfiltered page and leave the user hunting.
-    const url = new URL(link, window.location.origin)
-    window.history.pushState(null, '', pathForPage(loc.page, loc.section) + url.search)
+    window.history.pushState(null, '', pathForPage(loc.page, loc.section) + target.search)
     // The destination page may already be mounted, in which case nothing about
     // it re-renders and a filter in the query string would be ignored. This says
     // "the URL changed" to whoever cares.
@@ -423,17 +440,26 @@ export default function App() {
   // Pull-to-refresh reloads the data each page registered, never the document.
   const { refresh } = useRefresh()
 
-  /**
-   * Where the page under any workout detail was scrolled to.
-   *
-   * Captured on every scroll rather than read when a workout opens: by the
-   * time an effect could run, the list has already been replaced and the
-   * container has clamped its scrollTop to the shorter content.
-   */
+  /** Where the page under any drill-in was scrolled to. */
   const listScroll = useRef(0)
+
+  /**
+   * Whether a drill-in is open over the current page.
+   *
+   * Two of them, and they behave identically: a workout detail over the
+   * workout list, and a settings category over the settings hub. Neither is a
+   * page change — both replace the content inside the same scrolling <main> —
+   * so the "start at the top" effect below never fires for either, and both
+   * need the level above them remembered by hand.
+   *
+   * A boolean rather than the value itself, so opening a second category from
+   * the hub is the same transition as opening the first.
+   */
+  const drilledIn = Boolean(selectedWorkout) || section != null
+
   const onMainScroll = useCallback(() => {
-    if (!selectedWorkout && mainEl) listScroll.current = mainEl.scrollTop
-  }, [selectedWorkout, mainEl])
+    if (!drilledIn && mainEl) listScroll.current = mainEl.scrollTop
+  }, [drilledIn, mainEl])
 
   // Start each page at the top. Without this a swipe from a scrolled page
   // animates the next one in already scrolled down, which reads as a glitch.
@@ -443,18 +469,20 @@ export default function App() {
   }, [page, mainEl])
 
   /**
-   * Opening a workout is not a page change — the detail replaces the list
-   * inside the same scrolling <main> — so the effect above never fired for it.
-   * The detail opened at whatever offset the list had been left at, and coming
-   * back put the list wherever the detail had been scrolled to.
+   * Drill in at the top; come back where you were.
+   *
+   * Captured on every scroll rather than read at the moment of the transition:
+   * by the time an effect could run, the content has already been replaced and
+   * the container has clamped its scrollTop to whatever the new content is
+   * tall enough for.
    *
    * useLayoutEffect so the restored offset is painted with the list rather than
    * a frame after it, which reads as a jump.
    */
   useLayoutEffect(() => {
     if (!mainEl) return
-    mainEl.scrollTo({ top: selectedWorkout ? 0 : listScroll.current })
-  }, [selectedWorkout, mainEl])
+    mainEl.scrollTo({ top: drilledIn ? 0 : listScroll.current })
+  }, [drilledIn, mainEl])
 
   const layoutClass = [
     'app-layout',
@@ -539,6 +567,14 @@ export default function App() {
             onBack={() => selectWorkout(null)}
             onOpenSettings={() => navigate('settings')}
           />
+        ) : openingWorkout ? (
+          // Deliberately not the list: the URL already says a workout is
+          // opening, and showing the library first would be answering a
+          // question nobody asked.
+          <div className="detail-loading" style={{ minHeight: '60vh' }}>
+            <LoaderCircle size={18} className="spin" aria-hidden />
+            Loading workout…
+          </div>
         ) : page === 'dashboard' ? (
           <Dashboard onSelect={selectWorkout} />
         ) : page === 'workouts' ? (

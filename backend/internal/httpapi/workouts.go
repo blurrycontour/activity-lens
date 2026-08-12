@@ -58,6 +58,16 @@ type workoutDetailResponse struct {
 	// sent with the file itself. Owner-only, so Redact clearing RawFilename is
 	// enough to keep it false for everyone else.
 	HasOriginal bool `json:"hasOriginal,omitempty"`
+	// Shared reports that this workout is visible to someone other than its
+	// owner — public, or shared with at least one person. It is what decides
+	// whether the Social tab is offered, and it has to arrive with the workout
+	// rather than with the tab's own request: a tab that appears only after
+	// its contents load is a tab that flickers into existence on every page.
+	//
+	// One query, and only on the detail path. Deliberately not added to the
+	// list response, which would turn it into a per-row lookup across the whole
+	// library for something no list shows.
+	Shared bool `json:"shared,omitempty"`
 }
 
 func (s *Server) handleGetWorkout(w http.ResponseWriter, r *http.Request) {
@@ -67,15 +77,34 @@ func (s *Server) handleGetWorkout(w http.ResponseWriter, r *http.Request) {
 		s.writeWorkoutError(w, err)
 		return
 	}
+	// Anyone who is not the owner is looking at this workout because it is
+	// shared, so the flag is theirs for free; only the owner needs the query.
+	shared := true
 	if isOwner {
 		s.attachEquipment(r, user.ID, wk)
+		// The recipients rather than a bare EXISTS, so the badge on this page
+		// can carry the same count the one in the list does. It was showing a
+		// bare icon here and "2" there for the same workout, because the count
+		// only ever reached the list — where it comes from one grouped query
+		// over the whole library. Here it is a handful of rows for one row's
+		// worth of work.
+		ids, serr := s.workout.ShareRecipients(r.Context(), user.ID, wk.ID)
+		if serr != nil {
+			// Not fatal: the workout is the point of this response, and a
+			// missing Social tab is a smaller failure than no page at all.
+			slog.Warn("could not read share recipients", "workout_id", wk.ID, "error", serr)
+			shared = false
+		} else {
+			wk.SharedWithCount = len(ids)
+			shared = len(ids) > 0 || wk.Visibility == workout.VisibilityPublic
+		}
 	} else if owner, derr := s.ownerRef(r, wk.UserID); derr == nil {
 		// Equipment is deliberately left off: it is the owner's private gear
 		// inventory, not part of the workout being shared.
 		wk.Owner = owner
 	}
 	writeJSON(w, http.StatusOK, workoutDetailResponse{
-		Workout: wk, IsOwner: isOwner, HasOriginal: wk.RawFilename != "",
+		Workout: wk, IsOwner: isOwner, HasOriginal: wk.RawFilename != "", Shared: shared,
 	})
 }
 
@@ -284,6 +313,9 @@ func (s *Server) handleDeleteWorkout(w http.ResponseWriter, r *http.Request) {
 	if err := s.rawUploads.Delete(r.Context(), id); err != nil {
 		slog.Warn("could not delete archived upload", "workout_id", id, "error", err)
 	}
+	// So are its photos. The rows went with the workout through the foreign
+	// key; the files are ours to remove, and the whole directory is one call.
+	s.media.RemoveWorkout(id)
 	slog.Info("workout deleted", "workout_id", id, "user_id", user.ID)
 	w.WriteHeader(http.StatusNoContent)
 }

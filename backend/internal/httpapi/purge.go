@@ -62,6 +62,27 @@ func (s *Server) purgeUserData(ctx context.Context, user auth.User) {
 		if err := s.rawUploads.DeleteMany(ctx, workoutIDs); err != nil {
 			fail("archived uploads", err)
 		}
+		// Gallery photos, one directory per workout. Not batched into a single
+		// scan the way the archived uploads are: these are already separate
+		// directories, so removing them is the same number of syscalls either
+		// way, and deleting an account is not a hot path.
+		for _, id := range workoutIDs {
+			s.media.RemoveWorkout(id)
+		}
+	}
+	// Gallery rows on their own workouts went with the workouts; this is for
+	// any they added to someone else's, which have no key back to the account.
+	if err := s.workout.PurgeUserPhotos(ctx, user.ID); err != nil {
+		fail("workout photos", err)
+	}
+	// Comments and reactions the user left on other people's workouts. Their
+	// own workouts took theirs with them through the foreign key; these are
+	// the ones on somebody else's page, which nothing else would reach.
+	if err := s.workout.PurgeUserComments(ctx, user.ID); err != nil {
+		fail("workout comments", err)
+	}
+	if err := s.workout.PurgeUserReactions(ctx, user.ID); err != nil {
+		fail("workout reactions", err)
 	}
 	// Shares the user owned went with their workouts via the foreign key; this
 	// is for the ones naming them as a recipient, which have no key to cascade.
