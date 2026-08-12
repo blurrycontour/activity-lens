@@ -2212,7 +2212,7 @@ body:has(.overlay) .fab { display: none; }
   border-radius: var(--radius);
   background: transparent;
   color: var(--text-3);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
@@ -2228,7 +2228,7 @@ body:has(.overlay) .fab { display: none; }
 @media (max-width: 768px) {
   /* Labels would wrap or overflow at five tabs on a phone, so the strip
      scrolls horizontally and the items tighten up. */
-  .tab-strip-item { padding: 8px 12px; font-size: 12px; gap: 6px; }
+  .tab-strip-item { padding: 8px 12px; font-size: 14px; gap: 6px; }
 }
 
 /* Compact filter dropdown, shared by the type and time-range pickers. */
