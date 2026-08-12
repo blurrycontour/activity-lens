@@ -90,17 +90,46 @@ var workoutPausesSchema string
 //go:embed migrations/0021_push_last_seen.sql
 var pushLastSeenSchema string
 
+// maxOpenConns is how many connections the pool will open.
+//
+// It was 1, which made every request in the process queue behind every other
+// one — including a request that only reads, behind one that is decompressing
+// and encoding a megabyte of route. WAL allows any number of concurrent readers
+// alongside a single writer, so serialising reads bought nothing but latency.
+//
+// Small on purpose: this is a handful of users, and each connection is a file
+// handle and a page cache. Beyond a few, the writer is the limit anyway.
+const maxOpenConns = 8
+
 // OpenSQLite opens (and pings) a pure-Go SQLite database at dbPath with
 // foreign keys and WAL enabled for concurrency and integrity.
 func OpenSQLite(dbPath string) (*sql.DB, error) {
-	dsn := fmt.Sprintf("file:%s?_pragma=foreign_keys(ON)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)", filepath.ToSlash(dbPath))
+	// _txlock=immediate is what makes more than one connection safe, and it is
+	// not optional.
+	//
+	// A transaction that reads before it writes — SELECT to check ownership,
+	// then INSERT; go-authkit's OIDC user resolution and this app's equipment
+	// linking both do it — starts under a shared lock and has to upgrade to
+	// take the write lock. Two of those at once is a genuine deadlock: each
+	// holds a read lock the other must wait out, and neither will yield.
+	// busy_timeout does not help, because SQLite returns SQLITE_BUSY
+	// immediately on an upgrade rather than waiting. It cannot happen today
+	// only because the pool is one connection wide.
+	//
+	// BEGIN IMMEDIATE takes the write lock up front, so those transactions
+	// queue for it cleanly instead of racing to upgrade. Every explicit
+	// transaction in this codebase writes, so nothing pays for a lock it did
+	// not need; a plain query outside a transaction is unaffected and still
+	// runs concurrently with everything else.
+	dsn := fmt.Sprintf("file:%s?_txlock=immediate&_pragma=foreign_keys(ON)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)", filepath.ToSlash(dbPath))
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
-	// SQLite handles one writer at a time; a single connection avoids
-	// "database is locked" churn while WAL still allows concurrent readers.
-	db.SetMaxOpenConns(1)
+	db.SetMaxOpenConns(maxOpenConns)
+	// Idle matches open so a burst of parallel requests reuses connections
+	// rather than reopening the file and re-running the pragmas each time.
+	db.SetMaxIdleConns(maxOpenConns)
 	if err := db.Ping(); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("ping sqlite: %w", err)

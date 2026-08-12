@@ -711,6 +711,20 @@ export const api = {
   patchEquipment: (id: string, patch: Partial<EquipmentInput>) =>
     request<Equipment>(`/api/equipment/${id}`, { method: 'PATCH', body: patch }),
   deleteEquipment: (id: string) => request<unknown>(`/api/equipment/${id}`, { method: 'DELETE' }),
+  /**
+   * Adds workouts to a piece of equipment, from the gear page.
+   *
+   * Additive, unlike `patchWorkout({ equipmentIds })`, which replaces a
+   * workout's whole kit. The gear page knows which gear it is editing and
+   * nothing about the rest of what a workout carries, so a replacing write
+   * from there would quietly unlink the watch to add the shoes. Both of these
+   * answer with the full detail body, so the linked list and the wear figures
+   * — which all change together — arrive in one round trip.
+   */
+  linkEquipmentWorkouts: (id: string, workoutIds: string[]) =>
+    request<Equipment & { workouts: LinkedWorkout[] }>(`/api/equipment/${id}/workouts`, { method: 'POST', body: { workoutIds } }),
+  unlinkEquipmentWorkout: (id: string, workoutId: string) =>
+    request<Equipment & { workouts: LinkedWorkout[] }>(`/api/equipment/${id}/workouts/${workoutId}`, { method: 'DELETE' }),
 }
 
 /** Who, beyond the owner, can read a workout. Direct shares are separate. */
@@ -758,13 +772,24 @@ export interface EquipmentInput {
   retireAtKm?: number
 }
 
+/**
+ * A workout using a piece of equipment.
+ *
+ * Carries everything a workout row shows, so the gear page can draw the same
+ * row as the library rather than a reduced one of its own.
+ */
 export interface LinkedWorkout {
   id: string
   name: string
-  type: string
+  type: import('../data/workouts').WorkoutType
   date: string
   distance: number
   duration: number
+  elevationGain: number
+  calories: number
+  avgPace: number
+  avgSpeed: number
+  source?: 'upload' | 'manual' | 'healthconnect' | 'autoimport'
 }
 
 export interface ManualWorkoutInput {

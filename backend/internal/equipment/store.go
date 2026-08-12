@@ -25,6 +25,15 @@ type Repository interface {
 	// SetWorkoutEquipment replaces the set of equipment linked to a workout
 	// with ids (only ids owned by userID are honoured).
 	SetWorkoutEquipment(ctx context.Context, userID int64, workoutID string, ids []string) error
+	// LinkWorkouts adds workouts to one piece of equipment without disturbing
+	// whatever else those workouts already carry. It is the inverse direction
+	// of SetWorkoutEquipment and additive where that one replaces: the gear
+	// page knows which gear it is editing and nothing about the rest of a
+	// workout's kit, so a replacing write from there would silently unlink it.
+	// Returns how many links were newly made.
+	LinkWorkouts(ctx context.Context, userID int64, equipmentID string, workoutIDs []string) (int, error)
+	// UnlinkWorkout removes one workout from one piece of equipment.
+	UnlinkWorkout(ctx context.Context, userID int64, equipmentID, workoutID string) error
 	// ForWorkout returns the equipment linked to a workout.
 	ForWorkout(ctx context.Context, userID int64, workoutID string) ([]Equipment, error)
 	// DeleteAllForUser removes every piece of equipment a user owns, for
@@ -141,7 +150,8 @@ func (r *SQLiteRepository) DeleteAllForUser(ctx context.Context, userID int64) e
 
 func (r *SQLiteRepository) LinkedWorkouts(ctx context.Context, userID int64, equipmentID string) ([]LinkedWorkout, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT w.id, w.name, w.type, w.start_time, w.distance, w.duration
+		`SELECT w.id, w.name, w.type, w.start_time, w.distance, w.duration,
+		        w.elevation_gain, w.calories, w.avg_pace, w.avg_speed, w.source
 		 FROM workout_equipment we
 		 JOIN workouts w ON w.id = we.workout_id
 		 WHERE we.equipment_id = ? AND w.user_id = ?
@@ -154,7 +164,8 @@ func (r *SQLiteRepository) LinkedWorkouts(ctx context.Context, userID int64, equ
 	for rows.Next() {
 		var lw LinkedWorkout
 		var startTime string
-		if err := rows.Scan(&lw.ID, &lw.Name, &lw.Type, &startTime, &lw.Distance, &lw.Duration); err != nil {
+		if err := rows.Scan(&lw.ID, &lw.Name, &lw.Type, &startTime, &lw.Distance, &lw.Duration,
+			&lw.ElevationGain, &lw.Calories, &lw.AvgPace, &lw.AvgSpeed, &lw.Source); err != nil {
 			return nil, err
 		}
 		if t, err := time.Parse(time.RFC3339, startTime); err == nil {
@@ -213,6 +224,71 @@ func (r *SQLiteRepository) SetWorkoutEquipment(ctx context.Context, userID int64
 		}
 	}
 	return tx.Commit()
+}
+
+// LinkWorkouts links many workouts to one piece of equipment in one
+// transaction.
+//
+// Both sides are checked against user_id inside the statement rather than in
+// Go, because workout_equipment carries no owner of its own: it is a join of
+// two owned tables, and the only thing standing between it and someone else's
+// workout is the ownership test here. The INSERT..SELECT is that test — a row
+// is written only if a workout with that id belongs to this user, and the
+// equipment does too, so an id the caller made up inserts nothing rather than
+// erroring. Re-linking something already linked is likewise a no-op, which is
+// what makes the endpoint safe to retry.
+func (r *SQLiteRepository) LinkWorkouts(ctx context.Context, userID int64, equipmentID string, workoutIDs []string) (int, error) {
+	if len(workoutIDs) == 0 {
+		return 0, nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	// The equipment itself is checked once, so a bad id is 404 rather than a
+	// silent success that linked nothing.
+	var owned int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM equipment WHERE id = ? AND user_id = ?`, equipmentID, userID).Scan(&owned); err != nil {
+		return 0, err
+	}
+	if owned == 0 {
+		return 0, ErrNotFound
+	}
+
+	linked := 0
+	for _, id := range workoutIDs {
+		res, err := tx.ExecContext(ctx,
+			`INSERT OR IGNORE INTO workout_equipment (workout_id, equipment_id)
+			 SELECT w.id, ? FROM workouts w WHERE w.id = ? AND w.user_id = ?`, equipmentID, id, userID)
+		if err != nil {
+			return 0, fmt.Errorf("link workout: %w", err)
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			linked++
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return linked, nil
+}
+
+// UnlinkWorkout removes a single link, scoped to the owner of both sides.
+func (r *SQLiteRepository) UnlinkWorkout(ctx context.Context, userID int64, equipmentID, workoutID string) error {
+	_, err := r.db.ExecContext(ctx,
+		`DELETE FROM workout_equipment
+		 WHERE equipment_id = ? AND workout_id = ?
+		   AND EXISTS (SELECT 1 FROM equipment e WHERE e.id = ? AND e.user_id = ?)
+		   AND EXISTS (SELECT 1 FROM workouts w WHERE w.id = ? AND w.user_id = ?)`,
+		equipmentID, workoutID, equipmentID, userID, workoutID, userID)
+	if err != nil {
+		return fmt.Errorf("unlink workout: %w", err)
+	}
+	// Removing a link that was not there is success: the caller wanted it gone.
+	return nil
 }
 
 // scanner abstracts *sql.Row and *sql.Rows for scanEquipment.

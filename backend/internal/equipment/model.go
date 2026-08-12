@@ -34,6 +34,16 @@ type LinkedWorkout struct {
 	Date     string  `json:"date"` // YYYY-MM-DD
 	Distance float64 `json:"distance"`
 	Duration int     `json:"duration"`
+
+	// The rest of what a workout row shows. Carried here so the gear page can
+	// draw the same row as the workout list rather than a reduced one of its
+	// own — the alternative was looking each workout up in the client's cache,
+	// which renders a different row depending on whether that cache has loaded.
+	ElevationGain float64 `json:"elevationGain"`
+	Calories      int     `json:"calories"`
+	AvgPace       float64 `json:"avgPace"`
+	AvgSpeed      float64 `json:"avgSpeed"`
+	Source        string  `json:"source,omitempty"`
 }
 
 // Input carries the fields a caller may set when creating equipment.

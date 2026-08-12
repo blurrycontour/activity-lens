@@ -53,13 +53,20 @@ func (s *Server) handleCreateEquipment(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGetEquipment(w http.ResponseWriter, r *http.Request) {
-	user := httpmw.UserFrom(r)
-	e, err := s.equipment.Get(r.Context(), user.ID, r.PathValue("id"))
+	s.writeEquipmentDetail(w, r, httpmw.UserFrom(r).ID, r.PathValue("id"))
+}
+
+// writeEquipmentDetail answers with a piece of equipment and the workouts using
+// it — the body the gear page renders. Shared by the read and by both writes
+// that change the linked set, so a link and a reload can never disagree about
+// the shape of what comes back.
+func (s *Server) writeEquipmentDetail(w http.ResponseWriter, r *http.Request, userID int64, id string) {
+	e, err := s.equipment.Get(r.Context(), userID, id)
 	if err != nil {
 		s.writeEquipmentError(w, err)
 		return
 	}
-	workouts, err := s.equipment.LinkedWorkouts(r.Context(), user.ID, e.ID)
+	workouts, err := s.equipment.LinkedWorkouts(r.Context(), userID, e.ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not load linked workouts")
 		return
@@ -68,6 +75,45 @@ func (s *Server) handleGetEquipment(w http.ResponseWriter, r *http.Request) {
 		*equipment.Equipment
 		Workouts []equipment.LinkedWorkout `json:"workouts"`
 	}{e, workouts})
+}
+
+// handleLinkWorkouts adds workouts to a piece of equipment from the gear page.
+//
+// Additive, and deliberately not PATCH /api/workouts/{id} with an equipmentIds
+// list: that one replaces a workout's whole kit, and the gear page knows only
+// about itself. Linking a pair of shoes from here would have dropped the watch.
+//
+// It answers with the same body as GET, so the page has the new list, the
+// workout count and the wear figures without a second round trip — all three
+// change together and showing one updated beside two stale ones is worse than
+// showing nothing.
+func (s *Server) handleLinkWorkouts(w http.ResponseWriter, r *http.Request) {
+	user := httpmw.UserFrom(r)
+	var req struct {
+		WorkoutIDs []string `json:"workoutIds"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	id := r.PathValue("id")
+	linked, err := s.equipment.LinkWorkouts(r.Context(), user.ID, id, req.WorkoutIDs)
+	if err != nil {
+		s.writeEquipmentError(w, err)
+		return
+	}
+	slog.Info("equipment linked to workouts", "equipment_id", id, "user_id", user.ID, "linked", linked)
+	s.writeEquipmentDetail(w, r, user.ID, id)
+}
+
+func (s *Server) handleUnlinkWorkout(w http.ResponseWriter, r *http.Request) {
+	user := httpmw.UserFrom(r)
+	id := r.PathValue("id")
+	if err := s.equipment.UnlinkWorkout(r.Context(), user.ID, id, r.PathValue("workoutId")); err != nil {
+		s.writeEquipmentError(w, err)
+		return
+	}
+	s.writeEquipmentDetail(w, r, user.ID, id)
 }
 
 func (s *Server) handlePatchEquipment(w http.ResponseWriter, r *http.Request) {

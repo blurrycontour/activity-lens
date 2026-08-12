@@ -40,6 +40,20 @@ describe('parseLocation', () => {
     expect(parseLocation('/admin/appearance')).toMatchObject({ page: 'admin', section: null })
   })
 
+  // Gear is user-created, so there is no list of valid ids to check against —
+  // which is exactly why an equipment id must survive the round trip while a
+  // bogus settings category still does not. Being in the URL is what lets the
+  // back gesture return to the piece of gear a workout was opened from, rather
+  // than to the inventory.
+  it('keeps an equipment id, which is a section with no fixed list', () => {
+    expect(parseLocation('/equipment/e_277564788d8a7affaff28c0f'))
+      .toMatchObject({ page: 'equipment', section: 'e_277564788d8a7affaff28c0f', workoutId: null })
+    expect(parseLocation(pathForPage('equipment', 'e_abc')))
+      .toMatchObject({ page: 'equipment', section: 'e_abc' })
+    // And the bare page is still the inventory.
+    expect(parseLocation('/equipment')).toMatchObject({ page: 'equipment', section: null })
+  })
+
   it('round-trips every declared category', () => {
     for (const s of SETTINGS_SECTIONS) {
       expect(parseLocation(pathForPage('settings', s))).toMatchObject({ page: 'settings', section: s })

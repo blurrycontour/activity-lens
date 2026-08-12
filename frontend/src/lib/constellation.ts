@@ -26,7 +26,7 @@ export const FIELD_W = 400
 export const FIELD_H = 250
 
 /** How the trajectory leaves and arrives, picked per workout from its id. */
-export const VARIANTS = ['ascent', 'swing', 'loop', 'orbit'] as const
+export const VARIANTS = ['ascent', 'late', 'early', 'step'] as const
 export type Variant = (typeof VARIANTS)[number]
 
 export interface PathPoint {
@@ -88,7 +88,25 @@ function bezier(a: number, b: number, c: number, d: number, t: number): number {
 }
 
 /**
- * The control points for each variant, as fractions of the field.
+ * The control points for each variant.
+ *
+ * `[c1x, c1v, c2x, c2v]`, where x is a fraction of the way from the launch to
+ * the destination and v is a height within the band the curve is allowed to
+ * occupy — 0 at the bottom of it, 1 at the top.
+ *
+ * Two properties hold for every variant, and both are load-bearing:
+ *
+ * **x only ever increases.** Both control x's lie between the anchors and in
+ * order, which for a cubic is enough to make the curve monotonic in x. The old
+ * `loop` crossed its control points and `orbit` overshot the right edge, so the
+ * path doubled back over itself: the same column of the drawing carried two
+ * different moments of the session, and the stretch running right-to-left read
+ * as a knot rather than as travel. Nothing that folds can resemble the chart
+ * beside it, whatever the metric does.
+ *
+ * **v stays within 0–1**, so the curve stays inside its band and the swerve
+ * always has its full room either side. That is what removed the flat plateaus
+ * where a hard interval used to press against the edge of the field.
  *
  * The two anchors are fixed — every journey starts at the lower left and ends
  * at the upper right — because that reading direction is the one thing that
@@ -96,14 +114,14 @@ function bezier(a: number, b: number, c: number, d: number, t: number): number {
  * without a label. Only the middle changes.
  */
 const SHAPES: Record<Variant, [number, number, number, number]> = {
-  // A steady climb, bowing gently upward.
-  ascent: [0.24, 0.42, 0.62, 0.26],
-  // Dips before it climbs, so the middle of the session sits low.
-  swing: [0.30, 0.96, 0.58, 0.44],
-  // Control points cross, which folds the path back over itself.
-  loop: [0.86, 0.74, 0.16, 0.30],
-  // Overshoots to the right, then sweeps back up and in.
-  orbit: [1.02, 0.30, 0.40, 0.04],
+  // A steady climb, bowing gently.
+  ascent: [0.30, 0.30, 0.68, 0.62],
+  // Holds low and lifts at the end, so the distance is covered late.
+  late: [0.38, 0.04, 0.60, 0.42],
+  // Climbs away early and then flattens out into the distance.
+  early: [0.20, 0.66, 0.58, 1.0],
+  // Rises through the middle: low, a lift, then level again.
+  step: [0.46, 0.06, 0.54, 0.94],
 }
 
 /**
@@ -128,87 +146,77 @@ export function buildConstellation(seed: string, samples: number[], count = 110,
   const variant = VARIANTS[h % VARIANTS.length]
   const [c1x, c1y, c2x, c2y] = SHAPES[variant]
 
+  /*
+   * The band the whole drawing lives in, and the room reserved inside it for
+   * the effort to move the line.
+   *
+   * Working these out up front is what lets the swerve be applied without
+   * clamping: the curve is confined to `[lo, hi]`, and there is exactly
+   * `swerve` of clear field above and below that, so no reading — however
+   * extreme — can reach the edge. Clamping was the old approach and it flatted
+   * a hard interval into a plateau pressed against the top of the panel, which
+   * looked like a rendering fault rather than like a hard interval.
+   *
+   * Everything scales with the field's height, including the margin: the panel
+   * is anywhere from about 60 units tall on a wide desktop card to 900 in the
+   * expanded view on a phone, and a fixed 8 is a comfortable inset at one end
+   * and a sixth of the drawing at the other.
+   */
+  const marginY = Math.min(MARGIN, fieldH * 0.08)
+  const swerve = Math.min(fieldH * 0.22, (fieldH - 2 * marginY) * 0.3)
+  const hi = fieldH - marginY - swerve
+  const lo = marginY + swerve
+  const span = hi - lo
+
   // Launch and destination, inset so the glyphs at either end are not clipped.
   // The destination is short of the top-right corner rather than in it: the
   // maximise button sits there, and a finish glyph underneath a button is a
   // finish nobody can see. It still reads as "far away and up and to the
   // right", which is the only thing the position has to say.
-  const x0 = FIELD_W * 0.10, y0 = fieldH * 0.86
-  const x1 = FIELD_W * 0.86, y1 = fieldH * 0.27
+  const x0 = FIELD_W * 0.10, x1 = FIELD_W * 0.86
+  const height = (v: number) => hi - clamp(v, 0, 1) * span
 
   // A per-workout nudge to the middle of the curve, so two workouts sharing a
-  // variant still differ. Small enough that the variant still reads.
-  const jitterX = (random() - 0.5) * FIELD_W * 0.10
-  const jitterY = (random() - 0.5) * fieldH * 0.14
+  // variant still differ. Small enough that the variant still reads, and
+  // applied equally to both control points so their order — and with it the
+  // monotonic x that keeps the path from folding — survives it.
+  const jitterX = (random() - 0.5) * 0.10
+  const jitterV = (random() - 0.5) * 0.16
 
-  const p1x = FIELD_W * c1x + jitterX, p1y = fieldH * c1y + jitterY
-  const p2x = FIELD_W * c2x + jitterX, p2y = fieldH * c2y + jitterY
-
-  /*
-   * How hard the effort pushes the path off its curve.
-   *
-   * Measured against the *shorter* side of the field, not its height. The
-   * field is built to the panel's proportions now, so its height ranges from
-   * about 60 on a wide desktop card to 900 in the expanded view on a phone —
-   * and a fraction of that swung the modulation from barely visible to larger
-   * than the drawing, which is where the wilder bends came from.
-   */
-  const swerve = Math.min(FIELD_W, fieldH) * 0.17
+  const at = (f: number) => x0 + (x1 - x0) * clamp(f + jitterX, 0.05, 0.95)
+  const p1x = at(c1x), p1y = height(c1y + jitterV)
+  const p2x = at(c2x), p2y = height(c2y + jitterV)
+  const y0 = height(0), y1 = height(0.82)
 
   const points: PathPoint[] = []
   for (let i = 0; i < count; i++) {
     const t = i / (count - 1)
-    const bx = bezier(x0, p1x, p2x, x1, t)
-    const by = bezier(y0, p1y, p2y, y1, t)
 
     /*
-     * The tangent, from a short step along the curve, to get a normal.
+     * The effort moves the line straight up and down, and nothing else does.
      *
-     * The step goes backwards on the last point. Forwards, `Math.min(t + s, 1)`
-     * collapses to t itself at t = 1, so the tangent is zero, the normal is
-     * zero, and the swerve silently drops to nothing — the final point snapped
-     * back onto the bare curve while its neighbour a quarter of a percent
-     * earlier kept its full push. That was the sharp kick at the finish line,
-     * and it appeared on every workout regardless of what the metric did there.
+     * It used to be pushed along the curve's own normal, which sounds more
+     * elegant and was the source of most of what was wrong with this drawing.
+     * A normal rotates with the path, so on a steep stretch the push went
+     * sideways instead of up — displacing the line by as much as half the width
+     * of the field, out of time with itself, which is what the crazy bends
+     * were. It also had to be re-derived at every point from a finite step
+     * along the curve, and that step is what put a kick at the finish line.
+     *
+     * Vertical is both simpler and more honest: it is the axis the heart-rate
+     * chart uses, so a session that ramps up reads as a line that rises, and
+     * the curve underneath is left to do the one job it is good at, which is
+     * making the whole thing look like travel into the distance. Centred on
+     * the middle of the range, so an average stretch sits on the curve.
      */
-    const step = 0.004
-    const back = t + step > 1
-    const e = back ? t - step : t + step
-    const dir = back ? -1 : 1
-    let nx = (bezier(y0, p1y, p2y, y1, e) - by) * dir
-    let ny = -(bezier(x0, p1x, p2x, x1, e) - bx) * dir
-
-    /*
-     * The normal is forced to point upward, and that is what makes the drawing
-     * agree with the heart-rate chart.
-     *
-     * A normal taken from the tangent rotates with the path, so on a variant
-     * that curves hard — or folds back over itself — it can end up pointing
-     * down-screen. The same rising heart rate then pushes the line up in one
-     * stretch and down in the next, which is why a workout could look nothing
-     * like its own chart and take a sudden turn in the middle for no reason
-     * visible in the data.
-     *
-     * Pinning the sign means high always reads as higher, wherever on the
-     * curve it happens. The swerve stays perpendicular to travel, so it is
-     * still the shape of the effort rather than a second altitude axis.
-     */
-    if (ny > 0) { nx = -nx; ny = -ny }
-    const len = Math.hypot(nx, ny) || 1
-
-    // Centred on the middle of the range so an average stretch sits on the
-    // curve and only the extremes leave it.
     const value = sampleAt(samples, t)
-    const push = (value - 0.5) * 2 * swerve
+    const y = bezier(y0, p1y, p2y, y1, t) - (value - 0.5) * 2 * swerve
 
-    // Clamped into the field. A hard spike near the top of an already-rising
-    // curve pushes the path off the viewBox, where it is simply clipped — and a
-    // trajectory that vanishes at the edge and reappears reads as a rendering
-    // fault rather than as a hard interval. Grazing the edge instead is honest
-    // enough: the swerve is qualitative, and nothing here is read off an axis.
     points.push({
-      x: clamp(bx + (nx / len) * push, MARGIN, FIELD_W - MARGIN),
-      y: clamp(by + (ny / len) * push, MARGIN, fieldH - MARGIN),
+      x: bezier(x0, p1x, p2x, x1, t),
+      // Cannot bind by construction; kept as a cheap guard so a future change
+      // to the band arithmetic cannot put the path off the viewBox unnoticed.
+      y: clamp(y, 1, fieldH - 1),
       depth: t,
       t,
     })

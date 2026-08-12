@@ -107,7 +107,10 @@ func (s *Server) Handler() (http.Handler, error) {
 	root := http.NewServeMux()
 	// CORS wraps the API only. The SPA is same-origin by definition, and the
 	// native app never loads it over the network — it ships its own copy.
-	root.Handle("/api/", s.withCORS(withAccessLog(api)))
+	// withJSONTransfer sits inside the access log so the log records the status
+	// actually sent — a 304 should read as a 304 — and inside CORS so the
+	// preflight response, which has no body, never reaches it. See transfer.go.
+	root.Handle("/api/", s.withCORS(withAccessLog(withJSONTransfer(api))))
 	root.Handle("/", spa)
 	return root, nil
 }
@@ -228,6 +231,8 @@ func (s *Server) apiRoutes() http.Handler {
 	mux.Handle("GET /api/equipment/{id}", s.authed(s.handleGetEquipment))
 	mux.Handle("PATCH /api/equipment/{id}", s.authedCSRF(s.handlePatchEquipment))
 	mux.Handle("DELETE /api/equipment/{id}", s.authedCSRF(s.handleDeleteEquipment))
+	mux.Handle("POST /api/equipment/{id}/workouts", s.authedCSRF(s.handleLinkWorkouts))
+	mux.Handle("DELETE /api/equipment/{id}/workouts/{workoutId}", s.authedCSRF(s.handleUnlinkWorkout))
 
 	// Feedback: anyone may file one, only admins may read them.
 	mux.Handle("POST /api/feedback", s.authedCSRF(s.handleCreateFeedback))

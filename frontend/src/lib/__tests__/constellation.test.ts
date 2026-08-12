@@ -187,6 +187,73 @@ describe('a very wide panel', () => {
   })
 })
 
+describe('the path as a journey', () => {
+  it('never doubles back on itself', () => {
+    // Two of the four variants used to fold — control points that crossed, and
+    // one that overshot the right edge and swept back. A stretch running
+    // right-to-left puts two moments of the session in the same column, so the
+    // drawing reads as a knot and cannot resemble the chart beside it.
+    const spikes = Array.from({ length: 110 }, (_, i) => (i % 2 === 0 ? 0 : 1))
+    for (const id of ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l']) {
+      for (const samples of [flat, spikes]) {
+        const { points } = buildConstellation(id, samples)
+        for (let i = 1; i < points.length; i++) {
+          expect(points[i].x).toBeGreaterThan(points[i - 1].x)
+        }
+      }
+    }
+  })
+
+  it('leaves the effort room to move without hitting the edge', () => {
+    // The old build clamped into the field, so a hard interval near the top of
+    // an already-rising curve flattened into a plateau pressed against the
+    // edge. The band is now sized so the full swerve always fits: an extreme
+    // reading has to stay strictly inside, at every panel height.
+    // Pinning the metric to either end shifts the whole line by the full
+    // swerve and by exactly that — a rigid translation of the same curve. Any
+    // clamping shows up here as a stretch where the shift is short, which on
+    // screen is the plateau.
+    const high = Array.from({ length: 110 }, () => 1)
+    const low = Array.from({ length: 110 }, () => 0)
+    for (const h of [60, 140, 250, 900]) {
+      for (const id of ['a', 'b', 'c', 'd', 'e', 'f']) {
+        const bare = buildConstellation(id, flat, 110, h).points
+        for (const samples of [high, low]) {
+          const shifted = buildConstellation(id, samples, 110, h).points
+          const by = bare[0].y - shifted[0].y
+          expect(Math.abs(by)).toBeGreaterThan(0)
+          for (let i = 0; i < bare.length; i++) {
+            expect(bare[i].y - shifted[i].y).toBeCloseTo(by, 6)
+            expect(shifted[i].y).toBeGreaterThan(0)
+            expect(shifted[i].y).toBeLessThan(h)
+          }
+        }
+      }
+    }
+  })
+
+  it('rises and falls with the metric, in step with it', () => {
+    // The point of the drawing: it should read like the heart-rate chart bent
+    // into perspective. A ramp has to come out as a line whose height climbs
+    // monotonically relative to the same workout drawn flat — the old normal
+    // rotated with the curve, so on a steep stretch a rising heart rate moved
+    // the line sideways instead of up, out of time with itself.
+    const ramp = Array.from({ length: 110 }, (_, i) => i / 109)
+    for (const id of ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']) {
+      const bare = buildConstellation(id, flat).points
+      const ramped = buildConstellation(id, ramp).points
+      // The lift at each point, which must itself only ever increase.
+      const lift = ramped.map((p, i) => bare[i].y - p.y)
+      for (let i = 1; i < lift.length; i++) {
+        expect(lift[i]).toBeGreaterThan(lift[i - 1] - 1e-9)
+      }
+      // And the x positions are untouched by the metric: the effort moves the
+      // line up and down, never along.
+      for (let i = 0; i < bare.length; i++) expect(ramped[i].x).toBe(bare[i].x)
+    }
+  })
+})
+
 describe('the swerve direction', () => {
   it('never pushes a high reading downward', () => {
     // The normal is taken from the tangent, so on a variant that curves hard

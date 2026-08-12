@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { type Workout } from '../../data/workouts'
 import {
-  applyWorkoutFilters, DEFAULT_FILTERS, describeImportWindow, parseAutoImportParams,
+  applyWorkoutFilters, DEFAULT_FILTERS, describeImportWindow, parseAutoImportParams, searchWorkouts,
 } from '../workoutFilters'
 
 /**
@@ -163,5 +163,49 @@ describe('parseAutoImportParams', () => {
   it('claims nothing from an ordinary visit to the page', () => {
     expect(parseAutoImportParams('')).toBeNull()
     expect(parseAutoImportParams('?tab=shared')).toBeNull()
+  })
+})
+
+/**
+ * The picker on the gear page runs on this, against the whole library in
+ * memory. Two of its rules are the kind that fail quietly: an exclusion that
+ * stops working offers a workout the equipment already has, and a cap applied
+ * before the sort silently hides the recent workouts people are actually
+ * looking for.
+ */
+describe('searchWorkouts', () => {
+  const list = [
+    workout({ id: 'a', name: 'Morning Run', type: 'Run', date: '2026-03-04' }),
+    workout({ id: 'b', name: 'Evening Ride', type: 'Ride', date: '2026-03-19' }),
+    workout({ id: 'c', name: 'Long hill repeats', type: 'Run', date: '2025-11-02' }),
+  ]
+
+  it('matches on name, sport or date', () => {
+    const ids = (q: string) => searchWorkouts(list, q).map(w => w.id)
+    expect(ids('morning')).toEqual(['a'])
+    // Case-insensitive, and the sport is a search term of its own — "the ride
+    // in March" is a thing people type, and neither half is in the name.
+    expect(ids('RIDE')).toEqual(['b'])
+    expect(ids('2026-03').sort()).toEqual(['a', 'b'])
+    expect(ids('nothing here')).toEqual([])
+    // No query lists everything, which is what the picker opens on.
+    expect(ids('')).toHaveLength(3)
+  })
+
+  it('leaves out what is already linked', () => {
+    const got = searchWorkouts(list, '', new Set(['a', 'c']))
+    expect(got.map(w => w.id)).toEqual(['b'])
+  })
+
+  it('caps the list at the newest matches, not the first ones it happens to see', () => {
+    // Sorting after capping would keep three arbitrary workouts and then order
+    // those, so the run from yesterday would be missing from a search that
+    // matched everything — the exact case the picker is for.
+    const many = Array.from({ length: 60 }, (_, i) =>
+      workout({ id: `w${i}`, name: 'Run', date: `2026-01-${String(i % 28 + 1).padStart(2, '0')}` }))
+    const newest = workout({ id: 'newest', name: 'Run', date: '2026-09-09' })
+    const got = searchWorkouts([...many, newest], 'run', new Set(), 10)
+    expect(got).toHaveLength(10)
+    expect(got[0].id).toBe('newest')
   })
 })
