@@ -121,8 +121,9 @@ export default function SessionProfile({
    *
    * Rounded to the nearest ten and bounded: this feeds the seeded builder, and
    * rebuilding a hundred and ten points on every pixel of a window drag would
-   * be a resize handler doing real work. The bounds stop a very wide or very
-   * short panel from flattening the trajectory out of legibility.
+   * be a resize handler doing real work. The bounds are wide — a desktop panel
+   * beside the summary column is over three times as wide as it is tall, and a
+   * tighter floor here would put the letterbox back.
    */
   const skyBox = useRef<HTMLDivElement>(null)
   const [fieldH, setFieldH] = useState(FIELD_H)
@@ -133,7 +134,7 @@ export default function SessionProfile({
       const { width, height } = el.getBoundingClientRect()
       if (width <= 0 || height <= 0) return
       const wanted = Math.round((FIELD_W * height) / width / 10) * 10
-      setFieldH(Math.max(140, Math.min(360, wanted)))
+      setFieldH(Math.max(90, Math.min(420, wanted)))
     }
     measure()
     const obs = new ResizeObserver(measure)
@@ -315,13 +316,6 @@ export default function SessionProfile({
 
   return (
     <div className="session-profile">
-      {!hideHeader && (
-        <div className="session-profile-head">
-          <Sparkles size={14} style={{ color: 'var(--primary)' }} />
-          <h3>The session</h3>
-          <span className="session-profile-note">No route recorded</span>
-        </div>
-      )}
 
       <div className="session-sky" ref={skyBox}>
         <svg
@@ -370,15 +364,27 @@ export default function SessionProfile({
           </g>
         </svg>
 
-        {onExpand && (
-          <button
-            className="btn-icon session-sky-expand"
-            onClick={onExpand}
-            title="Expand"
-            aria-label="Expand the session"
-          >
-            <Maximize2 size={14} />
-          </button>
+        {/* Title, state and control on one line over the drawing rather than in
+            a header above it. The panel is a picture; giving the picture the
+            whole card and floating the words on it is what the map does, and
+            this stands in for the map. Suppressed whole inside the expand
+            modal, which supplies its own title and its own way out. */}
+        {!hideHeader && (
+          <div className="session-sky-bar">
+            <Sparkles size={14} style={{ color: 'var(--primary)' }} aria-hidden />
+            <h3>The session</h3>
+            <span className="session-profile-note">No route recorded</span>
+            {onExpand && (
+              <button
+                className="btn-icon session-sky-expand"
+                onClick={onExpand}
+                title="Expand"
+                aria-label="Expand the session"
+              >
+                <Maximize2 size={14} />
+              </button>
+            )}
+          </div>
         )}
 
         {/* Legend and picker stack in the same corner, the legend above: they

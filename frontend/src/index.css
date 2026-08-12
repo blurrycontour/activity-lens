@@ -2810,20 +2810,19 @@ body:has(.overlay) .fab { display: none; }
 .detail-hero-card {
   display: flex;
   flex-direction: column;
-  padding: 14px 0 0;
-  min-height: 280px;
-  /* Capped, unlike the map card, which is the one difference between them.
-     Both stretch to the summary column beside them, and a summary with weather
-     and every derived stat runs well past 400px — which a map happily fills
-     with more map, and a drawing fills with more empty sky. The cap is above
-     the minimum, so the panel still grows with a tall summary; it just stops
-     following it all the way up. Stretch stays, because the sky is a flex
-     child that needs a definite height to fill. */
-  max-height: 380px;
+  padding: 0;
+  overflow: hidden;
+  /* An explicit height, not a min and a max around a stretched grid item.
+     Both this and the map card stretch to the summary column beside them, and
+     a summary carrying weather and every derived stat runs past 700px — which
+     a map fills with more map and a drawing fills with more empty sky. That is
+     the one place the two should not behave alike. A definite height also
+     gives the sky, a flex child that fills it, something real to fill. */
+  align-self: start;
+  height: 380px;
 }
-.detail-hero-card .session-profile-head,
-.detail-hero-card .session-context-body { padding: 0 16px; }
-.detail-hero-card .session-context-body { padding-bottom: 16px; }
+/* The standing panel is words rather than a picture, so it keeps its inset. */
+.detail-hero-card .session-context { padding: 16px; }
 
 /* On desktop this stretches to match the summary column beside it, so the
    minimum only matters while the summary is short. */
@@ -2867,19 +2866,38 @@ body:has(.overlay) .fab { display: none; }
   background:
     radial-gradient(120% 90% at 12% 100%, color-mix(in srgb, var(--primary) 9%, transparent), transparent 60%),
     var(--bg-3);
-  border-top: 1px solid var(--border);
-  border-radius: 0 0 var(--radius) var(--radius);
 }
-.session-sky svg { display: block; width: 100%; height: 100%; cursor: crosshair; }
-/* The maximise button, the same place and the same control the map's is. The
-   destination glyph is drawn short of this corner so it never sits under it —
-   see the anchors in constellation.ts. */
-.session-sky-expand {
+
+/* The title bar, floating on the drawing rather than sitting above it.
+   The panel is a picture and gets the whole card; the words go on top of it,
+   under a scrim so they stay readable over a bright launch or a dense patch of
+   stars. Only the button in it takes pointer events, so the rest of the bar is
+   still sky you can scrub through. */
+.session-sky-bar {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 12px 20px;
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--bg-2) 82%, transparent), transparent);
+  pointer-events: none;
+}
+.session-sky-bar > button { pointer-events: auto; }
+.session-sky-bar h3 { font-size: 13px; font-weight: 600; }
+.session-sky-bar .session-profile-note { margin-left: auto; }
+.session-sky-bar .session-sky-expand { margin-left: 10px; }
+.session-sky svg { display: block; width: 100%; height: 100%; cursor: crosshair; }
+/* The maximise control, the same one the map carries. It rides in the title
+   bar rather than floating in the corner, which is also why the destination
+   glyph no longer has to dodge it. */
+.session-sky-expand {
   background: var(--bg-2);
   border: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
 /* The picker and its key, stacked in the corner the path has already left.
@@ -2917,7 +2935,15 @@ body:has(.overlay) .fab { display: none; }
    exists so a row of filter dropdowns lines up and buys nothing for a single
    picker sitting on a drawing. Without it the trigger is as wide as its label
    and no wider. */
-.session-sky-controls .al-dropdown-trigger { min-width: 0; }
+.session-sky-controls .al-dropdown-trigger {
+  /* No 150px minimum — that exists so a row of filter dropdowns lines up, and
+     buys nothing for a single picker on a drawing. But dropping it let the
+     trigger shrink until "Heart rate zones" wrapped onto three lines and the
+     control became a tall box, which is what looked massive: it was too
+     narrow, not too wide. nowrap is the other half of the change. */
+  min-width: 0;
+  white-space: nowrap;
+}
 
 /* The standing panel, for a workout with nothing recorded at all. */
 .session-context-body { display: flex; gap: 16px; align-items: flex-start; flex: 1; }
@@ -3785,12 +3811,10 @@ body:has(.overlay) .fab { display: none; }
      on a phone, and the one panel where more height is always worth having.
      Capped in pixels as well as in vh so a tall phone does not give the map the
      whole screen and push everything else below the fold. */
-  .detail-map-card,
-  /* The routeless panel gets the same height as the map it stands in for.
-     No cap here: stacked, it is a row of its own rather than a column trying
-     to match a tall summary beside it. */
-  .detail-hero-card { min-height: min(56vh, 420px); }
-  .detail-hero-card { max-height: none; }
+  .detail-map-card { min-height: min(56vh, 420px); }
+  /* Stacked, it is a row of its own rather than a column trying to match a
+     tall summary beside it. */
+  .detail-hero-card { height: min(56vh, 420px); }
   /* The playback bar's stacked layout used to live here. It is a container
      query now — see .playback-card — because the card's width, not the
      viewport's, is what decides whether the three parts fit on one line. */
@@ -4583,11 +4607,9 @@ body:has(.overlay) .fab { display: none; }
   border-top: none;
   border-top-left-radius: 0;
   border-top-right-radius: 0;
-  /* Tall enough that the three panels are roughly the same size, which is what
-     stops a switch from moving the page at all. This is the last section on
-     the page, so a panel that shrinks makes the document shorter and drags the
-     scroll position with it — see TabPanel. Whitespace under a short tab costs
-     nothing here, because there is nothing below it to push down. */
+  /* A floor for the very first paint, before TabPanel has measured anything.
+     From then on the minimum is the high-water mark it keeps — see TabPanel,
+     which is where the reason this section must never shrink is written down. */
   min-height: 240px;
 }
 
@@ -4863,4 +4885,4 @@ body:has(.overlay) .fab { display: none; }
    of expanding it — capped in vh so the transport below stays on screen. */
 .session-expanded { display: flex; height: min(64vh, 560px); }
 .session-expanded .session-profile { flex: 1; min-width: 0; }
-.session-expanded .session-sky { border-radius: var(--radius); border: 1px solid var(--border); }
+.session-expanded .session-sky { border-radius: var(--radius); border: 1px solid var(--border); overflow: hidden; }

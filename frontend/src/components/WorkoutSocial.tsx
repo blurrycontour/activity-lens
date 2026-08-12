@@ -40,6 +40,25 @@ export default function WorkoutSocial({ workoutId, isOwner }: WorkoutSocialProps
   // row of controls competing with the reactions people actually left, which
   // are the thing worth looking at.
   const [picking, setPicking] = useState(false)
+  const pickerWrap = useRef<HTMLDivElement>(null)
+
+  // A tray that only closes by picking something is a tray you have to
+  // dismiss by using it. Pointerdown rather than click, so it closes on the
+  // press that starts an interaction elsewhere rather than on its release —
+  // and capture, so a control underneath cannot stop the event first.
+  useEffect(() => {
+    if (!picking) return
+    const away = (e: Event) => {
+      if (!pickerWrap.current?.contains(e.target as Node)) setPicking(false)
+    }
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') setPicking(false) }
+    document.addEventListener('pointerdown', away, true)
+    document.addEventListener('keydown', key)
+    return () => {
+      document.removeEventListener('pointerdown', away, true)
+      document.removeEventListener('keydown', key)
+    }
+  }, [picking])
 
   const load = useCallback(async () => {
     try {
@@ -141,7 +160,7 @@ export default function WorkoutSocial({ workoutId, isOwner }: WorkoutSocialProps
             a second press of the button, so reacting is two taps and changing
             your mind is two more — but the resting state is one control rather
             than a row of six competing with the reactions people left. */}
-        <div className="social-picker-wrap">
+        <div className="social-picker-wrap" ref={pickerWrap}>
           <button
             type="button"
             className={`btn-icon social-picker-btn${picking ? ' open' : ''}`}

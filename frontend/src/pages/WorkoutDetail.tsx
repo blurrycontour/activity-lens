@@ -356,58 +356,54 @@ function wantsTabScroll(): boolean {
 }
 
 /**
- * The tab body, which does not collapse when the tab changes.
+ * The tab body, whose top edge never moves.
  *
- * Switching used to drop the page to nothing and push it back out: the panel's
- * contents are lazily loaded and then fetch their own data, so for a moment
- * there is a spinner where a gallery used to be. The content is not the
- * problem — the height is.
+ * The panels are different sizes and load at different times, so switching
+ * used to change the page's height twice — down to a spinner, then up to the
+ * content. This is the last section on the page, so those changes do not push
+ * anything below them around; what they do is make the *document* shorter,
+ * and a reader scrolled near the bottom then has their scroll position
+ * clamped by the browser. That is not a layout shift you can see the cause of.
+ * It reads as the page sliding out from under you, and it was worst switching
+ * to Social because Social differs most in height from the other two.
  *
- * Two things keep it still, and the second is the one that was missing:
+ * So the panel keeps a high-water mark: the tallest its content has been on
+ * this workout, applied as a minimum and never lowered. Every switch after the
+ * first therefore grows the panel or leaves it alone, and the page never gets
+ * shorter while you are reading it.
  *
- *   - the panel holds the height the last tab occupied while the next one
- *     arrives, measured off the live DOM at the moment of the switch rather
- *     than from an observer's last asynchronous reading;
- *   - every panel is at least as tall as a floor set in CSS, so switching
- *     between them moves very little in the first place.
+ * The mark is bounded by the viewport, which is the one concession. Without a
+ * bound, opening a gallery of thirty photos would leave that much blank space
+ * under a three-line note forever. Below the bound — where all three panels
+ * normally sit — nothing moves at all; above it the page is already longer
+ * than the screen, so the tab strip is not on it to be watched.
  *
- * That second one is what the first was missing. This is the last section on
- * the page, so when the panel shrinks the document gets shorter and a reader
- * scrolled near the bottom has their scroll position clamped — which does not
- * read as a layout shift, it reads as the page sliding under them. Bounding
- * how much any tab can differ from its neighbour bounds that to nothing.
- *
- * The release is deliberately not animated. A min-height easing down half a
- * second after the tab changed is motion with no cause on screen; if it
- * happens at all it should happen with the switch that asked for it.
+ * Measured on an inner element that never carries the minimum. Measuring the
+ * element the minimum is applied to would just read the minimum back and the
+ * mark could only ever grow.
  */
-function TabPanel({ tabKey, children }: { tabKey: string; children: React.ReactNode }) {
+function TabPanel({ children }: { children: React.ReactNode }) {
   const box = useRef<HTMLDivElement>(null)
   const [floor, setFloor] = useState(0)
-  const [held, setHeld] = useState(tabKey)
 
-  // Set during render, not in an effect. From an effect the floor arrives one
-  // commit late, so the browser paints a frame with the panel collapsed and
-  // then a frame with it propped back up — which takes the scroll position
-  // with it. React re-renders this component immediately on a render-phase
-  // update, so nothing in between is ever shown.
-  if (held !== tabKey) {
-    setHeld(tabKey)
-    // Read straight off the element rather than from a ResizeObserver: this
-    // runs before the new children are committed, so the DOM still holds the
-    // outgoing tab's real height, while the observer's last reading may be a
-    // frame or two stale.
-    setFloor(box.current?.offsetHeight ?? 0)
-  }
-
-  // Long enough to cover a lazy chunk and the request behind it, short enough
-  // that a tab which genuinely is shorter settles while the switch still
-  // explains it.
   useEffect(() => {
-    if (!floor) return
-    const t = setTimeout(() => setFloor(0), 400)
-    return () => clearTimeout(t)
-  }, [floor, tabKey])
+    const el = box.current
+    if (!el) return
+    const bump = () => {
+      const cap = Math.round(window.innerHeight * 0.8)
+      const height = Math.min(el.offsetHeight, cap)
+      setFloor(prev => (height > prev ? height : prev))
+    }
+    bump()
+    const obs = new ResizeObserver(bump)
+    obs.observe(el)
+    // A rotation or a window drag changes the cap, not just the content.
+    window.addEventListener('resize', bump)
+    return () => {
+      obs.disconnect()
+      window.removeEventListener('resize', bump)
+    }
+  }, [])
 
   return (
     <div className="card detail-tab-panel" style={floor ? { minHeight: floor } : undefined}>
@@ -1810,7 +1806,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             onChange={setDetailTab}
             ariaLabel="Workout sections"
           />
-          <TabPanel tabKey={activeTab}>
+          <TabPanel>
             {activeTab === 'notes' && (readOnly
               ? <p className="notes-text">{w.notes}</p>
               : <NotesCard workout={w} onSaved={setW} />)}

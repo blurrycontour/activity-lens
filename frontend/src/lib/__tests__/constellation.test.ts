@@ -169,3 +169,18 @@ describe('a field built to the panel', () => {
     }
   })
 })
+
+describe('a very wide panel', () => {
+  it('still starts low-left and ends high-right when the field is short', () => {
+    // A desktop panel beside the summary column is over three times as wide as
+    // it is tall, so the field it is built to is short. The trajectory has to
+    // survive that: it is the one thing that makes the drawing readable.
+    const { points } = buildConstellation('a', flat, 110, 90)
+    expect(points[0].x).toBeLessThan(points[points.length - 1].x)
+    expect(points[0].y).toBeGreaterThan(points[points.length - 1].y)
+    for (const p of points) {
+      expect(p.y).toBeGreaterThanOrEqual(0)
+      expect(p.y).toBeLessThanOrEqual(90)
+    }
+  })
+})
