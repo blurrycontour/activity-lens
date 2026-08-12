@@ -77,6 +77,10 @@ export default function Sidebar({ currentPage, onNavigate, collapsed, sidebarWid
             width: '100%',
             justifyContent: collapsed ? 'center' : 'flex-start',
             padding: collapsed ? '7px' : '7px 12px',
+            // A step under the nav items below it: it is the one button here,
+            // and matching their size made two different kinds of thing read as
+            // one list.
+            fontSize: 14,
           }}
           title="Add Workout"
         >
@@ -105,7 +109,7 @@ export default function Sidebar({ currentPage, onNavigate, collapsed, sidebarWid
                 background: active ? 'var(--primary-dim)' : 'transparent',
                 color: active ? 'var(--primary)' : 'var(--text-2)',
                 fontWeight: active ? 600 : 400,
-                fontSize: 13,
+                fontSize: 15,
                 textAlign: 'left',
                 transition: 'all 0.12s',
                 justifyContent: collapsed ? 'center' : 'flex-start',
