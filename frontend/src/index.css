@@ -238,6 +238,18 @@ body {
 .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
 .btn-ghost { background: transparent; color: var(--text-2); border: 1px solid var(--border); }
 .btn-ghost:hover { background: var(--bg-3); color: var(--text); }
+/* Between ghost and primary: reads as the action of its section without
+   competing with the page's one primary button. Tinted from the accent rather
+   than filled by it, so a row of these does not shout. */
+.btn-accent {
+  background: var(--primary-dim);
+  color: var(--primary);
+  border: 1px solid color-mix(in srgb, var(--primary) 35%, transparent);
+}
+.btn-accent:hover {
+  background: color-mix(in srgb, var(--primary) 18%, transparent);
+  border-color: var(--primary);
+}
 .btn-icon {
   padding: 7px;
   background: transparent;
@@ -926,13 +938,14 @@ body {
 
 /* Picking workouts to link to a piece of equipment, on the gear page.
 
-   The list scrolls inside the card rather than growing it: the picker sits
-   between the heading and the linked workouts below, and a search that matched
-   forty runs would otherwise push the rest of the page out of reach while you
-   are still choosing. The height is a little over six rows, so it always reads
-   as a list that continues. */
+   The results scroll inside the dialog rather than growing it, so a search that
+   matched forty runs cannot push the Add button off the bottom of the screen.
+   The height is capped against the viewport as well as in pixels, because on a
+   phone in landscape 280px of list plus the search box is already taller than
+   the window. */
+.link-picker-box { max-width: 520px; }
 .link-picker-list {
-  max-height: 280px;
+  max-height: min(280px, 40vh);
   overflow-y: auto;
   display: flex;
   flex-direction: column;

@@ -10,8 +10,10 @@ import { useWorkouts } from '../context/WorkoutsContext'
 import { useIsMobile } from '../lib/useIsMobile'
 import Dropdown, { type DropdownOption } from '../components/Dropdown'
 import FilterSheet from '../components/FilterSheet'
+import WorkoutCard from '../components/WorkoutCard'
+import ConfirmDialog from '../components/ConfirmDialog'
 import { searchWorkouts } from '../lib/workoutFilters'
-import { fmtDuration, fmtDist, type Workout } from '../data/workouts'
+import { fmtDist, type Workout } from '../data/workouts'
 
 interface EquipmentPageProps {
   onSelectWorkout: (id: string) => void
@@ -345,8 +347,13 @@ export default function EquipmentPage({ onSelectWorkout }: EquipmentPageProps) {
  * Searching rather than scrolling because the library is the whole history: a
  * picker listing all of it is not something anyone reads. It runs against the
  * workouts already in memory, so it answers on the keystroke and works offline.
+ *
+ * A dialog rather than a panel inside the page: choosing workouts is a detour
+ * with its own start and end, and opening it in place pushed the list you were
+ * looking at down the page — so the thing you were about to compare against
+ * moved the moment you went to change it.
  */
-function LinkWorkoutsPanel({ equipmentId, linked, onLinked, onClose }: {
+function LinkWorkoutsDialog({ equipmentId, linked, onLinked, onClose }: {
   equipmentId: string
   /** Already on this equipment, so the picker does not offer them again. */
   linked: ReadonlySet<string>
@@ -391,65 +398,71 @@ function LinkWorkoutsPanel({ equipmentId, linked, onLinked, onClose }: {
   }
 
   return (
-    <div className="card" style={{ padding: 14, marginBottom: 8 }}>
-      <div style={{ position: 'relative', marginBottom: 10 }}>
-        <Search size={14} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', pointerEvents: 'none' }} />
-        <input
-          className="input"
-          placeholder="Search workouts by name, sport or date…"
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          style={{ paddingLeft: 30, width: '100%' }}
-          autoFocus
-          aria-label="Search workouts to link"
-        />
-      </div>
+    <>
+      <div className="overlay" onClick={() => { if (!saving) onClose() }} />
+      <div className="modal" role="dialog" aria-modal="true" aria-label="Add workouts">
+        <div className="modal-box link-picker-box">
+          <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>Add workouts</h3>
+          <div style={{ position: 'relative', marginBottom: 10 }}>
+            <Search size={14} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', pointerEvents: 'none' }} />
+            <input
+              className="input"
+              placeholder="Search workouts by name, sport or date…"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              style={{ paddingLeft: 30, width: '100%' }}
+              autoFocus
+              aria-label="Search workouts to link"
+            />
+          </div>
 
-      {error && <p style={{ fontSize: 12, color: 'var(--danger)', marginBottom: 8 }}>{error}</p>}
+        {error && <p style={{ fontSize: 12, color: 'var(--danger)', marginBottom: 8 }}>{error}</p>}
 
-      <div className="link-picker-list">
-        {results.length === 0 ? (
-          <p style={{ fontSize: 13, color: 'var(--text-3)', padding: '10px 2px' }}>
-            {workouts.length === 0
-              ? 'No workouts yet.'
-              : query
-                ? 'No workouts match that.'
-                : 'Every workout already uses this.'}
-          </p>
-        ) : results.map(w => {
-          const on = picked.includes(w.id)
-          return (
-            <button
-              key={w.id}
-              type="button"
-              className={`link-picker-row${on ? ' on' : ''}`}
-              onClick={() => toggle(w.id)}
-              aria-pressed={on}
-            >
-              <span className="link-picker-check">{on && <Check size={12} />}</span>
-              <span style={{ flex: 1, minWidth: 0 }}>
-                <span className="link-picker-name">{w.name}</span>
-                <span className="link-picker-meta">
-                  {new Date(w.date).toLocaleDateString()} · {w.type} · {fmtDist(w.distance)}
+        <div className="link-picker-list">
+          {results.length === 0 ? (
+            <p style={{ fontSize: 13, color: 'var(--text-3)', padding: '10px 2px' }}>
+              {workouts.length === 0
+                ? 'No workouts yet.'
+                : query
+                  ? 'No workouts match that.'
+                  : 'Every workout already uses this.'}
+            </p>
+          ) : results.map(w => {
+            const on = picked.includes(w.id)
+            return (
+              <button
+                key={w.id}
+                type="button"
+                className={`link-picker-row${on ? ' on' : ''}`}
+                onClick={() => toggle(w.id)}
+                aria-pressed={on}
+              >
+                <span className="link-picker-check">{on && <Check size={12} />}</span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span className="link-picker-name">{w.name}</span>
+                  <span className="link-picker-meta">
+                    {new Date(w.date).toLocaleDateString()} · {w.type} · {fmtDist(w.distance)}
+                  </span>
                 </span>
-              </span>
-            </button>
-          )
-        })}
-      </div>
+              </button>
+            )
+          })}
+        </div>
 
-      <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end', alignItems: 'center' }}>
-        {picked.length > 0 && (
-          <span style={{ fontSize: 12, color: 'var(--text-3)', marginRight: 'auto' }}>
-            {picked.length} selected
-          </span>
-        )}
-        <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={onClose} disabled={saving}>Cancel</button>
-        <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={() => void save()} disabled={saving || picked.length === 0}>
-          {saving ? 'Adding…' : `Add${picked.length > 0 ? ` ${picked.length}` : ''}`}
-        </button>
+        <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end', alignItems: 'center' }}>
+          {picked.length > 0 && (
+            <span style={{ fontSize: 12, color: 'var(--text-3)', marginRight: 'auto' }}>
+              {picked.length} selected
+            </span>
+          )}
+          <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={onClose} disabled={saving}>Cancel</button>
+          <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={() => void save()} disabled={saving || picked.length === 0}>
+            {saving ? 'Adding…' : `Add${picked.length > 0 ? ` ${picked.length}` : ''}`}
+          </button>
+          </div>
+        </div>
       </div>
-    </div>
+    </>
   )
 }
 
@@ -465,6 +478,9 @@ function EquipmentDetail({ id, reloadToken, onBack, onSelectWorkout, onEdit, onD
   const [data, setData] = useState<(Equipment & { workouts: LinkedWorkout[] }) | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [linking, setLinking] = useState(false)
+  /** The workout the X was pressed on, awaiting confirmation. */
+  const [unlinking, setUnlinking] = useState<LinkedWorkout | null>(null)
+  const [unlinkBusy, setUnlinkBusy] = useState(false)
   const { refresh: refreshWorkouts } = useWorkouts()
 
   // What the picker must not offer again. Kept as a set because it is read once
@@ -494,12 +510,16 @@ function EquipmentDetail({ id, reloadToken, onBack, onSelectWorkout, onEdit, onD
   // The response carries the whole detail back, so the count and the wear
   // figures move with the list rather than a beat behind it.
   async function unlink(workoutID: string) {
+    setUnlinkBusy(true)
     try {
       setData(await api.unlinkEquipmentWorkout(id, workoutID))
       void refreshWorkouts()
     } catch {
       // Nothing changed server-side; a refetch is the honest recovery.
       void load()
+    } finally {
+      setUnlinkBusy(false)
+      setUnlinking(null)
     }
   }
 
@@ -557,15 +577,41 @@ function EquipmentDetail({ id, reloadToken, onBack, onSelectWorkout, onEdit, onD
         <h2 style={{ fontSize: 15, fontWeight: 600 }}>
           Linked workouts <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>({data.workouts.length})</span>
         </h2>
-        {!linking && (
-          <button className="btn btn-ghost" style={{ fontSize: 12, padding: '4px 10px' }} onClick={() => setLinking(true)}>
-            <Plus size={14} /> Add workouts
-          </button>
-        )}
+        <button className="btn btn-accent" style={{ fontSize: 12, padding: '4px 10px' }} onClick={() => setLinking(true)}>
+          <Plus size={14} /> Add workouts
+        </button>
       </div>
 
+      {data.workouts.length === 0 ? (
+        <div className="card" style={{ padding: 24, textAlign: 'center', color: 'var(--text-3)' }}>No workouts use this equipment yet.</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {/* The same row the workout list draws, with the X where the library
+              puts its share control — a workout should not look like a
+              different kind of thing depending on which page lists it. */}
+          {data.workouts.map(w => (
+            <WorkoutCard
+              key={w.id}
+              workout={w}
+              variant="list"
+              onClick={() => onSelectWorkout(w.id)}
+              aside={
+                <button
+                  className="icon-btn"
+                  title="Remove from this equipment"
+                  aria-label={`Remove ${w.name} from this equipment`}
+                  onClick={e => { e.stopPropagation(); setUnlinking(w) }}
+                >
+                  <X size={15} />
+                </button>
+              }
+            />
+          ))}
+        </div>
+      )}
+
       {linking && (
-        <LinkWorkoutsPanel
+        <LinkWorkoutsDialog
           equipmentId={data.id}
           linked={linkedIds}
           onLinked={setData}
@@ -573,37 +619,19 @@ function EquipmentDetail({ id, reloadToken, onBack, onSelectWorkout, onEdit, onD
         />
       )}
 
-      {data.workouts.length === 0 ? (
-        !linking && <div className="card" style={{ padding: 24, textAlign: 'center', color: 'var(--text-3)' }}>No workouts use this equipment yet.</div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {data.workouts.map(w => (
-            <div key={w.id} className="card" style={{ padding: 14, display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }} onClick={() => onSelectWorkout(w.id)}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: 14 }}>{w.name}</div>
-                <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
-                  {new Date(w.date).toLocaleDateString()} · {w.type}
-                </div>
-              </div>
-              <div style={{ fontSize: 13, color: 'var(--text-2)', textAlign: 'right' }}>
-                <div>{fmtDist(w.distance)}</div>
-                <div style={{ color: 'var(--text-3)' }}>{fmtDuration(w.duration)}</div>
-              </div>
-              {/* Linking from here without being able to unlink from here would
-                  send you to the workout page to undo a mistake made on this
-                  one. stopPropagation because the row itself opens the workout. */}
-              <button
-                className="icon-btn"
-                title="Remove from this equipment"
-                aria-label={`Remove ${w.name} from this equipment`}
-                onClick={e => { e.stopPropagation(); void unlink(w.id) }}
-              >
-                <X size={14} />
-              </button>
-              <ChevronRight size={16} style={{ color: 'var(--text-3)' }} />
-            </div>
-          ))}
-        </div>
+      {/* The X sits on a row whose own click opens the workout, and it is one
+          tap from a delete button on the card above — so it says out loud that
+          this unlinks and does not remove anything. */}
+      {unlinking && (
+        <ConfirmDialog
+          title="Remove from this equipment?"
+          message={<>“{unlinking.name}” will no longer be linked to “{data.name}”. The workout itself is not deleted, and its other equipment is untouched.</>}
+          confirmLabel="Remove"
+          busy={unlinkBusy}
+          busyLabel="Removing…"
+          onCancel={() => setUnlinking(null)}
+          onConfirm={() => void unlink(unlinking.id)}
+        />
       )}
 
       {confirmDelete && (

@@ -772,13 +772,24 @@ export interface EquipmentInput {
   retireAtKm?: number
 }
 
+/**
+ * A workout using a piece of equipment.
+ *
+ * Carries everything a workout row shows, so the gear page can draw the same
+ * row as the library rather than a reduced one of its own.
+ */
 export interface LinkedWorkout {
   id: string
   name: string
-  type: string
+  type: import('../data/workouts').WorkoutType
   date: string
   distance: number
   duration: number
+  elevationGain: number
+  calories: number
+  avgPace: number
+  avgSpeed: number
+  source?: 'upload' | 'manual' | 'healthconnect' | 'autoimport'
 }
 
 export interface ManualWorkoutInput {

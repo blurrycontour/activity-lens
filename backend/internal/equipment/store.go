@@ -150,7 +150,8 @@ func (r *SQLiteRepository) DeleteAllForUser(ctx context.Context, userID int64) e
 
 func (r *SQLiteRepository) LinkedWorkouts(ctx context.Context, userID int64, equipmentID string) ([]LinkedWorkout, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT w.id, w.name, w.type, w.start_time, w.distance, w.duration
+		`SELECT w.id, w.name, w.type, w.start_time, w.distance, w.duration,
+		        w.elevation_gain, w.calories, w.avg_pace, w.avg_speed, w.source
 		 FROM workout_equipment we
 		 JOIN workouts w ON w.id = we.workout_id
 		 WHERE we.equipment_id = ? AND w.user_id = ?
@@ -163,7 +164,8 @@ func (r *SQLiteRepository) LinkedWorkouts(ctx context.Context, userID int64, equ
 	for rows.Next() {
 		var lw LinkedWorkout
 		var startTime string
-		if err := rows.Scan(&lw.ID, &lw.Name, &lw.Type, &startTime, &lw.Distance, &lw.Duration); err != nil {
+		if err := rows.Scan(&lw.ID, &lw.Name, &lw.Type, &startTime, &lw.Distance, &lw.Duration,
+			&lw.ElevationGain, &lw.Calories, &lw.AvgPace, &lw.AvgSpeed, &lw.Source); err != nil {
 			return nil, err
 		}
 		if t, err := time.Parse(time.RFC3339, startTime); err == nil {
