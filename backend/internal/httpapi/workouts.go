@@ -64,9 +64,9 @@ type workoutDetailResponse struct {
 	// rather than with the tab's own request: a tab that appears only after
 	// its contents load is a tab that flickers into existence on every page.
 	//
-	// One EXISTS query, and only on the detail path. Deliberately not added to
-	// the list response, which would turn it into a per-row lookup across the
-	// whole library for something no list shows.
+	// One query, and only on the detail path. Deliberately not added to the
+	// list response, which would turn it into a per-row lookup across the whole
+	// library for something no list shows.
 	Shared bool `json:"shared,omitempty"`
 }
 
@@ -82,12 +82,21 @@ func (s *Server) handleGetWorkout(w http.ResponseWriter, r *http.Request) {
 	shared := true
 	if isOwner {
 		s.attachEquipment(r, user.ID, wk)
-		var serr error
-		if shared, serr = s.workout.IsShared(r.Context(), user.ID, wk.ID); serr != nil {
+		// The recipients rather than a bare EXISTS, so the badge on this page
+		// can carry the same count the one in the list does. It was showing a
+		// bare icon here and "2" there for the same workout, because the count
+		// only ever reached the list — where it comes from one grouped query
+		// over the whole library. Here it is a handful of rows for one row's
+		// worth of work.
+		ids, serr := s.workout.ShareRecipients(r.Context(), user.ID, wk.ID)
+		if serr != nil {
 			// Not fatal: the workout is the point of this response, and a
 			// missing Social tab is a smaller failure than no page at all.
-			slog.Warn("could not check workout sharing", "workout_id", wk.ID, "error", serr)
+			slog.Warn("could not read share recipients", "workout_id", wk.ID, "error", serr)
 			shared = false
+		} else {
+			wk.SharedWithCount = len(ids)
+			shared = len(ids) > 0 || wk.Visibility == workout.VisibilityPublic
 		}
 	} else if owner, derr := s.ownerRef(r, wk.UserID); derr == nil {
 		// Equipment is deliberately left off: it is the owner's private gear

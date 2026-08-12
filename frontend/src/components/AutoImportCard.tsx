@@ -124,7 +124,7 @@ export default function AutoImportCard() {
 
   return (
     <section className="card">
-      <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+      <h3 className="card-title" style={{ marginBottom: 4 }}>
         <FolderDown size={15} /> Auto import
       </h3>
       <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 14 }}>

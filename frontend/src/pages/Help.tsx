@@ -58,7 +58,7 @@ export default function Help() {
       <div className="page-content" style={{ maxWidth: 820, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
         {/* Getting started */}
         <section style={cardStyle}>
-          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <h3 className="card-title" style={{ marginBottom: 4 }}>
             <Upload size={16} /> Getting started
           </h3>
           <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6, marginTop: 8 }}>
@@ -72,7 +72,7 @@ export default function Help() {
 
         {/* Pages / features */}
         <section>
-          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>The pages</h3>
+          <h3 className="card-title" style={{ marginBottom: 12 }}>The pages</h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
             {features.map(f => (
               <div key={f.title} style={cardStyle}>
@@ -88,7 +88,7 @@ export default function Help() {
 
         {/* Personalize */}
         <section style={cardStyle}>
-          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <h3 className="card-title" style={{ marginBottom: 4 }}>
             <SettingsIcon size={16} /> Personalize your estimates
           </h3>
           <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6, marginTop: 8 }}>
@@ -100,7 +100,7 @@ export default function Help() {
 
         {/* Keyboard shortcuts */}
         <section style={cardStyle}>
-          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <h3 className="card-title" style={{ marginBottom: 12 }}>
             <Keyboard size={16} /> Keyboard shortcuts
           </h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 8 }}>
@@ -119,7 +119,7 @@ export default function Help() {
 
         {/* FAQ */}
         <section>
-          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <h3 className="card-title" style={{ marginBottom: 12 }}>
             <HelpCircle size={16} /> Frequently asked
           </h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

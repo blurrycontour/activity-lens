@@ -613,7 +613,7 @@ function BreakdownGrid({ title, info, stats, label, measure, statValue, format }
   return (
     <div style={{ marginTop: 20 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
-        <h3 style={{ fontSize: 14, fontWeight: 600 }}>{title}</h3>
+        <h3 className="card-title">{title}</h3>
         <InfoTip text={info} label={title} />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10 }}>

@@ -188,21 +188,31 @@ function goalTitle(g: GoalProgress['goal']): string {
  * is selected.
  */
 /**
- * The phase offset for one medal's animations, from its place in the list.
+ * Timings for one medal, from its place in the list.
  *
- * An inline custom property rather than nth-child rules, which is what this
- * replaced. Those keyed on the position of a goal's *row* inside three named
- * containers — so a fourth layout, or a container with a footer among its
- * children, silently fell back to no offset at all and every medal flashed
- * together. The index is the thing the stagger is actually about, so it is
- * what gets passed.
+ * Two offsets, because the two animations want opposite things from a stagger.
  *
- * Wrapped rather than repeated at 0.7s intervals: a whole number of these
- * inside the shine's three-second cycle would put a fifth medal back in step
- * with the first, so the step is deliberately not a factor of the period.
+ * The flip is an arrival: a short cascade down the card reads as one gesture,
+ * and anything longer reads as medals that forgot to show up — at 0.7s apiece
+ * the third was still waiting most of a second after the first had landed.
+ * A tenth of a second each keeps the run under half a second whatever the
+ * count.
+ *
+ * The shine is a loop, and wants the opposite: the offsets should be spread as
+ * widely as possible inside its three-second period so no two medals flash
+ * together. The step is deliberately not a factor of that period, or every
+ * fourth medal would come back into step with the first.
+ *
+ * Inline custom properties rather than nth-child rules, which is what this
+ * replaced: those keyed on a row's position inside three named containers, so
+ * any other layout silently fell back to no offset and everything flashed in
+ * unison.
  */
 function awardPhase(index: number): React.CSSProperties {
-  return { '--award-delay': `${((index * 0.7) % 2.4).toFixed(2)}s` } as React.CSSProperties
+  return {
+    '--award-in-delay': `${(index * 0.1).toFixed(2)}s`,
+    '--award-delay': `${((index * 0.77) % 3).toFixed(2)}s`,
+  } as React.CSSProperties
 }
 
 function GoalBadges({ p, compact, index = 0 }: { p: GoalProgress; compact?: boolean; index?: number }) {

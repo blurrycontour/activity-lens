@@ -391,7 +391,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
 }
 .settings-card.danger .settings-card-title { color: var(--danger); }
@@ -1045,9 +1045,12 @@ body {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
-  color: var(--text-2);
+  /* Primary ink, like every other card heading. It was the one title in the
+     app set in the secondary colour, which read as a disabled card rather than
+     a quiet one. */
+  color: var(--text);
 }
 /* Five values on one line, each behind its own icon so the row can be scanned
    rather than read. They wrap to a second line on a narrow phone. */
@@ -1991,7 +1994,7 @@ body:has(.overlay) .fab { display: none; }
   align-items: center;
   gap: 6px;
   min-width: 0;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
 }
 /* Its own line, directly under the title. */
@@ -2020,6 +2023,25 @@ body:has(.overlay) .fab { display: none; }
   .metric-panel-plot { margin-left: -16px; margin-right: -16px; }
 }
 
+/* ── Card titles ───────────────────────────────────────────────────────────
+   One size and one colour for the heading of any card on a page, wherever it
+   is. They had drifted to 13px in some places, 14 in others, and one of them —
+   the weather card — to the secondary ink, so the same kind of heading looked
+   like three different kinds of thing.
+
+   Dialog and sheet headers are deliberately not in here. Those are the title
+   of a surface that took over the screen, not of a card sitting in a page, and
+   they are larger and heavier on purpose. */
+.card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
 /* ── Chart card: title row, info tip, description ── */
 .chart-card-head {
   display: flex;
@@ -2028,7 +2050,7 @@ body:has(.overlay) .fab { display: none; }
   flex-wrap: wrap;
   margin-bottom: 4px;
 }
-.chart-card-title { font-size: 13px; font-weight: 600; }
+.chart-card-title { font-size: 15px; font-weight: 600; }
 .chart-card-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .chart-card-desc {
   font-size: 11px;
@@ -2856,7 +2878,7 @@ body:has(.overlay) .fab { display: none; }
 .session-profile,
 .session-context { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; }
 .session-profile-head { display: flex; align-items: center; gap: 8px; }
-.session-profile-head h3 { font-size: 13px; font-weight: 600; }
+.session-profile-head h3 { font-size: 15px; font-weight: 600; }
 .session-profile-note {
   margin-left: auto;
   font-size: 11px;
@@ -2910,7 +2932,7 @@ body:has(.overlay) .fab { display: none; }
   pointer-events: none;
 }
 .session-sky-bar > button { pointer-events: auto; }
-.session-sky-bar h3 { font-size: 13px; font-weight: 600; white-space: nowrap; }
+.session-sky-bar h3 { font-size: 15px; font-weight: 600; white-space: nowrap; }
 .session-sky-bar .session-profile-note { white-space: nowrap; }
 .session-sky-bar .session-profile-note { margin-left: auto; }
 .session-sky-bar .session-sky-expand { margin-left: 10px; }
@@ -4133,9 +4155,10 @@ body:has(.overlay) .fab { display: none; }
   box-shadow:
     0 0 0 2px var(--primary-dim),
     0 0 14px var(--primary-glow);
-  /* Struck, then flipped into place. The delay is per-goal — see awardPhase —
-     so a row of medals lands one after another rather than all at once. */
-  animation: goal-award-flip 0.85s cubic-bezier(0.25, 0.9, 0.3, 1) var(--award-delay, 0s) both;
+  /* Struck, then flipped into place. A short per-goal delay — see awardPhase —
+     so a row lands one after another rather than all at once, without the last
+     one keeping you waiting. */
+  animation: goal-award-flip 0.8s cubic-bezier(0.25, 0.9, 0.3, 1) var(--award-in-delay, 0s) both;
   position: relative;
   /* Clips the shine to the disc. An element's own box-shadow is drawn outside
      the border box and is not clipped by overflow, so the halo survives. */
@@ -4165,7 +4188,7 @@ body:has(.overlay) .fab { display: none; }
      that list, or a container with a footer among its children, fell back to
      no offset and every medal flashed in unison. */
   animation: goal-award-shine 3s ease-in-out infinite;
-  animation-delay: calc(var(--award-delay, 0s) + 0.9s);
+  animation-delay: calc(var(--award-delay, 0s) + 1s);
 }
 /* The coin flip. Three turns about the vertical axis, through a perspective so
    the disc narrows and widens instead of merely squashing — that foreshortening
@@ -4485,7 +4508,7 @@ body:has(.overlay) .fab { display: none; }
 }
 /* On the dial rather than under it, for the same reason. */
 .goal-ring-award {
-  animation: goal-award-flip 0.85s cubic-bezier(0.25, 0.9, 0.3, 1) var(--award-delay, 0s) both;
+  animation: goal-award-flip 0.8s cubic-bezier(0.25, 0.9, 0.3, 1) var(--award-in-delay, 0s) both;
   position: absolute;
   top: 2px;
   right: 2px;

@@ -144,10 +144,16 @@ export function buildConstellation(seed: string, samples: number[], count = 110,
   const p1x = FIELD_W * c1x + jitterX, p1y = fieldH * c1y + jitterY
   const p2x = FIELD_W * c2x + jitterX, p2y = fieldH * c2y + jitterY
 
-  // How hard the effort pushes the path off its curve. Perpendicular to the
-  // direction of travel, so a spike reads as a swerve rather than as height —
-  // height is already spoken for by the recession into the distance.
-  const swerve = fieldH * 0.17
+  /*
+   * How hard the effort pushes the path off its curve.
+   *
+   * Measured against the *shorter* side of the field, not its height. The
+   * field is built to the panel's proportions now, so its height ranges from
+   * about 60 on a wide desktop card to 900 in the expanded view on a phone —
+   * and a fraction of that swung the modulation from barely visible to larger
+   * than the drawing, which is where the wilder bends came from.
+   */
+  const swerve = Math.min(FIELD_W, fieldH) * 0.17
 
   const points: PathPoint[] = []
   for (let i = 0; i < count; i++) {
@@ -169,8 +175,25 @@ export function buildConstellation(seed: string, samples: number[], count = 110,
     const back = t + step > 1
     const e = back ? t - step : t + step
     const dir = back ? -1 : 1
-    const nx = (bezier(y0, p1y, p2y, y1, e) - by) * dir
-    const ny = -(bezier(x0, p1x, p2x, x1, e) - bx) * dir
+    let nx = (bezier(y0, p1y, p2y, y1, e) - by) * dir
+    let ny = -(bezier(x0, p1x, p2x, x1, e) - bx) * dir
+
+    /*
+     * The normal is forced to point upward, and that is what makes the drawing
+     * agree with the heart-rate chart.
+     *
+     * A normal taken from the tangent rotates with the path, so on a variant
+     * that curves hard — or folds back over itself — it can end up pointing
+     * down-screen. The same rising heart rate then pushes the line up in one
+     * stretch and down in the next, which is why a workout could look nothing
+     * like its own chart and take a sudden turn in the middle for no reason
+     * visible in the data.
+     *
+     * Pinning the sign means high always reads as higher, wherever on the
+     * curve it happens. The swerve stays perpendicular to travel, so it is
+     * still the shape of the effort rather than a second altitude axis.
+     */
+    if (ny > 0) { nx = -nx; ny = -ny }
     const len = Math.hypot(nx, ny) || 1
 
     // Centred on the middle of the range so an average stretch sits on the

@@ -186,3 +186,23 @@ describe('a very wide panel', () => {
     }
   })
 })
+
+describe('the swerve direction', () => {
+  it('never pushes a high reading downward', () => {
+    // The normal is taken from the tangent, so on a variant that curves hard
+    // it used to rotate past horizontal and the same rising heart rate pushed
+    // the line up in one stretch and down in the next — which is why a drawing
+    // could look nothing like its own chart and take a turn for no reason
+    // visible in the data. High must read as higher, everywhere on the curve.
+    const high = Array.from({ length: 110 }, () => 1)
+    for (const id of ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']) {
+      const bare = buildConstellation(id, flat).points
+      const lifted = buildConstellation(id, high).points
+      for (let i = 0; i < bare.length; i++) {
+        // Smaller y is higher on screen. A clamped point can be equal, never
+        // lower.
+        expect(lifted[i].y).toBeLessThanOrEqual(bare[i].y + 1e-9)
+      }
+    }
+  })
+})

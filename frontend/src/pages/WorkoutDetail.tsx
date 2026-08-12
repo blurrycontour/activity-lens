@@ -7,7 +7,7 @@ import Dropdown from '../components/Dropdown'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ReferenceDot, ReferenceArea, BarChart, Bar } from 'recharts'
 import {
   ArrowLeft, Heart, Mountain, Zap, Clock, TrendingUp, Navigation, Download, Pencil, Trash2, Gauge,
-  Check, X as XIcon, Play, Pause as PauseIcon, LoaderCircle, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, AlertTriangle, Activity, Share2, Lock, FileDown, Plus, Image as ImageIcon, NotebookPen, Images, MessageSquare } from 'lucide-react'
+  Check, X as XIcon, Play, Pause as PauseIcon, LoaderCircle, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, AlertTriangle, Activity, Share2, Lock, FileDown, Plus, Image as ImageIcon, NotebookPen, Images, MessageSquare, ClipboardList } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
@@ -172,7 +172,8 @@ function NotesCard({ workout: w, onSaved }: { workout: Workout; onSaved: (w: Wor
   return (
     <div className="card" style={{ marginTop: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
-        <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <h3 className="card-title">
+          <NotebookPen size={15} style={{ color: 'var(--primary)' }} />
           Notes
           <span className="notes-private" title="Notes stay private — they are never included when a workout is shared or made public">
             <Lock size={10} /> Private
@@ -1371,7 +1372,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
           <button className="btn-icon" onClick={onBack}><ArrowLeft size={18} /></button>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <h1 style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em' }}>{w.name}</h1>
+              <h1 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>{w.name}</h1>
               <span className={`badge tag-${w.type.toLowerCase()}`}><TypeIcon type={w.type} size={12} /> {w.type}</span>
               {/* The same mark the list row carries. It was only ever on the
                   list, which meant the one page you would open to check
@@ -1477,7 +1478,8 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
               reported directly by the source) carry a small calculated
               indicator. */}
           <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <h3 style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <h3 className="card-title">
+              <ClipboardList size={15} style={{ color: 'var(--primary)' }} />
               Summary
               {/* The headline figures come with the list row; the ones derived
                   from the samples — min and max HR, elevation loss — arrive
@@ -1717,7 +1719,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
         {!readOnly && (
         <div className="card" style={{ marginTop: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-            <h3 style={{ fontSize: 13, fontWeight: 600 }}>Equipment</h3>
+            <h3 className="card-title"><Footprints size={15} style={{ color: 'var(--primary)' }} /> Equipment</h3>
             {!editingEquip && !readOnly && (
               <button className="btn btn-ghost" style={{ fontSize: 12, padding: '4px 10px' }} onClick={startEditEquip}>
                 {(w.equipment ?? []).length > 0 ? 'Edit' : 'Add'}
