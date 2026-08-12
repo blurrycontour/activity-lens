@@ -38,6 +38,7 @@ import { consumeShareParam, takeSharedFiles } from './lib/shareTarget'
 import { onNativeIncomingFiles, takeNativeIncomingFiles } from './lib/native/incomingFiles'
 import { applySystemBars } from './lib/native/systemBars'
 import { onPushMessage } from './lib/native/unifiedPush'
+import { LoaderCircle } from 'lucide-react'
 import { api } from './lib/api'
 
 /** Fired when openLink changes the URL without unmounting the page it lands on. */
@@ -76,6 +77,16 @@ export default function App() {
   // The open category within a hub page (settings, admin), or null for the hub.
   const [section, setSection] = useState<string | null>(initialLocation.section)
   const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null)
+  /**
+   * True while a workout named in the URL is still being fetched.
+   *
+   * Reloading /workouts/abc used to show the workout *list* for as long as the
+   * request took, then swap it for the workout — a page you did not ask for,
+   * arriving first and leaving. The deep link is known synchronously from the
+   * path; only the data is late. This is what lets the app say "the workout is
+   * coming" instead of guessing wrong in the meantime.
+   */
+  const [openingWorkout, setOpeningWorkout] = useState(Boolean(initialLocation.workoutId))
   /**
    * The last workout that was open, kept so the back gesture can put it back on
    * screen at once rather than through a round trip. A ref and not state: it
@@ -143,7 +154,10 @@ export default function App() {
     let cancelled = false
     api.getWorkout(initialLocation.workoutId)
       .then(w => { if (!cancelled) setSelectedWorkout(w) })
+      // Deleted, or no longer shared with you: fall back to the list rather
+      // than leaving a spinner on screen for a workout that is not coming.
       .catch(() => { if (!cancelled) window.history.replaceState(null, '', pathForPage('workouts')) })
+      .finally(() => { if (!cancelled) setOpeningWorkout(false) })
     return () => { cancelled = true }
     // Only run once, when auth resolves.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -553,6 +567,14 @@ export default function App() {
             onBack={() => selectWorkout(null)}
             onOpenSettings={() => navigate('settings')}
           />
+        ) : openingWorkout ? (
+          // Deliberately not the list: the URL already says a workout is
+          // opening, and showing the library first would be answering a
+          // question nobody asked.
+          <div className="detail-loading" style={{ minHeight: '60vh' }}>
+            <LoaderCircle size={18} className="spin" aria-hidden />
+            Loading workout…
+          </div>
         ) : page === 'dashboard' ? (
           <Dashboard onSelect={selectWorkout} />
         ) : page === 'workouts' ? (

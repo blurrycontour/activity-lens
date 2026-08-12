@@ -17,6 +17,12 @@ func (s *Service) Comments(ctx context.Context, workoutID string) ([]Comment, er
 	return s.repo.ListComments(ctx, workoutID)
 }
 
+// Comment reads one message. The delete path uses it to learn whose the
+// message was before it goes, since after the DELETE there is nobody to name.
+func (s *Service) Comment(ctx context.Context, workoutID, commentID string) (Comment, error) {
+	return s.repo.GetComment(ctx, workoutID, commentID)
+}
+
 // AddComment stores a message from authorID on a workout they can see.
 func (s *Service) AddComment(ctx context.Context, workoutID string, authorID int64, body string) (Comment, error) {
 	body, err := cleanCommentBody(body)

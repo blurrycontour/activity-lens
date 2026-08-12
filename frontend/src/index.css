@@ -2812,14 +2812,13 @@ body:has(.overlay) .fab { display: none; }
   flex-direction: column;
   padding: 0;
   overflow: hidden;
-  /* An explicit height, not a min and a max around a stretched grid item.
-     Both this and the map card stretch to the summary column beside them, and
-     a summary carrying weather and every derived stat runs past 700px — which
-     a map fills with more map and a drawing fills with more empty sky. That is
-     the one place the two should not behave alike. A definite height also
-     gives the sky, a flex child that fills it, something real to fill. */
-  align-self: start;
-  height: 380px;
+  /* Stretched to the summary column beside it, exactly as the map card is.
+     There is no cap any more: the field is built to the panel's measured
+     proportions, so a taller card is a taller drawing rather than a drawing
+     with empty sky above it — which is what the cap was there to avoid and
+     what made the two panels different sizes for no reason a reader could
+     see. The minimum only matters while the summary is short. */
+  min-height: 280px;
 }
 /* The standing panel is words rather than a picture, so it keeps its inset. */
 .detail-hero-card .session-context { padding: 16px; }
@@ -2887,10 +2886,14 @@ body:has(.overlay) .fab { display: none; }
   pointer-events: none;
 }
 .session-sky-bar > button { pointer-events: auto; }
-.session-sky-bar h3 { font-size: 13px; font-weight: 600; }
+.session-sky-bar h3 { font-size: 13px; font-weight: 600; white-space: nowrap; }
+.session-sky-bar .session-profile-note { white-space: nowrap; }
 .session-sky-bar .session-profile-note { margin-left: auto; }
 .session-sky-bar .session-sky-expand { margin-left: 10px; }
-.session-sky svg { display: block; width: 100%; height: 100%; cursor: crosshair; }
+/* The direct child only. This sizes the drawing, and the title bar now lives
+   inside the sky too — with a bare `svg` selector the lucide glyphs in that bar
+   inherited "fill the panel", and a 14px sparkle became the whole card. */
+.session-sky > svg { display: block; width: 100%; height: 100%; cursor: crosshair; }
 /* The maximise control, the same one the map carries. It rides in the title
    bar rather than floating in the corner, which is also why the destination
    glyph no longer has to dodge it. */
@@ -3811,10 +3814,10 @@ body:has(.overlay) .fab { display: none; }
      on a phone, and the one panel where more height is always worth having.
      Capped in pixels as well as in vh so a tall phone does not give the map the
      whole screen and push everything else below the fold. */
-  .detail-map-card { min-height: min(56vh, 420px); }
-  /* Stacked, it is a row of its own rather than a column trying to match a
-     tall summary beside it. */
-  .detail-hero-card { height: min(56vh, 420px); }
+  /* Stacked, both are a row of their own rather than a column matching a
+     summary beside them, so both take a share of the screen instead. */
+  .detail-map-card,
+  .detail-hero-card { min-height: min(56vh, 420px); }
   /* The playback bar's stacked layout used to live here. It is a container
      query now — see .playback-card — because the card's width, not the
      viewport's, is what decides whether the three parts fit on one line. */

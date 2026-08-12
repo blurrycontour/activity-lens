@@ -211,6 +211,12 @@ func (s *Server) handleEditComment(w http.ResponseWriter, r *http.Request) {
 	if ref, err := s.lookupUser(r, user.ID); err == nil && ref != nil {
 		c.Author = ref
 	}
+	// An edit is told to the thread, because on a shared page it changes what
+	// everyone else already read. Keyed on the comment, so correcting a typo
+	// three times in a row is one notification rather than three — the thread
+	// cares that the message changed, not how many passes it took.
+	s.notifySocial(r, *user, ctx.workout,
+		actorName(*user)+" edited a comment", excerpt(c.Body), "social-edit:"+c.ID)
 	writeJSON(w, http.StatusOK, c)
 }
 
@@ -226,10 +232,22 @@ func (s *Server) handleDeleteComment(w http.ResponseWriter, r *http.Request) {
 	// Deliberately not gated on `shared`: an owner who has just made a workout
 	// private must still be able to clear a comment they did not want, and
 	// refusing here would leave it there with no way to reach it.
-	err := s.workout.RemoveComment(r.Context(), ctx.workout.ID, r.PathValue("commentID"), user.ID, ctx.isOwner)
-	if err != nil {
+	commentID := r.PathValue("commentID")
+	// Read before it goes, so the notification can say whose message this was.
+	// Best effort: a comment that cannot be read is still one that can be
+	// deleted, and failing the delete over the notification would be backwards.
+	gone, readErr := s.workout.Comment(r.Context(), ctx.workout.ID, commentID)
+	if err := s.workout.RemoveComment(r.Context(), ctx.workout.ID, commentID, user.ID, ctx.isOwner); err != nil {
 		s.writeSocialError(w, err)
 		return
+	}
+	// Only when somebody else's was removed — a moderation decision the author
+	// should hear about. Deleting your own is not news to anyone, least of all
+	// to you, and announcing it to the thread would be a second copy of a
+	// message that was just withdrawn, which is why the body is not included.
+	if readErr == nil && gone.UserID != user.ID {
+		s.notifySocial(r, *user, ctx.workout,
+			actorName(*user)+" removed a comment", ctx.workout.Name, "social-remove:"+commentID)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
