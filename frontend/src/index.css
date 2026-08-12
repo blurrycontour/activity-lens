@@ -2723,9 +2723,13 @@ body:has(.overlay) .fab { display: none; }
   font-size: 10px;
   color: var(--text-2);
 }
-.map-legend-zones { display: flex; gap: 14px; }
-.map-legend-zone { display: flex; align-items: center; gap: 4px; }
-.map-legend-zone i { width: 8px; height: 8px; border-radius: 2px; }
+.map-legend-zones { display: flex; gap: 16px; }
+.map-legend-zone { display: flex; align-items: center; gap: 5px; }
+/* A short bar rather than a dot. The ramp variant beside it grew to 150px and
+   this one only gained the space between its chips, so the two legends came
+   out visibly different lengths for the same job. A wider swatch also reads as
+   a piece of the scale, which is what it is. */
+.map-legend-zone i { width: 16px; height: 8px; border-radius: 2px; }
 .map-legend-ramp { display: flex; flex-direction: column; gap: 3px; }
 /* Long enough to read as a gradient. At 92px the middle of a three-stop ramp
    was about thirty pixels wide, which is not enough of it to see. */
@@ -2875,7 +2879,15 @@ body:has(.overlay) .fab { display: none; }
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  /* The ground haze lives here rather than as a <rect> inside the drawing.
+     The field's height is rounded to the nearest ten, so the viewBox almost
+     never matches the box's aspect exactly and the svg letterboxes by a few
+     pixels — which was invisible until the drawing painted its own background,
+     and then showed as a thin band along the bottom where the haze stopped
+     short of the card. Painting it on the container instead means the sky is
+     continuous whatever the drawing's aspect does. */
   background:
+    linear-gradient(to top, color-mix(in srgb, var(--primary) 10%, transparent), transparent 55%),
     radial-gradient(120% 90% at 12% 100%, color-mix(in srgb, var(--primary) 9%, transparent), transparent 60%),
     var(--bg-3);
 }

@@ -320,7 +320,6 @@ export default function SessionProfile({
 
   return (
     <div className="session-profile">
-
       <div className="session-sky" ref={skyBox}>
         <svg
           viewBox={`0 0 ${FIELD_W} ${fieldH}`}
@@ -328,17 +327,11 @@ export default function SessionProfile({
           role="img"
           aria-label="This session drawn as a journey, from its start at the lower left to its finish at the upper right"
         >
-          <defs>
-            {/* The ground haze: the field's own surface, lifting toward the
-                horizon, which is what stops the stars reading as confetti. */}
-            <linearGradient id="al-sky" x1="0" y1="1" x2="0.35" y2="0">
-              <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.10" />
-              <stop offset="55%" stopColor="var(--primary)" stopOpacity="0.02" />
-              <stop offset="100%" stopColor="var(--primary)" stopOpacity="0" />
-            </linearGradient>
-          </defs>
-
-          <rect x="0" y="0" width={FIELD_W} height={fieldH} fill="url(#al-sky)" />
+          {/* No background rect. The ground haze is painted by .session-sky
+              instead: the field's height is rounded, so the viewBox rarely
+              matches the box's aspect exactly and the drawing letterboxes by a
+              few pixels — which showed as a thin band along the bottom where
+              the drawing's own background stopped short of the card. */}
 
           {drawing}
 
