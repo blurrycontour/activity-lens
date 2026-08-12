@@ -62,6 +62,20 @@ function sectionsFor(page: Page): readonly string[] {
 }
 
 /**
+ * Pages whose section is an id rather than one of a fixed set.
+ *
+ * Equipment drills into a piece of gear, and gear is created by the user, so
+ * there is no list to check a segment against — anything non-empty is taken as
+ * an id and the page reports it missing if it is not.
+ *
+ * Being in the URL at all is what makes the back gesture work: opening a
+ * workout from a piece of gear replaces the whole page, so the equipment
+ * component unmounts and any id it was holding in local state goes with it.
+ * Coming back then landed on the inventory rather than the gear you left.
+ */
+const ID_SECTION_PAGES: readonly Page[] = ['equipment']
+
+/**
  * Routes that no longer exist, pointing at whatever absorbed them. Timeline was
  * merged into Analysis and Heatmap was renamed Consistency, so old bookmarks
  * and open tabs still land somewhere sensible.
@@ -111,7 +125,9 @@ export function parseLocation(pathname = window.location.pathname): AppLocation 
   if (PAGES.includes(candidate)) {
     // An unrecognised category is dropped rather than honoured: better to open
     // the hub than to render nothing.
-    const section = segs[1] && sectionsFor(candidate).includes(segs[1]) ? segs[1] : null
+    const section = segs[1] && (ID_SECTION_PAGES.includes(candidate) || sectionsFor(candidate).includes(segs[1]))
+      ? segs[1]
+      : null
     return { page: candidate, section, workoutId: null }
   }
 

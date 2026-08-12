@@ -586,7 +586,11 @@ export default function App() {
         ) : page === 'consistency' ? (
           <Consistency />
         ) : page === 'equipment' ? (
-          <Equipment onSelectWorkout={id => { api.getWorkout(id).then(selectWorkout).catch(() => {}) }} />
+          <Equipment
+            detail={section}
+            onOpenDetail={id => openSection('equipment', id)}
+            onSelectWorkout={id => { api.getWorkout(id).then(selectWorkout).catch(() => {}) }}
+          />
         ) : page === 'settings' ? (
           <Settings
             section={section as SettingsSection | null}

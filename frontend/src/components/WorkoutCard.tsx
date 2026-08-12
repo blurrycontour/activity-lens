@@ -54,10 +54,19 @@ interface WorkoutCardProps {
   aside?: React.ReactNode
   /** Full-width row at the bottom of the card, used for the author byline. */
   footer?: React.ReactNode
+  /**
+   * Drops the sport stripe down the leading edge.
+   *
+   * For a list that is already about one thing — the workouts using a single
+   * piece of equipment — where a colour per row encodes a distinction nobody
+   * came to that page to make, and reads as a stray decoration beside the gear
+   * card above it. The library, where sport is what you scan by, keeps it.
+   */
+  plain?: boolean
 }
 
 export default function WorkoutCard({
-  workout: w, variant, onClick, badge, aside, footer,
+  workout: w, variant, onClick, badge, aside, footer, plain = false,
   selectable = false, selecting = false, selected = false, onLongPress,
 }: WorkoutCardProps) {
   const color = TYPE_COLOR[w.type]
@@ -152,7 +161,7 @@ export default function WorkoutCard({
 
   return (
     <div
-      className="workout-row"
+      className={`workout-row${plain ? ' workout-row-plain' : ''}`}
       onClick={handleClick}
       {...pressProps}
       style={{ '--row-accent': color, ...selectionStyle } as React.CSSProperties}

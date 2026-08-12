@@ -3788,6 +3788,11 @@ body:has(.overlay) .fab { display: none; }
 /* Type stripe down the leading edge. Carries its own radius rather than
    relying on the row's clipping, so the rule below can lift that clipping
    without the stripe growing square corners. */
+/* Dropped where the list is already about one thing; see WorkoutCard's `plain`.
+   The hover tint goes with it — a row with no stripe that lights up in the
+   sport's colour on approach is the same encoding, just hidden until touched. */
+.workout-row-plain::before { display: none; }
+.workout-row-plain:hover { border-color: var(--border-strong); }
 .workout-row::before {
   content: '';
   position: absolute;

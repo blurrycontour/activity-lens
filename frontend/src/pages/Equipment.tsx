@@ -17,6 +17,15 @@ import { fmtDist, type Workout } from '../data/workouts'
 
 interface EquipmentPageProps {
   onSelectWorkout: (id: string) => void
+  /**
+   * The piece of gear currently open, or null for the inventory.
+   *
+   * Owned by the router rather than by this page, so that opening a workout
+   * from a piece of gear — which unmounts this whole component — can be backed
+   * out of onto the gear you left rather than onto the inventory.
+   */
+  detail: string | null
+  onOpenDetail: (id: string | null) => void
 }
 
 const TYPES = [
@@ -87,11 +96,10 @@ function wearOf(e: { type: string; totalDistance?: number; retireAtKm?: number }
   return { km, limitKm, pct: km / limitKm }
 }
 
-export default function EquipmentPage({ onSelectWorkout }: EquipmentPageProps) {
+export default function EquipmentPage({ onSelectWorkout, detail, onOpenDetail }: EquipmentPageProps) {
   const [items, setItems] = useState<Equipment[]>([])
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState<Equipment | 'new' | null>(null)
-  const [detail, setDetail] = useState<string | null>(null)
   /**
    * Incremented on every save, to tell an open detail view its row changed.
    *
@@ -260,10 +268,10 @@ export default function EquipmentPage({ onSelectWorkout }: EquipmentPageProps) {
           <EquipmentDetail
             id={detail}
             reloadToken={savedAt}
-            onBack={() => { setDetail(null); void load() }}
+            onBack={() => { onOpenDetail(null); void load() }}
             onSelectWorkout={onSelectWorkout}
             onEdit={e => setEditing(e)}
-            onDeleted={() => { setDetail(null); void load() }}
+            onDeleted={() => { onOpenDetail(null); void load() }}
           />
         ) : loading ? (
           <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-3)' }}>Loading…</div>
@@ -278,7 +286,7 @@ export default function EquipmentPage({ onSelectWorkout }: EquipmentPageProps) {
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
             {filtered.map(e => (
-              <div key={e.id} className="card" style={{ padding: 16, cursor: 'pointer', opacity: e.retired ? 0.6 : 1 }} onClick={() => setDetail(e.id)}>
+              <div key={e.id} className="card" style={{ padding: 16, cursor: 'pointer', opacity: e.retired ? 0.6 : 1 }} onClick={() => onOpenDetail(e.id)}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <span style={{ color: 'var(--primary)', flexShrink: 0 }}>{typeIcon(e.type, 22)}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -594,6 +602,7 @@ function EquipmentDetail({ id, reloadToken, onBack, onSelectWorkout, onEdit, onD
               key={w.id}
               workout={w}
               variant="list"
+              plain
               onClick={() => onSelectWorkout(w.id)}
               aside={
                 <button
