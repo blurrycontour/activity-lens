@@ -93,9 +93,24 @@ export default function Dropdown<T extends string | number>({
     const width = Math.max(r.width, MIN_MENU_WIDTH)
     const below = window.innerHeight - r.bottom
     const wantsUp = dropUp ?? (below < 240 && r.top > below)
+
+    /*
+     * Aligned to the trigger's left edge, unless that would run it off the
+     * right of the screen — then to its right edge instead, so the menu opens
+     * inwards. A menu is always wider than its own minimum and often wider
+     * than its trigger, so a picker sitting near a right edge (the track
+     * shading control, on the far side of a map or a drawing) reliably hung
+     * past it. The final clamp is the backstop for a trigger so wide that
+     * neither edge fits.
+     */
+    const margin = 8
+    let left = r.left
+    if (left + width > window.innerWidth - margin) left = r.right - width
+    left = Math.max(margin, Math.min(left, window.innerWidth - width - margin))
+
     setBox(wantsUp
-      ? { left: r.left, bottom: window.innerHeight - r.top + 4, width }
-      : { left: r.left, top: r.bottom + 4, width })
+      ? { left, bottom: window.innerHeight - r.top + 4, width }
+      : { left, top: r.bottom + 4, width })
   }, [open, dropUp])
 
   // Anything that moves the trigger invalidates the position. Closing is both

@@ -2716,16 +2716,20 @@ body:has(.overlay) .fab { display: none; }
   backdrop-filter: blur(8px);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
   pointer-events: none;
-  max-width: 62%;
+  /* Room for five zone chips or a 150px ramp without wrapping, while still
+     leaving most of the map visible behind it. */
+  max-width: 72%;
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--text-2);
 }
-.map-legend-zones { display: flex; gap: 9px; }
+.map-legend-zones { display: flex; gap: 14px; }
 .map-legend-zone { display: flex; align-items: center; gap: 4px; }
 .map-legend-zone i { width: 8px; height: 8px; border-radius: 2px; }
 .map-legend-ramp { display: flex; flex-direction: column; gap: 3px; }
-.map-legend-ramp i { display: block; width: 92px; height: 7px; border-radius: 4px; }
+/* Long enough to read as a gradient. At 92px the middle of a three-stop ramp
+   was about thirty pixels wide, which is not enough of it to see. */
+.map-legend-ramp i { display: block; width: 150px; height: 7px; border-radius: 4px; }
 /* The two ends pushed apart under the bar they label, so each number sits over
    the end of the ramp it belongs to. */
 .map-legend-ramp > span { display: flex; justify-content: space-between; gap: 10px; }
@@ -2902,7 +2906,24 @@ body:has(.overlay) .fab { display: none; }
 /* The direct child only. This sizes the drawing, and the title bar now lives
    inside the sky too — with a bare `svg` selector the lucide glyphs in that bar
    inherited "fill the panel", and a 14px sparkle became the whole card. */
-.session-sky > svg { display: block; width: 100%; height: 100%; cursor: crosshair; }
+/* Out of flow, and that is the point rather than a detail of placement.
+   An <svg> with a viewBox has an intrinsic aspect ratio, so in normal flow it
+   claims an intrinsic *height* from the width it is given — a third of a
+   screen, sometimes more — and every ancestor's automatic minimum size grew to
+   fit it. That is what made this card taller than the summary column beside
+   it, twice, through two different attempts to constrain it. Absolutely
+   positioned, it contributes no height at all and the card is exactly as tall
+   as the grid row makes it.
+   The direct child only: the title bar lives inside the sky too, and a bare
+   `svg` selector here once told a 14px lucide glyph to fill the panel. */
+.session-sky > svg {
+  display: block;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+}
 /* The maximise control, the same one the map carries. It rides in the title
    bar rather than floating in the corner, which is also why the destination
    glyph no longer has to dodge it. */
@@ -2940,7 +2961,7 @@ body:has(.overlay) .fab { display: none; }
 }
 /* The one concession to a narrow panel: the parts wrap rather than run off the
    edge. Nothing here changes their size. */
-.session-sky-legend .map-legend-ramp i { width: min(92px, 100%); }
+.session-sky-legend .map-legend-ramp i { width: min(150px, 100%); }
 .session-sky-legend .map-legend-zones { flex-wrap: wrap; justify-content: flex-end; }
 /* The map's control at the map's type size and padding — the same control,
    not a smaller copy of it — with one thing dropped: the 150px minimum, which
