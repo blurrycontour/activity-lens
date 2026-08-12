@@ -2812,6 +2812,14 @@ body:has(.overlay) .fab { display: none; }
   flex-direction: column;
   padding: 14px 0 0;
   min-height: 280px;
+  /* Capped, unlike the map card, which is the one difference between them.
+     Both stretch to the summary column beside them, and a summary with weather
+     and every derived stat runs well past 400px — which a map happily fills
+     with more map, and a drawing fills with more empty sky. The cap is above
+     the minimum, so the panel still grows with a tall summary; it just stops
+     following it all the way up. Stretch stays, because the sky is a flex
+     child that needs a definite height to fill. */
+  max-height: 380px;
 }
 .detail-hero-card .session-profile-head,
 .detail-hero-card .session-context-body { padding: 0 16px; }
@@ -2904,10 +2912,12 @@ body:has(.overlay) .fab { display: none; }
    edge. Nothing here changes their size. */
 .session-sky-legend .map-legend-ramp i { width: min(92px, 100%); }
 .session-sky-legend .map-legend-zones { flex-wrap: wrap; justify-content: flex-end; }
-/* No size overrides: the picker and the key are the map's, at the map's size.
-   They were cut down when this panel was the narrow column; it is the wide one
-   now, and two differently-sized copies of one control is the thing worth
-   avoiding. */
+/* The map's control at the map's type size and padding — the same control,
+   not a smaller copy of it — with one thing dropped: the 150px minimum, which
+   exists so a row of filter dropdowns lines up and buys nothing for a single
+   picker sitting on a drawing. Without it the trigger is as wide as its label
+   and no wider. */
+.session-sky-controls .al-dropdown-trigger { min-width: 0; }
 
 /* The standing panel, for a workout with nothing recorded at all. */
 .session-context-body { display: flex; gap: 16px; align-items: flex-start; flex: 1; }
@@ -3776,8 +3786,11 @@ body:has(.overlay) .fab { display: none; }
      Capped in pixels as well as in vh so a tall phone does not give the map the
      whole screen and push everything else below the fold. */
   .detail-map-card,
-  /* The routeless panel gets the same height as the map it stands in for. */
+  /* The routeless panel gets the same height as the map it stands in for.
+     No cap here: stacked, it is a row of its own rather than a column trying
+     to match a tall summary beside it. */
   .detail-hero-card { min-height: min(56vh, 420px); }
+  .detail-hero-card { max-height: none; }
   /* The playback bar's stacked layout used to live here. It is a container
      query now — see .playback-card — because the card's width, not the
      viewport's, is what decides whether the three parts fit on one line. */
@@ -4570,14 +4583,12 @@ body:has(.overlay) .fab { display: none; }
   border-top: none;
   border-top-left-radius: 0;
   border-top-right-radius: 0;
-  min-height: 60px;
-  /* The floor TabPanel holds during a switch is eased off rather than dropped,
-     so a shorter tab settles instead of snapping. Growing is not animated —
-     content arriving should appear at once. */
-  transition: min-height 0.22s ease;
-}
-@media (prefers-reduced-motion: reduce) {
-  .detail-tab-panel { transition: none; }
+  /* Tall enough that the three panels are roughly the same size, which is what
+     stops a switch from moving the page at all. This is the last section on
+     the page, so a panel that shrinks makes the document shorter and drags the
+     scroll position with it — see TabPanel. Whitespace under a short tab costs
+     nothing here, because there is nothing below it to push down. */
+  min-height: 240px;
 }
 
 /* ── Gallery ──────────────────────────────────────────────────────────── */
@@ -4710,18 +4721,21 @@ body:has(.overlay) .fab { display: none; }
    for it is a row you miss. */
 .social-picker-wrap { position: relative; display: inline-flex; }
 .social-picker-btn.open { color: var(--primary); border-color: var(--primary); }
+/* A grid of six columns, so the set reads as rows rather than as one long
+   strip: the first row is the six that mean "well done", the second the ones
+   that are a joke. A pill shape stopped making sense at two rows. */
 .social-picker {
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
   z-index: 5;
-  display: flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: repeat(6, auto);
   gap: 2px;
-  padding: 3px 6px;
+  padding: 5px;
   background: var(--bg-2);
   border: 1px solid var(--border-strong);
-  border-radius: 999px;
+  border-radius: calc(var(--radius) * 1.5);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
 .social-emoji {

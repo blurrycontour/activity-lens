@@ -163,8 +163,16 @@ func TestReactionIsOnePerPerson(t *testing.T) {
 		}
 	}
 
-	if err := svc.SetReaction(ctx, wk.ID, 2, "🚀"); !errors.Is(err, ErrInvalid) {
+	// Deliberately something no plausible future row would add. The first
+	// version of this used a rocket, which promptly became a real reaction and
+	// turned the assertion into a lie — the failure is what caught the clash.
+	if err := svc.SetReaction(ctx, wk.ID, 2, "🦕"); !errors.Is(err, ErrInvalid) {
 		t.Errorf("off-list emoji err = %v, want ErrInvalid", err)
+	}
+	// The allowlist is what the picker offers, so an empty or free-text value
+	// must not slip through either.
+	if err := svc.SetReaction(ctx, wk.ID, 2, "not an emoji"); !errors.Is(err, ErrInvalid) {
+		t.Errorf("free text err = %v, want ErrInvalid", err)
 	}
 	// Clearing something that is not there is the wanted state already, not an
 	// error — a double tap must not fail.

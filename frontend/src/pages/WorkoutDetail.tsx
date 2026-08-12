@@ -358,53 +358,56 @@ function wantsTabScroll(): boolean {
 /**
  * The tab body, which does not collapse when the tab changes.
  *
- * Switching used to drop the page to nothing and then push it back out: the
- * panel's contents are lazily loaded and then fetch their own data, so for a
- * moment there is a spinner where a gallery used to be, and everything below
- * jumps up and back down. The content is not the problem — the height is.
+ * Switching used to drop the page to nothing and push it back out: the panel's
+ * contents are lazily loaded and then fetch their own data, so for a moment
+ * there is a spinner where a gallery used to be. The content is not the
+ * problem — the height is.
  *
- * So the panel holds the height the last tab occupied while the next one
- * arrives, and eases off it afterwards. Measured rather than guessed, because
- * a fixed minimum is either too tall for the notes or too short for a gallery.
- * The floor is released on a timer rather than on a load event, because there
- * is no single event to wait for — a lazy chunk, then a request, then images —
- * and holding a little too long is invisible while releasing too early is the
- * jump this exists to remove.
+ * Two things keep it still, and the second is the one that was missing:
+ *
+ *   - the panel holds the height the last tab occupied while the next one
+ *     arrives, measured off the live DOM at the moment of the switch rather
+ *     than from an observer's last asynchronous reading;
+ *   - every panel is at least as tall as a floor set in CSS, so switching
+ *     between them moves very little in the first place.
+ *
+ * That second one is what the first was missing. This is the last section on
+ * the page, so when the panel shrinks the document gets shorter and a reader
+ * scrolled near the bottom has their scroll position clamped — which does not
+ * read as a layout shift, it reads as the page sliding under them. Bounding
+ * how much any tab can differ from its neighbour bounds that to nothing.
+ *
+ * The release is deliberately not animated. A min-height easing down half a
+ * second after the tab changed is motion with no cause on screen; if it
+ * happens at all it should happen with the switch that asked for it.
  */
 function TabPanel({ tabKey, children }: { tabKey: string; children: React.ReactNode }) {
   const box = useRef<HTMLDivElement>(null)
-  const natural = useRef(0)
   const [floor, setFloor] = useState(0)
   const [held, setHeld] = useState(tabKey)
 
   // Set during render, not in an effect. From an effect the floor arrives one
   // commit late, so the browser paints a frame with the panel collapsed and
-  // then a frame with it propped back up — which is a page that visibly jumps
-  // and, if you were scrolled down, takes the scroll position with it. React
-  // re-renders this component immediately on a render-phase update, so nothing
-  // in between is ever shown.
+  // then a frame with it propped back up — which takes the scroll position
+  // with it. React re-renders this component immediately on a render-phase
+  // update, so nothing in between is ever shown.
   if (held !== tabKey) {
     setHeld(tabKey)
-    setFloor(natural.current)
+    // Read straight off the element rather than from a ResizeObserver: this
+    // runs before the new children are committed, so the DOM still holds the
+    // outgoing tab's real height, while the observer's last reading may be a
+    // frame or two stale.
+    setFloor(box.current?.offsetHeight ?? 0)
   }
 
+  // Long enough to cover a lazy chunk and the request behind it, short enough
+  // that a tab which genuinely is shorter settles while the switch still
+  // explains it.
   useEffect(() => {
     if (!floor) return
-    const t = setTimeout(() => setFloor(0), 600)
+    const t = setTimeout(() => setFloor(0), 400)
     return () => clearTimeout(t)
   }, [floor, tabKey])
-
-  // Measured on the inner box, which never carries the floor — measuring the
-  // element the minimum is applied to would only read the minimum back.
-  useEffect(() => {
-    const el = box.current
-    if (!el) return
-    const obs = new ResizeObserver(() => {
-      if (el.offsetHeight > 0) natural.current = el.offsetHeight
-    })
-    obs.observe(el)
-    return () => obs.disconnect()
-  }, [])
 
   return (
     <div className="card detail-tab-panel" style={floor ? { minHeight: floor } : undefined}>

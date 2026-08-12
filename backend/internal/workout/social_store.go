@@ -57,9 +57,21 @@ const MaxCommentLength = 2000
 //
 // A fixed list rather than any emoji the client sends: it keeps the row width
 // predictable, makes the picker and the stored value the same vocabulary, and
-// means the reaction bar can never carry text somebody typed. Order is the
-// order they appear in the picker.
-var ReactionEmojis = []string{"👏", "🔥", "💪", "🎉", "❤️", "😮"}
+// means the reaction bar can never carry text somebody typed.
+//
+// Order is the order they appear in the picker, six to a row: the first row is
+// the ones that mean "well done", the second the ones that are a joke. Both are
+// worth having — a training log among friends is not only for congratulating —
+// and keeping them in one list rather than two means nothing downstream has to
+// know which is which.
+//
+// Appending is safe; removing one is not. A stored reaction naming an emoji no
+// longer here would stop being returned by the picker's own vocabulary and
+// quietly vanish from the tally, so anything dropped needs a migration.
+var ReactionEmojis = []string{
+	"👏", "🔥", "💪", "🎉", "❤️", "😮",
+	"💯", "🐐", "🚀", "🥵", "🌲", "💩",
+}
 
 // ValidReaction reports whether emoji is one this app stores.
 func ValidReaction(emoji string) bool {
