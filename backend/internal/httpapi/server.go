@@ -107,7 +107,10 @@ func (s *Server) Handler() (http.Handler, error) {
 	root := http.NewServeMux()
 	// CORS wraps the API only. The SPA is same-origin by definition, and the
 	// native app never loads it over the network — it ships its own copy.
-	root.Handle("/api/", s.withCORS(withAccessLog(api)))
+	// withJSONTransfer sits inside the access log so the log records the status
+	// actually sent — a 304 should read as a 304 — and inside CORS so the
+	// preflight response, which has no body, never reaches it. See transfer.go.
+	root.Handle("/api/", s.withCORS(withAccessLog(withJSONTransfer(api))))
 	root.Handle("/", spa)
 	return root, nil
 }
