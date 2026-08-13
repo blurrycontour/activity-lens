@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Lock, LogOut, Monitor, ShieldCheck } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
+import { useRefreshHandler } from '../../context/RefreshContext'
 import { api, ApiError, type SessionInfo } from '../../lib/api'
 import PasswordInput from '../../components/PasswordInput'
 import SettingsCard from '../../components/SettingsCard'
@@ -44,9 +45,14 @@ export default function SecuritySettings() {
     } finally { setPwBusy(false) }
   }
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
     try { setSessions((await api.listSessions()).sessions) } catch { /* keep the old list */ }
-  }
+  }, [])
+
+  // This page fetches its own sessions, so it has to opt into the pull gesture
+  // itself — the shared workout cache is the only thing registered by default,
+  // and pulling here did nothing at all.
+  useRefreshHandler(refresh)
 
   async function signOutOthers() {
     setBusy(true)

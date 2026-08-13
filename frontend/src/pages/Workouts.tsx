@@ -36,6 +36,8 @@ const RESUME_KEY = 'workouts.resume'
 const PAGE_SIZE = 20
 
 interface WorkoutsProps {
+  /** Opens another member's profile, from the byline on their workout. */
+  onOpenUser?: (id: number) => void
   onSelect: (w: Workout) => void
   onImport: () => void
 }
@@ -52,7 +54,7 @@ const SCOPES: { id: Scope; label: string; icon: React.ReactNode }[] = [
   { id: 'public', label: 'Public', icon: <Globe size={15} /> },
 ]
 
-export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
+export default function Workouts({ onSelect, onImport, onOpenUser }: WorkoutsProps) {
   const { workouts, loading, refresh } = useWorkouts()
   // Opening a workout unmounts this page, so every filter lived exactly as long
   // as it took to look at one result and come back. Kept in sessionStorage
@@ -595,10 +597,16 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
                 // than competing with the pace figure for the trailing cluster.
                 footer={scope !== 'mine' && w.owner
                   ? (
-                    <span className="owner-byline">
+                    /* stopPropagation because the row itself opens the
+                       workout, and this opens the person who owns it. */
+                    <button
+                      type="button"
+                      className="owner-byline owner-byline-link"
+                      onClick={e => { e.stopPropagation(); onOpenUser?.(w.owner!.id) }}
+                    >
                       <UserAvatar user={w.owner} size={18} />
                       <span>{userLabel(w.owner)}</span>
-                    </span>
+                    </button>
                   )
                   : undefined}
               />

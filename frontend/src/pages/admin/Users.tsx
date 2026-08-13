@@ -1,14 +1,14 @@
 import { useState } from 'react'
-import { Check, ChevronRight, Lock, Pencil, Plus, Trash2, X as XIcon } from 'lucide-react'
+import { ChevronRight, Lock, Plus, X as XIcon } from 'lucide-react'
 import { api, ApiError, type AdminUser } from '../../lib/api'
 import { useAuth } from '../../context/AuthContext'
 import PasswordInput from '../../components/PasswordInput'
-import ConfirmDialog from '../../components/ConfirmDialog'
+import UserAvatar from '../../components/UserAvatar'
 import SettingsCard from '../../components/SettingsCard'
 import Field from '../../components/Field'
 import StatusMsg, { type Msg } from '../../components/StatusMsg'
 import Dropdown, { type DropdownOption } from '../../components/Dropdown'
-import UserDetailAdmin, { fmtBytes } from './UserDetail'
+import { fmtBytes } from './UserDetail'
 import BroadcastAdmin from './Broadcast'
 
 const ROLES = ['administrator', 'editor', 'reader']
@@ -28,19 +28,14 @@ function fmtDate(iso: string) {
 interface Props {
   users: AdminUser[]
   onChanged: () => void
+  /** Opens one account. The hub owns which, so the page header can carry the
+      back arrow rather than this page growing a second one. */
+  onOpenUser: (id: number) => void
 }
 
-export default function UsersAdmin({ users, onChanged }: Props) {
+export default function UsersAdmin({ users, onChanged, onOpenUser }: Props) {
   const { user: me } = useAuth()
-  /** The account being inspected, or null for the list. */
-  const [detailId, setDetailId] = useState<number | null>(null)
   const [showCreate, setShowCreate] = useState(false)
-  const [editingId, setEditingId] = useState<number | null>(null)
-  const [draftRole, setDraftRole] = useState('')
-  const [draftActive, setDraftActive] = useState(true)
-  const [msg, setMsg] = useState<Msg | null>(null)
-  const [pendingDelete, setPendingDelete] = useState<AdminUser | null>(null)
-  const [deleting, setDeleting] = useState(false)
 
   const activeAdminCount = users.filter(u => u.role === 'administrator' && u.isActive).length
 
@@ -60,45 +55,6 @@ export default function UsersAdmin({ users, onChanged }: Props) {
     return u.role === 'administrator' && u.isActive && activeAdminCount <= 1
   }
 
-  function startEdit(u: AdminUser) {
-    setDraftRole(u.role)
-    setDraftActive(u.isActive)
-    setMsg(null)
-    setEditingId(u.id)
-  }
-
-  async function saveEdit(u: AdminUser) {
-    setMsg(null)
-    try {
-      await api.updateUser(u.id, { role: draftRole, isActive: draftActive })
-      setEditingId(null)
-      onChanged()
-    } catch (e) {
-      setMsg({ ok: false, text: e instanceof ApiError ? e.message : 'Update failed' })
-    }
-  }
-
-  async function confirmDelete() {
-    if (!pendingDelete) return
-    setDeleting(true); setMsg(null)
-    try {
-      await api.deleteUser(pendingDelete.id)
-      setPendingDelete(null)
-      onChanged()
-    } catch (e) {
-      setMsg({ ok: false, text: e instanceof ApiError ? e.message : 'Delete failed' })
-    } finally { setDeleting(false) }
-  }
-
-  if (detailId !== null) {
-    return (
-      <UserDetailAdmin
-        userId={detailId}
-        onBack={() => { setDetailId(null); onChanged() }}
-      />
-    )
-  }
-
   return (
     <>
       <SettingsCard
@@ -116,118 +72,63 @@ export default function UsersAdmin({ users, onChanged }: Props) {
         }
       >
         {showCreate && <CreateUser onDone={() => { setShowCreate(false); onChanged() }} onCancel={() => setShowCreate(false)} />}
-        <StatusMsg msg={msg} />
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {users.map(u => {
-            const editing = editingId === u.id
-            return (
-              <div key={u.id} className="user-row">
-                <div className="user-row-who">
-                  <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {u.displayName || u.username}
-                  </div>
-                  <div className="field-hint" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{u.email}</span>
-                    {!u.hasPassword && (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
-                        <Lock size={10} /> SSO
-                      </span>
+        <div className="admin-user-list">
+          {users.map(u => (
+            /* The whole row opens the account. Editing a role, deactivating and
+               deleting all moved onto that page: five controls crowded into a
+               scannable list is what made this incoherent, and none of them is
+               something you do without looking at the account first. */
+            <button
+              key={u.id}
+              type="button"
+              className="admin-user-row"
+              onClick={() => onOpenUser(u.id)}
+            >
+              <UserAvatar user={u} size={36} />
+
+              <span className="admin-user-main">
+                <span className="admin-user-name">
+                  {u.displayName || u.username}
+                  {u.id === me?.id && <span className="admin-user-you">You</span>}
+                  {!u.hasPassword && (
+                    <span className="admin-user-sso" title="Signs in through the identity provider">
+                      <Lock size={10} /> SSO
+                    </span>
+                  )}
+                </span>
+                <span className="admin-user-email">{u.email}</span>
+                {/* At list resolution: enough to spot the account worth
+                    opening. Absent stats mean the totals could not be
+                    computed, which is not the same as zero. */}
+                {u.stats && (
+                  <span className="admin-user-stats">
+                    <span>{u.stats.workouts} workouts</span>
+                    <span>{fmtBytes(u.stats.photoBytes + u.stats.originalBytes)}</span>
+                    {(u.sessions ?? 0) > 0 && (
+                      <span>{u.sessions} {u.sessions === 1 ? 'device' : 'devices'}</span>
                     )}
-                  </div>
-                </div>
+                  </span>
+                )}
+              </span>
 
-                <div className="user-row-role">
-                  {editing ? (
-                    <Dropdown
-                      block
-                      value={draftRole}
-                      options={ROLE_OPTIONS}
-                      onChange={setDraftRole}
-                      ariaLabel="Role"
-                    />
-                  ) : (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, textTransform: 'capitalize' }}>
-                      {u.role}
-                      {/* Marks the account the instance cannot afford to lose.
-                          Purely informational — an icon rather than a tooltip
-                          alone so it still reads on a touch device. */}
-                      {isLastActiveAdmin(u) && (
-                        <span title="The only administrator who can sign in. Add a second one before changing this account." style={{ display: 'inline-flex', color: 'var(--text-3)' }}>
-                          <Lock size={11} />
-                        </span>
-                      )}
+              <span className="admin-user-tags">
+                <span className="badge" style={{ textTransform: 'capitalize' }}>
+                  {u.role}
+                  {/* Marks the account the instance cannot afford to lose. */}
+                  {isLastActiveAdmin(u) && (
+                    <span title="The only administrator who can sign in. Add a second one before changing this account.">
+                      <Lock size={10} />
                     </span>
                   )}
-                </div>
+                </span>
+                {!u.isActive && <span className="badge badge-off">Inactive</span>}
+                <span className="admin-user-seen">{fmtDate(u.lastLoginAt)}</span>
+              </span>
 
-                <div className="user-row-state">
-                  {editing ? (
-                    <label className="switch">
-                      <input type="checkbox" checked={draftActive} onChange={e => setDraftActive(e.target.checked)} />
-                      <span className="switch-track" />
-                      {draftActive ? 'Active' : 'Inactive'}
-                    </label>
-                  ) : (
-                    <span className={`badge ${u.isActive ? 'badge-ok' : 'badge-off'}`}>
-                      {u.isActive ? 'Active' : 'Inactive'}
-                    </span>
-                  )}
-                </div>
-
-                {/* What this account amounts to, at list resolution: enough to
-                    spot the one worth opening. Absent stats mean the totals
-                    could not be computed, which is not the same as zero. */}
-                <div className="user-row-seen field-hint">
-                  <div>{fmtDate(u.lastLoginAt)}</div>
-                  {u.stats && (
-                    <div style={{ marginTop: 2 }}>
-                      {u.stats.workouts} workouts · {fmtBytes(u.stats.photoBytes + u.stats.originalBytes)}
-                      {(u.sessions ?? 0) > 0 && ` · ${u.sessions} ${u.sessions === 1 ? 'device' : 'devices'}`}
-                    </div>
-                  )}
-                </div>
-
-                <div className="user-row-actions">
-                  {!editing && (
-                    <button className="btn btn-ghost" onClick={() => setDetailId(u.id)} title="Details">
-                      <ChevronRight size={14} />
-                    </button>
-                  )}
-                  {editing ? (
-                    <>
-                      <button className="btn btn-primary" onClick={() => saveEdit(u)} title="Save"><Check size={14} /></button>
-                      <button className="btn btn-ghost" onClick={() => setEditingId(null)} title="Cancel"><XIcon size={14} /></button>
-                    </>
-                  ) : u.id === me?.id ? (
-                    /* Your own row carries no actions at all. Neither field is
-                       changeable on it: an administrator cannot take their own
-                       role away, cannot deactivate themselves, and cannot delete
-                       themselves from here — account deletion lives under
-                       Settings, behind an emailed confirmation code. Rendering
-                       the buttons disabled, or worse enabled, only invites a
-                       click that can end in an error. */
-                    <span className="field-hint">This is you</span>
-                  ) : (
-                    <>
-                      <button className="btn btn-ghost" onClick={() => startEdit(u)} title="Edit user" aria-label={`Edit ${u.username}`}>
-                        <Pencil size={14} />
-                      </button>
-                      <button
-                        className="btn btn-ghost"
-                        onClick={() => setPendingDelete(u)}
-                        title="Delete user"
-                        aria-label={`Delete ${u.username}`}
-                        style={{ color: 'var(--danger)' }}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            )
-          })}
+              <ChevronRight size={16} className="admin-user-chevron" />
+            </button>
+          ))}
         </div>
       </SettingsCard>
 
@@ -235,18 +136,6 @@ export default function UsersAdmin({ users, onChanged }: Props) {
           is what an admin came here for. */}
       <BroadcastAdmin recipients={users.filter(u => u.isActive && u.id !== me?.id).length} />
 
-      {pendingDelete && (
-        <ConfirmDialog
-          title={`Delete ${pendingDelete.displayName || pendingDelete.username}?`}
-          message="Their account and all of their workout data are removed. This cannot be undone."
-          confirmLabel="Delete user"
-          busyLabel="Deleting…"
-          busy={deleting}
-          danger
-          onConfirm={() => void confirmDelete()}
-          onCancel={() => setPendingDelete(null)}
-        />
-      )}
     </>
   )
 }

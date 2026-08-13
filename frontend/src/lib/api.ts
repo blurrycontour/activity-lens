@@ -635,6 +635,20 @@ export const api = {
     request<AdminSettings>('/api/admin/settings/storage', { method: 'PUT', body: payload }),
   testEmail: (to: string) =>
     request<{ status: string; to: string }>('/api/admin/settings/smtp/test', { method: 'POST', body: { to } }),
+  /**
+   * Another member, and the workouts of theirs you can see.
+   *
+   * The list is the intersection of what they have shared with you and what
+   * they have made public — the server builds it from the two feeds rather
+   * than by owner, so this can never surface a workout that was not already
+   * yours to read.
+   */
+  getUserProfile: (id: number) => request<{
+    user: { id: number; username: string; displayName: string; avatarPath: string }
+    sharedWithMe: number
+    public: number
+    workouts: import('../data/workouts').Workout[]
+  }>(`/api/users/${id}`),
   listAdminUsers: () => request<{ users: AdminUser[] }>('/api/admin/users'),
   getAdminUser: (id: number) => request<AdminUserDetail>(`/api/admin/users/${id}`),
   revokeUserSession: (id: number, sessionId: string) =>

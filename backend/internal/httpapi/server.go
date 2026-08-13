@@ -233,6 +233,8 @@ func (s *Server) apiRoutes() http.Handler {
 	mux.Handle("GET /api/feed/shared", s.authed(s.handleFeedShared))
 	// Minimal user directory backing the share picker.
 	mux.Handle("GET /api/users", s.authed(s.handleListUserDirectory))
+	// Another member, and the workouts of theirs you can already see.
+	mux.Handle("GET /api/users/{id}", s.authed(s.handleUserProfile))
 
 	// --- Notifications (authenticated) ---
 	mux.Handle("GET /api/notifications", s.authed(s.handleListNotifications))

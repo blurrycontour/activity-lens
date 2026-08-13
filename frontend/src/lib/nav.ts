@@ -8,6 +8,15 @@ export type Page =
   | 'help'
   | 'settings'
   | 'admin'
+  /**
+   * Another member's profile, at /users/{id}.
+   *
+   * Not in MOBILE_PAGES or the sidebar: there is no "users" hub to navigate
+   * to, only individual people reached from a shared or public workout. It
+   * owns a route so the back gesture returns to the workout you came from and
+   * so a profile can be linked.
+   */
+  | 'users'
 
 /**
  * The primary pages, in order. Mobile swipe navigation walks this list
@@ -35,7 +44,7 @@ export const BOTTOM_BAR_PAGES: Page[] = ['dashboard', 'workouts', 'analysis', 'c
 export const MORE_PAGES: Page[] = ['map', 'equipment', 'help']
 
 /** Every page that owns a route, including the ones reached from the user menu. */
-export const PAGES: Page[] = [...DESKTOP_PAGES, 'settings', 'admin']
+export const PAGES: Page[] = [...DESKTOP_PAGES, 'settings', 'admin', 'users']
 
 /**
  * Settings and admin are hubs: each category is a page of its own at
@@ -73,7 +82,7 @@ function sectionsFor(page: Page): readonly string[] {
  * component unmounts and any id it was holding in local state goes with it.
  * Coming back then landed on the inventory rather than the gear you left.
  */
-const ID_SECTION_PAGES: readonly Page[] = ['equipment']
+const ID_SECTION_PAGES: readonly Page[] = ['equipment', 'users']
 
 /**
  * Routes that no longer exist, pointing at whatever absorbed them. Timeline was

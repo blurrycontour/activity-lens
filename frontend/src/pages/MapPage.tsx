@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as maplibregl from 'maplibre-gl'
 import { Flame, Loader2, Maximize2, Route as RouteIcon } from 'lucide-react'
+import { useRefreshHandler } from '../context/RefreshContext'
 import PageHeader from '../components/PageHeader'
 import ExpandModal from '../components/ExpandModal'
 import TypeDropdown from '../components/TypeDropdown'
@@ -160,6 +161,9 @@ export default function MapPage() {
   loadRef.current = load
 
   useEffect(() => { setLoading(true); void load() }, [load])
+  // Its own fetch, so its own registration; without it a pull on the map is a
+  // gesture that does nothing.
+  useRefreshHandler(load)
 
   // The backfill runs in the background on the server, so a first visit on a
   // large library shows a growing map rather than a wrong one. Polling stops

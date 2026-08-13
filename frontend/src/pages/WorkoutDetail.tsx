@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { type RecalcParts, type Workout, type WorkoutType, fmtClock, fmtDuration, fmtDist, fmtPace, TYPE_COLOR } from '../data/workouts'
 import TypeIcon from '../components/TypeIcon'
@@ -38,6 +38,7 @@ const RouteMap = lazy(() => import('../components/RouteMap'))
 import ExpandModal from '../components/ExpandModal'
 import TabStrip, { type TabStripItem } from '../components/TabStrip'
 import ShareBadge from '../components/ShareBadge'
+import { useRefreshHandler } from '../context/RefreshContext'
 import { inlineTicks } from '../lib/chartTicks'
 const WorkoutGallery = lazy(() => import('../components/WorkoutGallery'))
 const WorkoutSocial = lazy(() => import('../components/WorkoutSocial'))
@@ -59,6 +60,8 @@ interface WorkoutDetailProps {
   onBack: () => void
   /** Opens Settings, for the weather panel's "turn it on" link. */
   onOpenSettings?: () => void
+  /** Opens another member's profile, from the byline on their workout. */
+  onOpenUser?: (id: number) => void
 }
 
 /** Small marker shown next to stat values that are derived from recorded
@@ -528,7 +531,7 @@ function preparePlot<T extends { t: number }>(data: T[], key: string): PlotSerie
   }
 }
 
-export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSettings }: WorkoutDetailProps) {
+export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSettings, onOpenUser }: WorkoutDetailProps) {
   const { updateWorkout, removeWorkout, workouts: library } = useWorkouts()
   const { user } = useAuth()
   const [w, setW] = useState(w0)
@@ -590,6 +593,13 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // The page owns this workout, so a pull has to refetch it — otherwise the
+  // gesture does nothing on the one screen where a comment or a photo someone
+  // else just added is exactly what you pulled to see.
+  useRefreshHandler(useCallback(async () => {
+    try { setW(await api.getWorkout(w0.id)) } catch { /* keep what is on screen */ }
+  }, [w0.id]))
 
   const [editing, setEditing] = useState(false)
   const [editName, setEditName] = useState(w.name)
@@ -1376,8 +1386,14 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
               <span className={`badge tag-${w.type.toLowerCase()}`}><TypeIcon type={w.type} size={12} /> {w.type}</span>
               {/* The same mark the list row carries. It was only ever on the
                   list, which meant the one page you would open to check
-                  whether a workout is shared was the one that did not say. */}
-              <ShareBadge workout={w} />
+                  whether a workout is shared was the one that did not say.
+
+                  Owner only, and that is the whole meaning of it: the badge
+                  says "you have shared this". On someone else's workout the
+                  server sets `shared` unconditionally — that is how the Social
+                  tab knows it has an audience — so rendering it here told you
+                  that a workout you are merely a guest on is one you shared. */}
+              {!readOnly && <ShareBadge workout={w} />}
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
               {new Date(w.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
@@ -1385,11 +1401,18 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             {/* Its own line rather than sharing one with the date: a long
                 display name would otherwise squeeze the date or wrap raggedly. */}
             {readOnly && w.owner && (
-              <span className="owner-byline" style={{ marginTop: 4 }}>
+              /* Opens their profile: the workouts of theirs you can see,
+                 gathered by person rather than by recency. */
+              <button
+                type="button"
+                className="owner-byline owner-byline-link"
+                style={{ marginTop: 4 }}
+                onClick={() => onOpenUser?.(w.owner!.id)}
+              >
                 <span>Shared by</span>
                 <UserAvatar user={w.owner} size={20} />
                 <span>{userLabel(w.owner)}</span>
-              </span>
+              </button>
             )}
           </div>
           <div style={{ marginLeft: 'auto', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10 }}>

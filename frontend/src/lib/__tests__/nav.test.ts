@@ -54,6 +54,14 @@ describe('parseLocation', () => {
     expect(parseLocation('/equipment')).toMatchObject({ page: 'equipment', section: null })
   })
 
+  // A profile is reached from a shared workout and owns a route so the back
+  // gesture returns there. Same open-ended section as equipment: the id is a
+  // user, and there is no list of valid ones to check against.
+  it('reads a user id as a profile route', () => {
+    expect(parseLocation('/users/42')).toMatchObject({ page: 'users', section: '42', workoutId: null })
+    expect(parseLocation(pathForPage('users', '7'))).toMatchObject({ page: 'users', section: '7' })
+  })
+
   it('round-trips every declared category', () => {
     for (const s of SETTINGS_SECTIONS) {
       expect(parseLocation(pathForPage('settings', s))).toMatchObject({ page: 'settings', section: s })

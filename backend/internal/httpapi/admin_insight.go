@@ -166,12 +166,15 @@ func (s *Server) handleBroadcast(w http.ResponseWriter, r *http.Request) {
 		}
 		// No dedupe key: two broadcasts with the same words are two messages,
 		// and an admin repeating themselves is usually doing it on purpose.
+		// No icon. Icon carries the avatar of whoever caused an event, and a
+		// broadcast is from the instance rather than from a person — showing
+		// the admin's face makes an announcement look like a message from one
+		// user to another. The client draws its own mark for this kind.
 		s.notify.Notify(r.Context(), notify.Event{
 			UserID: u.ID,
 			Kind:   notify.KindBroadcast,
 			Title:  title,
 			Body:   body,
-			Icon:   actor.AvatarPath,
 		})
 		sent++
 	}

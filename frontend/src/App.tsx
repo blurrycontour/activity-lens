@@ -19,6 +19,7 @@ import WorkoutDetail from './pages/WorkoutDetail'
 import Consistency from './pages/Consistency'
 import Analysis from './pages/Analysis'
 import Equipment from './pages/Equipment'
+import UserProfile from './pages/UserProfile'
 import Help from './pages/Help'
 import MapPage from './pages/MapPage'
 import Settings from './pages/settings'
@@ -565,6 +566,7 @@ export default function App() {
             workout={selectedWorkout}
             accent={accent}
             onBack={() => selectWorkout(null)}
+            onOpenUser={id => openSection('users', String(id))}
             onOpenSettings={() => navigate('settings')}
           />
         ) : openingWorkout ? (
@@ -578,13 +580,24 @@ export default function App() {
         ) : page === 'dashboard' ? (
           <Dashboard onSelect={selectWorkout} />
         ) : page === 'workouts' ? (
-          <Workouts onSelect={selectWorkout} onImport={() => setShowImport(true)} />
+          <Workouts
+            onSelect={selectWorkout}
+            onImport={() => setShowImport(true)}
+            onOpenUser={id => openSection('users', String(id))}
+          />
         ) : page === 'analysis' ? (
           <Analysis />
         ) : page === 'map' ? (
           <MapPage />
         ) : page === 'consistency' ? (
           <Consistency />
+        ) : page === 'users' ? (
+          // section carries the user id; see ID_SECTION_PAGES in nav.ts.
+          <UserProfile
+            id={Number(section)}
+            onBack={() => window.history.back()}
+            onSelect={selectWorkout}
+          />
         ) : page === 'equipment' ? (
           <Equipment
             detail={section}

@@ -1,11 +1,19 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ArrowLeft, Dumbbell, HardDrive, Images, LogOut, Watch } from 'lucide-react'
+import { Dumbbell, HardDrive, Images, LogOut, Trash2, Watch } from 'lucide-react'
 import { api, ApiError, type AdminUserDetail, type UserStats } from '../../lib/api'
+import { useRefreshHandler } from '../../context/RefreshContext'
 import SettingsCard from '../../components/SettingsCard'
 import SessionCard from '../../components/SessionCard'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import StatusMsg, { type Msg } from '../../components/StatusMsg'
 import UserAvatar from '../../components/UserAvatar'
+import Field from '../../components/Field'
+import Dropdown, { type DropdownOption } from '../../components/Dropdown'
+
+const ROLE_OPTIONS: DropdownOption<string>[] = ['administrator', 'editor', 'reader'].map(r => ({
+  value: r,
+  label: r.charAt(0).toUpperCase() + r.slice(1),
+}))
 
 /** Bytes as something a person can compare at a glance. */
 export function fmtBytes(n: number): string {
@@ -50,25 +58,40 @@ function Stat({ icon, label, value, sub }: {
  * unmount to survive and the back button is the one on screen. Adding a URL
  * would buy a linkable admin page nobody links to.
  */
-export default function UserDetailAdmin({ userId, onBack }: {
+export default function UserDetailAdmin({ userId, onBack, onChanged, isSelf, isLastAdmin }: {
   userId: number
   onBack: () => void
+  /** Tells the list to refetch after a role change or a deletion. */
+  onChanged: () => void
+  /** Your own account: role, status and deletion are all closed here. */
+  isSelf: boolean
+  /** The only administrator who can still sign in. */
+  isLastAdmin: boolean
 }) {
   const [data, setData] = useState<AdminUserDetail | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [msg, setMsg] = useState<Msg | null>(null)
   const [revoking, setRevoking] = useState<string | null>(null)
   const [pending, setPending] = useState<string | null>(null)
+  const [role, setRole] = useState('')
+  const [active, setActive] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const load = useCallback(async () => {
     try {
-      setData(await api.getAdminUser(userId))
+      const d = await api.getAdminUser(userId)
+      setData(d)
+      setRole(d.user.role)
+      setActive(d.user.isActive)
       setErr(null)
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : 'Could not load this user')
     }
   }, [userId])
   useEffect(() => { void load() }, [load])
+  useRefreshHandler(load)
 
   async function revoke(sessionId: string) {
     setRevoking(sessionId)
@@ -85,29 +108,46 @@ export default function UserDetailAdmin({ userId, onBack }: {
     }
   }
 
-  if (err) {
-    return (
-      <>
-        <button className="btn btn-ghost" onClick={onBack} style={{ marginBottom: 16 }}>
-          <ArrowLeft size={16} /> Back
-        </button>
-        <div className="settings-card danger"><span className="status-msg err">{err}</span></div>
-      </>
-    )
+  async function saveRole() {
+    setSaving(true)
+    setMsg(null)
+    try {
+      await api.updateUser(userId, { role, isActive: active })
+      await load()
+      onChanged()
+      setMsg({ ok: true, text: 'Saved' })
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof ApiError ? e.message : 'Could not save' })
+    } finally {
+      setSaving(false)
+    }
   }
+
+  async function remove() {
+    setDeleting(true)
+    try {
+      await api.deleteUser(userId)
+      onChanged()
+      onBack()
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof ApiError ? e.message : 'Could not delete' })
+      setDeleting(false)
+      setConfirmDelete(false)
+    }
+  }
+
+  if (err) return <div className="settings-card danger"><span className="status-msg err">{err}</span></div>
   if (!data) return <div className="field-hint" style={{ padding: 24 }}>Loading…</div>
 
   const u = data.user
   const s: UserStats = data.stats
   const disk = s.photoBytes + s.originalBytes
 
+  const dirty = role !== u.role || active !== u.isActive
+
   return (
     <>
-      <button className="btn btn-ghost" onClick={onBack} style={{ marginBottom: 16 }}>
-        <ArrowLeft size={16} /> Back to users
-      </button>
-
-      <SettingsCard title={u.displayName || u.username}>
+      <SettingsCard title="Account">
         <div className="admin-user-head">
           <UserAvatar user={u} size={44} />
           <div style={{ minWidth: 0, flex: 1 }}>
@@ -121,6 +161,41 @@ export default function UserDetailAdmin({ userId, onBack }: {
             </span>
           </div>
         </div>
+
+        {/* Your own account is read-only here, and deliberately: an
+            administrator cannot take their own role away, deactivate
+            themselves, or delete themselves from this screen — account
+            deletion lives under Settings behind an emailed code. Saying so
+            beats rendering controls that can only end in an error. */}
+        {isSelf ? (
+          <p className="field-hint" style={{ marginBottom: 4 }}>
+            This is your own account. Role, status and deletion are managed elsewhere.
+          </p>
+        ) : (
+          <>
+            <div className="admin-user-controls">
+              <Field label="Role">
+                <Dropdown block value={role} options={ROLE_OPTIONS} onChange={setRole} ariaLabel="Role" />
+              </Field>
+              <label className="switch">
+                <input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} />
+                <span className="switch-track" />
+                {active ? 'Active' : 'Inactive'}
+              </label>
+            </div>
+            {isLastAdmin && (
+              <p className="field-hint" style={{ marginTop: 8 }}>
+                The only administrator who can sign in. Add a second one before changing this account.
+              </p>
+            )}
+            <div className="settings-actions">
+              <button className="btn btn-primary" onClick={() => void saveRole()} disabled={!dirty || saving}>
+                {saving ? 'Saving…' : 'Save changes'}
+              </button>
+              <StatusMsg msg={msg} />
+            </div>
+          </>
+        )}
 
         <div className="admin-stat-grid">
           <Stat
@@ -152,7 +227,6 @@ export default function UserDetailAdmin({ userId, onBack }: {
       </SettingsCard>
 
       <SettingsCard title={`Signed-in devices (${data.sessions.length})`}>
-        <StatusMsg msg={msg} />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {data.sessions.length === 0 && (
             <span className="field-hint">This account has no active sessions.</span>
@@ -175,6 +249,35 @@ export default function UserDetailAdmin({ userId, onBack }: {
           ))}
         </div>
       </SettingsCard>
+
+      {!isSelf && (
+        <SettingsCard title="Delete account">
+          <p className="field-hint" style={{ marginBottom: 12 }}>
+            Removes “{u.displayName || u.username}” and every workout, photo and piece of gear
+            they own. This cannot be undone.
+          </p>
+          <button
+            className="btn btn-ghost"
+            style={{ color: 'var(--danger)' }}
+            onClick={() => setConfirmDelete(true)}
+          >
+            <Trash2 size={14} /> Delete this account
+          </button>
+        </SettingsCard>
+      )}
+
+      {confirmDelete && (
+        <ConfirmDialog
+          title={`Delete ${u.displayName || u.username}?`}
+          message="Their account and all of their workout data are removed. This cannot be undone."
+          confirmLabel="Delete user"
+          busyLabel="Deleting…"
+          busy={deleting}
+          danger
+          onConfirm={() => void remove()}
+          onCancel={() => setConfirmDelete(false)}
+        />
+      )}
 
       {/* Signing someone else's device out is not something to do by mis-tap,
           and from here it is invisible to whoever it happens to until they are
