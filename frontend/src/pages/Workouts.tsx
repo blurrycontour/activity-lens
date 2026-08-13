@@ -574,7 +574,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
                           shareable; a card is made from what is already here. */}
                       <MenuButton icon={<Share2 size={15} />} label="Share">
                         <button className="options-menu-item" onClick={() => setSharing(w)}>
-                          <Share2 size={14} /> Share link
+                          <Share2 size={14} /> Share
                         </button>
                         <button className="options-menu-item" onClick={() => setCardFor(w)}>
                           <ImageIcon size={14} /> Share card
