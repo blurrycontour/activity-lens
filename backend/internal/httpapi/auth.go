@@ -91,6 +91,9 @@ func (s *Server) handleIssueToken(w http.ResponseWriter, r *http.Request) {
 	if err := s.settings.RecordLogin(r.Context(), user.ID, time.Now()); err != nil {
 		slog.Warn("record last login", "error", err, "user", user.ID)
 	}
+	// So the device appears in Settings -> Sessions already labelled, rather
+	// than waiting for its first throttled request to say what it is.
+	s.RecordSessionClient(r, sid, user.ID)
 	slog.Info("login (token)", "user", user.Username, "user_id", user.ID, "ip", clientIP(r))
 	writeJSON(w, http.StatusOK, map[string]any{
 		"token":     sid,
@@ -191,6 +194,9 @@ func (s *Server) startSession(w http.ResponseWriter, r *http.Request, user *auth
 	if err := s.settings.RecordLogin(r.Context(), user.ID, time.Now()); err != nil {
 		slog.Warn("record last login", "error", err, "user", user.ID)
 	}
+	// So the device appears in Settings -> Sessions already labelled, rather
+	// than waiting for its first throttled request to say what it is.
+	s.RecordSessionClient(r, sid, user.ID)
 	secure := s.secure(r)
 	http.SetCookie(w, s.auth.SessionCookie(sid, exp, secure))
 	csrf, err := s.mw.IssueCSRFCookie(r)

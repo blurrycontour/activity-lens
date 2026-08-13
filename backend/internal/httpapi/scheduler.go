@@ -319,6 +319,19 @@ func (s *Server) sweep(ctx context.Context) {
 	} else if n > 0 {
 		slog.Info("pruned stale push subscriptions", "count", n)
 	}
+
+	// Client rows whose session has been revoked, expired or logged out.
+	// go-authkit deletes those sessions and knows nothing about our table, so
+	// this is the only thing that ever clears them. Same bargain as above: one
+	// DELETE that matches nothing on most passes.
+	if s.sessionClients != nil {
+		if n, err := s.sessionClients.PruneOrphans(ctx); err != nil {
+			slog.Warn("could not prune session clients", "error", err)
+		} else if n > 0 {
+			slog.Info("pruned session clients", "count", n)
+		}
+		s.sessionSeen.sweep(time.Now())
+	}
 }
 
 // trackPass gives simplified routes to workouts that predate the overview map.

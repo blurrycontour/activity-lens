@@ -52,12 +52,12 @@ func (s *Server) mailer(ctx context.Context) (*mail.Sender, error) {
 
 func (s *Server) handleListSessions(w http.ResponseWriter, r *http.Request) {
 	user := httpmw.UserFrom(r)
-	sessions, err := s.auth.ListSessions(r.Context(), user.ID, s.mw.SessionID(r))
+	list, err := s.auth.ListSessions(r.Context(), user.ID, s.mw.SessionID(r))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not load sessions")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"sessions": sessions})
+	writeJSON(w, http.StatusOK, map[string]any{"sessions": s.describeSessions(r.Context(), list)})
 }
 
 func (s *Server) handleRevokeOtherSessions(w http.ResponseWriter, r *http.Request) {

@@ -98,6 +98,11 @@ func (s *Server) purgeUserData(ctx context.Context, user auth.User) {
 	if err := s.feedback.PurgeUser(ctx, user.ID); err != nil {
 		fail("feedback", err)
 	}
+	if s.sessionClients != nil {
+		if err := s.sessionClients.PurgeUser(ctx, user.ID); err != nil {
+			slog.Error("purge session clients", "user_id", user.ID, "error", err)
+		}
+	}
 	if err := s.settings.PurgeUser(ctx, user.ID); err != nil {
 		fail("preferences", err)
 	}

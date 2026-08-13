@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -248,6 +249,12 @@ func (s *Server) handleTestEmail(w http.ResponseWriter, r *http.Request) {
 type adminUser struct {
 	auth.User
 	LastLoginAt string `json:"lastLoginAt"`
+	// Sessions is how many devices this account is signed in on, so the list
+	// can show it without every row carrying the devices themselves.
+	Sessions int `json:"sessions"`
+	// Stats is absent when the totals could not be computed, which the UI shows
+	// as "unknown" rather than as zero workouts.
+	Stats *UserStats `json:"stats,omitempty"`
 }
 
 func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
@@ -261,9 +268,27 @@ func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "could not load login history")
 		return
 	}
+	// Sessions and totals for everyone, in two passes over the whole set
+	// rather than a pair of queries per user — this list shows every account.
+	var stats map[int64]*UserStats
+	if s.adminStats != nil {
+		var err error
+		if stats, err = s.adminStats.All(r.Context()); err != nil {
+			slog.Warn("could not load user stats", "error", err)
+			stats = nil
+		}
+	}
+	counts, err := s.sessionCounts(r.Context(), users)
+	if err != nil {
+		slog.Warn("could not count sessions", "error", err)
+	}
 	out := make([]adminUser, 0, len(users))
 	for _, u := range users {
-		out = append(out, adminUser{User: u, LastLoginAt: last[u.ID]})
+		row := adminUser{User: u, LastLoginAt: last[u.ID], Sessions: counts[u.ID]}
+		if stats != nil {
+			row.Stats = stats[u.ID]
+		}
+		out = append(out, row)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"users": out})
 }

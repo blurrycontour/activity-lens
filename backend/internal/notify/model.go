@@ -42,10 +42,19 @@ const (
 	// recipient's own training, which is why Settings hides its switch from
 	// everyone else rather than offering a toggle that can never fire.
 	KindFeedback Kind = "feedback"
+	// KindBroadcast: a message an administrator sent to everyone on this
+	// instance — a planned outage, a new feature, a request to re-import
+	// something. It has a switch like every other kind and is on by default.
+	//
+	// Mutable on purpose. An unmutable channel is a thing people learn to
+	// resent, and this is a handful of friends sharing a server rather than a
+	// service with terms to serve; an admin who needs to reach someone who has
+	// switched it off has their phone number.
+	KindBroadcast Kind = "broadcast"
 )
 
 // AllKinds is every kind, in the order Settings lists them.
-var AllKinds = []Kind{KindWorkoutShared, KindWorkoutSocial, KindGearWorn, KindGoalMet, KindGoalAtRisk, KindGoalNoneSet, KindWorkoutImported, KindFeedback}
+var AllKinds = []Kind{KindBroadcast, KindWorkoutShared, KindWorkoutSocial, KindGearWorn, KindGoalMet, KindGoalAtRisk, KindGoalNoneSet, KindWorkoutImported, KindFeedback}
 
 // ValidKind reports whether k is a known kind.
 func ValidKind(k Kind) bool {
