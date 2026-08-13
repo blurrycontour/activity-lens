@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 const (
@@ -80,6 +82,10 @@ type UserPrefs struct {
 	// Notify holds the per-kind notification switches. Stored as opaque JSON
 	// so the settings package does not have to know what kinds exist.
 	Notify json.RawMessage `json:"notify,omitempty"`
+	// Tagline is a line the user writes about themselves, shown on their
+	// profile. The one field here that other people read, which is why it is
+	// cleaned on the way in — see CleanTagline.
+	Tagline string `json:"tagline"`
 	// WeatherEnabled controls whether newly imported workouts get their
 	// historical conditions looked up from Open-Meteo.
 	//
@@ -228,9 +234,9 @@ func (s *Store) UserPreferences(ctx context.Context, userID int64) (UserPrefs, e
 	)
 	err := s.db.QueryRowContext(ctx,
 		`SELECT calorie_method, body_weight_kg, sex, birth_year, height_cm, max_hr, resting_hr, threshold_pace, ftp, step_length_cm,
-		        goals, notify_prefs, weekly_goal_count, weekly_goal_type, weekly_goal_min_km, weather_enabled FROM user_prefs WHERE user_id = ?`, userID).
+		        goals, notify_prefs, weekly_goal_count, weekly_goal_type, weekly_goal_min_km, weather_enabled, tagline FROM user_prefs WHERE user_id = ?`, userID).
 		Scan(&v.CalorieMethod, &v.BodyWeightKg, &v.Sex, &v.BirthYear, &v.HeightCm, &v.MaxHR, &v.RestingHR, &v.ThresholdPace, &v.FTP, &v.StepLengthCm,
-			&goalsJSON, &notifyJSON, &legacyCount, &legacyType, &legacyMinKm, &weather)
+			&goalsJSON, &notifyJSON, &legacyCount, &legacyType, &legacyMinKm, &weather, &v.Tagline)
 	if errors.Is(err, sql.ErrNoRows) {
 		return v, nil
 	}
@@ -267,8 +273,8 @@ func (s *Store) SaveUserPreferences(ctx context.Context, userID int64, v UserPre
 	}
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO user_prefs (user_id, calorie_method, body_weight_kg, sex, birth_year, height_cm, max_hr, resting_hr, threshold_pace, ftp, step_length_cm,
-		                         goals, notify_prefs, weather_enabled, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		                         goals, notify_prefs, weather_enabled, tagline, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(user_id) DO UPDATE SET
 		   calorie_method = excluded.calorie_method,
 		   body_weight_kg = excluded.body_weight_kg,
@@ -283,10 +289,72 @@ func (s *Store) SaveUserPreferences(ctx context.Context, userID int64, v UserPre
 		   goals = excluded.goals,
 		   notify_prefs = excluded.notify_prefs,
 		   weather_enabled = excluded.weather_enabled,
+		   tagline = excluded.tagline,
 		   updated_at = excluded.updated_at`,
 		userID, v.CalorieMethod, v.BodyWeightKg, v.Sex, v.BirthYear, v.HeightCm, v.MaxHR, v.RestingHR, v.ThresholdPace, v.FTP, v.StepLengthCm,
-		string(goalsJSON), string(v.Notify), boolToInt(v.WeatherEnabled), time.Now().UTC().Format(time.RFC3339))
+		string(goalsJSON), string(v.Notify), boolToInt(v.WeatherEnabled), CleanTagline(v.Tagline), time.Now().UTC().Format(time.RFC3339))
 	return err
+}
+
+// MaxTaglineLen bounds a tagline. A line about yourself, not a biography: long
+// enough for a sentence with some character in it, short enough that a profile
+// header stays a header.
+const MaxTaglineLen = 140
+
+// CleanTagline trims a tagline to something safe to render on someone else's
+// screen.
+//
+// Control characters go, including newlines: this is displayed as a single line
+// beside a name, and a tagline that spans four rows would push a profile's
+// contents off the fold. The cap counts runes rather than bytes, so an emoji
+// costs one character rather than four.
+func CleanTagline(s string) string {
+	var b strings.Builder
+	for _, r := range strings.TrimSpace(s) {
+		if r == '\n' || r == '\r' || r == '\t' {
+			b.WriteRune(' ')
+			continue
+		}
+		if unicode.IsControl(r) {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	out := strings.Join(strings.Fields(b.String()), " ")
+	if utf8.RuneCountInString(out) > MaxTaglineLen {
+		runes := []rune(out)
+		out = strings.TrimSpace(string(runes[:MaxTaglineLen]))
+	}
+	return out
+}
+
+// Taglines returns the taglines of the given users, keyed by id, skipping the
+// empty ones. One query for a whole page of people, rather than one each.
+func (s *Store) Taglines(ctx context.Context, ids []int64) (map[int64]string, error) {
+	out := map[int64]string{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT user_id, tagline FROM user_prefs WHERE tagline != '' AND user_id IN (?`+
+			strings.Repeat(",?", len(ids)-1)+`)`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query taglines: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var t string
+		if err := rows.Scan(&id, &t); err != nil {
+			return nil, err
+		}
+		out[id] = t
+	}
+	return out, rows.Err()
 }
 
 // RecordLogin stores the last-login timestamp for a user.

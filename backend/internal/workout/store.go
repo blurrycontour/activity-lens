@@ -50,6 +50,9 @@ type Repository interface {
 	ListPublicSummary(ctx context.Context, viewerID int64) ([]Workout, error)
 	// ListSharedWithMeSummary returns workouts shared directly with viewerID.
 	ListSharedWithMeSummary(ctx context.Context, viewerID int64) ([]Workout, error)
+	// ListSharedByMeWithSummary is the mirror: the owner's own workouts that
+	// they have shared with one particular person.
+	ListSharedByMeWithSummary(ctx context.Context, ownerID, recipientID int64) ([]Workout, error)
 	// Gallery photos. Every one of these is scoped by workout id and carries
 	// no permission logic of its own — the caller establishes that the user may
 	// see (to read) or owns (to write) the workout first, exactly as the

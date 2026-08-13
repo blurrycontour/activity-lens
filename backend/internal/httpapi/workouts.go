@@ -779,6 +779,10 @@ type savePrefsRequest struct {
 	// disabling a feature is the worst way for that to fail. Absent means
 	// "leave it on".
 	WeatherEnabled *bool `json:"weatherEnabled"`
+
+	// Cleaned rather than validated: a tagline that is too long or carries a
+	// newline is a tagline to trim, not a save to reject. See CleanTagline.
+	Tagline string `json:"tagline"`
 }
 
 func (s *Server) handleSavePreferences(w http.ResponseWriter, r *http.Request) {
@@ -804,6 +808,7 @@ func (s *Server) handleSavePreferences(w http.ResponseWriter, r *http.Request) {
 		}
 		return n
 	}
+	tagline := settings.CleanTagline(req.Tagline)
 	sex := req.Sex
 	if sex != "male" && sex != "female" {
 		sex = ""
@@ -845,6 +850,7 @@ func (s *Server) handleSavePreferences(w http.ResponseWriter, r *http.Request) {
 
 		Goals:          goals,
 		WeatherEnabled: req.WeatherEnabled == nil || *req.WeatherEnabled,
+		Tagline:        tagline,
 	}
 	// Unknown kinds are dropped so a stale or hand-crafted client cannot write
 	// switches that nothing reads.

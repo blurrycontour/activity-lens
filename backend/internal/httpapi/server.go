@@ -275,6 +275,7 @@ func (s *Server) apiRoutes() http.Handler {
 	// Everything one admin screen shows about one account, in one response.
 	mux.Handle("GET /api/admin/users/{id}", s.authedAdmin(s.handleGetAdminUser))
 	mux.Handle("DELETE /api/admin/users/{id}/sessions/{sessionId}", s.authedAdminCSRF(s.handleRevokeUserSession))
+	mux.Handle("DELETE /api/admin/users/{id}/sessions", s.authedAdminCSRF(s.handleRevokeUserSessions))
 	mux.Handle("POST /api/admin/broadcast", s.authedAdminCSRF(s.handleBroadcast))
 
 	// Unknown API route -> JSON 404 (never fall through to the SPA).

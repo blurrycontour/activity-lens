@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronRight, Lock, Plus, X as XIcon } from 'lucide-react'
+import { ChevronRight, Lock, Plus } from 'lucide-react'
 import { api, ApiError, type AdminUser } from '../../lib/api'
 import { useAuth } from '../../context/AuthContext'
 import PasswordInput from '../../components/PasswordInput'
@@ -17,13 +17,6 @@ const ROLE_OPTIONS: DropdownOption<string>[] = ROLES.map(r => ({
   value: r,
   label: r.charAt(0).toUpperCase() + r.slice(1),
 }))
-
-function fmtDate(iso: string) {
-  if (!iso) return 'Never'
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return iso
-  return d.toLocaleDateString(undefined, { dateStyle: 'medium' })
-}
 
 interface Props {
   users: AdminUser[]
@@ -60,18 +53,11 @@ export default function UsersAdmin({ users, onChanged, onOpenUser }: Props) {
       <SettingsCard
         title={`Users (${users.length})`}
         actions={
-          showCreate ? (
-            <button className="btn btn-ghost" onClick={() => setShowCreate(false)}>
-              <XIcon size={14} /> Cancel
-            </button>
-          ) : (
-            <button className="btn btn-ghost" onClick={() => setShowCreate(true)}>
-              <Plus size={14} /> Add user
-            </button>
-          )
+          <button className="btn btn-accent" onClick={() => setShowCreate(true)}>
+            <Plus size={14} /> Add user
+          </button>
         }
       >
-        {showCreate && <CreateUser onDone={() => { setShowCreate(false); onChanged() }} onCancel={() => setShowCreate(false)} />}
 
         <div className="admin-user-list">
           {users.map(u => (
@@ -88,8 +74,21 @@ export default function UsersAdmin({ users, onChanged, onOpenUser }: Props) {
               <UserAvatar user={u} size={36} />
 
               <span className="admin-user-main">
+                {/* The role rides on the name line rather than in a trailing
+                    column: it is part of who this account is, and on a phone a
+                    trailing column wrapped it below the storage figures — which
+                    is the wrong order to read them in. */}
                 <span className="admin-user-name">
                   {u.displayName || u.username}
+                  <span className={`badge role-${u.role}`}>
+                    {u.role}
+                    {isLastActiveAdmin(u) && (
+                      <span title="The only administrator who can sign in. Add a second one before changing this account.">
+                        <Lock size={10} />
+                      </span>
+                    )}
+                  </span>
+                  {!u.isActive && <span className="badge badge-off">Inactive</span>}
                   {u.id === me?.id && <span className="admin-user-you">You</span>}
                   {!u.hasPassword && (
                     <span className="admin-user-sso" title="Signs in through the identity provider">
@@ -105,32 +104,27 @@ export default function UsersAdmin({ users, onChanged, onOpenUser }: Props) {
                   <span className="admin-user-stats">
                     <span>{u.stats.workouts} workouts</span>
                     <span>{fmtBytes(u.stats.photoBytes + u.stats.originalBytes)}</span>
-                    {(u.sessions ?? 0) > 0 && (
-                      <span>{u.sessions} {u.sessions === 1 ? 'device' : 'devices'}</span>
-                    )}
+                    <span>{u.stats.equipment} {u.stats.equipment === 1 ? 'item' : 'items'}</span>
                   </span>
                 )}
               </span>
 
-              <span className="admin-user-tags">
-                <span className="badge" style={{ textTransform: 'capitalize' }}>
-                  {u.role}
-                  {/* Marks the account the instance cannot afford to lose. */}
-                  {isLastActiveAdmin(u) && (
-                    <span title="The only administrator who can sign in. Add a second one before changing this account.">
-                      <Lock size={10} />
-                    </span>
-                  )}
-                </span>
-                {!u.isActive && <span className="badge badge-off">Inactive</span>}
-                <span className="admin-user-seen">{fmtDate(u.lastLoginAt)}</span>
-              </span>
+              {(u.sessions ?? 0) > 0 && (
+                <span className="admin-user-seen">{u.sessions} {u.sessions === 1 ? 'device' : 'devices'}</span>
+              )}
 
               <ChevronRight size={16} className="admin-user-chevron" />
             </button>
           ))}
         </div>
       </SettingsCard>
+
+      {/* A dialog rather than a form unfolding above the list: creating an
+          account is a detour with its own start and end, and opening it in
+          place pushed every row down the page mid-scroll. */}
+      {showCreate && (
+        <CreateUser onDone={() => { setShowCreate(false); onChanged() }} onCancel={() => setShowCreate(false)} />
+      )}
 
       {/* Under the list because it is about all of them, and because the list
           is what an admin came here for. */}
@@ -163,8 +157,12 @@ function CreateUser({ onDone, onCancel }: { onDone: () => void; onCancel: () => 
   }
 
   return (
-    <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div className="field-grid">
+    <>
+      <div className="overlay" onClick={() => { if (!busy) onCancel() }} />
+      <div className="modal" role="dialog" aria-modal="true" aria-label="Add user">
+        <div className="modal-box" style={{ maxWidth: 520 }}>
+          <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 14 }}>Add user</h3>
+          <div className="field-grid">
         <Field label="Username">
           <input className="input" style={{ width: '100%' }} value={username} onChange={e => setUsername(e.target.value)} />
         </Field>
@@ -177,15 +175,19 @@ function CreateUser({ onDone, onCancel }: { onDone: () => void; onCancel: () => 
         <Field label="Password">
           <PasswordInput autoComplete="new-password" value={password} onChange={e => setPassword(e.target.value)} />
         </Field>
-        <Field label="Role">
-          <Dropdown block value={role} options={ROLE_OPTIONS} onChange={setRole} ariaLabel="Role" />
-        </Field>
+            <Field label="Role">
+              <Dropdown block value={role} options={ROLE_OPTIONS} onChange={setRole} ariaLabel="Role" />
+            </Field>
+          </div>
+          <StatusMsg msg={msg} />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+            <button className="btn btn-ghost" onClick={onCancel} disabled={busy}>Cancel</button>
+            <button className="btn btn-primary" onClick={create} disabled={busy || !username.trim() || !password}>
+              {busy ? 'Creating…' : 'Create user'}
+            </button>
+          </div>
+        </div>
       </div>
-      <div className="settings-actions">
-        <button className="btn btn-primary" onClick={create} disabled={busy}>{busy ? 'Creating…' : 'Create user'}</button>
-        <button className="btn btn-ghost" onClick={onCancel} disabled={busy}>Cancel</button>
-        <StatusMsg msg={msg} />
-      </div>
-    </div>
+    </>
   )
 }

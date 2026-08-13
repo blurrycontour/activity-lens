@@ -47,6 +47,19 @@ func (r *SQLiteRepository) ListSharedWithMeSummary(ctx context.Context, viewerID
 		ORDER BY workouts.start_time DESC`, viewerID, viewerID)
 }
 
+// ListSharedByMeWithSummary returns the caller's own workouts that they have
+// shared directly with one other person.
+//
+// The mirror of ListSharedWithMeSummary and the third answer a profile needs:
+// what have I sent them. Owner-scoped by user_id, so this only ever reads the
+// caller's own library — the recipient id narrows it and grants nothing.
+func (r *SQLiteRepository) ListSharedByMeWithSummary(ctx context.Context, ownerID, recipientID int64) ([]Workout, error) {
+	return r.querySummaries(ctx, `SELECT `+selectSummaryCols+` FROM workouts
+		WHERE workouts.user_id = ?
+		  AND workouts.id IN (SELECT workout_id FROM workout_shares WHERE user_id = ?)
+		ORDER BY workouts.start_time DESC`, ownerID, recipientID)
+}
+
 func (r *SQLiteRepository) querySummaries(ctx context.Context, query string, args ...any) ([]Workout, error) {
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {

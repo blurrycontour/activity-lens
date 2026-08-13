@@ -54,6 +54,14 @@ func (s *Service) SetVisibility(ctx context.Context, ownerID int64, id string, v
 	return s.repo.SetVisibility(ctx, ownerID, id, v)
 }
 
+// ListSharedByMeWith returns the caller's own workouts shared with one person.
+//
+// Not redacted, unlike the feeds: these are the caller's own workouts and they
+// are looking at their own sharing from the other end.
+func (s *Service) ListSharedByMeWith(ctx context.Context, ownerID, recipientID int64) ([]Workout, error) {
+	return s.repo.ListSharedByMeWithSummary(ctx, ownerID, recipientID)
+}
+
 // ShareRecipients lists the users a workout the caller owns is shared with.
 func (s *Service) ShareRecipients(ctx context.Context, ownerID int64, workoutID string) ([]int64, error) {
 	return s.repo.ShareRecipients(ctx, ownerID, workoutID)

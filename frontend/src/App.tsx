@@ -20,6 +20,7 @@ import Consistency from './pages/Consistency'
 import Analysis from './pages/Analysis'
 import Equipment from './pages/Equipment'
 import UserProfile from './pages/UserProfile'
+import Discover from './pages/Discover'
 import Help from './pages/Help'
 import MapPage from './pages/MapPage'
 import Settings from './pages/settings'
@@ -591,6 +592,8 @@ export default function App() {
           <MapPage />
         ) : page === 'consistency' ? (
           <Consistency />
+        ) : page === 'discover' ? (
+          <Discover onOpenUser={id => openSection('users', String(id))} />
         ) : page === 'users' ? (
           // section carries the user id; see ID_SECTION_PAGES in nav.ts.
           <UserProfile
@@ -613,6 +616,7 @@ export default function App() {
             onAccentChange={setAccent}
             themeMode={themeMode}
             onThemeChange={setThemeMode}
+            onViewProfile={() => { if (user) openSection('users', String(user.id)) }}
           />
         ) : page === 'admin' ? (
           <Admin

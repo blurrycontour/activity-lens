@@ -40,10 +40,11 @@ func (s *Server) handleGetAdminUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The admin is looking at someone else's devices, so no session here is
-	// "current" — passing an empty id is what says that, rather than marking
-	// whichever session happens to be the admin's own.
-	list, err := s.auth.ListSessions(r.Context(), id, "")
+	// Passing the caller's own session id marks it "current" when an admin is
+	// looking at their own account, so the one device they are sitting at is
+	// labelled rather than offered a revoke button that would sign them out
+	// mid-task. On anyone else's account nothing matches and nothing is marked.
+	list, err := s.auth.ListSessions(r.Context(), id, s.mw.SessionID(r))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not load sessions")
 		return
@@ -85,10 +86,11 @@ func (s *Server) handleRevokeUserSession(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, "invalid user id")
 		return
 	}
-	// No "except" session: an admin revoking a device means that device, and
-	// excluding their own current session would silently no-op when an admin
-	// revokes their own.
-	ok, err := s.auth.RevokeSession(r.Context(), id, r.PathValue("sessionId"), "")
+	// Excluding the caller's own session: an admin can sign out any device on
+	// any account, including their own others, but not the one they are using
+	// — that is the Sign out button in the top bar, not a row in a list of
+	// someone's devices, and doing it here would end the request's own session.
+	ok, err := s.auth.RevokeSession(r.Context(), id, r.PathValue("sessionId"), s.mw.SessionID(r))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not revoke session")
 		return
@@ -108,6 +110,10 @@ const (
 	maxBroadcastTitle = 120
 	maxBroadcastBody  = 1000
 )
+
+// broadcastIcon is the mark an announcement carries on an OS notification.
+// Shipped with the frontend, so it is served by this same binary.
+const broadcastIcon = "/notif-broadcast.png"
 
 // handleBroadcast sends one message to everyone on this instance.
 //
@@ -166,18 +172,46 @@ func (s *Server) handleBroadcast(w http.ResponseWriter, r *http.Request) {
 		}
 		// No dedupe key: two broadcasts with the same words are two messages,
 		// and an admin repeating themselves is usually doing it on purpose.
-		// No icon. Icon carries the avatar of whoever caused an event, and a
-		// broadcast is from the instance rather than from a person — showing
-		// the admin's face makes an announcement look like a message from one
-		// user to another. The client draws its own mark for this kind.
+		// Not the admin's avatar: a broadcast is from the instance rather than
+		// from a person, and their face makes an announcement look like a
+		// message between two users.
+		//
+		// A static mark instead, and a real path rather than nothing, because
+		// this field is what the Android app fetches for the notification's
+		// large icon — the in-app list can pick a glyph by kind, but the OS
+		// notification only has what the payload gives it. Root-relative, so
+		// it resolves against whichever server the app is pointed at, and
+		// served from the frontend's own public directory.
 		s.notify.Notify(r.Context(), notify.Event{
 			UserID: u.ID,
 			Kind:   notify.KindBroadcast,
 			Title:  title,
 			Body:   body,
+			Icon:   broadcastIcon,
 		})
 		sent++
 	}
 	slog.Info("broadcast", "admin", actor.Username, "recipients", sent, "title", title)
 	writeJSON(w, http.StatusOK, map[string]any{"sent": sent})
+}
+
+// handleRevokeUserSessions signs a user out everywhere.
+//
+// The caller's own current session survives, which only matters when an admin
+// is looking at their own account: it is the difference between clearing the
+// other devices and locking yourself out of the page you are standing on.
+func (s *Server) handleRevokeUserSessions(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+	n, err := s.auth.RevokeOtherSessions(r.Context(), id, s.mw.SessionID(r))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not revoke sessions")
+		return
+	}
+	actor := httpmw.UserFrom(r)
+	slog.Info("admin revoked all sessions", "admin", actor.Username, "user_id", id, "revoked", n)
+	writeJSON(w, http.StatusOK, map[string]any{"revoked": n})
 }

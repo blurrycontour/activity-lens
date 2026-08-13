@@ -759,16 +759,22 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Middots as gaps rather than characters, so a wrap never leaves one stranded
-   at the start of a line. */
 .admin-user-stats {
   display: flex;
   flex-wrap: wrap;
-  gap: 3px 12px;
+  gap: 3px 8px;
   margin-top: 3px;
   font-size: 11px;
   color: var(--text-3);
   font-family: var(--font-mono);
+}
+/* A dot before every item but the first, drawn rather than typed: a wrapped
+   line never starts with a stranded separator, because the pseudo-element
+   belongs to the item it precedes. */
+.admin-user-stats span + span::before {
+  content: '·';
+  margin-right: 8px;
+  color: var(--border-strong);
 }
 .admin-user-you,
 .admin-user-sso {
@@ -784,13 +790,7 @@ body {
   background: var(--bg-2);
 }
 .admin-user-you { border-color: var(--primary); color: var(--primary); background: var(--primary-dim); }
-.admin-user-tags {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-.admin-user-tags .badge { display: inline-flex; align-items: center; gap: 4px; }
+.admin-user-name .badge { display: inline-flex; align-items: center; gap: 4px; font-weight: 500; }
 .admin-user-seen { font-size: 11px; color: var(--text-3); white-space: nowrap; }
 .admin-user-chevron { color: var(--text-3); flex-shrink: 0; }
 
@@ -806,17 +806,34 @@ body {
 @media (max-width: 768px) {
   .settings-page { gap: 16px; }
   .settings-row { padding: 14px 13px; }
-  /* The avatar keeps its column; everything else stacks under the name, and
-     the tags drop to their own row so nothing lands on top of the email. */
+  /* Avatar, then everything about the person, then the chevron — all on one
+     row. The chevron keeps its own column rather than being allowed to wrap,
+     which is how it ended up alone on a line of its own. */
   .admin-user-row {
     grid-template-columns: auto minmax(0, 1fr) auto;
-    row-gap: 8px;
-  }
-  .admin-user-tags {
-    grid-column: 2 / -1;
-    flex-wrap: wrap;
+    align-items: center;
   }
   .admin-user-seen { display: none; }
+}
+
+/* Roles as colour, not just text: an administrator is a different kind of
+   account from a reader, and on a list you scan that difference should be
+   visible before you have read the word. Each tinted from a token, so all six
+   accents and all three themes keep working. */
+.badge.role-administrator {
+  background: color-mix(in srgb, var(--danger) 15%, transparent);
+  color: var(--danger);
+  text-transform: capitalize;
+}
+.badge.role-editor {
+  background: var(--primary-dim);
+  color: var(--primary);
+  text-transform: capitalize;
+}
+.badge.role-reader {
+  background: var(--bg-2);
+  color: var(--text-3);
+  text-transform: capitalize;
 }
 
 .badge-ok { background: color-mix(in srgb, var(--success) 16%, transparent); color: var(--success); }
@@ -3978,6 +3995,53 @@ body:has(.overlay) .fab { display: none; }
 }
 .owner-byline-link:hover { background: var(--bg-3); color: var(--text-2); }
 
+/* ── Discover: everyone on this instance ── */
+.discover-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+}
+.discover-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, transform 0.12s;
+}
+.discover-card:hover {
+  background: var(--bg-3);
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+.discover-body { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.discover-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.discover-handle { font-size: 11px; color: var(--text-3); font-family: var(--font-mono); }
+/* Two lines at most: a directory of cards stays a grid of equal tiles, and a
+   tagline is a line about yourself rather than a paragraph. */
+.discover-tagline {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 /* ── Another member's profile ── */
 .profile-head {
   display: flex;
@@ -3996,6 +4060,21 @@ body:has(.overlay) .fab { display: none; }
   color: var(--text-2);
 }
 .profile-counts span { display: inline-flex; align-items: center; gap: 5px; }
+.profile-tagline {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text-2);
+  line-height: 1.45;
+  max-width: 52ch;
+}
+/* The search and filters above the list, matching the library's row. */
+.profile-tools {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 14px;
+}
 
 /* ── Workout list row ──
    The per-type accent is passed in as --row-accent so the colour stays

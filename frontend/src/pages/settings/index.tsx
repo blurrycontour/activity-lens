@@ -25,6 +25,8 @@ interface SettingsProps {
   onAccentChange: (a: string) => void
   themeMode: ThemeMode
   onThemeChange: (m: ThemeMode) => void
+  /** Opens the caller's own public profile, from the tagline card. */
+  onViewProfile?: () => void
 }
 
 /**
@@ -34,14 +36,14 @@ interface SettingsProps {
  * is the one people already know from opening a workout, and desktop and mobile
  * share a single code path.
  */
-export default function Settings({ section, onOpen, onBack, accent, onAccentChange, themeMode, onThemeChange }: SettingsProps) {
+export default function Settings({ section, onOpen, onBack, accent, onAccentChange, themeMode, onThemeChange, onViewProfile }: SettingsProps) {
   if (!section) return <SettingsHub onOpen={onOpen} />
 
   const meta = sectionMeta(section)
 
   const body = (
     <>
-      {section === 'profile' && <ProfileSettings />}
+      {section === 'profile' && <ProfileSettings onViewProfile={onViewProfile} />}
       {section === 'security' && <SecuritySettings />}
       {section === 'body' && <BodySettings />}
       {section === 'appearance' && (

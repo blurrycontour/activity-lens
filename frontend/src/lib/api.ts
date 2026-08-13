@@ -190,6 +190,14 @@ export interface UserPreferences {
   /** Notification switches; absent until the user saves them once. */
   notify?: NotifyPrefs
   /**
+   * A line the user writes about themselves, shown on their profile.
+   *
+   * The one preference other people read. The server trims it to 140 runes and
+   * strips control characters, so what comes back may be shorter than what was
+   * sent.
+   */
+  tagline?: string
+  /**
    * Whether newly imported workouts get their historical conditions looked up.
    *
    * On by default, because it only ever covers workouts imported from now on —
@@ -237,6 +245,32 @@ export interface OidcInput {
   logoUrlDark: string
   allowRegistration: boolean
   scopes: string[]
+}
+
+/** A person as everyone (not just admins) may see them. */
+export interface DirectoryUser {
+  id: number
+  username: string
+  displayName: string
+  avatarPath: string
+  /** The caller's own entry. */
+  self?: boolean
+  /** What they wrote about themselves; absent when they wrote none. */
+  tagline?: string
+}
+
+/** Another member, and the workouts you and they can see of each other's. */
+export interface UserProfileData {
+  user: { id: number; username: string; displayName: string; avatarPath: string }
+  tagline?: string
+  /** True when this is your own profile, which carries only the public half. */
+  self?: boolean
+  /** Theirs, sent to you directly. */
+  sharedWithMe: import('../data/workouts').Workout[]
+  /** Theirs, open to everyone signed in here. */
+  publicWorkouts: import('../data/workouts').Workout[]
+  /** Yours, sent to them. Empty on your own profile. */
+  sharedWithThem: import('../data/workouts').Workout[]
 }
 
 /** What one account has accumulated on this instance. */
@@ -643,16 +677,14 @@ export const api = {
    * than by owner, so this can never surface a workout that was not already
    * yours to read.
    */
-  getUserProfile: (id: number) => request<{
-    user: { id: number; username: string; displayName: string; avatarPath: string }
-    sharedWithMe: number
-    public: number
-    workouts: import('../data/workouts').Workout[]
-  }>(`/api/users/${id}`),
+  getUserProfile: (id: number) => request<UserProfileData>(`/api/users/${id}`),
   listAdminUsers: () => request<{ users: AdminUser[] }>('/api/admin/users'),
   getAdminUser: (id: number) => request<AdminUserDetail>(`/api/admin/users/${id}`),
   revokeUserSession: (id: number, sessionId: string) =>
     request<unknown>(`/api/admin/users/${id}/sessions/${sessionId}`, { method: 'DELETE' }),
+  /** Signs a user out everywhere but the caller's own current device. */
+  revokeUserSessions: (id: number) =>
+    request<{ revoked: number }>(`/api/admin/users/${id}/sessions`, { method: 'DELETE' }),
   /** Sends one message to every active account but the sender's. */
   broadcast: (payload: { title: string; body: string; includeInactive?: boolean }) =>
     request<{ sent: number }>('/api/admin/broadcast', { method: 'POST', body: payload }),
@@ -775,9 +807,21 @@ export const api = {
     request<WorkoutShares>(`/api/workouts/${id}/shares`, { method: 'POST', body: { userId } }),
   removeShare: (id: string, userId: number) =>
     request<unknown>(`/api/workouts/${id}/shares/${userId}`, { method: 'DELETE' }),
-  /** Minimal user directory backing the share picker. */
-  listUserDirectory: (q?: string) =>
-    request<{ users: UserRef[] }>(`/api/users${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+  /**
+   * Everyone on this instance.
+   *
+   * Backs both the share picker and the Discover page; `includeSelf` is the
+   * difference between them, since you belong in a directory of members and
+   * not in a list of people to share with.
+   */
+  listUserDirectory: (opts: string | { q?: string; includeSelf?: boolean } = {}) => {
+    const o = typeof opts === 'string' ? { q: opts } : opts
+    const p = new URLSearchParams()
+    if (o.q) p.set('q', o.q)
+    if (o.includeSelf) p.set('includeSelf', 'true')
+    const qs = p.toString()
+    return request<{ users: DirectoryUser[] }>(`/api/users${qs ? `?${qs}` : ''}`)
+  },
 
   // --- Equipment ---
   listEquipment: () => request<Equipment[]>('/api/equipment'),

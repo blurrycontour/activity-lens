@@ -68,6 +68,9 @@ func (unimplementedSharing) ListPublicSummary(context.Context, int64) ([]Workout
 func (unimplementedSharing) ListSharedWithMeSummary(context.Context, int64) ([]Workout, error) {
 	panic("sharing is only exercised against the real schema; see sharing_test.go")
 }
+func (unimplementedSharing) ListSharedByMeWithSummary(context.Context, int64, int64) ([]Workout, error) {
+	panic("sharing is only exercised against the real schema; see sharing_test.go")
+}
 func (unimplementedSharing) SetVisibility(context.Context, int64, string, Visibility) error {
 	panic("sharing is only exercised against the real schema; see sharing_test.go")
 }

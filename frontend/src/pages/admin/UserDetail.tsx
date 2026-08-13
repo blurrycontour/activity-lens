@@ -77,6 +77,8 @@ export default function UserDetailAdmin({ userId, onBack, onChanged, isSelf, isL
   const [active, setActive] = useState(true)
   const [saving, setSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [signOutAll, setSignOutAll] = useState(false)
+  const [signingOutAll, setSigningOutAll] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
   const load = useCallback(async () => {
@@ -120,6 +122,22 @@ export default function UserDetailAdmin({ userId, onBack, onChanged, isSelf, isL
       setMsg({ ok: false, text: e instanceof ApiError ? e.message : 'Could not save' })
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function revokeAll() {
+    setSigningOutAll(true)
+    setMsg(null)
+    try {
+      const { revoked } = await api.revokeUserSessions(userId)
+      await load()
+      onChanged()
+      setMsg({ ok: true, text: `Signed out ${revoked} ${revoked === 1 ? 'device' : 'devices'}` })
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof ApiError ? e.message : 'Could not sign them out' })
+    } finally {
+      setSigningOutAll(false)
+      setSignOutAll(false)
     }
   }
 
@@ -226,7 +244,18 @@ export default function UserDetailAdmin({ userId, onBack, onChanged, isSelf, isL
         </div>
       </SettingsCard>
 
-      <SettingsCard title={`Signed-in devices (${data.sessions.length})`}>
+      <SettingsCard
+        title={`Signed-in devices (${data.sessions.length})`}
+        actions={
+          <button
+            className="btn btn-ghost"
+            onClick={() => setSignOutAll(true)}
+            disabled={data.sessions.filter(x => !x.current).length === 0}
+          >
+            <LogOut size={14} /> Sign out all
+          </button>
+        }
+      >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {data.sessions.length === 0 && (
             <span className="field-hint">This account has no active sessions.</span>
@@ -235,7 +264,13 @@ export default function UserDetailAdmin({ userId, onBack, onChanged, isSelf, isL
             <SessionCard
               key={sess.id}
               session={sess}
-              action={
+              action={sess.current ? (
+                /* The device this admin is using. Revoking it would end the
+                   request's own session, so it is marked rather than offered. */
+                <span className="badge" style={{ background: 'var(--primary-dim)', color: 'var(--primary)', flexShrink: 0 }}>
+                  This device
+                </span>
+              ) : (
                 <button
                   className="btn btn-ghost"
                   onClick={() => setPending(sess.id)}
@@ -244,7 +279,7 @@ export default function UserDetailAdmin({ userId, onBack, onChanged, isSelf, isL
                 >
                   <LogOut size={14} /> {revoking === sess.id ? 'Signing out…' : 'Sign out'}
                 </button>
-              }
+              )}
             />
           ))}
         </div>
@@ -264,6 +299,21 @@ export default function UserDetailAdmin({ userId, onBack, onChanged, isSelf, isL
             <Trash2 size={14} /> Delete this account
           </button>
         </SettingsCard>
+      )}
+
+      {signOutAll && (
+        <ConfirmDialog
+          title="Sign out every device?"
+          message={<>
+            Signs “{u.displayName || u.username}” out everywhere. They will need to sign in
+            again on each device; nothing else about the account changes.
+          </>}
+          confirmLabel="Sign out all"
+          busy={signingOutAll}
+          busyLabel="Signing out…"
+          onCancel={() => setSignOutAll(false)}
+          onConfirm={() => void revokeAll()}
+        />
       )}
 
       {confirmDelete && (
