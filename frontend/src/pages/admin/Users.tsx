@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Check, Lock, Pencil, Plus, Trash2, X as XIcon } from 'lucide-react'
+import { Check, ChevronRight, Lock, Pencil, Plus, Trash2, X as XIcon } from 'lucide-react'
 import { api, ApiError, type AdminUser } from '../../lib/api'
 import { useAuth } from '../../context/AuthContext'
 import PasswordInput from '../../components/PasswordInput'
@@ -8,6 +8,8 @@ import SettingsCard from '../../components/SettingsCard'
 import Field from '../../components/Field'
 import StatusMsg, { type Msg } from '../../components/StatusMsg'
 import Dropdown, { type DropdownOption } from '../../components/Dropdown'
+import UserDetailAdmin, { fmtBytes } from './UserDetail'
+import BroadcastAdmin from './Broadcast'
 
 const ROLES = ['administrator', 'editor', 'reader']
 
@@ -30,6 +32,8 @@ interface Props {
 
 export default function UsersAdmin({ users, onChanged }: Props) {
   const { user: me } = useAuth()
+  /** The account being inspected, or null for the list. */
+  const [detailId, setDetailId] = useState<number | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [draftRole, setDraftRole] = useState('')
@@ -84,6 +88,15 @@ export default function UsersAdmin({ users, onChanged }: Props) {
     } catch (e) {
       setMsg({ ok: false, text: e instanceof ApiError ? e.message : 'Delete failed' })
     } finally { setDeleting(false) }
+  }
+
+  if (detailId !== null) {
+    return (
+      <UserDetailAdmin
+        userId={detailId}
+        onBack={() => { setDetailId(null); onChanged() }}
+      />
+    )
   }
 
   return (
@@ -162,9 +175,25 @@ export default function UsersAdmin({ users, onChanged }: Props) {
                   )}
                 </div>
 
-                <div className="user-row-seen field-hint">{fmtDate(u.lastLoginAt)}</div>
+                {/* What this account amounts to, at list resolution: enough to
+                    spot the one worth opening. Absent stats mean the totals
+                    could not be computed, which is not the same as zero. */}
+                <div className="user-row-seen field-hint">
+                  <div>{fmtDate(u.lastLoginAt)}</div>
+                  {u.stats && (
+                    <div style={{ marginTop: 2 }}>
+                      {u.stats.workouts} workouts · {fmtBytes(u.stats.photoBytes + u.stats.originalBytes)}
+                      {(u.sessions ?? 0) > 0 && ` · ${u.sessions} ${u.sessions === 1 ? 'device' : 'devices'}`}
+                    </div>
+                  )}
+                </div>
 
                 <div className="user-row-actions">
+                  {!editing && (
+                    <button className="btn btn-ghost" onClick={() => setDetailId(u.id)} title="Details">
+                      <ChevronRight size={14} />
+                    </button>
+                  )}
                   {editing ? (
                     <>
                       <button className="btn btn-primary" onClick={() => saveEdit(u)} title="Save"><Check size={14} /></button>
@@ -201,6 +230,10 @@ export default function UsersAdmin({ users, onChanged }: Props) {
           })}
         </div>
       </SettingsCard>
+
+      {/* Under the list because it is about all of them, and because the list
+          is what an admin came here for. */}
+      <BroadcastAdmin recipients={users.filter(u => u.isActive && u.id !== me?.id).length} />
 
       {pendingDelete && (
         <ConfirmDialog

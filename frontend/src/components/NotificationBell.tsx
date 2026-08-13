@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Bell, Check, Share2, Footprints, Trophy, Clock, X, Trash2, FolderDown, MessageSquare, Target } from 'lucide-react'
+import { Bell, Check, Share2, Footprints, Trophy, Clock, X, Trash2, FolderDown, MessageSquare, Target, Megaphone } from 'lucide-react'
 import { api, apiURL, type AppNotification, type NotificationKind } from '../lib/api'
 import { dismissOSNotification, enablePush, maybePromptForPush, pushState, syncPushSubscription, type PushState } from '../lib/push'
 import { consumeNotificationTap, maybeEnrolNativePush, onNotificationTap, syncNativePush, watchNativeEndpoint, type NotificationTap } from '../lib/native/unifiedPush'
@@ -13,6 +13,7 @@ const POLL_MS = 60_000
 const MAX_BADGE = 9
 
 const KIND_ICON: Record<NotificationKind, React.ReactNode> = {
+  broadcast: <Megaphone size={14} />,
   workout_shared: <Share2 size={14} />,
   workout_social: <MessageSquare size={14} />,
   gear_worn: <Footprints size={14} />,

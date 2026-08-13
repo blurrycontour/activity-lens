@@ -286,7 +286,15 @@ func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
 	for _, u := range users {
 		row := adminUser{User: u, LastLoginAt: last[u.ID], Sessions: counts[u.ID]}
 		if stats != nil {
-			row.Stats = stats[u.ID]
+			// A user with no workouts has no row in any of those grouped
+			// queries, which is not the same as the totals being unavailable —
+			// so they get an explicit zero. Nil is reserved for "we could not
+			// work it out", which is what the UI renders as unknown.
+			if got, ok := stats[u.ID]; ok {
+				row.Stats = got
+			} else {
+				row.Stats = &UserStats{}
+			}
 		}
 		out = append(out, row)
 	}

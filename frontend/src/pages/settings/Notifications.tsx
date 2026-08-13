@@ -16,6 +16,7 @@ import StatusMsg, { type Msg } from '../../components/StatusMsg'
  * reads as a broken feature rather than an inapplicable one.
  */
 const NOTIFY_KINDS: { id: NotificationKind; label: string; adminOnly?: boolean }[] = [
+  { id: 'broadcast', label: 'An administrator sends a message to everyone' },
   { id: 'workout_shared', label: 'Someone shares a workout with me' },
   // One switch for comments and reactions together: they are one feature, and
   // a page is either one you follow or one you do not.

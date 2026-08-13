@@ -550,6 +550,109 @@ body {
   background: var(--bg-3);
   border: 1px solid var(--border);
 }
+/* One account, for an administrator. */
+.admin-user-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+/* Auto-fit rather than a fixed column count: four across a desktop card, two
+   on a phone, without a breakpoint for each. */
+.admin-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+.admin-stat {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+}
+.admin-stat-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  color: var(--primary);
+  margin-top: 2px;
+}
+.admin-stat-value {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+.admin-stat-label {
+  font-size: 11px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-family: var(--font-mono);
+}
+.admin-stat-sub { font-size: 11px; color: var(--text-3); margin-top: 3px; }
+
+.session-card { align-items: flex-start; }
+.session-card-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+}
+.session-card-body { min-width: 0; flex: 1; }
+.session-card-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+/* The version and the "Browser" mark: facts about the client, so they read as
+   labels attached to the name rather than as part of it. */
+.session-card-tag {
+  padding: 1px 6px;
+  border-radius: 99px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  color: var(--text-3);
+  font-size: 10px;
+  font-weight: 500;
+  font-family: var(--font-mono);
+}
+/* Each fact its own item, so a narrow screen wraps between them rather than
+   through the middle of an IP address. */
+.session-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.session-card-meta span { white-space: nowrap; }
+/* Only shown when nothing could be read out of it, so it is allowed to be
+   ugly — it is the raw truth and the last resort. */
+.session-card-agent {
+  margin-top: 5px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-3);
+  overflow-wrap: anywhere;
+}
+
 .tile-mono {
   font-family: var(--font-mono);
   font-size: 12px;
