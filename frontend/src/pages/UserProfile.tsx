@@ -5,6 +5,7 @@ import { ALL_WORKOUT_TYPES, type Workout, type WorkoutType } from '../data/worko
 import { useRefreshHandler } from '../context/RefreshContext'
 import { useIsMobile } from '../lib/useIsMobile'
 import { applyWorkoutFilters, DEFAULT_FILTERS } from '../lib/workoutFilters'
+import { useSessionState } from '../lib/useSessionState'
 import PageHeader from '../components/PageHeader'
 import TabStrip from '../components/TabStrip'
 import TypeIcon from '../components/TypeIcon'
@@ -45,7 +46,14 @@ export default function UserProfile({ id, onBack, onSelect }: {
 }) {
   const [data, setData] = useState<UserProfileData | null>(null)
   const [err, setErr] = useState<string | null>(null)
-  const [tab, setTab] = useState<Tab>('with-me')
+  /**
+   * Kept across unmounts, because opening a workout from here replaces this
+   * page: the tab you were reading was gone by the time you pressed back, and
+   * every workout you looked at cost you the tab again. Per session, not
+   * forever — which tab you were on is part of what you are doing now.
+   */
+  const [{ tab }, setTabState] = useSessionState<{ tab: Tab }>('al_profile_tab', { tab: 'with-me' })
+  const setTab = useCallback((t: Tab) => setTabState({ tab: t }), [setTabState])
   const isMobile = useIsMobile()
 
   // The same controls the library uses, so a list of workouts is filtered the
@@ -61,13 +69,14 @@ export default function UserProfile({ id, onBack, onSelect }: {
       const d = await api.getUserProfile(id)
       setData(d)
       // Your own profile has only one tab, and a remembered "with me" would
-      // land on a tab this page does not offer.
-      setTab(d.self ? 'public' : 'with-me')
+      // land on a tab this page does not offer. Anything else is left alone, so
+      // a refresh — or coming back from a workout — keeps the tab you chose.
+      if (d.self) setTab('public')
       setErr(null)
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : 'Could not load this profile')
     }
-  }, [id])
+  }, [id, setTab])
   useEffect(() => { void load() }, [load])
   useRefreshHandler(load)
 
@@ -169,7 +178,9 @@ export default function UserProfile({ id, onBack, onSelect }: {
 
   return (
     <>
-      <PageHeader title={name} onBack={onBack} />
+      {/* "User", not the name: the name is the headline directly below, and
+          the bar repeating it printed the same fact twice. */}
+      <PageHeader title={data.self ? 'Profile' : 'User'} onBack={onBack} />
       <div className="page-content">
         <div className="profile-head">
           <UserAvatar user={data.user} size={64} />
@@ -185,7 +196,7 @@ export default function UserProfile({ id, onBack, onSelect }: {
         </div>
 
         <div style={{ marginTop: 18 }}>
-          <TabStrip items={tabs} value={tab} onChange={setTab} ariaLabel="Which workouts" />
+          <TabStrip items={tabs} value={tab} onChange={setTab} ariaLabel="Which workouts" fill />
         </div>
 
         <div className="profile-tools">

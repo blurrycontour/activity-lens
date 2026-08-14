@@ -74,12 +74,16 @@ export default function UsersAdmin({ users, onChanged, onOpenUser }: Props) {
               <UserAvatar user={u} size={36} />
 
               <span className="admin-user-main">
-                {/* The role rides on the name line rather than in a trailing
-                    column: it is part of who this account is, and on a phone a
-                    trailing column wrapped it below the storage figures — which
-                    is the wrong order to read them in. */}
                 <span className="admin-user-name">
                   {u.displayName || u.username}
+                  {u.id === me?.id && <span className="admin-user-you">You</span>}
+                </span>
+                <span className="admin-user-email">{u.email}</span>
+                {/* Under the email and above the figures: what this account
+                    *is* reads before what it has done, and on a phone the
+                    badges get a line of their own rather than being pushed
+                    below the storage totals by a name that wrapped. */}
+                <span className="admin-user-tags">
                   <span className={`badge role-${u.role}`}>
                     {u.role}
                     {isLastActiveAdmin(u) && (
@@ -89,14 +93,12 @@ export default function UsersAdmin({ users, onChanged, onOpenUser }: Props) {
                     )}
                   </span>
                   {!u.isActive && <span className="badge badge-off">Inactive</span>}
-                  {u.id === me?.id && <span className="admin-user-you">You</span>}
                   {!u.hasPassword && (
                     <span className="admin-user-sso" title="Signs in through the identity provider">
                       <Lock size={10} /> SSO
                     </span>
                   )}
                 </span>
-                <span className="admin-user-email">{u.email}</span>
                 {/* At list resolution: enough to spot the account worth
                     opening. Absent stats mean the totals could not be
                     computed, which is not the same as zero. */}

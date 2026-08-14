@@ -54,7 +54,7 @@ export default function Discover({ onOpenUser }: { onOpenUser: (id: number) => v
         subtitle={`${users.length} ${users.length === 1 ? 'person' : 'people'} on this server`}
       />
       <div className="page-content">
-        <div style={{ position: 'relative', maxWidth: 360, marginBottom: 16 }}>
+        <div style={{ position: 'relative', marginBottom: 16 }}>
           <Search size={14} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', pointerEvents: 'none' }} />
           <input
             className="input"

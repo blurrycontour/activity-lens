@@ -770,11 +770,20 @@ body {
 }
 /* A dot before every item but the first, drawn rather than typed: a wrapped
    line never starts with a stranded separator, because the pseudo-element
-   belongs to the item it precedes. */
+   belongs to the item it precedes. A bullet rather than a middot — at 11px in
+   a mono face the middot all but disappeared between two figures. */
 .admin-user-stats span + span::before {
-  content: '·';
+  content: '\2022';
   margin-right: 8px;
-  color: var(--border-strong);
+  color: var(--text-3);
+}
+/* The badges' own line, under the email. */
+.admin-user-tags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
 }
 .admin-user-you,
 .admin-user-sso {
@@ -790,7 +799,7 @@ body {
   background: var(--bg-2);
 }
 .admin-user-you { border-color: var(--primary); color: var(--primary); background: var(--primary-dim); }
-.admin-user-name .badge { display: inline-flex; align-items: center; gap: 4px; font-weight: 500; }
+.admin-user-tags .badge { display: inline-flex; align-items: center; gap: 4px; font-weight: 500; }
 .admin-user-seen { font-size: 11px; color: var(--text-3); white-space: nowrap; }
 .admin-user-chevron { color: var(--text-3); flex-shrink: 0; }
 
@@ -2527,6 +2536,10 @@ body:has(.overlay) .fab { display: none; }
   /* Labels would wrap or overflow at five tabs on a phone, so the strip
      scrolls horizontally and the items tighten up. */
   .tab-strip-item { padding: 8px 12px; font-size: 14px; gap: 6px; }
+  /* A strip marked as filling shares the width between its tabs instead of
+     leaving a gap at the end. Only ever set on short strips — spreading five
+     tabs across a phone is what the scrolling above exists to avoid. */
+  .tab-strip.fill .tab-strip-item { flex: 1; min-width: 0; justify-content: center; }
 }
 
 /* Compact filter dropdown, shared by the type and time-range pickers. */
@@ -3547,6 +3560,19 @@ body:has(.overlay) .fab { display: none; }
 /* Clamped too, so one unusually long title cannot make a single row taller
    than the rest of the list put together. */
 .notif-title { font-size: 12.5px; font-weight: 600; line-height: 1.35; }
+/* Reading one notification in full — what a broadcast, which links nowhere,
+   opens into. */
+.notif-read { max-width: 460px; }
+.notif-read-head { display: flex; align-items: flex-start; gap: 10px; }
+.notif-read-title { font-size: 15px; font-weight: 700; line-height: 1.3; }
+.notif-read-body {
+  margin-top: 12px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .notif-item.unread .notif-title { color: var(--text); }
 /* Bounds a notification's title and body to a couple of lines each.
    Applied to both the panel and the in-app banner, which had the same
@@ -3996,10 +4022,13 @@ body:has(.overlay) .fab { display: none; }
 .owner-byline-link:hover { background: var(--bg-3); color: var(--text-2); }
 
 /* ── Discover: everyone on this instance ── */
+/* One column at every width. A grid of tiles read as a gallery of strangers;
+   a list reads as a directory, which is what this is — and it keeps the row
+   the same shape on a phone as on a desktop. */
 .discover-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 .discover-card {
   display: flex;
@@ -4019,7 +4048,7 @@ body:has(.overlay) .fab { display: none; }
   border-color: var(--border-strong);
   transform: translateY(-1px);
 }
-.discover-body { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.discover-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .discover-name {
   display: flex;
   align-items: center;

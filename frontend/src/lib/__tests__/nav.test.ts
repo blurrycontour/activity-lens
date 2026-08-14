@@ -62,6 +62,19 @@ describe('parseLocation', () => {
     expect(parseLocation(pathForPage('users', '7'))).toMatchObject({ page: 'users', section: '7' })
   })
 
+  // Which account is open under Admin > Users is in the URL, so leaving the
+  // page for a workout and coming back lands on the account, not the category
+  // list. Round-tripped rather than asserted one way: the two halves drifting
+  // is exactly how a back gesture silently starts landing in the wrong place.
+  it('carries a record open inside a category', () => {
+    expect(pathForPage('admin', 'users', '42')).toBe('/admin/users/42')
+    expect(parseLocation('/admin/users/42')).toMatchObject({ page: 'admin', section: 'users', detail: '42' })
+    expect(parseLocation(pathForPage('admin', 'users'))).toMatchObject({ section: 'users', detail: null })
+    // No category, no record: a stray segment cannot conjure one.
+    expect(pathForPage('admin', null, '42')).toBe('/admin')
+    expect(parseLocation('/admin/nonsense/42')).toMatchObject({ section: null, detail: null })
+  })
+
   it('round-trips every declared category', () => {
     for (const s of SETTINGS_SECTIONS) {
       expect(parseLocation(pathForPage('settings', s))).toMatchObject({ page: 'settings', section: s })

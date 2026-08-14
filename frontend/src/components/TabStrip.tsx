@@ -12,6 +12,12 @@ interface TabStripProps<T extends string> {
   onChange: (id: T) => void
   /** Names the strip for assistive tech, e.g. "Analysis sections". */
   ariaLabel: string
+  /**
+   * Share the full width between the tabs on a phone rather than leaving the
+   * strip short of the right edge. Only for strips of two or three: more than
+   * that needs the scrolling this component was built around.
+   */
+  fill?: boolean
 }
 
 /**
@@ -33,7 +39,7 @@ interface TabStripProps<T extends string> {
  * for any number of tabs at any width — including a desktop window narrowed to
  * the point where the strip overflows, which no breakpoint would catch.
  */
-export default function TabStrip<T extends string>({ items, value, onChange, ariaLabel }: TabStripProps<T>) {
+export default function TabStrip<T extends string>({ items, value, onChange, ariaLabel, fill }: TabStripProps<T>) {
   const ref = useRef<HTMLElement>(null)
   const [edges, setEdges] = useState({ start: false, end: false })
 
@@ -71,7 +77,7 @@ export default function TabStrip<T extends string>({ items, value, onChange, ari
   return (
     <nav
       ref={ref}
-      className={`tab-strip${edges.start ? ' fade-start' : ''}${edges.end ? ' fade-end' : ''}`}
+      className={`tab-strip${fill ? ' fill' : ''}${edges.start ? ' fade-start' : ''}${edges.end ? ' fade-end' : ''}`}
       aria-label={ariaLabel}
       onScroll={measure}
     >

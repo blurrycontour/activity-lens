@@ -78,6 +78,8 @@ export default function App() {
   const [page, setPage] = useState<Page>(initialLocation.page)
   // The open category within a hub page (settings, admin), or null for the hub.
   const [section, setSection] = useState<string | null>(initialLocation.section)
+  // The record open inside that category, e.g. the account under Admin > Users.
+  const [detail, setDetail] = useState<string | null>(initialLocation.detail)
   const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null)
   /**
    * True while a workout named in the URL is still being fetched.
@@ -146,7 +148,7 @@ export default function App() {
   // so the address bar matches the page and a reload doesn't redirect twice.
   useEffect(() => {
     if (initialLocation.redirect) {
-      window.history.replaceState(null, '', pathForPage(initialLocation.page, initialLocation.section))
+      window.history.replaceState(null, '', pathForPage(initialLocation.page, initialLocation.section, initialLocation.detail))
     }
   }, [initialLocation])
 
@@ -259,6 +261,7 @@ export default function App() {
       const loc = parseLocation()
       setPage(loc.page)
       setSection(loc.section)
+      setDetail(loc.detail)
       if (loc.workoutId) {
         // Shown again immediately when it is the one we just came from, and
         // only then refreshed. The fetch takes long enough to see, and until it
@@ -278,6 +281,7 @@ export default function App() {
   const navigate = useCallback((p: Page) => {
     setPage(p)
     setSection(null)
+    setDetail(null)
     setSelectedWorkout(null)
     window.history.pushState(null, '', pathForPage(p))
   }, [])
@@ -288,15 +292,16 @@ export default function App() {
    * Pushed rather than replaced so the phone's back gesture and the browser's
    * back button leave the category the same way the on-screen arrow does.
    */
-  const openSection = useCallback((p: Page, s: string | null) => {
+  const openSection = useCallback((p: Page, s: string | null, d: string | null = null) => {
     setPage(p)
     setSection(s)
+    setDetail(d)
     // A workout being open wins over the page underneath it, so leaving this
     // set meant the user menu's Profile entry changed the page and the URL and
     // then carried on showing the workout — from anywhere else it worked, which
     // is exactly what makes that kind of bug hard to describe.
     setSelectedWorkout(null)
-    window.history.pushState(null, '', pathForPage(p, s))
+    window.history.pushState(null, '', pathForPage(p, s, d))
   }, [])
 
   /**
@@ -322,6 +327,7 @@ export default function App() {
           setSelectedWorkout(null)
           setPage('workouts')
           setSection(null)
+          setDetail(null)
           window.history.pushState(null, '', pathForPage('workouts'))
         })
       return
@@ -329,10 +335,11 @@ export default function App() {
     setSelectedWorkout(null)
     setPage(loc.page)
     setSection(loc.section)
+    setDetail(loc.detail)
     // The query string is kept, not dropped: a notification links to a filtered
     // list ("/workouts?source=autoimport"), and pathForPage alone would land on
     // the unfiltered page and leave the user hunting.
-    window.history.pushState(null, '', pathForPage(loc.page, loc.section) + target.search)
+    window.history.pushState(null, '', pathForPage(loc.page, loc.section, loc.detail) + target.search)
     // The destination page may already be mounted, in which case nothing about
     // it re-renders and a filter in the query string would be ignored. This says
     // "the URL changed" to whoever cares.
@@ -621,7 +628,9 @@ export default function App() {
         ) : page === 'admin' ? (
           <Admin
             section={section as AdminSection | null}
+            userId={detail}
             onOpen={s => openSection('admin', s)}
+            onOpenUser={id => openSection('admin', 'users', id === null ? null : String(id))}
             onBack={() => openSection('admin', null)}
           />
         ) : (

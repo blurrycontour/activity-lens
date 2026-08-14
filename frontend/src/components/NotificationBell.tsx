@@ -51,11 +51,22 @@ interface NotificationBellProps {
  */
 export default function NotificationBell({ onNavigate }: NotificationBellProps) {
   const [open, setOpen] = useState(false)
+  /**
+   * A notification opened for reading rather than for navigating.
+   *
+   * Most notifications point somewhere, and tapping one goes there. A broadcast
+   * points nowhere — it *is* the message — and tapping it used to do nothing at
+   * all, on a row whose text was clamped to two lines. This shows it in full.
+   */
+  const [reading, setReading] = useState<AppNotification | null>(null)
   const [items, setItems] = useState<AppNotification[]>([])
   const [unread, setUnread] = useState(0)
   const [loaded, setLoaded] = useState(false)
   const [push, setPush] = useState<PushState>('unsupported')
   const [pushKey, setPushKey] = useState('')
+  // The same key, readable straight after a load: the mount effect needs it
+  // before React has re-rendered with the state above.
+  const pushKeyRef = useRef('')
   // Where to pin the panel, measured from the bell. Needed because the panel is
   // portalled out of the top bar (see the render), so it can no longer be
   // positioned relative to its trigger by CSS alone.
@@ -71,14 +82,15 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
       const res = await api.notifications()
       setItems(res.notifications)
       setUnread(res.unread)
+      pushKeyRef.current = res.pushKey ?? ''
       setPushKey(res.pushKey ?? '')
       setPush(res.pushKey ? await pushState() : 'unsupported')
       setLoaded(true)
-      return res.pushKey ?? ''
+      return res.notifications
     } catch {
       // A failed poll is not worth surfacing; the next one may well succeed.
     }
-    return ''
+    return null
   }, [])
 
   // An endpoint the distributor issues later — a refresh, a registration it had
@@ -104,7 +116,8 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
         .then(p => maybeEnrolNativePush(p.notify?.push ?? true))
         .catch(() => {})
 
-      const key = await load()
+      await load()
+      const key = pushKeyRef.current
       if (!key) return
       // Keep the server's record of this device in step with the browser's.
       await syncPushSubscription()
@@ -122,7 +135,11 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
       // Marked read before navigating, not after: the user has dealt with this
       // one, and leaving it bold in the list they are about to see is the bug
       // this fixes. load() then picks up the new state.
-      void markNotificationOpened(tap.id).then(() => load())
+      void markNotificationOpened(tap.id).then(() => load()).then(list => {
+        // Nothing to navigate to — a broadcast is the message itself, so a tap
+        // on one opens it for reading rather than doing nothing at all.
+        if (!tap.link) setReading(list?.find(n => n.id === tap.id) ?? null)
+      })
       if (tap.link) onNavigate(tap.link)
     }
     void consumeNotificationTap().then(tap => { if (tap) go(tap) })
@@ -147,11 +164,15 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
 
   // The backdrop handles dismissal by click; this covers the keyboard.
   useEffect(() => {
-    if (!open) return
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setOpen(false) }
+    if (!open && !reading) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      setOpen(false)
+      setReading(null)
+    }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [open])
+  }, [open, reading])
 
   useLayoutEffect(() => {
     if (!open || !btnRef.current) return
@@ -177,6 +198,7 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
     // Reading it here should clear it from the OS tray too.
     void dismissOSNotification(n.id)
     if (n.link) onNavigate(n.link)
+    else setReading(n)
   }
 
   async function turnOnPush() {
@@ -305,6 +327,32 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
             ))}
           </div>
         </div>
+        </>,
+        document.body,
+      )}
+
+      {reading && createPortal(
+        <>
+          <div className="overlay" onClick={() => setReading(null)} />
+          <div className="modal" role="dialog" aria-modal="true" aria-label={reading.title}>
+            <div className="modal-box notif-read">
+              <div className="notif-read-head">
+                {reading.icon
+                  ? <img className="notif-avatar" src={apiURL(reading.icon)} alt="" />
+                  : <span className="notif-icon">{KIND_ICON[reading.kind] ?? <Bell size={14} />}</span>}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <h3 className="notif-read-title">{reading.title}</h3>
+                  <span className="notif-time">{ago(reading.createdAt)}</span>
+                </div>
+                <button className="btn-icon" onClick={() => setReading(null)} aria-label="Close">
+                  <X size={16} />
+                </button>
+              </div>
+              {/* Whitespace preserved: a broadcast is typed by a person, and the
+                  line breaks they put in are part of what they wrote. */}
+              {reading.body && <p className="notif-read-body">{reading.body}</p>}
+            </div>
+          </div>
         </>,
         document.body,
       )}
