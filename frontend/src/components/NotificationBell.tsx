@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Bell, Check, Share2, Footprints, Trophy, Clock, X, Trash2, FolderDown, MessageSquare, Target, Megaphone } from 'lucide-react'
+import { Bell, Check, Download, Share2, Footprints, Trophy, Clock, X, Trash2, FolderDown, MessageSquare, Target, Megaphone } from 'lucide-react'
 import { api, apiURL, type AppNotification, type NotificationKind } from '../lib/api'
 import { dismissOSNotification, enablePush, maybePromptForPush, pushState, syncPushSubscription, type PushState } from '../lib/push'
-import { consumeNotificationTap, maybeEnrolNativePush, onNotificationTap, syncNativePush, watchNativeEndpoint, type NotificationTap } from '../lib/native/unifiedPush'
-import { markNotificationOpened, PUSH_EVENT } from '../lib/notifications'
+import { maybeEnrolNativePush, syncNativePush, watchNativeEndpoint } from '../lib/native/unifiedPush'
+import { PUSH_EVENT, READ_NOTIFICATION_EVENT } from '../lib/notifications'
 import { useIsMobile } from '../lib/useIsMobile'
 
 /** How often to re-check the unread count while the app is open. */
@@ -14,6 +14,7 @@ const MAX_BADGE = 9
 
 const KIND_ICON: Record<NotificationKind, React.ReactNode> = {
   broadcast: <Megaphone size={14} />,
+  app_update: <Download size={14} />,
   workout_shared: <Share2 size={14} />,
   workout_social: <MessageSquare size={14} />,
   gear_worn: <Footprints size={14} />,
@@ -127,24 +128,16 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // A tapped Android notification names the page it belongs to. Both asked for
-  // and subscribed to: a cold start delivers the intent before this component
-  // exists, and a tap while the app is open delivers it after.
+  // A linkless notification tapped outside the app — the tap itself is handled
+  // above this component, which is mounted only when signed in.
   useEffect(() => {
-    const go = (tap: NotificationTap) => {
-      // Marked read before navigating, not after: the user has dealt with this
-      // one, and leaving it bold in the list they are about to see is the bug
-      // this fixes. load() then picks up the new state.
-      void markNotificationOpened(tap.id).then(() => load()).then(list => {
-        // Nothing to navigate to — a broadcast is the message itself, so a tap
-        // on one opens it for reading rather than doing nothing at all.
-        if (!tap.link) setReading(list?.find(n => n.id === tap.id) ?? null)
-      })
-      if (tap.link) onNavigate(tap.link)
+    const onRead = (e: Event) => {
+      const id = (e as CustomEvent<string>).detail
+      void load().then(list => setReading(list?.find(n => n.id === id) ?? null))
     }
-    void consumeNotificationTap().then(tap => { if (tap) go(tap) })
-    return onNotificationTap(go)
-  }, [load, onNavigate])
+    window.addEventListener(READ_NOTIFICATION_EVENT, onRead)
+    return () => window.removeEventListener(READ_NOTIFICATION_EVENT, onRead)
+  }, [load])
 
   // Poll while the tab is visible. Push covers the app being closed, so this
   // only has to catch changes made in another session or on another device.

@@ -23,6 +23,9 @@ const (
 	keyOIDC    = "oidc"
 	keyStorage = "storage"
 	keyVAPID   = "vapid"
+	// keyAnnounced remembers the release users were last told about, so a
+	// restart on the same version does not announce it again.
+	keyAnnounced = "announced_version"
 )
 
 // SMTP holds outbound email settings.
@@ -161,6 +164,28 @@ func (s *Store) set(ctx context.Context, key string, v any) error {
 		 ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
 		key, string(raw), time.Now().UTC().Format(time.RFC3339))
 	return err
+}
+
+// AnnouncedVersion is the release this instance has already told its users
+// about, or empty if it has never told them anything.
+//
+// Instance-wide rather than per user because the question is about the server:
+// it has one version at a time, and every user is looking at the same one.
+func (s *Store) AnnouncedVersion(ctx context.Context) (string, error) {
+	var v struct {
+		Version string `json:"version"`
+	}
+	if _, err := s.get(ctx, keyAnnounced, &v); err != nil {
+		return "", err
+	}
+	return v.Version, nil
+}
+
+// SetAnnouncedVersion records that users have been told about this release.
+func (s *Store) SetAnnouncedVersion(ctx context.Context, version string) error {
+	return s.set(ctx, keyAnnounced, struct {
+		Version string `json:"version"`
+	}{version})
 }
 
 // StoredSMTP returns the raw SMTP settings saved in the database.

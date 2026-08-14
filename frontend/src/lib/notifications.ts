@@ -12,6 +12,15 @@ import { dismissOSNotification } from './push'
 export const PUSH_EVENT = 'al:push'
 
 /**
+ * Asks whoever owns the notification list to show one in full.
+ *
+ * For a notification that links nowhere — a broadcast is the message itself —
+ * tapped from outside the app. The tap is handled at the top of the app, which
+ * has no list and no dialog; the bell has both. `detail` is the notification id.
+ */
+export const READ_NOTIFICATION_EVENT = 'al:read-notification'
+
+/**
  * Acts on a notification the user opened from outside the app: a system
  * notification they tapped, or the in-app banner.
  *

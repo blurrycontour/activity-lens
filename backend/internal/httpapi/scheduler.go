@@ -96,6 +96,8 @@ func (s *Server) StartScheduler(ctx context.Context) {
 	weatherTicker := time.NewTicker(weatherInterval)
 	defer weatherTicker.Stop()
 
+	// A deployment is a restart, so this is the moment a new release exists.
+	s.announceAppUpdate(ctx)
 	// One pass at startup, so a restart does not skip that day's window.
 	s.sweep(ctx)
 	s.runWeatherPass(ctx)

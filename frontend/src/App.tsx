@@ -1,6 +1,6 @@
 import { useIsMobile } from './lib/useIsMobile'
 import NotificationBanner, { type BannerNotification } from './components/NotificationBanner'
-import { consumeOpenedParam, markNotificationOpened, PUSH_EVENT } from './lib/notifications'
+import { consumeOpenedParam, markNotificationOpened, PUSH_EVENT, READ_NOTIFICATION_EVENT } from './lib/notifications'
 import UpdateToast from './components/UpdateToast'
 import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
 import TopBar, { type ThemeMode } from './components/TopBar'
@@ -39,9 +39,18 @@ import { useSwipeNav } from './lib/useSwipeNav'
 import { consumeShareParam, takeSharedFiles } from './lib/shareTarget'
 import { onNativeIncomingFiles, takeNativeIncomingFiles } from './lib/native/incomingFiles'
 import { applySystemBars } from './lib/native/systemBars'
-import { onPushMessage } from './lib/native/unifiedPush'
+import {
+  consumeNotificationTap, onNotificationTap, onPushMessage, type NotificationTap,
+} from './lib/native/unifiedPush'
+import { startUpdate } from './lib/appUpdate'
 import { LoaderCircle } from 'lucide-react'
 import { api } from './lib/api'
+
+/**
+ * The link an update notification carries. Handled rather than navigated to:
+ * see openLink. Kept in step with AppUpdateLink in the backend.
+ */
+const UPDATE_LINK = '/update'
 
 /** Fired when openLink changes the URL without unmounting the page it lands on. */
 export const LOCATION_EVENT = 'al:location'
@@ -311,6 +320,13 @@ export default function App() {
    */
   const openLink = useCallback((link: string) => {
     const target = new URL(link, window.location.origin)
+    // Not a page but an instruction: the update notification asks for the
+    // update to start, which on Android means the install dialog and on the
+    // web means picking up the build this server is now serving.
+    if (target.pathname === UPDATE_LINK) {
+      void startUpdate()
+      return
+    }
     const loc = parseLocation(target.pathname)
     if (loc.workoutId) {
       api.getWorkout(loc.workoutId)
@@ -368,6 +384,38 @@ export default function App() {
     }
     navigator.serviceWorker.addEventListener('message', onMessage)
     return () => navigator.serviceWorker.removeEventListener('message', onMessage)
+  }, [openLink])
+
+  /**
+   * A tapped Android notification.
+   *
+   * Here rather than in the bell, which is only mounted once someone is signed
+   * in: an update notification is delivered to a device whose session may well
+   * have ended, and tapping it has to work anyway — starting an update needs no
+   * session, and the endpoints it uses are deliberately unauthenticated.
+   *
+   * Both polled and subscribed to: a cold start delivers the intent before this
+   * code exists, and a tap while the app is open delivers it after. The plugin
+   * hands a tap over exactly once, so this being the only consumer is what
+   * makes it handled exactly once.
+   */
+  useEffect(() => {
+    const go = (tap: NotificationTap) => {
+      // Marked read before acting, not after: the user has dealt with this one,
+      // and leaving it bold in the list they are about to see is the bug this
+      // fixes. Fails quietly when signed out, which is the case where there is
+      // no list to leave it bold in.
+      void markNotificationOpened(tap.id)
+      if (tap.link) {
+        openLink(tap.link)
+      } else if (tap.id) {
+        // Nothing to navigate to — a broadcast is the message itself, so ask
+        // the bell to show it in full rather than doing nothing at all.
+        window.dispatchEvent(new CustomEvent(READ_NOTIFICATION_EVENT, { detail: tap.id }))
+      }
+    }
+    void consumeNotificationTap().then(tap => { if (tap) go(tap) })
+    return onNotificationTap(go)
   }, [openLink])
 
   // A cold start from a tapped notification, where the worker had no window to

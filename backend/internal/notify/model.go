@@ -51,10 +51,19 @@ const (
 	// service with terms to serve; an admin who needs to reach someone who has
 	// switched it off has their phone number.
 	KindBroadcast Kind = "broadcast"
+	// KindAppUpdate: this server is running a newer release than it was, and
+	// the app that goes with it can be updated.
+	//
+	// It exists for the Android app, which is a separate artifact from the
+	// server and can sit months behind it without anyone noticing: the web app
+	// picks up a new build on its next load, but a phone only checks when it is
+	// opened, and the case worth telling someone about is exactly the one where
+	// they have not opened it. Sent once per version, to everyone who wants it.
+	KindAppUpdate Kind = "app_update"
 )
 
 // AllKinds is every kind, in the order Settings lists them.
-var AllKinds = []Kind{KindBroadcast, KindWorkoutShared, KindWorkoutSocial, KindGearWorn, KindGoalMet, KindGoalAtRisk, KindGoalNoneSet, KindWorkoutImported, KindFeedback}
+var AllKinds = []Kind{KindBroadcast, KindAppUpdate, KindWorkoutShared, KindWorkoutSocial, KindGearWorn, KindGoalMet, KindGoalAtRisk, KindGoalNoneSet, KindWorkoutImported, KindFeedback}
 
 // ValidKind reports whether k is a known kind.
 func ValidKind(k Kind) bool {

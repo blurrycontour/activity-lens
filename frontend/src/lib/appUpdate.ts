@@ -77,6 +77,32 @@ export async function applyPendingUpdate(): Promise<void> {
 }
 
 /**
+ * Acts on "there is a new version" arriving from outside the app — the update
+ * notification being tapped.
+ *
+ * Distinct from applyPendingUpdate because nothing may be *pending* here: the
+ * server said a new release exists, which on the web is a claim about the files
+ * it serves rather than about a worker this tab has already installed. So a
+ * waiting worker is used when there is one, and otherwise the page is simply
+ * reloaded, which is what fetches the new build.
+ *
+ * The Android app is unchanged by that distinction: it always asks the install
+ * dialog to check, which owns the download and the handoff to the system
+ * installer, and needs no session to do it.
+ */
+export async function startUpdate(): Promise<void> {
+  if (canSelfUpdate()) {
+    requestUpdateCheck()
+    return
+  }
+  if (pending) {
+    await apply?.(true)
+    return
+  }
+  window.location.reload()
+}
+
+/**
  * Subscribes a component to "a new build is waiting". Reads the current value
  * on mount too, so a component that mounts after the update landed — the user
  * menu, opened minutes later — still sees it.

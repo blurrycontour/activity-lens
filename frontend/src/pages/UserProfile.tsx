@@ -98,12 +98,15 @@ export default function UserProfile({ id, onBack, onSelect }: {
   const name = userLabel(data.user)
   const tabs = data.self
     ? [
-      { id: 'public' as Tab, label: 'Public', icon: <Globe size={14} /> },
       { id: 'with-them' as Tab, label: 'Shared', icon: <Send size={14} /> },
+      { id: 'public' as Tab, label: 'Public', icon: <Globe size={14} /> },
     ]
+    // "by me" against "with me": one word apart, and the direction is in both.
+    // An unqualified "Shared" beside "Shared with me" leaves the reader to
+    // infer that the short one means the opposite way round.
     : [
-      { id: 'with-me' as Tab, label: 'With me', icon: <Handshake size={14} /> },
-      { id: 'with-them' as Tab, label: 'With them', icon: <Send size={14} /> },
+      { id: 'with-me' as Tab, label: 'Shared with me', icon: <Handshake size={14} /> },
+      { id: 'with-them' as Tab, label: 'Shared by me', icon: <Send size={14} /> },
       { id: 'public' as Tab, label: 'Public', icon: <Globe size={14} /> },
     ]
 
