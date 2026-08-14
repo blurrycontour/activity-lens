@@ -80,6 +80,9 @@ func (unimplementedSharing) ShareRecipients(context.Context, int64, string) ([]i
 func (unimplementedSharing) ShareCounts(context.Context, int64) (map[string]int, error) {
 	panic("sharing is only exercised against the real schema; see sharing_test.go")
 }
+func (unimplementedSharing) ShareRecipientsByWorkout(context.Context, int64) (map[string][]int64, error) {
+	panic("sharing is only exercised against the real schema; see sharing_test.go")
+}
 func (unimplementedSharing) AddShare(context.Context, int64, string, int64) error {
 	panic("sharing is only exercised against the real schema; see sharing_test.go")
 }
@@ -386,6 +389,43 @@ func TestShareCounts(t *testing.T) {
 	}
 	if _, ok := counts[other]; ok {
 		t.Fatal("ShareCounts leaked another user's workout")
+	}
+}
+
+// The grouped form of the same question, which the owner's own profile renders
+// as names beside each workout. Owner scoping is the part worth pinning: this
+// one is called with the viewer's own id and must never reach past it.
+func TestShareRecipientsByWorkout(t *testing.T) {
+	ctx := context.Background()
+	svc := newSharingSvc(t)
+
+	two := seed(t, svc, alice, "Shared twice")
+	unshared := seed(t, svc, alice, "Not shared")
+	other := seed(t, svc, bob, "Bob's run")
+
+	for _, target := range []int64{bob, carol} {
+		if err := svc.AddShare(ctx, alice, two, target); err != nil {
+			t.Fatalf("AddShare() error = %v", err)
+		}
+	}
+	if err := svc.AddShare(ctx, bob, other, carol); err != nil {
+		t.Fatalf("AddShare() error = %v", err)
+	}
+
+	got, err := svc.ShareRecipientsByWorkout(ctx, alice)
+	if err != nil {
+		t.Fatalf("ShareRecipientsByWorkout() error = %v", err)
+	}
+	if len(got[two]) != 2 || got[two][0] != bob || got[two][1] != carol {
+		t.Errorf("recipients = %v, want [%d %d] in share order", got[two], bob, carol)
+	}
+	// Absent rather than an empty slice: the client renders a row of names only
+	// where there are names, and "shared with nobody" is not a share.
+	if _, ok := got[unshared]; ok {
+		t.Error("a workout shared with nobody has an entry")
+	}
+	if _, ok := got[other]; ok {
+		t.Fatal("recipients leaked from another user's workout")
 	}
 }
 

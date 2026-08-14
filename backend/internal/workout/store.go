@@ -107,6 +107,7 @@ type Repository interface {
 	// ShareCounts maps workout id to recipient count across everything ownerID
 	// owns, in one query, so listing a library never fans out per row.
 	ShareCounts(ctx context.Context, ownerID int64) (map[string]int, error)
+	ShareRecipientsByWorkout(ctx context.Context, ownerID int64) (map[string][]int64, error)
 	// AddShare is idempotent. Both AddShare and RemoveShare return ErrNotFound
 	// when the caller does not own the workout.
 	AddShare(ctx context.Context, ownerID int64, workoutID string, targetID int64) error

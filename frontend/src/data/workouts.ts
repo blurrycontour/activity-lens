@@ -148,6 +148,12 @@ export interface Workout {
   visibility?: 'private' | 'public'
   /** How many people this workout is shared with directly. Your own only. */
   sharedWithCount?: number
+  /**
+   * Who those people are. Sent only on your own profile — who else can see a
+   * workout is the owner's business — so a list row that has it is one of
+   * yours, and one without it may simply not have been asked for.
+   */
+  sharedWith?: { id: number; username: string; displayName: string; avatarPath: string }[]
   /** The author, present only on workouts belonging to someone else. */
   owner?: { id: number; username: string; displayName: string; avatarPath: string }
   /**

@@ -72,6 +72,11 @@ func (s *Service) ShareCounts(ctx context.Context, ownerID int64) (map[string]in
 	return s.repo.ShareCounts(ctx, ownerID)
 }
 
+// ShareRecipientsByWorkout lists, per workout, who the owner has shared it with.
+func (s *Service) ShareRecipientsByWorkout(ctx context.Context, ownerID int64) (map[string][]int64, error) {
+	return s.repo.ShareRecipientsByWorkout(ctx, ownerID)
+}
+
 // AddShare grants targetID read access to a workout the caller owns. It is
 // idempotent; sharing with yourself is rejected as meaningless rather than
 // silently stored, since it would otherwise show up as a phantom recipient.

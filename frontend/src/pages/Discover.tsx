@@ -166,6 +166,7 @@ export default function Discover({ onOpenUser, onSelectWorkout }: {
               ? 'Nobody has shared a workout with you yet.'
               : 'No public workouts on this instance yet.'}
             onSelect={onSelectWorkout}
+            byline="owner"
             onOpenUser={onOpenUser}
           />
         )}

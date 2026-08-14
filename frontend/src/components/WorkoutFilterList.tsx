@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Handshake, Layers, LoaderCircle, Search, SlidersHorizontal, X } from 'lucide-react'
+import { Handshake, Layers, LoaderCircle, Search, Send, SlidersHorizontal, X } from 'lucide-react'
 import { ALL_WORKOUT_TYPES, type Workout, type WorkoutType } from '../data/workouts'
 import { applyWorkoutFilters, DEFAULT_FILTERS, type Scope } from '../lib/workoutFilters'
 import { RANGE_OPTIONS } from '../lib/range'
@@ -31,6 +31,14 @@ const NONE: Narrowing = {
   rangeDays: 0,
 }
 
+/**
+ * How many recipients are named before the rest become a count.
+ *
+ * Three fits the row at phone widths; past that the names stop being read and
+ * start being a wall, and "and 4 more" is the more useful fact anyway.
+ */
+const NAMED_RECIPIENTS = 3
+
 interface Props {
   /** The workouts to show, or undefined while they are still coming. */
   rows: Workout[] | undefined
@@ -46,7 +54,16 @@ interface Props {
   /** A load that failed, shown in place of the list. */
   error?: string | null
   onSelect: (w: Workout) => void
-  /** Opens the owner's profile from the byline. Omitted for your own workouts. */
+  /**
+   * The row under each card, if any.
+   *
+   * 'owner' names who recorded it, for a feed of other people's workouts.
+   * 'recipients' names who you sent it to, which only your own workouts can
+   * answer. Neither, by default: on one person's profile every row is already
+   * theirs, and a byline repeating the name at the top of the page is noise.
+   */
+  byline?: 'owner' | 'recipients'
+  /** Opens a person named in the byline. */
   onOpenUser?: (id: number) => void
 }
 
@@ -61,7 +78,7 @@ interface Props {
  * this the more complicated thing rather than the shared one.
  */
 export default function WorkoutFilterList({
-  rows, scope, storageKey, emptyMessage, error, onSelect, onOpenUser,
+  rows, scope, storageKey, emptyMessage, error, onSelect, byline, onOpenUser,
 }: Props) {
   const isMobile = useIsMobile()
   // Opening a workout unmounts this, so a search typed here would otherwise be
@@ -209,22 +226,9 @@ export default function WorkoutFilterList({
               workout={w}
               variant="list"
               onClick={() => onSelect(w)}
-              // Owner names can be long, so they get their own row rather than
+// Names can be long, so they get their own row rather than
               // competing with the pace figure for the trailing cluster.
-              footer={onOpenUser && w.owner
-                ? (
-                  /* stopPropagation because the row itself opens the workout,
-                     and this opens the person who owns it. */
-                  <button
-                    type="button"
-                    className="owner-byline owner-byline-link"
-                    onClick={e => { e.stopPropagation(); onOpenUser(w.owner!.id) }}
-                  >
-                    <UserAvatar user={w.owner} size={18} />
-                    <span>{userLabel(w.owner)}</span>
-                  </button>
-                )
-                : undefined}
+              footer={<Byline workout={w} kind={byline} onOpenUser={onOpenUser} />}
             />
           ))}
         </div>
@@ -245,5 +249,53 @@ export default function WorkoutFilterList({
         />
       )}
     </>
+  )
+}
+
+/**
+ * Who a workout involves, under the card.
+ *
+ * One component for both directions because they are the same row with the
+ * arrow reversed — the author of someone else's workout, or the people you sent
+ * your own to — and drawing them differently would suggest a distinction that
+ * is not there.
+ */
+function Byline({ workout: w, kind, onOpenUser }: {
+  workout: Workout
+  kind?: 'owner' | 'recipients'
+  onOpenUser?: (id: number) => void
+}) {
+  const people = kind === 'recipients' ? w.sharedWith ?? [] : w.owner ? [w.owner] : []
+  if (!kind || people.length === 0) return null
+
+  const named = people.slice(0, NAMED_RECIPIENTS)
+  const rest = people.length - named.length
+
+  return (
+    <span className="owner-byline">
+      {kind === 'recipients' && <Send size={12} aria-hidden />}
+      {named.map(p => (
+        /* stopPropagation because the row itself opens the workout, and this
+           opens the person. A plain span when there is nowhere to go, rather
+           than a button that looks live and does nothing. */
+        onOpenUser ? (
+          <button
+            key={p.id}
+            type="button"
+            className="owner-byline owner-byline-link"
+            onClick={e => { e.stopPropagation(); onOpenUser(p.id) }}
+          >
+            <UserAvatar user={p} size={18} />
+            <span>{userLabel(p)}</span>
+          </button>
+        ) : (
+          <span key={p.id} className="owner-byline">
+            <UserAvatar user={p} size={18} />
+            <span>{userLabel(p)}</span>
+          </span>
+        )
+      ))}
+      {rest > 0 && <span className="owner-byline-more">and {rest} more</span>}
+    </span>
   )
 }

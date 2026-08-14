@@ -335,7 +335,9 @@ export default function App() {
           // The query string comes along, exactly as it does for a page below:
           // a social notification links to "?tab=social", and dropping it would
           // land on the charts and leave the reader to find the comment.
-          window.history.pushState(null, '', `/workouts/${w.id}${target.search}`)
+          // Marked like any workout we open, so closing it goes back to
+          // wherever the tap came from rather than to the library.
+          window.history.pushState({ workout: true }, '', `/workouts/${w.id}${target.search}`)
         })
         // A workout that has since been unshared or deleted: land on the list
         // rather than a dead end.
@@ -434,10 +436,39 @@ export default function App() {
     window.dispatchEvent(new Event(PUSH_EVENT))
   }), [])
 
-  const selectWorkout = useCallback((w: Workout | null) => {
-    setSelectedWorkout(w)
-    window.history.pushState(null, '', w ? `/workouts/${w.id}` : pathForPage('workouts'))
+  /**
+   * Closes the workout, landing where it was opened from.
+   *
+   * It used to push the library, so the header's back arrow and the phone's
+   * back gesture disagreed with each other: opening a workout from Discover, a
+   * profile or a piece of equipment and pressing the arrow dumped you in your
+   * own library, while the gesture returned you where you came from. Going back
+   * through history is the one behaviour that is right from everywhere.
+   *
+   * The state marker is what distinguishes an entry this app pushed from a cold
+   * load of /workouts/{id} — a deep link, a reload, a shared URL — where there
+   * is nothing behind us and going back would leave the app entirely.
+   */
+  const closeWorkout = useCallback(() => {
+    if (window.history.state?.workout) {
+      window.history.back()
+      return
+    }
+    setSelectedWorkout(null)
+    window.history.replaceState(null, '', pathForPage('workouts'))
   }, [])
+
+  /**
+   * Opens a workout, marking the history entry as one we pushed.
+   *
+   * The marker is what lets closing it go *back* rather than forward to the
+   * library — see closeWorkout.
+   */
+  const selectWorkout = useCallback((w: Workout | null) => {
+    if (!w) { closeWorkout(); return }
+    setSelectedWorkout(w)
+    window.history.pushState({ workout: true }, '', `/workouts/${w.id}`)
+  }, [closeWorkout])
 
   const toggleSidebar = useCallback(() => {
     setSidebarCollapsed(c => !c)
@@ -460,7 +491,7 @@ export default function App() {
       if (e.key === 'g') { gPressed = true; setTimeout(() => { gPressed = false }, 1000); return }
       if (e.key === '[') toggleSidebar()
       if (e.key === 'Escape') {
-        selectWorkout(null)
+        closeWorkout()
         setShowUserMenu(false)
         setShowImport(false)
       }
@@ -471,7 +502,7 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [navigate, toggleSidebar, selectWorkout])
+  }, [navigate, toggleSidebar, closeWorkout])
 
   // The <main> element, tracked as state via a callback ref rather than a
   // plain useRef. isMobile can already be true (and so gesturesEnabled true)
@@ -621,7 +652,7 @@ export default function App() {
             key={selectedWorkout.id}
             workout={selectedWorkout}
             accent={accent}
-            onBack={() => selectWorkout(null)}
+            onBack={closeWorkout}
             onOpenUser={id => openSection('users', String(id))}
             onOpenSettings={() => navigate('settings')}
           />
@@ -654,6 +685,7 @@ export default function App() {
             id={Number(section)}
             onBack={() => window.history.back()}
             onSelect={selectWorkout}
+            onOpenUser={id => openSection('users', String(id))}
           />
         ) : page === 'equipment' ? (
           <Equipment

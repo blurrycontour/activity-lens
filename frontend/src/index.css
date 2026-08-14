@@ -4023,6 +4023,10 @@ body:has(.overlay) .fab { display: none; }
   transition: background 0.12s, color 0.12s;
 }
 .owner-byline-link:hover { background: var(--bg-3); color: var(--text-2); }
+/* The recipients row: several people under one workout, wrapping rather than
+   eliding, since which of them can see it is the whole point of the line. */
+.owner-byline { flex-wrap: wrap; gap: 6px 8px; }
+.owner-byline-more { font-size: 12px; color: var(--text-3); white-space: nowrap; }
 
 /* ── Discover: everyone on this instance ── */
 /* One column at every width. A grid of tiles read as a gallery of strangers;

@@ -111,6 +111,37 @@ func (r *SQLiteRepository) ShareRecipients(ctx context.Context, ownerID int64, w
 	return out, rows.Err()
 }
 
+// ShareRecipientsByWorkout answers "who can see each of my workouts" in one
+// query, for every workout an owner has shared.
+//
+// The grouped form of ShareRecipients, and separate from ShareCounts because a
+// list that names people needs the ids rather than a total. One query for the
+// whole library rather than one per row: a profile page renders every shared
+// workout at once, and per-row lookups would be a query per card.
+func (r *SQLiteRepository) ShareRecipientsByWorkout(ctx context.Context, ownerID int64) (map[string][]int64, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT workout_shares.workout_id, workout_shares.user_id
+		FROM workout_shares
+		JOIN workouts ON workouts.id = workout_shares.workout_id
+		WHERE workouts.user_id = ?
+		ORDER BY workout_shares.workout_id, workout_shares.created_at`, ownerID)
+	if err != nil {
+		return nil, fmt.Errorf("query share recipients: %w", err)
+	}
+	defer rows.Close()
+	out := make(map[string][]int64)
+	for rows.Next() {
+		var (
+			workoutID string
+			userID    int64
+		)
+		if err := rows.Scan(&workoutID, &userID); err != nil {
+			return nil, err
+		}
+		out[workoutID] = append(out[workoutID], userID)
+	}
+	return out, rows.Err()
+}
+
 func (r *SQLiteRepository) ShareCounts(ctx context.Context, ownerID int64) (map[string]int, error) {
 	rows, err := r.db.QueryContext(ctx, `SELECT workout_shares.workout_id, COUNT(*)
 		FROM workout_shares

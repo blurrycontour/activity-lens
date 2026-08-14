@@ -10,6 +10,20 @@ import UserAvatar, { avatarUrl, userLabel } from '../components/UserAvatar'
 import WorkoutFilterList from '../components/WorkoutFilterList'
 
 /**
+ * The last profile fetched, kept across unmounts.
+ *
+ * The header is the person — avatar, name, tagline — so a render with no data
+ * is a header with no name, and anything that remounts this page shows the bare
+ * back arrow for as long as the request takes. That was visible as the name
+ * flashing in and out when moving around the page.
+ *
+ * Module-level rather than state precisely because state does not survive the
+ * remount this exists to cover. One entry, not a map: you look at one profile
+ * at a time, and a cache that grows is a cache that goes stale.
+ */
+let lastProfile: { id: number; data: UserProfileData } | null = null
+
+/**
  * Which set of workouts is on screen.
  *
  * Three, because there are three distinct relationships between two people and
@@ -34,12 +48,17 @@ type Tab = 'with-me' | 'with-them' | 'public'
  * toggle inside the library's filters. "With me" is dropped, because nobody
  * shares a workout with themselves.
  */
-export default function UserProfile({ id, onBack, onSelect }: {
+export default function UserProfile({ id, onBack, onSelect, onOpenUser }: {
   id: number
   onBack: () => void
   onSelect: (w: Workout) => void
+  /** Opens one of the people a workout of yours was shared with. */
+  onOpenUser: (id: number) => void
 }) {
-  const [data, setData] = useState<UserProfileData | null>(null)
+  // Seeded from the cache, so returning to a profile draws the person at once
+  // and the fetch below only ever corrects it.
+  const [data, setData] = useState<UserProfileData | null>(
+    () => (lastProfile?.id === id ? lastProfile.data : null))
   const [err, setErr] = useState<string | null>(null)
   /**
    * Kept across unmounts, because opening a workout from here replaces this
@@ -54,6 +73,7 @@ export default function UserProfile({ id, onBack, onSelect }: {
   const load = useCallback(async () => {
     try {
       const d = await api.getUserProfile(id)
+      lastProfile = { id, data: d }
       setData(d)
       // Your own profile has only one tab, and a remembered "with me" would
       // land on a tab this page does not offer. Anything else is left alone, so
@@ -66,10 +86,11 @@ export default function UserProfile({ id, onBack, onSelect }: {
   useEffect(() => { void load() }, [load])
   useRefreshHandler(load)
 
-  // Before the person arrives, the header is the back arrow and nothing else.
-  // It used to carry the word "Profile", which was then replaced by the avatar
-  // and name a moment later — a title appearing only to be swapped out reads as
-  // the page having loaded the wrong thing first.
+  // Only before anyone has been seen at all — with the cache above, that is a
+  // cold open of a profile and nothing else. The header is the back arrow and
+  // nothing else; it used to carry the word "Profile", which was then replaced
+  // by the avatar and name a moment later, and a title that appears only to be
+  // swapped out reads as the page having loaded the wrong thing first.
   if (err || !data) {
     return (
       <>
@@ -164,6 +185,11 @@ export default function UserProfile({ id, onBack, onSelect }: {
           storageKey={`profile.${tab}`}
           emptyMessage={empty}
           onSelect={onSelect}
+          // Only on your own outbound list: everywhere else on this page the
+          // rows belong to the person in the header, and naming them again
+          // under every card says nothing.
+          byline={data.self && tab === 'with-them' ? 'recipients' : undefined}
+          onOpenUser={onOpenUser}
         />
       </div>
 

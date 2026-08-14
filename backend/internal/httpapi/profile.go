@@ -143,6 +143,19 @@ func (s *Server) writeOwnProfile(w http.ResponseWriter, r *http.Request, ref wor
 		writeError(w, http.StatusInternalServerError, "could not load shares")
 		return
 	}
+	// Who each one went to, so the list can name them rather than counting
+	// them. One query for the library, and one directory lookup, rather than a
+	// pair per row.
+	recipients, err := s.workout.ShareRecipientsByWorkout(r.Context(), ref.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load shares")
+		return
+	}
+	dir, err := s.userDirectory(r)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load users")
+		return
+	}
 	out := make([]workout.Workout, 0)
 	sent := make([]workout.Workout, 0)
 	for i := range list {
@@ -156,6 +169,14 @@ func (s *Server) writeOwnProfile(w http.ResponseWriter, r *http.Request, ref wor
 		// public: one is "these three can see it", the other is "everyone
 		// signed in here can". A workout can be both, and belongs in both.
 		if wk.SharedWithCount > 0 {
+			// Named, in the order they were shared with. An account deleted
+			// since is simply absent — the share row goes with the user, and a
+			// name we cannot resolve is not one worth inventing.
+			for _, id := range recipients[wk.ID] {
+				if who, ok := dir[id]; ok {
+					wk.SharedWith = append(wk.SharedWith, who)
+				}
+			}
 			sent = append(sent, wk)
 		}
 	}

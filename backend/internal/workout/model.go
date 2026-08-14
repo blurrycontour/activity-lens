@@ -194,6 +194,10 @@ type Workout struct {
 	// SharedWithCount is populated by the API layer on owner-facing lists so
 	// the library can badge workouts that have direct recipients.
 	SharedWithCount int `json:"sharedWithCount,omitempty"`
+	// SharedWith names those people, on the owner's own profile. Only the API
+	// layer fills it, and only where the viewer is the owner: who else can see
+	// a workout is the owner's business and nobody else's.
+	SharedWith []OwnerRef `json:"sharedWith,omitempty"`
 	// Owner is populated by the API layer on responses to someone other than
 	// the owner, and is nil on your own workouts.
 	Owner *OwnerRef `json:"owner,omitempty"`
