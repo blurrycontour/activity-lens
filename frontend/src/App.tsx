@@ -406,7 +406,7 @@ export default function App() {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return
       if (gPressed) {
         gPressed = false
-        const map: Record<string, Page> = { d: 'dashboard', w: 'workouts', a: 'analysis', c: 'consistency', m: 'map', e: 'equipment' }
+        const map: Record<string, Page> = { d: 'dashboard', w: 'workouts', a: 'analysis', c: 'consistency', m: 'map', e: 'equipment', p: 'discover' }
         if (map[e.key]) { navigate(map[e.key]); return }
       }
       if (e.key === 'g') { gPressed = true; setTimeout(() => { gPressed = false }, 1000); return }
@@ -588,11 +588,7 @@ export default function App() {
         ) : page === 'dashboard' ? (
           <Dashboard onSelect={selectWorkout} />
         ) : page === 'workouts' ? (
-          <Workouts
-            onSelect={selectWorkout}
-            onImport={() => setShowImport(true)}
-            onOpenUser={id => openSection('users', String(id))}
-          />
+          <Workouts onSelect={selectWorkout} onImport={() => setShowImport(true)} />
         ) : page === 'analysis' ? (
           <Analysis />
         ) : page === 'map' ? (
@@ -600,7 +596,10 @@ export default function App() {
         ) : page === 'consistency' ? (
           <Consistency />
         ) : page === 'discover' ? (
-          <Discover onOpenUser={id => openSection('users', String(id))} />
+          <Discover
+            onOpenUser={id => openSection('users', String(id))}
+            onSelectWorkout={selectWorkout}
+          />
         ) : page === 'users' ? (
           // section carries the user id; see ID_SECTION_PAGES in nav.ts.
           <UserProfile

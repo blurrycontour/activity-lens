@@ -4071,30 +4071,52 @@ body:has(.overlay) .fab { display: none; }
   overflow: hidden;
 }
 
-/* ── Another member's profile ── */
-.profile-head {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
+/* ── Another member's profile ──
+   The header *is* the person: avatar, name, handle and tagline take the place
+   of a page title, which would otherwise print the same name twice. */
+.profile-header { align-items: center; gap: 12px; }
+.profile-avatar-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  border-radius: 50%;
+  cursor: zoom-in;
+  flex-shrink: 0;
+  line-height: 0;
+  transition: box-shadow 0.12s;
 }
+.profile-avatar-btn:hover { box-shadow: 0 0 0 3px var(--primary-dim); }
 .profile-name { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
 .profile-handle { font-size: 13px; color: var(--text-3); font-family: var(--font-mono); margin-top: 1px; }
-.profile-counts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 14px;
-  margin-top: 8px;
-  font-size: 12px;
-  color: var(--text-2);
-}
-.profile-counts span { display: inline-flex; align-items: center; gap: 5px; }
 .profile-tagline {
-  margin-top: 8px;
+  margin-top: 6px;
   font-size: 13px;
   color: var(--text-2);
   line-height: 1.45;
   max-width: 52ch;
+}
+/* Bounded by the viewport, not by its own resolution: an uploaded picture can
+   be far larger than the screen. */
+.profile-avatar-full {
+  display: block;
+  margin: 0 auto;
+  width: min(340px, 70vw);
+  height: auto;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 50%;
+  background: var(--bg-3);
+}
+/* Nothing to show, in a feed or a profile tab. */
+.feed-empty {
+  margin-top: 12px;
+  padding: 44px 16px;
+  border-radius: var(--radius);
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  text-align: center;
+  font-size: 14px;
+  color: var(--text-3);
 }
 /* The search and filters above the list, matching the library's row. */
 .profile-tools {

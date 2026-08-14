@@ -24,7 +24,7 @@ export type Page =
  * The primary pages, in order. Mobile swipe navigation walks this list
  * cyclically, so swiping right on the first page wraps around to the last.
  */
-export const MOBILE_PAGES: Page[] = ['dashboard', 'workouts', 'analysis', 'consistency', 'map', 'equipment', 'discover']
+export const MOBILE_PAGES: Page[] = ['dashboard', 'workouts', 'analysis', 'discover', 'consistency', 'map', 'equipment']
 
 /** Sidebar order on desktop: the mobile set plus Help. */
 export const DESKTOP_PAGES: Page[] = [...MOBILE_PAGES, 'help']
@@ -40,10 +40,10 @@ export const DESKTOP_PAGES: Page[] = [...MOBILE_PAGES, 'help']
  * Everything still reachable: the rest live behind More, and swipe navigation
  * walks all of MOBILE_PAGES regardless.
  */
-export const BOTTOM_BAR_PAGES: Page[] = ['dashboard', 'workouts', 'analysis', 'consistency']
+export const BOTTOM_BAR_PAGES: Page[] = ['dashboard', 'workouts', 'analysis', 'discover']
 
 /** The pages behind "More" on a phone. */
-export const MORE_PAGES: Page[] = ['map', 'equipment', 'discover', 'help']
+export const MORE_PAGES: Page[] = ['consistency', 'map', 'equipment', 'help']
 
 /** Every page that owns a route, including the ones reached from the user menu. */
 export const PAGES: Page[] = [...DESKTOP_PAGES, 'settings', 'admin', 'users']

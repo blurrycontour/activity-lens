@@ -1,21 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Globe, Handshake, Layers, LoaderCircle, Search, Send, SlidersHorizontal } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { ArrowLeft, Globe, Handshake, LoaderCircle, Send } from 'lucide-react'
 import { api, ApiError, type UserProfileData } from '../lib/api'
-import { ALL_WORKOUT_TYPES, type Workout, type WorkoutType } from '../data/workouts'
+import type { Workout } from '../data/workouts'
 import { useRefreshHandler } from '../context/RefreshContext'
-import { useIsMobile } from '../lib/useIsMobile'
-import { applyWorkoutFilters, DEFAULT_FILTERS } from '../lib/workoutFilters'
 import { useSessionState } from '../lib/useSessionState'
+import ExpandModal from '../components/ExpandModal'
 import PageHeader from '../components/PageHeader'
 import TabStrip from '../components/TabStrip'
-import TypeIcon from '../components/TypeIcon'
-import UserAvatar, { userLabel } from '../components/UserAvatar'
-import WorkoutCard from '../components/WorkoutCard'
-import TypeDropdown from '../components/TypeDropdown'
-import SortDropdown, { SORT_OPTIONS, type SortKey } from '../components/SortDropdown'
-import RangeDropdown from '../components/RangeDropdown'
-import FilterSheet, { type FilterGroup } from '../components/FilterSheet'
-import { RANGE_OPTIONS } from '../lib/range'
+import UserAvatar, { avatarUrl, userLabel } from '../components/UserAvatar'
+import WorkoutFilterList from '../components/WorkoutFilterList'
 
 /**
  * Which set of workouts is on screen.
@@ -31,10 +24,10 @@ type Tab = 'with-me' | 'with-them' | 'public'
  * each other's.
  *
  * Nothing here is new access. "With me" and "Public" come from the same two
- * feeds the Shared and Public tabs render, and "With them" is the caller's own
- * library filtered by who they shared it with — so every row was already
- * visible to whoever is looking. It is a different arrangement of the same
- * permission, by person rather than by recency.
+ * feeds Discover renders, and "With them" is the caller's own library filtered
+ * by who they shared it with — so every row was already visible to whoever is
+ * looking. It is a different arrangement of the same permission, by person
+ * rather than by recency.
  *
  * Your own profile carries only the public tab: the other two are relations
  * between two people, and neither means anything pointed at yourself.
@@ -54,15 +47,7 @@ export default function UserProfile({ id, onBack, onSelect }: {
    */
   const [{ tab }, setTabState] = useSessionState<{ tab: Tab }>('al_profile_tab', { tab: 'with-me' })
   const setTab = useCallback((t: Tab) => setTabState({ tab: t }), [setTabState])
-  const isMobile = useIsMobile()
-
-  // The same controls the library uses, so a list of workouts is filtered the
-  // same way wherever you meet one.
-  const [search, setSearch] = useState('')
-  const [typeFilter, setTypeFilter] = useState<WorkoutType | 'All'>('All')
-  const [sortBy, setSortBy] = useState<SortKey>('date-desc')
-  const [rangeDays, setRangeDays] = useState(0)
-  const [showFilters, setShowFilters] = useState(false)
+  const [zoomed, setZoomed] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -79,68 +64,6 @@ export default function UserProfile({ id, onBack, onSelect }: {
   }, [id, setTab])
   useEffect(() => { void load() }, [load])
   useRefreshHandler(load)
-
-  const rows = useMemo(() => {
-    if (!data) return []
-    // Three named lists from the server rather than one merged one to slice
-    // apart: which rows are which is the server's answer to give.
-    const source = tab === 'with-them'
-      ? data.sharedWithThem
-      : tab === 'public'
-        ? data.publicWorkouts
-        : data.sharedWithMe
-    return applyWorkoutFilters(source, {
-      ...DEFAULT_FILTERS,
-      scope: tab === 'with-them' ? 'mine' : 'shared',
-      search,
-      typeFilter,
-      sortBy,
-      rangeDays,
-    })
-  }, [data, tab, search, typeFilter, sortBy, rangeDays])
-
-  const activeFilters = useMemo(() => {
-    const out: { key: string; label: string; clear: () => void }[] = []
-    if (typeFilter !== 'All') out.push({ key: 'type', label: typeFilter, clear: () => setTypeFilter('All') })
-    if (rangeDays !== 0) {
-      out.push({
-        key: 'range',
-        label: RANGE_OPTIONS.find(o => o.value === rangeDays)?.label ?? `${rangeDays}d`,
-        clear: () => setRangeDays(0),
-      })
-    }
-    if (sortBy !== 'date-desc') out.push({ key: 'sort', label: 'Sorted', clear: () => setSortBy('date-desc') })
-    return out
-  }, [typeFilter, rangeDays, sortBy])
-
-  // The same three groups the library's sheet offers, in the same order, so
-  // the phone filter is one control learned once.
-  const filterGroups: FilterGroup[] = [
-    {
-      key: 'type',
-      label: 'Activity',
-      value: typeFilter,
-      onChange: v => setTypeFilter(v as WorkoutType | 'All'),
-      options: [
-        { value: 'All', label: 'All types', glyph: <Layers size={13} color="var(--text-3)" aria-hidden /> },
-        ...ALL_WORKOUT_TYPES.map(t => ({ value: t, label: t, glyph: <TypeIcon type={t} size={13} /> })),
-      ],
-    },
-    {
-      key: 'sort',
-      label: 'Sort by',
-      value: sortBy,
-      onChange: v => setSortBy(v as SortKey),
-      options: SORT_OPTIONS.map(o => ({ value: o.value, label: o.label, glyph: o.glyph })),
-    },
-    {
-      key: 'range',
-      label: 'Period',
-      value: rangeDays,
-      onChange: v => setRangeDays(v as number),
-      options: RANGE_OPTIONS.map(o => ({ value: o.value, label: o.label })),
-    },
-  ]
 
   if (err) {
     return (
@@ -170,6 +93,14 @@ export default function UserProfile({ id, onBack, onSelect }: {
       { id: 'public' as Tab, label: 'Public', icon: <Globe size={14} /> },
     ]
 
+  // Three named lists from the server rather than one merged one to slice
+  // apart: which rows are which is the server's answer to give.
+  const rows = tab === 'with-them'
+    ? data.sharedWithThem
+    : tab === 'public'
+      ? data.publicWorkouts
+      : data.sharedWithMe
+
   const empty = tab === 'with-them'
     ? `You have not shared anything with ${name}.`
     : tab === 'public'
@@ -178,87 +109,49 @@ export default function UserProfile({ id, onBack, onSelect }: {
 
   return (
     <>
-      {/* "User", not the name: the name is the headline directly below, and
-          the bar repeating it printed the same fact twice. */}
-      <PageHeader title={data.self ? 'Profile' : 'User'} onBack={onBack} />
-      <div className="page-content">
-        <div className="profile-head">
-          <UserAvatar user={data.user} size={64} />
-          <div style={{ minWidth: 0 }}>
-            <div className="profile-name">{name}</div>
-            {/* Only when it says something the name did not — a display name of
-                "alice" over a username of "alice" is one fact printed twice. */}
-            {data.user.displayName && data.user.displayName !== data.user.username && (
-              <div className="profile-handle">@{data.user.username}</div>
-            )}
-            {data.tagline && <p className="profile-tagline">{data.tagline}</p>}
-          </div>
+      {/* The person *is* the title here, so they take the header rather than
+          the word "User" sitting above a second copy of the same name. Built
+          from the page-header classes so the back arrow lands in exactly the
+          place it does on every other page. */}
+      <div className="page-header page-header-row profile-header">
+        <button className="btn-icon page-header-back" onClick={onBack} aria-label="Back">
+          <ArrowLeft size={18} />
+        </button>
+        <button
+          type="button"
+          className="profile-avatar-btn"
+          onClick={() => setZoomed(true)}
+          aria-label={`Show ${name}'s picture`}
+          title="Show picture"
+        >
+          <UserAvatar user={data.user} size={56} />
+        </button>
+        <div className="page-header-text">
+          <h1 className="profile-name">{name}</h1>
+          <p className="profile-handle">@{data.user.username}</p>
+          {data.tagline && <p className="profile-tagline">{data.tagline}</p>}
         </div>
-
-        <div style={{ marginTop: 18 }}>
-          <TabStrip items={tabs} value={tab} onChange={setTab} ariaLabel="Which workouts" fill />
-        </div>
-
-        <div className="profile-tools">
-          <div style={{ position: 'relative', flex: 1, minWidth: 160 }}>
-            <Search size={14} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', pointerEvents: 'none' }} />
-            <input
-              className="input"
-              placeholder="Search workouts..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              style={{ paddingLeft: 30, width: '100%' }}
-            />
-          </div>
-          {isMobile ? (
-            <button
-              className="btn btn-ghost filter-btn"
-              onClick={() => setShowFilters(true)}
-              aria-label={`Filters${activeFilters.length ? `, ${activeFilters.length} applied` : ''}`}
-            >
-              <SlidersHorizontal size={15} />
-              {activeFilters.length > 0 && <span className="filter-count">{activeFilters.length}</span>}
-            </button>
-          ) : (
-            <>
-              <TypeDropdown value={typeFilter} onChange={v => setTypeFilter(v)} />
-              <SortDropdown value={sortBy} onChange={setSortBy} />
-              <RangeDropdown value={rangeDays} onChange={setRangeDays} />
-            </>
-          )}
-        </div>
-
-        {isMobile && activeFilters.length > 0 && (
-          <div className="filter-chips">
-            {activeFilters.map(f => (
-              <button key={f.key} className="filter-chip" onClick={f.clear}>
-                {f.label} <span aria-hidden>×</span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {rows.length === 0 ? (
-          <div className="card" style={{ padding: 28, textAlign: 'center', color: 'var(--text-3)', marginTop: 12 }}>
-            {search || activeFilters.length > 0 ? 'No workouts match that.' : empty}
-          </div>
-        ) : (
-          <div className="workout-list" style={{ marginTop: 12 }}>
-            {/* The same row the library draws, so a workout looks like a
-                workout wherever you meet it. */}
-            {rows.map(w => (
-              <WorkoutCard key={w.id} workout={w} variant="list" onClick={() => onSelect(w)} />
-            ))}
-          </div>
-        )}
       </div>
 
-      {showFilters && (
-        <FilterSheet
-          groups={filterGroups}
-          onClose={() => setShowFilters(false)}
-          onReset={() => { setTypeFilter('All'); setSortBy('date-desc'); setRangeDays(0) }}
+      <div className="page-content">
+        <TabStrip items={tabs} value={tab} onChange={setTab} ariaLabel="Which workouts" fill />
+
+        <WorkoutFilterList
+          // Keyed by tab so switching starts the next list at the top with its
+          // own search rather than inheriting the previous tab's.
+          key={tab}
+          rows={rows}
+          scope={tab === 'with-them' ? 'mine' : 'shared'}
+          storageKey={`profile.${tab}`}
+          emptyMessage={empty}
+          onSelect={onSelect}
         />
+      </div>
+
+      {zoomed && (
+        <ExpandModal title={name} onClose={() => setZoomed(false)}>
+          <img className="profile-avatar-full" src={avatarUrl(data.user)} alt={`${name}'s picture`} />
+        </ExpandModal>
       )}
     </>
   )
