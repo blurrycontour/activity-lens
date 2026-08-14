@@ -129,17 +129,34 @@ func (s *Server) handleUserProfile(w http.ResponseWriter, r *http.Request) {
 // exist to show you other people — so the only way to answer this is from your
 // own library, filtered by the visibility that is yours to read.
 func (s *Server) writeOwnProfile(w http.ResponseWriter, r *http.Request, ref workout.OwnerRef) {
-	list, err := s.workout.List(r.Context(), ref.ID)
+	list, err := s.workout.ListSummary(r.Context(), ref.ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not load workouts")
 		return
 	}
+	// One grouped query for the whole library rather than a lookup per row,
+	// the same way the library list annotates itself.
+	counts, err := s.workout.ShareCounts(r.Context(), ref.ID)
+	if err != nil {
+		// Without counts the sent-to-someone list would silently look empty,
+		// which is worse than saying the profile could not be built.
+		writeError(w, http.StatusInternalServerError, "could not load shares")
+		return
+	}
 	out := make([]workout.Workout, 0)
+	sent := make([]workout.Workout, 0)
 	for i := range list {
-		if list[i].Visibility == workout.VisibilityPublic {
-			wk := list[i]
-			wk.Owner = &ref
+		wk := list[i]
+		wk.Owner = &ref
+		wk.SharedWithCount = counts[wk.ID]
+		if wk.Visibility == workout.VisibilityPublic {
 			out = append(out, wk)
+		}
+		// Sent to named people, which is a different act from making something
+		// public: one is "these three can see it", the other is "everyone
+		// signed in here can". A workout can be both, and belongs in both.
+		if wk.SharedWithCount > 0 {
+			sent = append(sent, wk)
 		}
 	}
 	prefs, err := s.settings.UserPreferences(r.Context(), ref.ID)
@@ -150,10 +167,13 @@ func (s *Server) writeOwnProfile(w http.ResponseWriter, r *http.Request, ref wor
 		"user":    ref,
 		"tagline": prefs.Tagline,
 		"self":    true,
-		// Your own profile is only ever the public half: the other two lists
-		// are relations between two people.
+		// Nothing is shared *with* you by yourself, so that list stays empty.
 		"sharedWithMe":   []workout.Workout{},
 		"publicWorkouts": out,
-		"sharedWithThem": []workout.Workout{},
+		// Your own profile reads the same way round as anyone else's: this is
+		// "yours, sent to them" with "them" being everyone you have shared
+		// with — the outbound half that was previously only reachable as a
+		// toggle buried in the library's filters.
+		"sharedWithThem": sent,
 	})
 }

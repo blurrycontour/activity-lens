@@ -2536,10 +2536,13 @@ body:has(.overlay) .fab { display: none; }
   /* Labels would wrap or overflow at five tabs on a phone, so the strip
      scrolls horizontally and the items tighten up. */
   .tab-strip-item { padding: 8px 12px; font-size: 14px; gap: 6px; }
-  /* A strip marked as filling shares the width between its tabs instead of
-     leaving a gap at the end. Only ever set on short strips — spreading five
-     tabs across a phone is what the scrolling above exists to avoid. */
-  .tab-strip.fill .tab-strip-item { flex: 1; min-width: 0; justify-content: center; }
+  /* A strip marked as filling shares the *spare* width between its tabs
+     instead of leaving a gap at the end. Grown from each tab's own content
+     width, never to an equal share: equal columns sized the strip to its
+     shortest label and clipped the icon off the longest one. Only ever set on
+     short strips — spreading five tabs across a phone is what the scrolling
+     above exists to avoid. */
+  .tab-strip.fill .tab-strip-item { flex: 1 0 auto; justify-content: center; }
 }
 
 /* Compact filter dropdown, shared by the type and time-range pickers. */

@@ -5,7 +5,6 @@ import type { Workout } from '../data/workouts'
 import { useRefreshHandler } from '../context/RefreshContext'
 import { useSessionState } from '../lib/useSessionState'
 import ExpandModal from '../components/ExpandModal'
-import PageHeader from '../components/PageHeader'
 import TabStrip from '../components/TabStrip'
 import UserAvatar, { avatarUrl, userLabel } from '../components/UserAvatar'
 import WorkoutFilterList from '../components/WorkoutFilterList'
@@ -29,8 +28,11 @@ type Tab = 'with-me' | 'with-them' | 'public'
  * looking. It is a different arrangement of the same permission, by person
  * rather than by recency.
  *
- * Your own profile carries only the public tab: the other two are relations
- * between two people, and neither means anything pointed at yourself.
+ * Your own profile is the same idea pointed at yourself: Public is what
+ * everyone signed in here can see of you, and Shared is what you have sent to
+ * named people — the outbound half, which until now was only reachable as a
+ * toggle inside the library's filters. "With me" is dropped, because nobody
+ * shares a workout with themselves.
  */
 export default function UserProfile({ id, onBack, onSelect }: {
   id: number
@@ -45,7 +47,7 @@ export default function UserProfile({ id, onBack, onSelect }: {
    * every workout you looked at cost you the tab again. Per session, not
    * forever — which tab you were on is part of what you are doing now.
    */
-  const [{ tab }, setTabState] = useSessionState<{ tab: Tab }>('al_profile_tab', { tab: 'with-me' })
+  const [{ tab: storedTab }, setTabState] = useSessionState<{ tab: Tab }>('al_profile_tab', { tab: 'with-me' })
   const setTab = useCallback((t: Tab) => setTabState({ tab: t }), [setTabState])
   const [zoomed, setZoomed] = useState(false)
 
@@ -56,37 +58,49 @@ export default function UserProfile({ id, onBack, onSelect }: {
       // Your own profile has only one tab, and a remembered "with me" would
       // land on a tab this page does not offer. Anything else is left alone, so
       // a refresh — or coming back from a workout — keeps the tab you chose.
-      if (d.self) setTab('public')
       setErr(null)
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : 'Could not load this profile')
     }
-  }, [id, setTab])
+  }, [id])
   useEffect(() => { void load() }, [load])
   useRefreshHandler(load)
 
-  if (err) {
+  // Before the person arrives, the header is the back arrow and nothing else.
+  // It used to carry the word "Profile", which was then replaced by the avatar
+  // and name a moment later — a title appearing only to be swapped out reads as
+  // the page having loaded the wrong thing first.
+  if (err || !data) {
     return (
       <>
-        <PageHeader title="Profile" onBack={onBack} />
-        <div className="page-content settings-page">
-          <div className="settings-card danger"><span className="status-msg err">{err}</span></div>
+        <div className="page-header page-header-row profile-header">
+          <button className="btn-icon page-header-back" onClick={onBack} aria-label="Back">
+            <ArrowLeft size={18} />
+          </button>
         </div>
-      </>
-    )
-  }
-  if (!data) {
-    return (
-      <>
-        <PageHeader title="Profile" onBack={onBack} />
-        <div className="detail-loading"><LoaderCircle size={18} className="spin" /></div>
+        {err ? (
+          <div className="page-content settings-page">
+            <div className="settings-card danger"><span className="status-msg err">{err}</span></div>
+          </div>
+        ) : (
+          <div className="detail-loading"><LoaderCircle size={18} className="spin" /></div>
+        )}
       </>
     )
   }
 
+  // Your own profile does not offer "With me" — nobody shares a workout with
+  // themselves — so a tab remembered from someone else's profile is folded
+  // rather than left pointing at a strip that has no such button. Derived
+  // instead of corrected in an effect: an effect here would rewrite stored
+  // state during a render that has already had to cope without it.
+  const tab: Tab = data.self && storedTab === 'with-me' ? 'public' : storedTab
   const name = userLabel(data.user)
   const tabs = data.self
-    ? [{ id: 'public' as Tab, label: 'Public', icon: <Globe size={14} /> }]
+    ? [
+      { id: 'public' as Tab, label: 'Public', icon: <Globe size={14} /> },
+      { id: 'with-them' as Tab, label: 'Shared', icon: <Send size={14} /> },
+    ]
     : [
       { id: 'with-me' as Tab, label: 'With me', icon: <Handshake size={14} /> },
       { id: 'with-them' as Tab, label: 'With them', icon: <Send size={14} /> },
@@ -102,7 +116,9 @@ export default function UserProfile({ id, onBack, onSelect }: {
       : data.sharedWithMe
 
   const empty = tab === 'with-them'
-    ? `You have not shared anything with ${name}.`
+    ? data.self
+      ? 'You have not shared any workout with anyone yet.'
+      : `You have not shared anything with ${name}.`
     : tab === 'public'
       ? data.self ? 'You have not made any workout public.' : `${name} has no public workouts.`
       : `${name} has not shared anything with you.`
