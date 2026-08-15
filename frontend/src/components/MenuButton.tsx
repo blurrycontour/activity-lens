@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import useEscape from '../lib/useEscape'
 
 /**
  * An icon button that opens a small menu of actions beneath it.
@@ -19,6 +20,8 @@ export default function MenuButton({ icon, label, children }: {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
+  useEscape(open, () => setOpen(false))
+
   useEffect(() => {
     if (!open) return
 
@@ -38,15 +41,8 @@ export default function MenuButton({ icon, label, children }: {
       e.preventDefault()
       setOpen(false)
     }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false)
-    }
     document.addEventListener('click', onClick, true)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('click', onClick, true)
-      document.removeEventListener('keydown', onKey)
-    }
+    return () => document.removeEventListener('click', onClick, true)
   }, [open])
 
   return (

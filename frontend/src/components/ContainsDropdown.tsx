@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Check, ChevronDown, Cloud, Footprints, Heart, Image, MapPin, MessageSquare, NotebookPen, SlidersHorizontal, X } from 'lucide-react'
 import { hasKey, isNegated, type Has, type HasFilter } from '../lib/workoutFilters'
+import useEscape from '../lib/useEscape'
 
 interface ContainsOption {
   value: Has
@@ -100,18 +101,14 @@ export default function ContainsDropdown({ value, onToggle, mine }: {
   const ref = useRef<HTMLDivElement>(null)
 
   // Click-away and Escape, the same pair every menu in the app closes on.
+  useEscape(open, () => setOpen(false))
   useEffect(() => {
     if (!open) return
     const onDown = (e: MouseEvent) => {
       if (!ref.current?.contains(e.target as Node)) setOpen(false)
     }
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
     document.addEventListener('mousedown', onDown)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onDown)
-      document.removeEventListener('keydown', onKey)
-    }
+    return () => document.removeEventListener('mousedown', onDown)
   }, [open])
 
   const options = containsOptions(mine)

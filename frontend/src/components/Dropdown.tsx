@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Check, ChevronDown } from 'lucide-react'
+import useEscape from '../lib/useEscape'
 
 export interface DropdownOption<T> {
   value: T
@@ -137,12 +138,7 @@ export default function Dropdown<T extends string | number>({
   }, [open])
 
   // Escape closes it, like every other dismissible surface in the app.
-  useEffect(() => {
-    if (!open) return
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setOpen(false) }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [open])
+  useEscape(open, () => setOpen(false))
 
   const selected = options.find(o => o.value === value) ?? options[0]
   if (!selected) return null

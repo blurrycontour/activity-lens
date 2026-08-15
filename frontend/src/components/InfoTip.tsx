@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Info } from 'lucide-react'
+import useEscape from '../lib/useEscape'
 
 /** Gap between the trigger and the bubble, and the minimum viewport margin. */
 const GAP = 8
@@ -73,6 +74,8 @@ export default function InfoTip({ text, label, children, className }: {
     if (open) place()
   }, [open, place])
 
+  useEscape(open, () => setOpen(false))
+
   useEffect(() => {
     if (!open) return
     function away(e: Event) {
@@ -80,13 +83,9 @@ export default function InfoTip({ text, label, children, className }: {
       if (bubbleRef.current?.contains(e.target as Node)) return
       setOpen(false)
     }
-    function esc(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false)
-    }
     const close = () => setOpen(false)
     document.addEventListener('mousedown', away)
     document.addEventListener('touchstart', away)
-    document.addEventListener('keydown', esc)
     // Any scroll or resize invalidates the fixed coordinates; closing is less
     // jarring than chasing the trigger around.
     window.addEventListener('scroll', close, true)
@@ -94,7 +93,6 @@ export default function InfoTip({ text, label, children, className }: {
     return () => {
       document.removeEventListener('mousedown', away)
       document.removeEventListener('touchstart', away)
-      document.removeEventListener('keydown', esc)
       window.removeEventListener('scroll', close, true)
       window.removeEventListener('resize', close)
     }

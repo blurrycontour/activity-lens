@@ -176,14 +176,8 @@ export default function MapPage() {
 
   // Not the Fullscreen API: it is unreliable inside an Android WebView and on
   // iOS Safari, and this has to work in the app as well as the browser. The
-  // modal handles the back gesture and the close button; Escape is here so a
-  // keyboard has the same way out as every other dismissible surface.
-  useEffect(() => {
-    if (!full) return
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setFull(false) }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [full])
+  // ExpandModal below is what closes it — back, Escape and the close button all
+  // come from Modal, so there is nothing to handle here.
 
   /*
    * The map runs to the bottom of the viewport, measured rather than computed.

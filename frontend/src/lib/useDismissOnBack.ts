@@ -1,6 +1,32 @@
 import { useEffect, useRef } from 'react'
 
 /**
+ * Every overlay currently open, oldest first, and whether a guard entry is on
+ * the history stack for them.
+ *
+ * There is exactly one guard entry however many overlays are stacked, and the
+ * topmost overlay is the only one that responds to anything. Both parts are
+ * needed, and the reasons are different:
+ *
+ *   - `popstate` and `keydown` are window-wide, so without the stack every open
+ *     overlay hears every back press and every Escape, and one gesture closes
+ *     the lot.
+ *   - one entry per overlay looks correct and is not: closing the top one has
+ *     to pop its own entry, and that pop is indistinguishable from a back press
+ *     to the overlay underneath — which promptly closes too. Sharing a single
+ *     entry, re-armed as each layer goes, means nothing pops until the last one
+ *     is gone.
+ */
+let stack: symbol[] = []
+let guarded = false
+
+/** Puts the guard entry back without firing popstate. */
+function arm() {
+  window.history.pushState({ overlay: true }, '', window.location.href)
+  guarded = true
+}
+
+/**
  * Makes an overlay close on Escape and on the system back gesture.
  *
  * Back is the interesting half. On a phone there is no visible close affordance
@@ -8,11 +34,13 @@ import { useEffect, useRef } from 'react'
  * nothing in the page knows an overlay is up, so the app's own router handled it
  * and navigated away, dropping the user a whole page back from where they were.
  *
- * A pushed history entry is what turns that into "never mind": while the overlay
- * is open there is one extra entry to consume, and back consumes it instead of a
- * real one. Closing any other way pops that entry back off, so the history does
- * not grow an unusable step for every time the overlay was opened. Same trick as
- * the selection mode in Workouts.
+ * A pushed history entry is what turns that into "never mind": while anything is
+ * open there is one extra entry to consume, and back consumes it instead of a
+ * real one. Closing any other way pops it back off, so the history does not grow
+ * a dead step for every time an overlay was opened. Same trick as the selection
+ * mode in Workouts.
+ *
+ * Nearly every caller gets this through `Modal`, which owns it for all of them.
  *
  * @param open      whether the overlay is currently up
  * @param onDismiss called once, when back or Escape asks it to close
@@ -26,16 +54,23 @@ export default function useDismissOnBack(open: boolean, onDismiss: () => void) {
   useEffect(() => {
     if (!open) return
 
-    let ours = true
-    window.history.pushState({ overlay: true }, '', window.location.href)
+    const id = Symbol('overlay')
+    stack.push(id)
+    if (!guarded) arm()
+
+    const topmost = () => stack[stack.length - 1] === id
 
     const onPop = () => {
-      // The entry is already gone; going back again would leave the page.
-      ours = false
+      if (!topmost()) return
+      stack.pop()
+      // Another layer is still up, so the guard has to go back on for it. When
+      // this was the last one the entry has served its purpose and is spent.
+      if (stack.length > 0) arm()
+      else guarded = false
       dismiss.current()
     }
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
+      if (e.key !== 'Escape' || !topmost()) return
       e.stopPropagation()
       dismiss.current()
     }
@@ -45,9 +80,24 @@ export default function useDismissOnBack(open: boolean, onDismiss: () => void) {
     return () => {
       window.removeEventListener('popstate', onPop)
       document.removeEventListener('keydown', onKey)
-      // Closed by anything other than back — the close button, Escape, a state
-      // change elsewhere — so our entry is still on the stack and has to go.
-      if (ours) window.history.back()
+
+      // Still listed means this closed by something other than back — a close
+      // button, Escape, a state change elsewhere — so the stack has to be
+      // tidied by hand. Back has already done it above.
+      const i = stack.indexOf(id)
+      if (i === -1) return
+      stack.splice(i, 1)
+
+      // The last one out takes the guard entry with it. Unless something has
+      // been pushed on top of it since: a notification banner sits above the
+      // overlay and can navigate while a dialog is open, and going back then
+      // would undo that navigation rather than tidying up after ourselves.
+      if (stack.length === 0 && guarded) {
+        guarded = false
+        if ((window.history.state as { overlay?: boolean } | null)?.overlay) {
+          window.history.back()
+        }
+      }
     }
   }, [open])
 }

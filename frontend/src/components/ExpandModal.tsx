@@ -1,5 +1,4 @@
 import { X } from 'lucide-react'
-import useDismissOnBack from '../lib/useDismissOnBack'
 import Modal from './Modal'
 
 /**
@@ -29,7 +28,6 @@ export default function ExpandModal({ title, onClose, children, variant }: {
    */
   variant?: 'map'
 }) {
-  useDismissOnBack(true, onClose)
 
   const map = variant === 'map'
   return (

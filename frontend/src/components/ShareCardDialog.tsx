@@ -79,12 +79,6 @@ export default function ShareCardDialog({ workout, onClose }: {
     return () => { alive = false }
   }, [full, titleMode, showRoute, showHR])
 
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [onClose])
-
   async function run(what: CardFormat | 'share') {
     if (!canvasRef.current) return
     setBusy(what)
