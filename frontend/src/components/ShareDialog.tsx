@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Globe, Lock, Search, X, Loader2 } from 'lucide-react'
+import { Globe, Lock, X, Loader2 } from 'lucide-react'
 import { api, ApiError, type UserRef, type WorkoutShares } from '../lib/api'
 import { fmtDist, fmtDuration, TYPE_COLOR, type Workout } from '../data/workouts'
 import TypeIcon from './TypeIcon'
 import UserAvatar, { userLabel } from './UserAvatar'
 import Modal from './Modal'
+import SearchInput from './SearchInput'
 
 interface ShareDialogProps {
   /** The workout being shared. Identified prominently so there is no doubt
@@ -166,14 +167,13 @@ export default function ShareDialog({ workout, onClose, onChange }: ShareDialogP
                   </div>
                 )}
 
-                <div style={{ position: 'relative', marginTop: 10 }}>
-                  <Search size={14} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', pointerEvents: 'none' }} />
-                  <input
-                    className="input"
-                    placeholder="Find someone…"
+                <div style={{ marginTop: 10 }}>
+                  <SearchInput
                     value={search}
-                    onChange={e => setSearch(e.target.value)}
-                    style={{ paddingLeft: 30, width: '100%' }}
+                    onChange={setSearch}
+                    placeholder="Find someone…"
+                    grow={false}
+                    minWidth={0}
                   />
                 </div>
 

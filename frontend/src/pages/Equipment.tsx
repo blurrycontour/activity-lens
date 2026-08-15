@@ -15,6 +15,7 @@ import ConfirmDialog from '../components/ConfirmDialog'
 import { searchWorkouts } from '../lib/workoutFilters'
 import { fmtDist, type Workout } from '../data/workouts'
 import Modal from '../components/Modal'
+import SearchInput from '../components/SearchInput'
 
 interface EquipmentPageProps {
   onSelectWorkout: (id: string) => void
@@ -193,16 +194,11 @@ export default function EquipmentPage({ onSelectWorkout, detail, onOpenDetail }:
             below the fold. */}
         {!detail && (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            <div style={{ position: 'relative', flex: 1, minWidth: 180 }}>
-              <Search size={14} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', pointerEvents: 'none' }} />
-              <input
-                className="input"
-                placeholder="Search equipment..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                style={{ paddingLeft: 30, width: '100%' }}
-              />
-            </div>
+            <SearchInput
+              value={search}
+              onChange={setSearch}
+              placeholder="Search equipment..."
+            />
 
             {isMobile ? (
               <button
@@ -702,11 +698,11 @@ function EquipmentForm({ initial, onClose, onSaved }: {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Name</label>
+              <label className="form-label">Name</label>
               <input className="input" style={{ width: '100%' }} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g. Nike Pegasus 40" />
             </div>
             <div>
-              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Type</label>
+              <label className="form-label">Type</label>
               <Dropdown
                 value={form.type}
                 options={FORM_TYPE_OPTIONS}
@@ -716,15 +712,15 @@ function EquipmentForm({ initial, onClose, onSaved }: {
               />
             </div>
             <div>
-              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Brand</label>
+              <label className="form-label">Brand</label>
               <input className="input" style={{ width: '100%' }} value={form.brand} onChange={e => setForm({ ...form, brand: e.target.value })} placeholder="e.g. Nike" />
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Model</label>
+              <label className="form-label">Model</label>
               <input className="input" style={{ width: '100%' }} value={form.model} onChange={e => setForm({ ...form, model: e.target.value })} placeholder="e.g. Air Zoom" />
             </div>
             <div>
-              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Replace at (km)</label>
+              <label className="form-label">Replace at (km)</label>
               <input
                 className="input" type="number" min="0" style={{ width: '100%' }}
                 value={form.retireAtKm || ''}
@@ -733,7 +729,7 @@ function EquipmentForm({ initial, onClose, onSaved }: {
               />
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Notes (optional)</label>
+              <label className="form-label">Notes (optional)</label>
               <textarea className="input" style={{ width: '100%', resize: 'vertical', minHeight: 60 }} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="Purchase date, size, etc." />
             </div>
             <label style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', color: 'var(--text-2)' }}>

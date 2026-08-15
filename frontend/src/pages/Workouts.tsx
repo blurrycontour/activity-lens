@@ -21,6 +21,7 @@ import { downloadWorkoutGPX, reportSaveFailure } from '../lib/download'
 import { useIsMobile } from '../lib/useIsMobile'
 import { LOCATION_EVENT } from '../App'
 import { useSessionState } from '../lib/useSessionState'
+import SearchInput from '../components/SearchInput'
 import {
   applyWorkoutFilters, DEFAULT_FILTERS, describeImportWindow, parseAutoImportParams,
   type Has, type WorkoutFilters,
@@ -384,7 +385,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
     <div>
       <div className="page-header">
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 14 }}>
-          <h1 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>Workouts</h1>
+          <h1 className="page-header-title">Workouts</h1>
           <span style={{ fontSize: 12, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
             {filtered.length} of {source?.length ?? 0}
           </span>
@@ -446,16 +447,11 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
           </div>
         ) : (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <div className="workout-search" style={{ position: 'relative', flex: 1, minWidth: 180 }}>
-            <Search size={14} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', pointerEvents: 'none' }} />
-            <input
-              className="input"
-              placeholder="Search workouts..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              style={{ paddingLeft: 30, width: '100%' }}
-            />
-          </div>
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="Search workouts..."
+          />
 
           {isMobile ? (
             <button

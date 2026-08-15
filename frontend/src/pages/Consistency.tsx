@@ -237,7 +237,7 @@ export default function Consistency() {
     <div>
       <div className="page-header">
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 16 }}>
-          <h1 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>Consistency</h1>
+          <h1 className="page-header-title">Consistency</h1>
           <span style={{ fontSize: 12, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
             {filteredWorkouts.length} activities · {rangeLabel(rangeDays)}
           </span>
@@ -349,7 +349,9 @@ export default function Consistency() {
               position: 'fixed',
               top: hoveredDay.y + 12, left: hoveredDay.x + 12,
               background: 'var(--bg-2)', border: '1px solid var(--border-strong)',
-              borderRadius: 8, padding: '10px 14px', zIndex: 100,
+              // A cursor-following tooltip, so it shares the tooltip layer
+              // rather than sitting on a number of its own.
+              borderRadius: 8, padding: '10px 14px', zIndex: 'var(--z-tooltip)',
               boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
             }}>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600, color: 'var(--primary)', marginBottom: 4 }}>{hoveredDay.date}</div>

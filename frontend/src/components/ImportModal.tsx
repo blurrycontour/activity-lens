@@ -511,7 +511,7 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                     <div style={{ gridColumn: '1 / -1' }}>
-                      <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Workout Name *</label>
+                      <label className="form-label">Workout Name *</label>
                       <input
                         className="input"
                         style={{ width: '100%' }}
@@ -521,11 +521,11 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
                       />
                     </div>
                     <div>
-                      <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Sport Type</label>
+                      <label className="form-label">Sport Type</label>
                       <SportDropdown value={form.type} onChange={t => setForm(f => ({ ...f, type: t }))} />
                     </div>
                     <div>
-                      <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Date</label>
+                      <label className="form-label">Date</label>
                       <input
                         className="input"
                         style={{ width: '100%' }}
@@ -535,7 +535,7 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
                       />
                     </div>
                     <div>
-                      <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Duration (mm:ss or h:mm:ss)</label>
+                      <label className="form-label">Duration (mm:ss or h:mm:ss)</label>
                       <input
                         className="input" style={{ width: '100%' }}
                         placeholder="e.g. 45:00"
@@ -544,7 +544,7 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
                       />
                     </div>
                     <div>
-                      <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Distance (km)</label>
+                      <label className="form-label">Distance (km)</label>
                       <input
                         className="input" style={{ width: '100%' }}
                         placeholder="e.g. 10.5"
@@ -554,7 +554,7 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
                       />
                     </div>
                     <div>
-                      <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Avg Heart Rate (bpm)</label>
+                      <label className="form-label">Avg Heart Rate (bpm)</label>
                       <input
                         className="input" style={{ width: '100%' }}
                         placeholder="e.g. 155"
@@ -564,7 +564,7 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
                       />
                     </div>
                     <div>
-                      <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Elevation Gain (m)</label>
+                      <label className="form-label">Elevation Gain (m)</label>
                       <input
                         className="input" style={{ width: '100%' }}
                         placeholder="e.g. 120"
@@ -574,7 +574,7 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
                       />
                     </div>
                     <div style={{ gridColumn: '1 / -1' }}>
-                      <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Notes (optional)</label>
+                      <label className="form-label">Notes (optional)</label>
                       <textarea
                         className="input"
                         style={{ width: '100%', resize: 'vertical', minHeight: 60 }}
@@ -591,7 +591,7 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
                   when the account has no equipment yet, so the modal's height
                   never jumps once it's open. */}
               <div style={{ marginTop: 18 }}>
-                <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 8 }}>
+                <label className="form-label" style={{ marginBottom: 8 }}>
                   {batchCounts && batchCounts.ready > 1
                     ? `Equipment (optional) — applied to all ${batchCounts.ready}`
                     : 'Equipment (optional)'}

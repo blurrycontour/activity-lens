@@ -176,7 +176,7 @@ export function LayerSwitcher({ layer, onChange, offsetRight = 46 }: {
       // Inline, and not a class: .options-menu-wrap sets `position: relative`
       // further down the stylesheet, so a class here loses to it and the
       // switcher drops back into the flow and out of sight.
-      style={{ position: 'absolute', top: 10, right: offsetRight, zIndex: 500 }}
+      style={{ position: 'absolute', top: 10, right: offsetRight, zIndex: 'var(--z-map-panel)' }}
     >
       <button
         className="btn-icon"

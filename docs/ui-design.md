@@ -43,6 +43,16 @@ Three rules that follow from this:
 - **Sport colours mean the sport**, everywhere, always. Use `TYPE_COLOR` from
   `src/data/workouts.ts`; never repaint by rank or position.
 
+Deriving a tint from a token — an 8% wash behind an error, say — is
+`color-mix(in srgb, var(--danger) 8%, transparent)`, never the token's hex
+retyped as `rgba(…)`. A literal cannot follow the theme, and the failure is
+quiet: it looks right in whichever mode it was written in.
+
+Known gap: form labels exist in two styles — `.field-label` (uppercase mono,
+what `<Field>` uses) and `.form-label` (sentence case, used inside dialogs).
+Both are classes now, so unifying them is a one-line decision rather than a
+hunt, but it is a visible restyle and has not been made.
+
 ## Type & shape
 
 - Base 14px. Card titles 13px/600. Descriptions and hints 11px in `--text-3`.
@@ -82,11 +92,31 @@ Check `src/components/` first — the common cases already exist:
 
 `PageHeader` · `ChartCard` · `SettingsCard` / `SettingsRow` · `Field` ·
 `Dropdown` (the app's picker — not a native `<select>`) · `PasswordInput` ·
-`StatusMsg` · `TabStrip` · `ConfirmDialog` · `InfoTip` · `FilterSheet` ·
-`TypeIcon` / `TypeLegend` · `Sparkline` · `EmptyPlot`
+`SearchInput` · `MenuButton` · `StatusMsg` · `TabStrip` · `ConfirmDialog` ·
+`InfoTip` · `FilterSheet` · `TypeIcon` / `TypeLegend` · `Sparkline` · `EmptyPlot`
 
 If something is used twice, it becomes a component or a class. A near-copy of
 an existing component is a bug — it will drift.
+
+## Anything that floats over the page
+
+- **Dialogs, sheets and panels go through `Modal`.** It portals to the body
+  (pages render inside the swipe pager, a stacking context, so a dialog left in
+  place is painted over by the top and bottom bars), dims and blurs the page,
+  and gives every surface the same way out: tap outside, Escape, and the system
+  back gesture. Never hand-roll the backdrop.
+- **Never hand-roll Escape on a `Modal`** — it already has it, and a second
+  listener dismisses twice. For popovers that are not `Modal`s (dropdowns,
+  menus, tooltips) use the `useEscape` hook.
+- **Back is not optional.** On a phone the back gesture is the close button; a
+  surface that ignores it navigates the page away instead. `Modal` handles this
+  via `useDismissOnBack`, which keeps one guard history entry for the whole
+  overlay stack and lets only the topmost surface respond.
+- **Stacking order is named, not numbered.** Use the `--z-*` tokens on `:root`
+  (`--z-chrome`, `--z-overlay`, `--z-dialog`, `--z-menu`, `--z-tooltip`,
+  `--z-status`, `--z-floating`, …). Pick the layer the thing belongs to; do not
+  invent a number big enough to win. Small local values inside a component's own
+  stacking context are fine and stay raw.
 
 ## Charts
 

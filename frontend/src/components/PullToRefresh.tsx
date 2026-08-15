@@ -215,7 +215,7 @@ export default function PullToRefresh({ scrollEl, enabled, onRefresh }: PullToRe
         display: 'flex',
         justifyContent: 'center',
         pointerEvents: 'none',
-        zIndex: 40,
+        zIndex: 'var(--z-fab)',
         transform: `translateY(${pull}px)`,
         transition: dragging ? 'none' : 'transform 0.25s cubic-bezier(0.22, 1, 0.36, 1)',
       }}
