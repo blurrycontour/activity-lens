@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { X, ExternalLink, Copy, Check } from 'lucide-react'
-import { api, type BuildInfo } from '../lib/api'
-import { installedApp } from '../lib/native/appUpdate'
+import { loadAboutInfo, peekAboutInfo } from '../lib/buildInfo'
 import { isNative } from '../lib/serverConfig'
 import Logo from './Logo'
 import Modal from './Modal'
@@ -23,34 +22,25 @@ function fmtBuildDate(iso: string): string {
  * it is the single fact worth quoting in a bug report.
  */
 export default function AboutDialog({ onClose }: { onClose: () => void }) {
-  const [build, setBuild] = useState<BuildInfo | null>(null)
-  // Distinct from `build`: a failed request has to stop the placeholders, and
-  // "no data" and "not asked yet" look identical without this.
-  const [settled, setSettled] = useState(false)
-  const [appVersion, setAppVersion] = useState<string | null>(null)
+  /*
+   * Warmed after sign-in, so this is nearly always already here and the dialog
+   * opens at its final size. Only a dialog opened in the first moments of a
+   * session waits, and then for one request rather than two.
+   */
+  const [info, setInfo] = useState(peekAboutInfo)
   const [copied, setCopied] = useState(false)
+  const build = info?.build ?? null
+  const appVersion = info?.appVersion ?? null
+  // `info` being set is the settled signal: it is assigned once, whatever came
+  // back, so placeholders cannot outlive a request that failed.
+  const settled = info !== null
 
-  // In the Android app the installed APK has a version of its own, which can
-  // legitimately differ from the server's — that gap is exactly what the in-app
-  // updater closes, so it is worth being able to see it.
   useEffect(() => {
-    if (!isNative()) return
+    if (info) return
     let cancelled = false
-    installedApp().then(info => { if (!cancelled) setAppVersion(info.version) }).catch(() => {})
+    void loadAboutInfo().then(i => { if (!cancelled) setInfo(i) })
     return () => { cancelled = true }
-  }, [])
-
-  // The frontend knows its own version at compile time, but everything else —
-  // commit, build date, licence — is baked into the server binary, so it has
-  // to be asked for. A failure just leaves those rows out.
-  useEffect(() => {
-    let cancelled = false
-    api.buildInfo()
-      .then(b => { if (!cancelled) setBuild(b) })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setSettled(true) })
-    return () => { cancelled = true }
-  }, [])
+  }, [info])
 
   const sourceUrl = build?.source || REPO_URL
 
@@ -124,7 +114,12 @@ export default function AboutDialog({ onClose }: { onClose: () => void }) {
             <dt>Version</dt><dd>{build?.version ?? (settled ? __APP_VERSION__ : <Skeleton width={56} />)}</dd>
             {/* Android only: the installed APK, which can legitimately lag the
                 server. Closing that gap is what the in-app updater is for. */}
-            {appVersion && (<><dt>App version</dt><dd>{appVersion}</dd></>)}
+            {/* Reserved while loading on Android, where this row always
+                arrives — otherwise a cold open grows by a row on the one
+                platform that has it. */}
+            {(appVersion || (!settled && isNative())) && (
+              <><dt>App version</dt><dd>{appVersion ?? <Skeleton width={48} />}</dd></>
+            )}
             {build?.licenses && (<><dt>Licence</dt><dd>{build.licenses}</dd></>)}
           </dl>
 

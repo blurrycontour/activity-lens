@@ -1863,6 +1863,7 @@ body {
 }
 /* Dialogs that space their children with a flex gap already have the room. */
 .dup-modal > .dialog-head,
+.recalc-modal > .dialog-head,
 .share-card-modal > .dialog-head { margin-bottom: 0; }
 .share-card-title { font-size: 15px; font-weight: 600; }
 .share-card-preview {
@@ -5747,3 +5748,13 @@ body:has(.overlay) .fab { display: none; }
 .session-expanded { display: flex; }
 .session-expanded .session-profile { flex: 1; min-width: 0; min-height: 0; }
 .session-expanded .session-sky { border-radius: 0; border: none; }
+
+/* A page that is still arriving. Only the map is loaded this way — it is the
+   one page heavy enough to be worth a separate chunk. */
+.page-loading {
+  display: grid;
+  place-items: center;
+  min-height: 40vh;
+  color: var(--text-3);
+  font-size: 13px;
+}

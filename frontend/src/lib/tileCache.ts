@@ -1,5 +1,11 @@
 import * as maplibregl from 'maplibre-gl'
 import { isNative } from './serverConfig'
+import { SCHEME, cachedURL, directURL } from './tileScheme'
+
+// Re-exported so callers that want a cached URL can keep asking this module for
+// it, while ones that only want the URL can import tileScheme and leave MapLibre
+// out of their graph.
+export { cachedURL }
 
 /**
  * A persistent, bounded cache for map tiles in the Android app.
@@ -22,7 +28,6 @@ import { isNative } from './serverConfig'
  * itself would be cached, which is the least interesting byte of the lot.
  */
 
-const SCHEME = 'alcache'
 const CACHE_NAME = 'map-tiles-v1'
 
 /**
@@ -38,16 +43,6 @@ const MAX_ENTRIES = 800
 
 /** How often to check the size, in stores. Trimming on every put is wasteful. */
 const TRIM_EVERY = 50
-
-/** Rewrites a URL to route through this cache, on the platforms that need it. */
-export function cachedURL(url: string): string {
-  if (!isNative() || !url.startsWith('https://')) return url
-  return SCHEME + '://' + url.slice('https://'.length)
-}
-
-function directURL(url: string): string {
-  return 'https://' + url.slice(SCHEME.length + 3)
-}
 
 /**
  * Points the style's own references back through the cache.

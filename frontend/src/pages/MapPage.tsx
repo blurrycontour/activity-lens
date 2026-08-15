@@ -6,7 +6,10 @@ import PageHeader from '../components/PageHeader'
 import ExpandModal from '../components/ExpandModal'
 import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
-import { LayerSwitcher, MAP_LAYERS, MAP_LAYER_KEY, ResetViewControl, hasWebGL, type MapLayerId } from '../components/RouteMap'
+// From mapLayers, not RouteMap: importing them from there would pull the map
+// component into this page's graph statically, and undo the lazy import that
+// WorkoutDetail uses to keep MapLibre out of the first paint.
+import { LayerSwitcher, MAP_LAYERS, MAP_LAYER_KEY, ResetViewControl, hasWebGL, type MapLayerId } from '../components/mapLayers'
 import { TYPE_COLOR, type WorkoutType } from '../data/workouts'
 import { api, type Track } from '../lib/api'
 import { useLocalStorage } from '../lib/useLocalStorage'

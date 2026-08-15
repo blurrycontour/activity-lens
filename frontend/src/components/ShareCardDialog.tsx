@@ -5,7 +5,7 @@ import {
   CARD_W, cardFilename, cardHeight, drawShareCard, encodeCard, themeFromDocument,
   type CardFormat, type CardTitleMode,
 } from '../lib/shareCard'
-import { reportSaveFailure, shareFile } from '../lib/download'
+import { reportSaveFailure, saveFile, shareFile } from '../lib/download'
 import { isNative } from '../lib/serverConfig'
 import { api } from '../lib/api'
 import Modal from './Modal'
@@ -95,7 +95,6 @@ export default function ShareCardDialog({ workout, onClose }: {
         // sheet that did open.
         if (!shared) setNote('No share sheet here — saved the image instead.')
       } else {
-        const { saveFile } = await import('../lib/download')
         await saveFile(name, blob)
       }
     } catch (err) {

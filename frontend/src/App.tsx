@@ -2,7 +2,7 @@ import { useIsMobile } from './lib/useIsMobile'
 import NotificationBanner, { type BannerNotification } from './components/NotificationBanner'
 import { consumeOpenedParam, markNotificationOpened, PUSH_EVENT, READ_NOTIFICATION_EVENT } from './lib/notifications'
 import UpdateToast from './components/UpdateToast'
-import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, useRef, lazy, Suspense } from 'react'
 import TopBar, { type ThemeMode } from './components/TopBar'
 import Sidebar from './components/Sidebar'
 import BottomBar from './components/BottomBar'
@@ -22,7 +22,14 @@ import Equipment from './pages/Equipment'
 import UserProfile from './pages/UserProfile'
 import Discover from './pages/Discover'
 import Help from './pages/Help'
-import MapPage from './pages/MapPage'
+/*
+ * Lazily, because it is the only page that needs MapLibre and MapLibre is a
+ * megabyte of JavaScript. Imported statically it sat in the entry chunk, so
+ * every session parsed the map engine on first paint whether or not a map was
+ * ever opened — and it made WorkoutDetail's lazy import of RouteMap pointless,
+ * since the library was already loaded by then.
+ */
+const MapPage = lazy(() => import('./pages/MapPage'))
 import Settings from './pages/settings'
 import Admin from './pages/admin'
 import Login from './pages/Login'
@@ -43,6 +50,7 @@ import {
   consumeNotificationTap, onNotificationTap, onPushMessage, type NotificationTap,
 } from './lib/native/unifiedPush'
 import { startUpdate } from './lib/appUpdate'
+import { loadAboutInfo } from './lib/buildInfo'
 import { LoaderCircle } from 'lucide-react'
 import { api } from './lib/api'
 
@@ -174,6 +182,14 @@ export default function App() {
     return () => { cancelled = true }
     // Only run once, when auth resolves.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user])
+
+  // Warmed in the background, so the About dialog opens at its final size
+  // rather than growing as two requests land. Nothing here changes while the
+  // app runs, and it is a few hundred bytes.
+  useEffect(() => {
+    if (!user) return
+    void loadAboutInfo()
   }, [user])
 
   // Pick up a workout file shared into the installed app from the Android
@@ -671,7 +687,9 @@ export default function App() {
         ) : page === 'analysis' ? (
           <Analysis />
         ) : page === 'map' ? (
-          <MapPage />
+          <Suspense fallback={<div className="page-content page-loading">Loading map…</div>}>
+            <MapPage />
+          </Suspense>
         ) : page === 'consistency' ? (
           <Consistency />
         ) : page === 'discover' ? (
