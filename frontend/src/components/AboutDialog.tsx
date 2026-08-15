@@ -5,6 +5,7 @@ import { installedApp } from '../lib/native/appUpdate'
 import { isNative } from '../lib/serverConfig'
 import Logo from './Logo'
 import Modal from './Modal'
+import Skeleton from './Skeleton'
 
 /** Fallback link when the build carries no source URL of its own. */
 const REPO_URL = 'https://github.com/blurrycontour/activity-lens'
@@ -23,6 +24,9 @@ function fmtBuildDate(iso: string): string {
  */
 export default function AboutDialog({ onClose }: { onClose: () => void }) {
   const [build, setBuild] = useState<BuildInfo | null>(null)
+  // Distinct from `build`: a failed request has to stop the placeholders, and
+  // "no data" and "not asked yet" look identical without this.
+  const [settled, setSettled] = useState(false)
   const [appVersion, setAppVersion] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
 
@@ -41,7 +45,10 @@ export default function AboutDialog({ onClose }: { onClose: () => void }) {
   // to be asked for. A failure just leaves those rows out.
   useEffect(() => {
     let cancelled = false
-    api.buildInfo().then(b => { if (!cancelled) setBuild(b) }).catch(() => {})
+    api.buildInfo()
+      .then(b => { if (!cancelled) setBuild(b) })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setSettled(true) })
     return () => { cancelled = true }
   }, [])
 
@@ -94,18 +101,27 @@ export default function AboutDialog({ onClose }: { onClose: () => void }) {
             stays on your own server.
           </p>
 
+          {/* The server's rows keep their place while they load, so the dialog
+              does not grow under the reader once the request lands. A request
+              that fails drops them, exactly as before. */}
           <dl className="about-facts">
-            {build?.created && (<><dt>Built</dt><dd>{fmtBuildDate(build.created)}</dd></>)}
-            {build?.revision && (
-              <><dt>Revision</dt><dd className="about-sha" title={build.revision}>{build.revision.slice(0, 16)}</dd></>
+            {(build?.created || !settled) && (
+              <><dt>Built</dt><dd>{build?.created ? fmtBuildDate(build.created) : <Skeleton width={104} />}</dd></>
             )}
-            {build && (<><dt>Server</dt><dd>{build.goVersion} · {build.platform}</dd></>)}
+            {(build?.revision || !settled) && (
+              <><dt>Revision</dt><dd className="about-sha" title={build?.revision}>
+                {build?.revision ? build.revision.slice(0, 16) : <Skeleton width={124} />}
+              </dd></>
+            )}
+            {(build || !settled) && (
+              <><dt>Server</dt><dd>{build ? `${build.goVersion} · ${build.platform}` : <Skeleton width={140} />}</dd></>
+            )}
             <dt>Interface</dt><dd>React &amp; Vite</dd>
             {/* The server's version, not the bundle's. On web the two are the
                 same build so it makes no difference, but in the Android app the
                 bundle version is the APK's — which is the row below, and showing
                 it twice under two labels said nothing. */}
-            <dt>Version</dt><dd>{build?.version ?? __APP_VERSION__}</dd>
+            <dt>Version</dt><dd>{build?.version ?? (settled ? __APP_VERSION__ : <Skeleton width={56} />)}</dd>
             {/* Android only: the installed APK, which can legitimately lag the
                 server. Closing that gap is what the in-app updater is for. */}
             {appVersion && (<><dt>App version</dt><dd>{appVersion}</dd></>)}

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Plus, Watch, Bike, Shirt, Package, SportShoe, Pencil, Trash2, X, ChevronRight,
-  ArrowLeft, AlertTriangle, Search, SlidersHorizontal, ArrowUpDown, Layers,
+  ArrowLeft, AlertTriangle, SlidersHorizontal, ArrowUpDown, Layers,
   ArrowDownAZ, Activity, Route, Gauge, Shapes, Check,
 } from 'lucide-react'
 import { api, type Equipment, type EquipmentInput, type LinkedWorkout } from '../lib/api'
@@ -405,17 +405,19 @@ function LinkWorkoutsDialog({ equipmentId, linked, onLinked, onClose }: {
   return (
     <Modal onClose={onClose} dismissable={!saving} label="Add workouts">
         <div className="modal-box link-picker-box">
-          <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>Add workouts</h3>
-          <div style={{ position: 'relative', marginBottom: 10 }}>
-            <Search size={14} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', pointerEvents: 'none' }} />
-            <input
-              className="input"
-              placeholder="Search workouts by name, sport or date…"
+          <div className="dialog-head">
+            <h3 style={{ fontSize: 16, fontWeight: 700 }}>Add workouts</h3>
+            <button className="btn-icon" onClick={onClose} disabled={saving} aria-label="Close"><X size={16} /></button>
+          </div>
+          <div style={{ marginBottom: 10 }}>
+            <SearchInput
               value={query}
-              onChange={e => setQuery(e.target.value)}
-              style={{ paddingLeft: 30, width: '100%' }}
+              onChange={setQuery}
+              placeholder="Search workouts by name, sport or date…"
+              label="Search workouts to link"
+              grow={false}
+              minWidth={0}
               autoFocus
-              aria-label="Search workouts to link"
             />
           </div>
 
@@ -693,7 +695,7 @@ function EquipmentForm({ initial, onClose, onSaved }: {
               <h2 style={{ fontSize: 16, fontWeight: 700 }}>{initial ? 'Edit Equipment' : 'Add Equipment'}</h2>
               <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>Track gear like shoes, watches, and bikes</p>
             </div>
-            <button className="btn-icon" onClick={onClose}><X size={16} /></button>
+            <button className="btn-icon" onClick={onClose} aria-label="Close"><X size={16} /></button>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>

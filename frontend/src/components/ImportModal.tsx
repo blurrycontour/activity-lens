@@ -304,7 +304,7 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
               <h2 style={{ fontSize: 16, fontWeight: 700 }}>Add Workout</h2>
               <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>Upload a file or enter details manually</p>
             </div>
-            <button className="btn-icon" onClick={onClose}><X size={16} /></button>
+            <button className="btn-icon" onClick={onClose} aria-label="Close"><X size={16} /></button>
           </div>
 
           {phase === 'done' && batchResult ? (

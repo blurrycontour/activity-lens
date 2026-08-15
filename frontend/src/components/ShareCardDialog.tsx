@@ -109,7 +109,7 @@ export default function ShareCardDialog({ workout, onClose }: {
   return (
     <Modal onClose={onClose} label="Share card">
         <div className="modal-box share-card-modal">
-          <div className="share-card-head">
+          <div className="dialog-head">
             <h3 className="share-card-title">Share card</h3>
             <button className="btn-icon" onClick={onClose} aria-label="Close"><X size={16} /></button>
           </div>

@@ -1852,11 +1852,18 @@ body {
   flex-direction: column;
   gap: 12px;
 }
-.share-card-head {
+/* A dialog's title row: its name on the left, the close button on the right.
+   Every dialog that is not a confirmation carries one, so it is one class. */
+.dialog-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
 }
+/* Dialogs that space their children with a flex gap already have the room. */
+.dup-modal > .dialog-head,
+.share-card-modal > .dialog-head { margin-bottom: 0; }
 .share-card-title { font-size: 15px; font-weight: 600; }
 .share-card-preview {
   display: flex;
@@ -1978,11 +1985,6 @@ body {
   gap: 14px;
   max-height: 80vh;
 }
-.dup-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
 .dup-note { font-size: 12.5px; color: var(--text-3); line-height: 1.6; flex-shrink: 0; }
 /* The only thing that scrolls, so the heading, the note and the actions stay
    put however many groups there are. `min-height: 0` is what lets a flex item
@@ -2101,9 +2103,14 @@ body {
 
 @media (max-width: 640px) {
   /* Nearly full height, because the group list is the content and 80vh of cap
-     left it a letterbox. The safe-area insets come off as well: .modal centres
-     in the whole viewport, which on a notched phone includes the status bar. */
-  .dup-modal,
+     left it a letterbox. `100%` is of what .modal allows after the padding
+     below, so the insets are already accounted for.
+
+     This and the rule after it were one selector list, with the comment
+     between them reading as a separator — so the dialog box took the wrapper's
+     bar-clearance as its own padding, on top of the 24px it already had, and
+     its own max-height was never set at all. */
+  .dup-modal { max-height: 100%; }
   /* Clear of both bars, not merely of the screen edges: a dialog that runs
      under the tab bar hides its own buttons, and one under the top bar looks
      like part of it. .modal's padding does the work, so every dialog gets it
@@ -4647,6 +4654,11 @@ body:has(.overlay) .fab { display: none; }
      summary beside them, so both take a share of the screen instead. */
   .detail-map-card,
   .detail-hero-card { min-height: min(56vh, 420px); }
+  /* Except the standing panel, which is words rather than a drawing. A map or
+     an elevation profile is worth a share of the screen because it is the
+     thing you came to look at; a paragraph stretched to 56vh is just a
+     paragraph with empty space under it. */
+  .detail-hero-card:has(.session-context) { min-height: 0; }
   /* The playback bar's stacked layout used to live here. It is a container
      query now — see .playback-card — because the card's width, not the
      viewport's, is what decides whether the three parts fit on one line. */

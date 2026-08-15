@@ -12,7 +12,7 @@ import { Search } from 'lucide-react'
  * where the search should be the element that grows, and how narrow it may get
  * before wrapping depends on what it shares the row with.
  */
-export default function SearchInput({ value, onChange, placeholder, label, minWidth = 180, grow = true }: {
+export default function SearchInput({ value, onChange, placeholder, label, minWidth = 180, grow = true, autoFocus }: {
   value: string
   onChange: (v: string) => void
   placeholder: string
@@ -21,6 +21,8 @@ export default function SearchInput({ value, onChange, placeholder, label, minWi
   minWidth?: number
   /** Whether it takes the spare room in its row. */
   grow?: boolean
+  /** Only where the dialog exists to be searched. */
+  autoFocus?: boolean
 }) {
   return (
     <div className="search-field" style={{ flex: grow ? 1 : undefined, minWidth }}>
@@ -31,6 +33,7 @@ export default function SearchInput({ value, onChange, placeholder, label, minWi
         aria-label={label}
         value={value}
         onChange={e => onChange(e.target.value)}
+        autoFocus={autoFocus}
       />
     </div>
   )

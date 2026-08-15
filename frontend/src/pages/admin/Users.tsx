@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronRight, Lock, Plus } from 'lucide-react'
+import { ChevronRight, Lock, Plus, X } from 'lucide-react'
 import { api, ApiError, type AdminUser } from '../../lib/api'
 import { useAuth } from '../../context/AuthContext'
 import PasswordInput from '../../components/PasswordInput'
@@ -162,7 +162,10 @@ function CreateUser({ onDone, onCancel }: { onDone: () => void; onCancel: () => 
   return (
     <Modal onClose={onCancel} dismissable={!busy} label="Add user">
         <div className="modal-box" style={{ maxWidth: 520 }}>
-          <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 14 }}>Add user</h3>
+          <div className="dialog-head">
+            <h3 style={{ fontSize: 16, fontWeight: 700 }}>Add user</h3>
+            <button className="btn-icon" onClick={onCancel} disabled={busy} aria-label="Close"><X size={16} /></button>
+          </div>
           <div className="field-grid">
         <Field label="Username">
           <input className="input" style={{ width: '100%' }} value={username} onChange={e => setUsername(e.target.value)} />

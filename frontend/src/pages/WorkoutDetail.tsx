@@ -1380,7 +1380,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
                   <h2 style={{ fontSize: 16, fontWeight: 700 }}>Edit Workout</h2>
                   <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>Update the workout's details</p>
                 </div>
-                <button className="btn-icon" onClick={() => setEditing(false)} disabled={saving}><XIcon size={16} /></button>
+                <button className="btn-icon" onClick={() => setEditing(false)} disabled={saving} aria-label="Close"><XIcon size={16} /></button>
               </div>
 
               <div className="edit-modal-body">

@@ -112,6 +112,14 @@ an existing component is a bug — it will drift.
   surface that ignores it navigates the page away instead. `Modal` handles this
   via `useDismissOnBack`, which keeps one guard history entry for the whole
   overlay stack and lets only the topmost surface respond.
+- **Every dialog that is not a confirmation carries a close button** — a
+  `.btn-icon` with an `X` and `aria-label="Close"`, top right, in a
+  `.dialog-head` row. Confirmations are exempt: their Cancel *is* the way out,
+  and a second one is noise.
+- **Reserve the space data will occupy.** A dialog that renders its rows only
+  once a fetch lands grows under the reader a moment after opening. Use
+  `Skeleton` at roughly the value's width, and track whether the request has
+  *settled* — otherwise a failed one shimmers forever.
 - **Stacking order is named, not numbered.** Use the `--z-*` tokens on `:root`
   (`--z-chrome`, `--z-overlay`, `--z-dialog`, `--z-menu`, `--z-tooltip`,
   `--z-status`, `--z-floating`, …). Pick the layer the thing belongs to; do not

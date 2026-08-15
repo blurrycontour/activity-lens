@@ -87,7 +87,7 @@ export default function DuplicatesDialog({ workouts, onClose, onDelete }: {
   return (
     <Modal onClose={onClose} onBack={onBack}>
         <div className="modal-box dup-modal" role="dialog" aria-modal="true" aria-label="Possible duplicates">
-          <div className="dup-head">
+          <div className="dialog-head">
             <h3 style={{ fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
               <Copy size={15} /> Possible duplicates
               {/* The caveats matter and are too long to leave in front of the
