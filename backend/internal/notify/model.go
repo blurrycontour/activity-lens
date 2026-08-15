@@ -37,6 +37,14 @@ const (
 	// are one feature and nobody wants "reactions" and "comments" as separate
 	// switches for a page they either follow or do not.
 	KindWorkoutSocial Kind = "workout_social"
+	// KindPing: another member nudged you from your profile — "let's go for a
+	// run", or that they are feeling like a couch potato.
+	//
+	// The one kind sent by a person to a person with no workout behind it,
+	// which is why it is the only one with a cooldown between sends: everything
+	// else is rate limited by the thing that causes it, and a ping is caused by
+	// nothing but wanting to send one.
+	KindPing Kind = "ping"
 	// KindFeedback: someone filed feedback. Only ever sent to administrators —
 	// it is the one kind that reports on the instance rather than on the
 	// recipient's own training, which is why Settings hides its switch from
@@ -63,7 +71,7 @@ const (
 )
 
 // AllKinds is every kind, in the order Settings lists them.
-var AllKinds = []Kind{KindBroadcast, KindAppUpdate, KindWorkoutShared, KindWorkoutSocial, KindGearWorn, KindGoalMet, KindGoalAtRisk, KindGoalNoneSet, KindWorkoutImported, KindFeedback}
+var AllKinds = []Kind{KindBroadcast, KindAppUpdate, KindWorkoutShared, KindWorkoutSocial, KindPing, KindGearWorn, KindGoalMet, KindGoalAtRisk, KindGoalNoneSet, KindWorkoutImported, KindFeedback}
 
 // ValidKind reports whether k is a known kind.
 func ValidKind(k Kind) bool {

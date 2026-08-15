@@ -18,13 +18,17 @@ import (
 // kind would mean touching all three.
 const AppUpdateLink = "/update"
 
-// announceAppUpdate tells everyone once, when this server starts on a release
-// it has not announced before.
+// announceAppUpdate tells everyone once, when this server starts carrying an
+// Android app it has not announced before.
 //
-// It exists for the Android app. The web app is served by this very process, so
-// a browser picks up the new build on its next load and needs no telling; the
-// phone is a separate artifact that only looks for an update when it is opened,
-// and the person worth reaching is precisely the one who has not opened it.
+// Keyed on the bundled APK's version, not the server's. They usually move
+// together — both come from one build — but they are separate artifacts, and
+// only one of them is something a user has to act on: the web app is served by
+// this very process and a browser picks up the new build on its next load,
+// while the phone is a separate install that only looks for an update when it
+// is opened. A server-only deployment therefore says nothing, because there is
+// nothing for anyone to install; a server with no APK at all says nothing
+// either, for the same reason.
 //
 // At startup rather than on a ticker because the trigger is a deployment, and a
 // deployment is a restart. Two things keep it from repeating itself: the
@@ -32,12 +36,19 @@ const AppUpdateLink = "/update"
 // dedupe key, which makes a second attempt at the same release a no-op per user
 // even if the record were lost.
 func (s *Server) announceAppUpdate(ctx context.Context) {
+	app := s.androidApp()
+	if !app.Available {
+		// No app to install, so no update to announce — and nothing to record
+		// either: an image built without an APK must not leave a version behind
+		// that makes the next image with one look like an upgrade.
+		return
+	}
 	last, err := s.settings.AnnouncedVersion(ctx)
 	if err != nil {
 		slog.Warn("could not read the announced version", "error", err)
 		return
 	}
-	version := strings.TrimSpace(s.build.Version)
+	version := strings.TrimSpace(app.Version)
 	announce, record := updateAnnouncement(last, version)
 	if record {
 		// Recorded before the fan-out, not after. A crash midway then costs one
@@ -69,7 +80,7 @@ func (s *Server) announceAppUpdate(ctx context.Context) {
 			UserID: u.ID,
 			Kind:   notify.KindAppUpdate,
 			Title:  fmt.Sprintf("Activity Lens %s is available", version),
-			Body:   "Open to install the update.",
+			Body:   "A new version of the Android app is ready. Open to install it.",
 			Link:   AppUpdateLink,
 			// Keyed on the version, so this is at most one notification per
 			// user per release however many times the server restarts.

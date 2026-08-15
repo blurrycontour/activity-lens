@@ -23,9 +23,17 @@ const (
 	keyOIDC    = "oidc"
 	keyStorage = "storage"
 	keyVAPID   = "vapid"
-	// keyAnnounced remembers the release users were last told about, so a
-	// restart on the same version does not announce it again.
-	keyAnnounced = "announced_version"
+	// keySocial holds the instance-wide social settings — currently just how
+	// often one person may ping another.
+	keySocial = "social"
+	// keyAnnounced remembers the Android app version users were last told
+	// about, so a restart on the same version does not announce it again.
+	//
+	// A different key from the "announced_version" this used to be, which held
+	// the *server's* version. Reusing it would make the first boot after the
+	// switch compare a server version against an app version, find them
+	// different, and announce an update nobody received.
+	keyAnnounced = "announced_app_version"
 )
 
 // SMTP holds outbound email settings.
@@ -64,6 +72,49 @@ type Storage struct {
 	// pipeline can reprocess history without asking users to re-upload.
 	// Trades additional database size for that flexibility.
 	KeepOriginalUploads bool `json:"keepOriginalUploads"`
+}
+
+// Social holds instance-wide settings for what members may do to each other.
+type Social struct {
+	// PingCooldownSeconds is how long one person must wait before pinging the
+	// same person again. Zero means DefaultPingCooldown; a negative value is
+	// refused at the handler rather than silently treated as "no limit",
+	// because "no limit" is not a thing this feature should be able to be.
+	PingCooldownSeconds int `json:"pingCooldownSeconds"`
+}
+
+/*
+DefaultPingCooldown is the wait between two pings from one person to the same
+person.
+
+Sixty seconds is long enough that a ping cannot be used to hammer someone's
+phone, and short enough that a real exchange — a nudge, a reply, a second nudge
+— never runs into it. It is per pair rather than per sender, so nudging two
+different friends in the same minute works; the spam this exists to stop is
+aimed at one person.
+*/
+const DefaultPingCooldown = 60
+
+// MaxPingCooldown bounds what an administrator can set. A cooldown measured in
+// days is indistinguishable from the feature being switched off, and switching
+// it off is what the per-user notification toggle is for.
+const MaxPingCooldown = 24 * 60 * 60
+
+// StoredSocial returns the social settings, filled in with defaults.
+func (s *Store) StoredSocial(ctx context.Context) (Social, error) {
+	v := Social{PingCooldownSeconds: DefaultPingCooldown}
+	if _, err := s.get(ctx, keySocial, &v); err != nil {
+		return Social{}, err
+	}
+	if v.PingCooldownSeconds <= 0 {
+		v.PingCooldownSeconds = DefaultPingCooldown
+	}
+	return v, nil
+}
+
+// SaveSocial persists the social settings.
+func (s *Store) SaveSocial(ctx context.Context, v Social) error {
+	return s.set(ctx, keySocial, v)
 }
 
 // UserPrefs holds per-user preferences that influence how activity metrics
@@ -166,11 +217,12 @@ func (s *Store) set(ctx context.Context, key string, v any) error {
 	return err
 }
 
-// AnnouncedVersion is the release this instance has already told its users
-// about, or empty if it has never told them anything.
+// AnnouncedVersion is the Android app version this instance has already told
+// its users about, or empty if it has never told them anything.
 //
-// Instance-wide rather than per user because the question is about the server:
-// it has one version at a time, and every user is looking at the same one.
+// Instance-wide rather than per user because the question is about what this
+// server carries: it bundles one APK at a time, and every user is offered the
+// same one.
 func (s *Store) AnnouncedVersion(ctx context.Context) (string, error) {
 	var v struct {
 		Version string `json:"version"`
