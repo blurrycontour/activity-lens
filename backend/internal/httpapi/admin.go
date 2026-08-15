@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -29,6 +30,11 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	storage, err := s.settings.StoredStorage(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load settings")
+		return
+	}
+	social, err := s.settings.StoredSocial(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not load settings")
 		return
@@ -61,7 +67,35 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 		"storage": map[string]any{
 			"keepOriginalUploads": storage.KeepOriginalUploads,
 		},
+		"social": map[string]any{
+			"pingCooldownSeconds": social.PingCooldownSeconds,
+		},
 	})
+}
+
+// handleSaveSocial sets how often one member may ping another.
+func (s *Server) handleSaveSocial(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		PingCooldownSeconds int `json:"pingCooldownSeconds"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	// Refused rather than clamped at either end. Zero would read as "no limit"
+	// to whoever typed it and mean "the default" to the store, and a cooldown
+	// of a week is the feature switched off by an admin for everyone — which is
+	// what each person's own notification switch is for.
+	if req.PingCooldownSeconds < 1 || req.PingCooldownSeconds > settings.MaxPingCooldown {
+		writeError(w, http.StatusBadRequest,
+			fmt.Sprintf("a ping cooldown must be between 1 and %d seconds", settings.MaxPingCooldown))
+		return
+	}
+	if err := s.settings.SaveSocial(r.Context(), settings.Social{PingCooldownSeconds: req.PingCooldownSeconds}); err != nil {
+		writeError(w, http.StatusInternalServerError, "could not save settings")
+		return
+	}
+	s.handleGetSettings(w, r)
 }
 
 func (s *Server) handleSaveSMTP(w http.ResponseWriter, r *http.Request) {

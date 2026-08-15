@@ -59,3 +59,15 @@ func TestWorkoutSocialIsAKnownKind(t *testing.T) {
 		t.Error("a new user would hear nothing about comments on their workouts")
 	}
 }
+
+// A ping is the one kind a person sends deliberately and immediately expects to
+// land, so a registration slip here looks like the button being broken rather
+// than like a notification being missed.
+func TestPingIsAKnownKind(t *testing.T) {
+	if !ValidKind(KindPing) {
+		t.Fatal("ping is not in AllKinds, so Notify will discard it")
+	}
+	if !DefaultPrefs().Wants(KindPing) {
+		t.Error("a new user would never receive a ping")
+	}
+}

@@ -25,6 +25,9 @@ const NOTIFY_KINDS: { id: NotificationKind; label: string; adminOnly?: boolean }
   // One switch for comments and reactions together: they are one feature, and
   // a page is either one you follow or one you do not.
   { id: 'workout_social', label: 'Someone comments on or reacts to a workout' },
+  // The one kind another person sends on purpose, with nothing behind it but
+  // wanting to. Off here means their taps land nowhere, which is the point.
+  { id: 'ping', label: 'Someone pings me from my profile' },
   { id: 'gear_worn', label: 'Gear reaches its replacement distance' },
   { id: 'goal_met', label: 'I complete a training goal' },
   { id: 'goal_at_risk', label: "A goal's period is nearly over and I'm short" },

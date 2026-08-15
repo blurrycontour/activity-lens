@@ -3,6 +3,7 @@ package httpapi
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/blurrycontour/activity-lens/backend/internal/settings"
 	"github.com/blurrycontour/activity-lens/backend/internal/workout"
@@ -113,9 +114,19 @@ func (s *Server) handleUserProfile(w http.ResponseWriter, r *http.Request) {
 		prefs = settings.UserPrefs{}
 	}
 
+	// What the ping row needs to draw itself: the messages this server offers,
+	// and how long is left of the cooldown between these two people. Sent with
+	// the profile rather than fetched separately because it is only ever wanted
+	// here, and a second round trip would leave the row briefly undrawable.
+	cooldown := s.pingCooldown(r)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"user":    ref,
 		"tagline": prefs.Tagline,
+		"ping": map[string]any{
+			"messages":        pingMessages,
+			"cooldownSeconds": int(cooldown / time.Second),
+			"waitSeconds":     int(s.pings.wait(viewer.ID, id, cooldown, time.Now()).Round(time.Second) / time.Second),
+		},
 		// Theirs, sent to you directly.
 		"sharedWithMe": mine,
 		// Theirs, open to everyone signed in here.

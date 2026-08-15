@@ -1,4 +1,4 @@
-import { Users, Mail, KeyRound, Database, MessageSquare } from 'lucide-react'
+import { Users, Mail, KeyRound, Database, MessageSquare, Hand } from 'lucide-react'
 import type { AdminSection } from '../../lib/nav'
 
 export interface AdminSectionMeta {
@@ -14,6 +14,7 @@ export const ADMIN_META: AdminSectionMeta[] = [
   { id: 'email', label: 'Email', sub: 'SMTP delivery for confirmation codes', icon: <Mail size={16} /> },
   { id: 'sso', label: 'Single sign-on', sub: 'OIDC provider and login button', icon: <KeyRound size={16} /> },
   { id: 'storage', label: 'Storage', sub: 'What is kept from imported files', icon: <Database size={16} /> },
+  { id: 'social', label: 'Social', sub: 'How often members can ping each other', icon: <Hand size={16} /> },
 ]
 
 export function adminMeta(id: string): AdminSectionMeta | undefined {

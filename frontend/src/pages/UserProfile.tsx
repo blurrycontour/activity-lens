@@ -5,6 +5,7 @@ import type { Workout } from '../data/workouts'
 import { useRefreshHandler } from '../context/RefreshContext'
 import { useSessionState } from '../lib/useSessionState'
 import ExpandModal from '../components/ExpandModal'
+import PingRow from '../components/PingRow'
 import TabStrip from '../components/TabStrip'
 import UserAvatar, { avatarUrl, userLabel } from '../components/UserAvatar'
 import WorkoutFilterList from '../components/WorkoutFilterList'
@@ -174,6 +175,11 @@ export default function UserProfile({ id, onBack, onSelect, onOpenUser }: {
       </div>
 
       <div className="page-content">
+        {/* Between the person and the lists: a nudge is aimed at whoever is in
+            the header, not at whichever tab is on screen. Only on someone
+            else's profile, and only when the server offers it. */}
+        {!data.self && data.ping && <PingRow userId={id} name={name} info={data.ping} />}
+
         <TabStrip items={tabs} value={tab} onChange={setTab} ariaLabel="Which workouts" fill />
 
         <WorkoutFilterList

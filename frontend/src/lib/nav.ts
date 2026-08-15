@@ -62,7 +62,7 @@ export const SETTINGS_SECTIONS = [
 ] as const
 export type SettingsSection = typeof SETTINGS_SECTIONS[number]
 
-export const ADMIN_SECTIONS = ['users', 'feedback', 'email', 'sso', 'storage'] as const
+export const ADMIN_SECTIONS = ['users', 'feedback', 'email', 'sso', 'storage', 'social'] as const
 export type AdminSection = typeof ADMIN_SECTIONS[number]
 
 /** The section ids valid under a given hub page. */

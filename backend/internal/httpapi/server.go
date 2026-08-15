@@ -62,6 +62,9 @@ type Server struct {
 	sessionClients *sessions.Store
 	// sessionSeen throttles the "last active" writes; see sessiontrack.go.
 	sessionSeen *sessionTracker
+	// pings holds the cooldown between one member nudging another. In memory
+	// and per process; see ping.go for why that is the right store for it.
+	pings *pingLimiter
 	// adminStats computes per-user totals for the admin screens. Nil leaves
 	// those numbers at zero rather than failing the page.
 	adminStats *AdminStatsStore
@@ -74,6 +77,7 @@ func New(cfg config.Config, authSvc *auth.Service, workoutSvc *workout.Service, 
 	s.nativeCodes = newNativeAuthCodes()
 	s.weatherWake = make(chan struct{}, 1)
 	s.sessionSeen = newSessionTracker()
+	s.pings = newPingLimiter()
 	s.mw = &httpmw.Middleware{
 		Auth:   authSvc,
 		Secure: s.secure,
@@ -237,6 +241,9 @@ func (s *Server) apiRoutes() http.Handler {
 	mux.Handle("GET /api/users", s.authed(s.handleListUserDirectory))
 	// Another member, and the workouts of theirs you can already see.
 	mux.Handle("GET /api/users/{id}", s.authed(s.handleUserProfile))
+	// A nudge from one member to another. The message is chosen from a fixed
+	// list the server owns, never typed — see ping.go.
+	mux.Handle("POST /api/users/{id}/ping", s.authedCSRF(s.handlePingUser))
 
 	// --- Notifications (authenticated) ---
 	mux.Handle("GET /api/notifications", s.authed(s.handleListNotifications))
@@ -269,6 +276,7 @@ func (s *Server) apiRoutes() http.Handler {
 	mux.Handle("PUT /api/admin/settings/smtp", s.authedAdminCSRF(s.handleSaveSMTP))
 	mux.Handle("PUT /api/admin/settings/oidc", s.authedAdminCSRF(s.handleSaveOIDC))
 	mux.Handle("PUT /api/admin/settings/storage", s.authedAdminCSRF(s.handleSaveStorage))
+	mux.Handle("PUT /api/admin/settings/social", s.authedAdminCSRF(s.handleSaveSocial))
 	mux.Handle("POST /api/admin/settings/smtp/test", s.authedAdminCSRF(s.handleTestEmail))
 	mux.Handle("GET /api/admin/users", s.authedAdmin(s.handleListUsers))
 	mux.Handle("POST /api/admin/users", s.authedAdminCSRF(s.handleCreateUser))

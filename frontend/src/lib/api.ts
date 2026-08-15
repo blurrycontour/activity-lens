@@ -50,7 +50,7 @@ export interface BuildInfo {
 }
 
 /** What happened, driving the icon the notification panel renders. */
-export type NotificationKind = 'broadcast' | 'app_update' | 'workout_shared' | 'workout_social' | 'gear_worn' | 'goal_met' | 'goal_at_risk' | 'goal_none_set' | 'workout_imported' | 'feedback'
+export type NotificationKind = 'broadcast' | 'app_update' | 'workout_shared' | 'workout_social' | 'ping' | 'gear_worn' | 'goal_met' | 'goal_at_risk' | 'goal_none_set' | 'workout_imported' | 'feedback'
 
 export interface AppNotification {
   id: string
@@ -168,6 +168,13 @@ export interface AdminSettings {
   smtp: SmtpSettings
   oidc: OidcSettings
   storage: StorageSettings
+  social: SocialSettings
+}
+
+/** Instance-wide rules for what members may do to each other. */
+export interface SocialSettings {
+  /** How long one member must wait before pinging the same member again. */
+  pingCooldownSeconds: number
 }
 
 export interface StorageSettings {
@@ -271,6 +278,20 @@ export interface UserProfileData {
   publicWorkouts: import('../data/workouts').Workout[]
   /** Yours, sent to them. Empty on your own profile. */
   sharedWithThem: import('../data/workouts').Workout[]
+  /**
+   * What the nudge row needs to draw itself. Absent on your own profile, and
+   * from servers that predate pings — both mean "do not offer it".
+   */
+  ping?: PingInfo
+}
+
+/** The nudges this server offers, and where this pair stands with them. */
+export interface PingInfo {
+  /** Every message, in the order to lay them out. Ids come from the server. */
+  messages: { id: string; text: string }[]
+  cooldownSeconds: number
+  /** Seconds left before the next ping to this person; 0 means ready. */
+  waitSeconds: number
 }
 
 /** What one account has accumulated on this instance. */
@@ -667,6 +688,8 @@ export const api = {
     request<AdminSettings>('/api/admin/settings/oidc', { method: 'PUT', body: payload }),
   saveStorage: (payload: StorageSettings) =>
     request<AdminSettings>('/api/admin/settings/storage', { method: 'PUT', body: payload }),
+  saveSocial: (payload: SocialSettings) =>
+    request<AdminSettings>('/api/admin/settings/social', { method: 'PUT', body: payload }),
   testEmail: (to: string) =>
     request<{ status: string; to: string }>('/api/admin/settings/smtp/test', { method: 'POST', body: { to } }),
   /**
@@ -678,6 +701,13 @@ export const api = {
    * yours to read.
    */
   getUserProfile: (id: number) => request<UserProfileData>(`/api/users/${id}`),
+  /**
+   * Nudges another member. `message` is one of the ids the profile handed out —
+   * the text itself belongs to the server, so nothing typed here reaches
+   * anyone's lock screen. Rejected with 429 while the cooldown is running.
+   */
+  pingUser: (id: number, message: string) =>
+    request<{ sent: boolean; cooldownSeconds: number }>(`/api/users/${id}/ping`, { method: 'POST', body: { message } }),
   listAdminUsers: () => request<{ users: AdminUser[] }>('/api/admin/users'),
   getAdminUser: (id: number) => request<AdminUserDetail>(`/api/admin/users/${id}`),
   revokeUserSession: (id: number, sessionId: string) =>
