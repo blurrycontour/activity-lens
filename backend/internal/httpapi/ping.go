@@ -31,6 +31,13 @@ type pingMessage struct {
 	ID string `json:"id"`
 	// Text is what the recipient reads. Written from the sender's side — this
 	// is a person talking, not the app reporting.
+	//
+	// It leads with the emoji for the same sport the button draws, because the
+	// body is the one part of a ping that travels: the bell shows the sender's
+	// face rather than the sport, and an OS notification shows whatever the
+	// payload's text happens to be. An emoji rides along in a string everywhere
+	// — lock screen, ntfy, the app — where an icon would need three separate
+	// pieces of plumbing to arrive.
 	Text string `json:"text"`
 }
 
@@ -46,12 +53,12 @@ of what people actually send each other is "I am doing nothing today", and
 without it the row is a row of demands.
 */
 var pingMessages = []pingMessage{
-	{ID: "run", Text: "Let's go for a run!"},
-	{ID: "ride", Text: "Let's go for a ride!"},
-	{ID: "hike", Text: "Let's go for a hike!"},
-	{ID: "swim", Text: "Let's go for a swim!"},
-	{ID: "strength", Text: "Let's hit the gym!"},
-	{ID: "couch", Text: "Feeling like a couch potato."},
+	{ID: "run", Text: "🏃 Let's go for a run!"},
+	{ID: "ride", Text: "🚴 Let's go for a ride!"},
+	{ID: "hike", Text: "🥾 Let's go for a hike!"},
+	{ID: "swim", Text: "🏊 Let's go for a swim!"},
+	{ID: "strength", Text: "🏋️ Let's hit the gym!"},
+	{ID: "couch", Text: "🛋️ Feeling like a couch potato."},
 }
 
 // pingText resolves a message id, reporting whether it is one we offer.
