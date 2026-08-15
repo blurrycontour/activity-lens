@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { X } from 'lucide-react'
 import useSheetDrag from '../lib/useSheetDrag'
+import Modal from './Modal'
 
 /** One selectable value within a group. */
 export interface FilterOption<T> {
@@ -66,8 +67,7 @@ export default function FilterSheet({ groups, onClose, onReset }: FilterSheetPro
   }, [onClose])
 
   return (
-    <>
-      <div className="overlay" onClick={onClose} />
+    <Modal onClose={onClose} wrapper="none">
       <div
         className="sheet"
         role="dialog"
@@ -125,6 +125,6 @@ export default function FilterSheet({ groups, onClose, onReset }: FilterSheetPro
           </button>
         </div>
       </div>
-    </>
+    </Modal>
   )
 }

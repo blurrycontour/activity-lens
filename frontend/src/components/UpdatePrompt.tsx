@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { AlertCircle, Download, ShieldCheck, X } from 'lucide-react'
 import { api } from '../lib/api'
 import { clearUpdatePending, markUpdateReady } from '../lib/appUpdate'
+import Modal from './Modal'
 import {
   canInstallOver, canSelfUpdate, downloadAndInstall, installedApp, INSTALL_NOT_PERMITTED,
   onUpdateProgress, openInstallSettings, reportUpdateCheckDone, updateAvailable,
@@ -177,11 +178,9 @@ export default function UpdatePrompt() {
     : null
 
   return (
-    <>
-      {/* No click-to-dismiss on the overlay: the dialog is dismissible by its
-          own controls, and a stray tap during a download would be expensive. */}
-      <div className="overlay" />
-      <div className="modal" role="dialog" aria-modal="true" aria-label="App update">
+    // No click-to-dismiss: the dialog is dismissible by its own controls, and
+    // a stray tap during a download would be expensive.
+    <Modal dismissable={false} label="App update">
       <div className="modal-box" style={{ maxWidth: 380 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 14 }}>
           <div style={{
@@ -267,7 +266,6 @@ export default function UpdatePrompt() {
           )}
         </div>
       </div>
-      </div>
-    </>
+    </Modal>
   )
 }

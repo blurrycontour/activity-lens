@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { AlertTriangle, Copy, Trash2, X } from 'lucide-react'
 import { fmtDist, fmtDuration, type Workout } from '../data/workouts'
 import { findDuplicateGroups, redundantIds } from '../lib/duplicates'
@@ -8,6 +7,7 @@ import TypeIcon from './TypeIcon'
 import SourceMark from './SourceMark'
 import InfoTip from './InfoTip'
 import ConfirmDialog from './ConfirmDialog'
+import Modal from './Modal'
 
 const HOW_IT_WORKS = 'Workouts of the same sport on the same day are treated as '
   + 'the same activity when their duration and distance agree to within a couple '
@@ -85,10 +85,8 @@ export default function DuplicatesDialog({ workouts, onClose, onDelete }: {
   // context — so a dialog left in the page is capped at that level and the top
   // and bottom bars draw over it. A short dialog never reaches them; a tall one
   // does, which is how this surfaced.
-  return createPortal(
-    <>
-      <div className="overlay" onClick={onClose} />
-      <div className="modal">
+  return (
+    <Modal onClose={onClose}>
         <div className="modal-box dup-modal" role="dialog" aria-modal="true" aria-label="Possible duplicates">
           <div className="dup-head">
             <h3 style={{ fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -173,10 +171,8 @@ export default function DuplicatesDialog({ workouts, onClose, onDelete }: {
             </button>
           </div>
         </div>
-      </div>
-      {/* Inside this portal and after the dialog, so it paints on top of it:
-          the two share a z-index, and a ConfirmDialog rendered from the page
-          instead would be trapped under the swipe pager's stacking context. */}
+      {/* After the dialog, so it paints on top of it: the two share a z-index,
+          and both portal to the body — see Modal. */}
       {confirming && (
         <ConfirmDialog
           title={`Delete ${chosen.length} workout${chosen.length === 1 ? '' : 's'}?`}
@@ -214,7 +210,6 @@ export default function DuplicatesDialog({ workouts, onClose, onDelete }: {
           onCancel={() => setConfirming(false)}
         />
       )}
-    </>,
-    document.body,
+    </Modal>
   )
 }

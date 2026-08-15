@@ -4,6 +4,7 @@ import AboutDialog from './AboutDialog'
 import { applyPendingUpdate, useUpdatePending } from '../lib/appUpdate'
 import { avatarUrl } from './UserAvatar'
 import type { ApiUser } from '../lib/api'
+import Modal from './Modal'
 
 interface UserMenuProps {
   onClose: () => void
@@ -49,11 +50,7 @@ export default function UserMenu({ onClose, onSettings, onProfile, onAdmin, onLo
   if (showAbout) return <AboutDialog onClose={() => { setShowAbout(false); onClose() }} />
 
   return (
-    <>
-      <div
-        className="overlay"
-        onClick={onClose}
-      />
+    <Modal onClose={onClose} wrapper="none" label="Account menu">
       <div
         ref={ref}
         style={{
@@ -129,6 +126,6 @@ export default function UserMenu({ onClose, onSettings, onProfile, onAdmin, onLo
           </button>
         </div>
       </div>
-    </>
+    </Modal>
   )
 }

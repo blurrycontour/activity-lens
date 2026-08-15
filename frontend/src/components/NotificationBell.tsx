@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { Bell, Check, Download, Share2, Footprints, Trophy, Clock, X, Trash2, FolderDown, MessageSquare, Target, Megaphone } from 'lucide-react'
 import { api, apiURL, type AppNotification, type NotificationKind } from '../lib/api'
 import { dismissOSNotification, enablePush, maybePromptForPush, pushState, syncPushSubscription, type PushState } from '../lib/push'
 import { maybeEnrolNativePush, syncNativePush, watchNativeEndpoint } from '../lib/native/unifiedPush'
 import { PUSH_EVENT, READ_NOTIFICATION_EVENT } from '../lib/notifications'
 import { useIsMobile } from '../lib/useIsMobile'
+import Modal from './Modal'
 
 /** How often to re-check the unread count while the app is open. */
 const POLL_MS = 60_000
@@ -246,9 +246,8 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
           The backdrop matters because without one, a tap outside the panel
           closes it *and* activates whatever was underneath — easy to do on a
           phone, where the panel is nearly full width. */}
-      {open && createPortal(
-        <>
-        <div className="overlay" onClick={() => setOpen(false)} />
+      {open && (
+        <Modal onClose={() => setOpen(false)} wrapper="none">
         <div
           className="notif-panel"
           role="dialog"
@@ -320,14 +319,11 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
             ))}
           </div>
         </div>
-        </>,
-        document.body,
+        </Modal>
       )}
 
-      {reading && createPortal(
-        <>
-          <div className="overlay" onClick={() => setReading(null)} />
-          <div className="modal" role="dialog" aria-modal="true" aria-label={reading.title}>
+      {reading && (
+        <Modal onClose={() => setReading(null)} label={reading.title}>
             <div className="modal-box notif-read">
               <div className="notif-read-head">
                 {reading.icon
@@ -345,9 +341,7 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
                   line breaks they put in are part of what they wrote. */}
               {reading.body && <p className="notif-read-body">{reading.body}</p>}
             </div>
-          </div>
-        </>,
-        document.body,
+        </Modal>
       )}
     </div>
   )

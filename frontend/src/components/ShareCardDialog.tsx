@@ -8,6 +8,7 @@ import {
 import { reportSaveFailure, shareFile } from '../lib/download'
 import { isNative } from '../lib/serverConfig'
 import { api } from '../lib/api'
+import Modal from './Modal'
 
 /**
  * A workout as a picture, for sending to people who do not have an account.
@@ -101,13 +102,8 @@ export default function ShareCardDialog({ workout, onClose }: {
   }
 
   return (
-    <>
-      <div className="overlay" onClick={onClose} />
-      {/* The .modal wrapper is what carries the z-index and the centring —
-          .modal-box on its own is an unpositioned div, so it rendered beneath
-          the overlay and the dialog was a blur with nothing in it. */}
-      <div className="modal">
-        <div className="modal-box share-card-modal" role="dialog" aria-modal="true" aria-label="Share card">
+    <Modal onClose={onClose} label="Share card">
+        <div className="modal-box share-card-modal">
           <div className="share-card-head">
             <h3 className="share-card-title">Share card</h3>
             <button className="btn-icon" onClick={onClose} aria-label="Close"><X size={16} /></button>
@@ -171,7 +167,6 @@ export default function ShareCardDialog({ workout, onClose }: {
             </p>
           )}
         </div>
-      </div>
-    </>
+    </Modal>
   )
 }

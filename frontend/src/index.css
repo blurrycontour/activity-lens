@@ -1266,12 +1266,21 @@ body {
    ignores it — but it also removes the caret, so we draw one. The colour is a
    mid grey that reads on both themes; a data URI cannot use currentColor. */
 /* ── Overlay / Modal ── */
+/* The one backdrop, behind every dialog, sheet and popover — see Modal.tsx.
+   Blurred rather than merely dimmed: the page behind a dialog is context, not
+   content, and on a phone a dim alone still reads as something to tap. */
 .overlay {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.6);
   z-index: 1100;
-  backdrop-filter: blur(2px);
+  backdrop-filter: blur(6px) saturate(80%);
+  -webkit-backdrop-filter: blur(6px) saturate(80%);
+}
+/* Backdrop blur silently does nothing on some browsers; darken instead, so the
+   separation survives either way. */
+@supports not (backdrop-filter: blur(1px)) {
+  .overlay { background: rgba(0, 0, 0, 0.72); }
 }
 
 .modal {
@@ -2029,9 +2038,16 @@ body {
      left it a letterbox. The safe-area insets come off as well: .modal centres
      in the whole viewport, which on a notched phone includes the status bar. */
   .dup-modal,
+  /* Clear of both bars, not merely of the screen edges: a dialog that runs
+     under the tab bar hides its own buttons, and one under the top bar looks
+     like part of it. .modal's padding does the work, so every dialog gets it
+     and none has to remember. */
+  .modal {
+    padding: calc(12px + var(--topbar-h)) 12px calc(12px + var(--bottombar-h));
+  }
   .recalc-modal,
   .edit-modal {
-    max-height: calc(100dvh - 32px - var(--safe-top) - var(--safe-bottom));
+    max-height: calc(100dvh - var(--topbar-h) - var(--bottombar-h) - 24px);
   }
   .dup-row { padding: 10px; }
   .dup-actions .btn { width: 100%; flex: none; }

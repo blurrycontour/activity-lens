@@ -1,5 +1,6 @@
 import { type ReactNode } from 'react'
 import { AlertTriangle } from 'lucide-react'
+import Modal from './Modal'
 
 interface ConfirmDialogProps {
   title: string
@@ -36,10 +37,8 @@ export default function ConfirmDialog({
   onCancel,
 }: ConfirmDialogProps) {
   return (
-    <>
-      {/* Dismissible by tapping away, except while the action is running. */}
-      <div className="overlay" onClick={() => { if (!busy) onCancel() }} />
-      <div className="modal" role="dialog" aria-modal="true" aria-label={title}>
+    // Dismissible by tapping away, except while the action is running.
+    <Modal onClose={onCancel} dismissable={!busy} label={title}>
         <div className="modal-box" style={{ maxWidth: 420 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
             <AlertTriangle size={20} style={{ color: danger ? 'var(--danger)' : 'var(--warning)' }} />
@@ -60,7 +59,6 @@ export default function ConfirmDialog({
             </button>
           </div>
         </div>
-      </div>
-    </>
+    </Modal>
   )
 }

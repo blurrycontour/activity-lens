@@ -1,6 +1,7 @@
 import { FolderSync, Import, PenLine, Share2, Upload, X } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { isNative } from '../lib/serverConfig'
+import Modal from './Modal'
 
 /**
  * The "here is how you get your workouts in" welcome.
@@ -95,9 +96,7 @@ export default function ImportIntro({ onClose }: ImportIntroProps) {
   const routes = routesFor(isNative())
 
   return (
-    <>
-      <div className="overlay" onClick={onClose} />
-      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="import-intro-title">
+    <Modal onClose={onClose} label="Importing workouts">
         <div className="modal-box import-intro">
           <button
             className="btn-icon"
@@ -135,7 +134,6 @@ export default function ImportIntro({ onClose }: ImportIntroProps) {
             <button className="btn btn-primary" onClick={onClose}>Okay! Got it.</button>
           </div>
         </div>
-      </div>
-    </>
+    </Modal>
   )
 }

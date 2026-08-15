@@ -55,6 +55,7 @@ import MenuButton from '../components/MenuButton'
 import WorkoutReshape, { emptyPlan, planChanges, presentStreams, type ReshapePlan } from '../components/WorkoutReshape'
 import ShareDialog from '../components/ShareDialog'
 import ShareCardDialog from '../components/ShareCardDialog'
+import Modal from '../components/Modal'
 
 interface WorkoutDetailProps {
   workout: Workout
@@ -1369,9 +1370,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
         />
       )}
       {editing && (
-        <>
-          <div className="overlay" onClick={() => { if (!saving) setEditing(false) }} />
-          <div className="modal">
+        <Modal onClose={() => setEditing(false)} dismissable={!saving} label="Edit workout">
             {/* Scrolls rather than growing past the viewport: with the
                 recording section open this is taller than a laptop screen, and
                 the Save button was the part that fell off the bottom. */}
@@ -1431,7 +1430,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
                     aria-expanded={showAdvanced}
                   >
                     <ChevronDown size={14} className={showAdvanced ? 'open' : undefined} aria-hidden />
-                    Advanced: trim and recorded data
+                    Advanced
                     {planChanges(w, plan) && <span className="edit-advanced-mark">edited</span>}
                   </button>
                   {showAdvanced && <WorkoutReshape workout={w} plan={plan} onChange={setPlan} hasOriginal={!!w.hasOriginal} />}
@@ -1452,8 +1451,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
                 </button>
               </div>
             </div>
-          </div>
-        </>
+        </Modal>
       )}
       {/* Named rather than generic: "this cannot be undone" is not true here —
           there may be an original to restore from — and what is actually going
@@ -1494,9 +1492,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
       )}
 
       {confirmDelete && (
-        <>
-          <div className="overlay" onClick={() => { if (!deleting) setConfirmDelete(false) }} />
-          <div className="modal">
+        <Modal onClose={() => setConfirmDelete(false)} dismissable={!deleting}>
             <div className="modal-box" style={{ maxWidth: 420 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
                 <AlertTriangle size={20} style={{ color: 'var(--warning)' }} />
@@ -1512,8 +1508,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
                 </button>
               </div>
             </div>
-          </div>
-        </>
+        </Modal>
       )}
       <div className="page-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

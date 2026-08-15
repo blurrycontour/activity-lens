@@ -10,6 +10,7 @@ import StatusMsg, { type Msg } from '../../components/StatusMsg'
 import Dropdown, { type DropdownOption } from '../../components/Dropdown'
 import { fmtBytes } from './UserDetail'
 import BroadcastAdmin from './Broadcast'
+import Modal from '../../components/Modal'
 
 const ROLES = ['administrator', 'editor', 'reader']
 
@@ -159,9 +160,7 @@ function CreateUser({ onDone, onCancel }: { onDone: () => void; onCancel: () => 
   }
 
   return (
-    <>
-      <div className="overlay" onClick={() => { if (!busy) onCancel() }} />
-      <div className="modal" role="dialog" aria-modal="true" aria-label="Add user">
+    <Modal onClose={onCancel} dismissable={!busy} label="Add user">
         <div className="modal-box" style={{ maxWidth: 520 }}>
           <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 14 }}>Add user</h3>
           <div className="field-grid">
@@ -189,7 +188,6 @@ function CreateUser({ onDone, onCancel }: { onDone: () => void; onCancel: () => 
             </button>
           </div>
         </div>
-      </div>
-    </>
+    </Modal>
   )
 }
