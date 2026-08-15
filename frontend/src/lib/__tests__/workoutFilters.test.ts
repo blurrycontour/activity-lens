@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { type Workout } from '../../data/workouts'
 import {
   applyWorkoutFilters, DEFAULT_FILTERS, describeImportWindow, parseAutoImportParams, searchWorkouts,
-  type Has,
+  type HasFilter,
 } from '../workoutFilters'
 
 /**
@@ -225,7 +225,7 @@ describe('applyWorkoutFilters — what a workout contains', () => {
   const bare = workout({ id: 'bare', avgHR: 0, notes: '' })
   const list = [withPhotos, withGps, withBoth, bare]
 
-  const ids = (has: Has[]) =>
+  const ids = (has: HasFilter[]) =>
     applyWorkoutFilters(list, { ...DEFAULT_FILTERS, has }).map(w => w.id).sort()
 
   it('keeps only workouts with the attribute', () => {
@@ -249,9 +249,18 @@ describe('applyWorkoutFilters — what a workout contains', () => {
     expect(ids(['weather'])).toEqual([])
   })
 
-  it('reads heart rate and steps from the row itself', () => {
+  it('reads heart rate from the row itself, and cadence from its flag', () => {
     // The shared workout() helper carries a heart rate; only `bare` clears it.
     expect(ids(['hr'])).toEqual(['both', 'gps', 'photos'])
-    expect(ids(['steps'])).toEqual([])
+    expect(ids(['cadence'])).toEqual([])
+  })
+
+  // "Without" is the more useful half for finding what needs fixing: the runs
+  // with no GPS, the ones never written up.
+  it('filters for the absence of an attribute', () => {
+    expect(ids(['no-gps'])).toEqual(['bare', 'photos'])
+    expect(ids(['no-photos'])).toEqual(['bare', 'gps'])
+    // With and without combine like any other pair.
+    expect(ids(['no-photos', 'gps'])).toEqual(['gps'])
   })
 })

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, ChevronDown, Cloud, Footprints, Heart, Image, MapPin, MessageSquare, NotebookPen, SlidersHorizontal } from 'lucide-react'
-import type { Has } from '../lib/workoutFilters'
+import { Check, ChevronDown, Cloud, Footprints, Heart, Image, MapPin, MessageSquare, NotebookPen, SlidersHorizontal, X } from 'lucide-react'
+import { hasKey, isNegated, type Has, type HasFilter } from '../lib/workoutFilters'
 
 interface ContainsOption {
   value: Has
@@ -25,7 +25,7 @@ export const CONTAINS_OPTIONS: ContainsOption[] = [
   { value: 'photos', label: 'Photos', glyph: <Image size={14} /> },
   { value: 'gps', label: 'GPS route', glyph: <MapPin size={14} /> },
   { value: 'hr', label: 'Heart rate', glyph: <Heart size={14} /> },
-  { value: 'steps', label: 'Steps', glyph: <Footprints size={14} /> },
+  { value: 'cadence', label: 'Cadence', glyph: <Footprints size={14} /> },
   { value: 'comments', label: 'Comments', glyph: <MessageSquare size={14} /> },
   { value: 'weather', label: 'Weather', glyph: <Cloud size={14} /> },
   { value: 'notes', label: 'Notes', glyph: <NotebookPen size={14} />, ownerOnly: true },
@@ -36,9 +36,49 @@ export function containsOptions(mine: boolean): ContainsOption[] {
   return mine ? CONTAINS_OPTIONS : CONTAINS_OPTIONS.filter(o => !o.ownerOnly)
 }
 
-/** The label for one attribute, for the chip that says it is applied. */
-export function containsLabel(v: Has): string {
-  return CONTAINS_OPTIONS.find(o => o.value === v)?.label ?? v
+/** The label for one filter, for the chip that says it is applied. */
+export function containsLabel(v: HasFilter): string {
+  const label = CONTAINS_OPTIONS.find(o => o.value === hasKey(v))?.label ?? hasKey(v)
+  return isNegated(v) ? `No ${label.toLowerCase()}` : label
+}
+
+/**
+ * The next state for an attribute, cycling with → without → off.
+ *
+ * A cycle rather than two controls: the three states are answers to one
+ * question — "photos?" — and splitting them into a "has" list and a "hasn't"
+ * list would let someone tick both and get an empty page with no clue why.
+ */
+export function cycleHas(current: HasFilter[], k: Has): HasFilter[] {
+  const rest = current.filter(f => hasKey(f) !== k)
+  const existing = current.find(f => hasKey(f) === k)
+  if (existing === undefined) return [...rest, k]
+  if (!isNegated(existing)) return [...rest, `no-${k}` as HasFilter]
+  return rest
+}
+
+/**
+ * The options for the phone's filter sheet, labelled for their current state.
+ *
+ * Built here so the sheet and the dropdown offer the same set in the same
+ * order, and so "No photos" is worded once.
+ */
+export function containsSheetOptions(mine: boolean, value: HasFilter[]) {
+  return containsOptions(mine).map(o => {
+    const state = value.find(f => hasKey(f) === o.value)
+    return {
+      value: o.value,
+      label: state !== undefined ? containsLabel(state) : o.label,
+      glyph: o.glyph,
+    }
+  })
+}
+
+/** How one option currently stands, for the sheet's three-state chip. */
+export function containsState(value: HasFilter[], v: unknown): 'on' | 'excluded' | undefined {
+  const state = value.find(f => hasKey(f) === v)
+  if (state === undefined) return undefined
+  return isNegated(state) ? 'excluded' : 'on'
 }
 
 /**
@@ -50,7 +90,7 @@ export function containsLabel(v: Has): string {
  * as one of the same controls.
  */
 export default function ContainsDropdown({ value, onToggle, mine }: {
-  value: Has[]
+  value: HasFilter[]
   /** Called with the attribute that was clicked; the caller owns the array. */
   onToggle: (v: Has) => void
   /** Whether these are the caller's own workouts, which unlocks Notes. */
@@ -96,22 +136,30 @@ export default function ContainsDropdown({ value, onToggle, mine }: {
       {open && (
         <div className="al-dropdown-menu" role="listbox" aria-multiselectable>
           {options.map(o => {
-            const on = value.includes(o.value)
+            const state = value.find(f => hasKey(f) === o.value)
+            const without = state !== undefined && isNegated(state)
             return (
               <button
                 key={o.value}
                 type="button"
                 role="option"
-                aria-selected={on}
-                className={`al-dropdown-item${on ? ' active' : ''}`}
+                aria-selected={state !== undefined}
+                className={`al-dropdown-item${state !== undefined ? ' active' : ''}`}
                 // Deliberately does not close: ticking one of several is the
                 // whole point, and a menu that shut each time would take four
                 // clicks to say "photos and heart rate".
                 onClick={() => onToggle(o.value)}
+                title={state === undefined
+                  ? `Only workouts with ${o.label.toLowerCase()}`
+                  : without ? 'Click to clear' : `Click again for workouts without ${o.label.toLowerCase()}`}
               >
                 {o.glyph}
-                <span style={{ flex: 1, textAlign: 'left' }}>{o.label}</span>
-                {on && <Check size={13} aria-hidden />}
+                <span style={{ flex: 1, textAlign: 'left' }}>{without ? `No ${o.label.toLowerCase()}` : o.label}</span>
+                {/* A tick for "must have", a cross for "must not" — the state
+                    has to be readable without hovering for the tooltip. */}
+                {state !== undefined && (without
+                  ? <X size={13} color="var(--danger)" aria-hidden />
+                  : <Check size={13} aria-hidden />)}
               </button>
             )
           })}

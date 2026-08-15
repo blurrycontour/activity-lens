@@ -231,7 +231,8 @@ const (
 	// carries the route itself, so only a list has to be told whether there is
 	// one. Appended, like every column added since — the scanners read by
 	// position, and inserting anywhere else moves every field after it.
-	selectSummaryCols = workoutSummaryCols + `, visibility, created_at, ` + weatherCols + `, moving_time, track_points`
+	selectSummaryCols = workoutSummaryCols + `, visibility, created_at, ` + weatherCols + `, moving_time, track_points,
+		(cadence_timeline IS NOT NULL AND LENGTH(cadence_timeline) > 2)`
 )
 
 func (r *SQLiteRepository) Create(ctx context.Context, w *Workout) error {
@@ -1037,12 +1038,16 @@ func scanWorkoutSummary(row interface{ Scan(...any) error }) (*Workout, error) {
 		createdAt   string
 		wx          weatherScan
 		trackPoints int
+		// Asked of the blob's length rather than by reading it: the cadence
+		// series is one of the larger columns and a list has no use for its
+		// contents, only for whether there are any. "[]" is two bytes.
+		hasCadence bool
 	)
 	if err := row.Scan(&w.ID, &w.UserID, &w.Name, &typ, &startTime, &w.Duration, &w.Distance,
 		&w.AvgHR, &w.MaxHR, &w.ElevationGain, &w.Calories, &w.Steps, &w.AvgPace, &w.AvgSpeed, &w.Notes,
 		&calManual, &calReported, &stepManual, &source, &visibility, &createdAt,
 		&wx.status, &wx.temp, &wx.apparent, &wx.humidity, &wx.wind, &wx.precip, &wx.code,
-		&w.MovingTime, &trackPoints); err != nil {
+		&w.MovingTime, &trackPoints, &hasCadence); err != nil {
 		return nil, err
 	}
 	// A row whose simplified track has not been built yet reads as "no route",
@@ -1050,6 +1055,7 @@ func scanWorkoutSummary(row interface{ Scan(...any) error }) (*Workout, error) {
 	// within a few minutes of an upgrade; a filter briefly missing an old
 	// workout beats decompressing every route blob to answer a list.
 	w.HasRoute = trackPoints > 0
+	w.HasCadence = hasCadence
 	wx.applyTo(&w)
 	w.CaloriesManual = calManual != 0
 	w.CaloriesReported = calReported != 0

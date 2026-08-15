@@ -206,6 +206,9 @@ type Workout struct {
 	// which carry no route of their own. Read from the stored point count, so
 	// it costs nothing beyond a column.
 	HasRoute bool `json:"hasRoute,omitempty"`
+	// HasCadence is the same question about the cadence series, which a list
+	// row does not carry either.
+	HasCadence bool `json:"hasCadence,omitempty"`
 	// PhotoCount and CommentCount are filled by the API layer from one grouped
 	// query per list, so a list can be filtered by "has photos" without
 	// carrying the photos themselves.

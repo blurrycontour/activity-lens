@@ -33,6 +33,12 @@ export interface FilterGroup {
   /* eslint-enable @typescript-eslint/no-explicit-any */
   /** Several options may be on at once, and they narrow together. */
   multi?: boolean
+  /**
+   * A third state for options that can also be *excluded*, which "on or off"
+   * cannot express. The sheet only draws it; what the states mean, and what
+   * tapping does next, belong to the caller.
+   */
+  state?: (value: unknown) => 'on' | 'excluded' | undefined
 }
 
 interface FilterSheetProps {
@@ -87,13 +93,16 @@ export default function FilterSheet({ groups, onClose, onReset }: FilterSheetPro
               <div className="sheet-group-label">{g.label}</div>
               <div className="chip-row" role="group" aria-label={g.label}>
                 {g.options.map(o => {
-                  const on = g.multi
-                    ? Array.isArray(g.value) && g.value.includes(o.value)
-                    : o.value === g.value
+                  const state = g.state?.(o.value)
+                  const on = state !== undefined
+                    ? true
+                    : g.multi
+                      ? Array.isArray(g.value) && g.value.includes(o.value)
+                      : o.value === g.value
                   return (
                   <button
                     key={String(o.value)}
-                    className={`chip${on ? ' active' : ''}`}
+                    className={`chip${on ? ' active' : ''}${state === 'excluded' ? ' excluded' : ''}`}
                     aria-pressed={on}
                     onClick={() => g.onChange(o.value)}
                   >

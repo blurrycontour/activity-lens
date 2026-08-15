@@ -159,6 +159,8 @@ export interface Workout {
    * route of their own — read it as "there is a map to open", not as the map.
    */
   hasRoute?: boolean
+  /** Whether it recorded cadence — same reasoning, same absence from list rows. */
+  hasCadence?: boolean
   /** Photos and comments, counted by the server so a list can be filtered by them. */
   photoCount?: number
   commentCount?: number

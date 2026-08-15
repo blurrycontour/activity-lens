@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Handshake, Layers, LoaderCircle, Search, Send, SlidersHorizontal, X } from 'lucide-react'
 import { ALL_WORKOUT_TYPES, type Workout, type WorkoutType } from '../data/workouts'
-import { applyWorkoutFilters, DEFAULT_FILTERS, type Has, type Scope } from '../lib/workoutFilters'
+import { applyWorkoutFilters, DEFAULT_FILTERS, type Has, type HasFilter, type Scope } from '../lib/workoutFilters'
 import { RANGE_OPTIONS } from '../lib/range'
 import { useIsMobile } from '../lib/useIsMobile'
 import { useSessionState } from '../lib/useSessionState'
-import ContainsDropdown, { containsLabel, containsOptions } from './ContainsDropdown'
+import ContainsDropdown, { containsLabel, containsSheetOptions, containsState, cycleHas } from './ContainsDropdown'
 import FilterSheet, { type FilterGroup } from './FilterSheet'
 import RangeDropdown from './RangeDropdown'
 import SortDropdown, { SORT_OPTIONS, type SortKey } from './SortDropdown'
@@ -23,7 +23,7 @@ interface Narrowing {
   typeFilter: WorkoutType | 'All'
   sortBy: SortKey
   rangeDays: number
-  has: Has[]
+  has: HasFilter[]
 }
 
 const NONE: Narrowing = {
@@ -94,8 +94,8 @@ export default function WorkoutFilterList({
   // gone by the time the reader pressed back. Same lifetime as the library's.
   const [narrow, setNarrow] = useSessionState<Narrowing>(storageKey, NONE)
   const { search, typeFilter, sortBy, rangeDays, has } = narrow
-  /** Adds or removes one attribute; they narrow together. */
-  const toggleHas = (v: Has) => patch({ has: has.includes(v) ? has.filter(h => h !== v) : [...has, v] })
+  /** with → without → off, for one attribute; they narrow together. */
+  const toggleHas = (v: Has) => patch({ has: cycleHas(has, v) })
   const [showFilters, setShowFilters] = useState(false)
   const [shown, setShown] = useState(PAGE_SIZE)
 
@@ -158,7 +158,8 @@ export default function WorkoutFilterList({
       multi: true,
       value: has,
       onChange: v => toggleHas(v as Has),
-      options: containsOptions(mine).map(o => ({ value: o.value, label: o.label, glyph: o.glyph })),
+      state: v => containsState(has, v),
+      options: containsSheetOptions(mine, has),
     },
   ]
 
@@ -174,7 +175,11 @@ export default function WorkoutFilterList({
       label: SORT_OPTIONS.find(o => o.value === sortBy)?.label ?? 'Sorted',
       clear: () => patch({ sortBy: NONE.sortBy }),
     },
-    ...has.map(h => ({ key: `has-${h}`, label: containsLabel(h), clear: () => toggleHas(h) })),
+    ...has.map(h => ({
+      key: `has-${h}`,
+      label: containsLabel(h),
+      clear: () => patch({ has: has.filter(f => f !== h) }),
+    })),
   ].filter(Boolean) as { key: string; label: string; clear: () => void }[]
 
   return (

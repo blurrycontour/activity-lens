@@ -3924,6 +3924,14 @@ body:has(.overlay) .fab { display: none; }
   color: var(--primary);
   font-weight: 600;
 }
+/* Chosen, but the other way round: "no photos" is as much a filter as
+   "photos", and it has to be distinguishable at a glance from it — the accent
+   would say "on" for a chip that means the opposite. */
+.chip.active.excluded {
+  background: var(--danger-dim);
+  border-color: var(--danger);
+  color: var(--danger);
+}
 
 /* Trigger that opens the sheet, with a count of applied filters. */
 .filter-btn { position: relative; flex-shrink: 0; }

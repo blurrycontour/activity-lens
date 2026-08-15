@@ -8,7 +8,7 @@ import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
 import SortDropdown, { SORT_OPTIONS, type SortKey } from '../components/SortDropdown'
 import FilterSheet, { type FilterGroup } from '../components/FilterSheet'
-import ContainsDropdown, { containsLabel, containsOptions } from '../components/ContainsDropdown'
+import ContainsDropdown, { containsLabel, containsSheetOptions, containsState, cycleHas } from '../components/ContainsDropdown'
 import MenuButton from '../components/MenuButton'
 import ShareDialog from '../components/ShareDialog'
 import ShareCardDialog from '../components/ShareCardDialog'
@@ -102,8 +102,8 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
   const setTypeFilter = (v: WorkoutType | 'All') => patch({ typeFilter: v })
   const setSortBy = (v: SortKey) => patch({ sortBy: v })
   const setRangeDays = (v: number) => patch({ rangeDays: v })
-  /** Adds or removes one attribute; they narrow together. */
-  const toggleHas = (v: Has) => patch({ has: has.includes(v) ? has.filter(h => h !== v) : [...has, v] })
+  /** with → without → off, for one attribute; they narrow together. */
+  const toggleHas = (v: Has) => patch({ has: cycleHas(has, v) })
   const [sharing, setSharing] = useState<Workout | null>(null)
   const [cardFor, setCardFor] = useState<Workout | null>(null)
   /** A bulk delete that partly failed, shown above the list. */
@@ -202,7 +202,11 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
     typeFilter !== 'All' && { key: 'type', label: typeFilter, clear: () => setTypeFilter('All') },
     rangeDays !== 0 && { key: 'range', label: RANGE_OPTIONS.find(o => o.value === rangeDays)?.label ?? '', clear: () => setRangeDays(0) },
     sortBy !== 'date-desc' && { key: 'sort', label: SORT_OPTIONS.find(o => o.value === sortBy)?.label ?? '', clear: () => setSortBy('date-desc') },
-    ...has.map(h => ({ key: `has-${h}`, label: containsLabel(h), clear: () => toggleHas(h) })),
+    ...has.map(h => ({
+      key: `has-${h}`,
+      label: containsLabel(h),
+      clear: () => patch({ has: has.filter(f => f !== h) }),
+    })),
     originFilter === 'autoimport' && {
       key: 'origin',
       label: describeImportWindow(since),
@@ -563,7 +567,8 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
             multi: true,
             value: has,
             onChange: v => toggleHas(v as Has),
-            options: containsOptions(true).map(o => ({ value: o.value, label: o.label, glyph: o.glyph })),
+            state: v => containsState(has, v),
+            options: containsSheetOptions(true, has),
           }]}
           onClose={() => setShowFilters(false)}
           onReset={activeFilters.length > 0 ? resetFilters : undefined}

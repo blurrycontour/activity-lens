@@ -17,17 +17,37 @@ export type Scope = 'mine' | 'shared' | 'public'
  * "none of them", which is worse than not offering it. See CONTAINS_OPTIONS in
  * ContainsDropdown for where that is decided.
  */
-export type Has = 'photos' | 'gps' | 'hr' | 'steps' | 'comments' | 'weather' | 'notes'
+export type Has = 'photos' | 'gps' | 'hr' | 'cadence' | 'comments' | 'weather' | 'notes'
+
+/**
+ * One attribute, and whether it must be present or absent.
+ *
+ * "Without" is as useful as "with" and is often the more useful of the two:
+ * finding the runs with no GPS, or the ones you never wrote a note on, is how
+ * you find what needs fixing. A prefix rather than a second list, so the two
+ * cannot drift apart and a filter is one value either way.
+ */
+export type HasFilter = Has | `no-${Has}`
+
+/** The attribute a filter is about, with any negation stripped. */
+export function hasKey(f: HasFilter): Has {
+  return (f.startsWith('no-') ? f.slice(3) : f) as Has
+}
+
+/** Whether a filter asks for the attribute to be absent. */
+export function isNegated(f: HasFilter): boolean {
+  return f.startsWith('no-')
+}
 
 /** Whether one workout satisfies one attribute. */
 function hasAttribute(w: Workout, k: Has): boolean {
   switch (k) {
+    // hasRoute and hasCadence rather than the series themselves: a list row
+    // carries neither, which is the whole reason the server sends the flags.
     case 'photos': return (w.photoCount ?? 0) > 0
-    // hasRoute rather than route.length: a list row carries no route, which is
-    // the whole reason the server sends the flag.
     case 'gps': return w.hasRoute === true
     case 'hr': return (w.avgHR ?? 0) > 0
-    case 'steps': return (w.steps ?? 0) > 0
+    case 'cadence': return w.hasCadence === true
     case 'comments': return (w.commentCount ?? 0) > 0
     case 'weather': return w.weather !== undefined
     case 'notes': return (w.notes ?? '').trim() !== ''
@@ -41,8 +61,12 @@ function hasAttribute(w: Workout, k: Has): boolean {
 export interface WorkoutFilters {
   scope: Scope
   search: string
-  /** Attributes every shown workout must have. Empty means no such filter. */
-  has: Has[]
+  /**
+   * Attributes every shown workout must have, or must not. Empty means no such
+   * filter; one attribute never appears twice, since asking for photos and no
+   * photos at once would simply be an empty list.
+   */
+  has: HasFilter[]
   typeFilter: WorkoutType | 'All'
   sortBy: SortKey
   rangeDays: number
@@ -106,9 +130,12 @@ export function applyWorkoutFilters(list: Workout[], f: WorkoutFilters): Workout
       })
     }
   }
-  // Every attribute asked for, not any of them.
+  // Every attribute asked for, not any of them — and "without" is the same
+  // question with the answer reversed.
   for (const k of f.has) {
-    result = result.filter(w => hasAttribute(w, k))
+    const want = !isNegated(k)
+    const key = hasKey(k)
+    result = result.filter(w => hasAttribute(w, key) === want)
   }
   result = filterByRange(result, f.rangeDays)
   result.sort(compareBySort(f.sortBy))
