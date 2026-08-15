@@ -16,6 +16,7 @@ import {
   ResponsiveContainer, CartesianGrid, Legend, Cell,
 } from 'recharts'
 import { CalendarDays, GitCompareArrows, Sigma } from 'lucide-react'
+import TabStrip from '../components/TabStrip'
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -250,19 +251,9 @@ export default function Consistency() {
       </div>
 
       <div className="page-content">
-        <nav className="tab-strip" style={{ marginBottom: 20 }} aria-label="Consistency sections">
-          {TABS.map(t => (
-            <button
-              key={t.id}
-              className={`tab-strip-item${tab === t.id ? ' active' : ''}`}
-              onClick={() => setTab(t.id)}
-              aria-current={tab === t.id ? 'page' : undefined}
-            >
-              {t.icon}
-              {t.label}
-            </button>
-          ))}
-        </nav>
+        <div style={{ marginBottom: 20 }}>
+          <TabStrip items={TABS} value={tab} onChange={setTab} ariaLabel="Consistency sections" fill />
+        </div>
 
         {tab === 'calendar' && (<>
         {/* Heatmap grid: cells stretch to fill the available width, so on

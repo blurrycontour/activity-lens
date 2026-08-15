@@ -20,6 +20,19 @@ import { useEffect, useRef } from 'react'
 let stack: symbol[] = []
 let guarded = false
 
+/**
+ * The pending removal of the guard entry, if the last overlay has just closed.
+ *
+ * Deferred by a tick, and cancelled if something opens in the meantime, because
+ * one surface very often replaces another: picking "About" from the user menu
+ * closes the menu and opens a dialog in the same commit. Popping immediately
+ * meant `history.back()` — which is asynchronous — delivered its popstate after
+ * the dialog had mounted and registered, and the dialog dismissed itself before
+ * it was ever seen. Handing the still-armed entry over instead is both correct
+ * and one fewer history round trip.
+ */
+let unguard: ReturnType<typeof setTimeout> | null = null
+
 /** Puts the guard entry back without firing popstate. */
 function arm() {
   window.history.pushState({ overlay: true }, '', window.location.href)
@@ -56,6 +69,12 @@ export default function useDismissOnBack(open: boolean, onDismiss: () => void) {
 
     const id = Symbol('overlay')
     stack.push(id)
+    // Taking over from a surface that closed in this same commit: its entry is
+    // still armed, so inherit it rather than letting it be popped.
+    if (unguard !== null) {
+      clearTimeout(unguard)
+      unguard = null
+    }
     if (!guarded) arm()
 
     const topmost = () => stack[stack.length - 1] === id
@@ -88,15 +107,21 @@ export default function useDismissOnBack(open: boolean, onDismiss: () => void) {
       if (i === -1) return
       stack.splice(i, 1)
 
-      // The last one out takes the guard entry with it. Unless something has
-      // been pushed on top of it since: a notification banner sits above the
-      // overlay and can navigate while a dialog is open, and going back then
-      // would undo that navigation rather than tidying up after ourselves.
-      if (stack.length === 0 && guarded) {
-        guarded = false
-        if ((window.history.state as { overlay?: boolean } | null)?.overlay) {
-          window.history.back()
-        }
+      // The last one out takes the guard entry with it — after a tick, so a
+      // surface opening in its place can claim it instead.
+      if (stack.length === 0 && guarded && unguard === null) {
+        unguard = setTimeout(() => {
+          unguard = null
+          if (stack.length > 0) return
+          guarded = false
+          // Unless something has been pushed on top of it since: a notification
+          // banner sits above the overlay and can navigate while a dialog is
+          // open, and going back then would undo that navigation rather than
+          // tidying up after ourselves.
+          if ((window.history.state as { overlay?: boolean } | null)?.overlay) {
+            window.history.back()
+          }
+        }, 0)
       }
     }
   }, [open])

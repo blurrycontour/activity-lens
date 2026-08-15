@@ -2628,8 +2628,13 @@ body:has(.overlay) .fab { display: none; }
   .tab-strip.fill .tab-strip-item { flex: 1 0 auto; justify-content: center; }
 }
 
-/* Compact filter dropdown, shared by the type and time-range pickers. */
+/* Compact filter dropdown, shared by the type and time-range pickers. The
+   icon-button menu's wrapper is the same anchor, so it shares this rule. */
 .al-dropdown,
+.options-menu-wrap {
+  position: relative;
+  display: inline-block;
+}
 /* Fills its column, for forms where a control should match the inputs beside
    it rather than sit at its natural width. */
 .al-dropdown.block { display: block; width: 100%; }
