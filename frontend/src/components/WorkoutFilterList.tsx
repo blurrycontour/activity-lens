@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FilterX, Handshake, Layers, LoaderCircle, Search, Send, SlidersHorizontal, X } from 'lucide-react'
+import { FilterX, Ghost, Layers, LoaderCircle, Search, Send, SlidersHorizontal, X } from 'lucide-react'
 import { ALL_WORKOUT_TYPES, type Workout, type WorkoutType } from '../data/workouts'
 import { applyWorkoutFilters, DEFAULT_FILTERS, type Has, type HasFilter, type Scope } from '../lib/workoutFilters'
 import { RANGE_OPTIONS } from '../lib/range'
@@ -262,24 +262,36 @@ export default function WorkoutFilterList({
             </>
           ) : (
             <>
-              <Handshake size={28} strokeWidth={1.5} style={{ margin: '0 auto 10px' }} aria-hidden />
+              {/* A ghost rather than a handshake: this is the same "there is
+                  nothing here" on every tab, and a handshake said "shared with
+                  you" above a message about public workouts. */}
+              <Ghost size={28} strokeWidth={1.5} style={{ margin: '0 auto 10px' }} aria-hidden />
               <div>{emptyMessage}</div>
             </>
           )}
         </div>
       ) : (
         <div className="workout-list" style={{ marginTop: 12 }}>
-          {visible.map(w => (
-            <WorkoutCard
-              key={w.id}
-              workout={w}
-              variant="list"
-              onClick={() => onSelect(w)}
-// Names can be long, so they get their own row rather than
-              // competing with the pace figure for the trailing cluster.
-              footer={<Byline workout={w} kind={byline} onOpenUser={onOpenUser} />}
-            />
-          ))}
+          {visible.map(w => {
+            // Resolved here rather than inside Byline, because a component that
+            // renders null is still a truthy prop: the card drew its footer
+            // wrapper — a rule and its padding — around nothing, which is the
+            // stray horizontal line under rows that have nobody to name.
+            const people = bylinePeople(w, byline)
+            return (
+              <WorkoutCard
+                key={w.id}
+                workout={w}
+                variant="list"
+                onClick={() => onSelect(w)}
+                // Names can be long, so they get their own row rather than
+                // competing with the pace figure for the trailing cluster.
+                footer={people.length > 0
+                  ? <Byline people={people} kind={byline} onOpenUser={onOpenUser} />
+                  : undefined}
+              />
+            )
+          })}
         </div>
       )}
 
@@ -302,6 +314,20 @@ export default function WorkoutFilterList({
 }
 
 /**
+ * Who a byline would name, which is often nobody.
+ *
+ * Every profile tab and both feeds pass the same list component, but only two
+ * of those arrangements have a person to name under a card: someone else's
+ * workout, and your own sent to named people. Everywhere else this is empty,
+ * and the caller has to know that *before* it decides to draw a footer.
+ */
+export function bylinePeople(w: Workout, kind?: 'owner' | 'recipients') {
+  if (kind === 'recipients') return w.sharedWith ?? []
+  if (kind === 'owner' && w.owner) return [w.owner]
+  return []
+}
+
+/**
  * Who a workout involves, under the card.
  *
  * One component for both directions because they are the same row with the
@@ -309,14 +335,11 @@ export default function WorkoutFilterList({
  * your own to — and drawing them differently would suggest a distinction that
  * is not there.
  */
-function Byline({ workout: w, kind, onOpenUser }: {
-  workout: Workout
+function Byline({ people, kind, onOpenUser }: {
+  people: NonNullable<Workout['sharedWith']>
   kind?: 'owner' | 'recipients'
   onOpenUser?: (id: number) => void
 }) {
-  const people = kind === 'recipients' ? w.sharedWith ?? [] : w.owner ? [w.owner] : []
-  if (!kind || people.length === 0) return null
-
   const named = people.slice(0, NAMED_RECIPIENTS)
   const rest = people.length - named.length
 

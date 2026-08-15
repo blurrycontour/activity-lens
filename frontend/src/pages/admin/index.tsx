@@ -12,6 +12,7 @@ import FeedbackAdmin from './Feedback'
 import EmailAdmin from './Email'
 import SsoAdmin from './Sso'
 import StorageAdmin from './Storage'
+import SocialAdmin from './Social'
 
 interface AdminProps {
   section: AdminSection | null
@@ -101,6 +102,7 @@ export default function Admin({ section, userId: userParam, onOpen, onOpenUser, 
         {settings && section === 'email' && <EmailAdmin settings={settings} onSaved={setSettings} />}
         {settings && section === 'sso' && <SsoAdmin settings={settings} onSaved={setSettings} />}
         {settings && section === 'storage' && <StorageAdmin settings={settings} onSaved={setSettings} />}
+        {settings && section === 'social' && <SocialAdmin settings={settings} onSaved={setSettings} />}
       </div>
     </>
   )
