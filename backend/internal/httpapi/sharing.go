@@ -165,6 +165,7 @@ func (s *Server) writeFeed(w http.ResponseWriter, r *http.Request, load func(ctx
 		list[i].Owner = &ref
 		out = append(out, list[i])
 	}
+	s.annotateFlags(r.Context(), out)
 	writeJSON(w, http.StatusOK, out)
 }
 

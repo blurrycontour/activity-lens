@@ -108,6 +108,7 @@ type Repository interface {
 	// owns, in one query, so listing a library never fans out per row.
 	ShareCounts(ctx context.Context, ownerID int64) (map[string]int, error)
 	ShareRecipientsByWorkout(ctx context.Context, ownerID int64) (map[string][]int64, error)
+	FlagsFor(ctx context.Context, ids []string) (map[string]RowFlags, error)
 	// AddShare is idempotent. Both AddShare and RemoveShare return ErrNotFound
 	// when the caller does not own the workout.
 	AddShare(ctx context.Context, ownerID int64, workoutID string, targetID int64) error
@@ -225,8 +226,12 @@ const weatherCols = `weather_status, weather_temp_c, weather_apparent_c,
 // intervals themselves are only ever drawn on one workout's charts, and a blob
 // per row is exactly what the summary set exists to avoid.
 const (
-	selectCols        = workoutCols + `, visibility, raw_filename, created_at, ` + weatherCols + `, moving_time, pauses`
-	selectSummaryCols = workoutSummaryCols + `, visibility, created_at, ` + weatherCols + `, moving_time`
+	selectCols = workoutCols + `, visibility, raw_filename, created_at, ` + weatherCols + `, moving_time, pauses`
+	// track_points last, and only on the summary set: the detail response
+	// carries the route itself, so only a list has to be told whether there is
+	// one. Appended, like every column added since — the scanners read by
+	// position, and inserting anywhere else moves every field after it.
+	selectSummaryCols = workoutSummaryCols + `, visibility, created_at, ` + weatherCols + `, moving_time, track_points`
 )
 
 func (r *SQLiteRepository) Create(ctx context.Context, w *Workout) error {
@@ -1031,14 +1036,20 @@ func scanWorkoutSummary(row interface{ Scan(...any) error }) (*Workout, error) {
 		visibility  string
 		createdAt   string
 		wx          weatherScan
+		trackPoints int
 	)
 	if err := row.Scan(&w.ID, &w.UserID, &w.Name, &typ, &startTime, &w.Duration, &w.Distance,
 		&w.AvgHR, &w.MaxHR, &w.ElevationGain, &w.Calories, &w.Steps, &w.AvgPace, &w.AvgSpeed, &w.Notes,
 		&calManual, &calReported, &stepManual, &source, &visibility, &createdAt,
 		&wx.status, &wx.temp, &wx.apparent, &wx.humidity, &wx.wind, &wx.precip, &wx.code,
-		&w.MovingTime); err != nil {
+		&w.MovingTime, &trackPoints); err != nil {
 		return nil, err
 	}
+	// A row whose simplified track has not been built yet reads as "no route",
+	// which is what the scheduler's track pass is draining. It self-corrects
+	// within a few minutes of an upgrade; a filter briefly missing an old
+	// workout beats decompressing every route blob to answer a list.
+	w.HasRoute = trackPoints > 0
 	wx.applyTo(&w)
 	w.CaloriesManual = calManual != 0
 	w.CaloriesReported = calReported != 0

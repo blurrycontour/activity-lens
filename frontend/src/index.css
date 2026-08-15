@@ -4722,8 +4722,10 @@ body:has(.overlay) .fab { display: none; }
   gap: 8px;
   flex-wrap: nowrap;
 }
-.analysis-filters .al-dropdown { min-width: 0; flex: 1 1 auto; }
-.analysis-filters .al-dropdown-trigger { min-width: 0; width: 100%; }
+/* The dropdowns keep their natural width here; only the phone rule below lets
+   them stretch. Growing them on a desktop spread two short labels across the
+   whole page for no reason — the sharing they were given was meant to solve a
+   row that did not fit, which is a problem a phone has and a desktop does not. */
 .analysis-filters .al-dropdown-trigger > span {
   min-width: 0;
   overflow: hidden;
@@ -4736,6 +4738,12 @@ body:has(.overlay) .fab { display: none; }
    whenever the *screen* was narrow, which is not the same question — a phone in
    landscape has plenty of room and was losing it anyway. */
 .analysis-filters .filter-pill { flex: 0 0 auto; }
+@media (max-width: 768px) {
+  /* Now the row genuinely has to fit: the two dropdowns share what is left
+     after the pill, and their labels ellipsize rather than wrapping the row. */
+  .analysis-filters .al-dropdown { min-width: 0; flex: 1 1 auto; }
+  .analysis-filters .al-dropdown-trigger { min-width: 0; width: 100%; }
+}
 
 /* ── Analysis: trend summary tiles ──────────────────────────────────
    Two up on a phone. At one per row the six of them pushed the chart they

@@ -43,6 +43,7 @@ func (s *Server) handleListWorkouts(w http.ResponseWriter, r *http.Request) {
 	} else {
 		slog.Warn("could not load share counts", "error", err)
 	}
+	s.annotateFlags(r.Context(), list)
 	writeJSON(w, http.StatusOK, list)
 }
 

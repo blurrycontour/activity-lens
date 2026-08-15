@@ -103,6 +103,10 @@ func (s *Server) handleUserProfile(w http.ResponseWriter, r *http.Request) {
 		open = append(open, wk)
 	}
 
+	for _, list := range [][]workout.Workout{mine, open, withThem} {
+		s.annotateFlags(r.Context(), list)
+	}
+
 	prefs, err := s.settings.UserPreferences(r.Context(), id)
 	if err != nil {
 		// A missing tagline is not worth failing a profile for.
@@ -160,7 +164,10 @@ func (s *Server) writeOwnProfile(w http.ResponseWriter, r *http.Request, ref wor
 	sent := make([]workout.Workout, 0)
 	for i := range list {
 		wk := list[i]
-		wk.Owner = &ref
+		// Deliberately no Owner: the field means "belongs to someone else", and
+		// setting it on your own rows made the workout page open them as a
+		// guest — "Shared by <you>" above your own workout, until the full
+		// fetch arrived and took it away again.
 		wk.SharedWithCount = counts[wk.ID]
 		if wk.Visibility == workout.VisibilityPublic {
 			out = append(out, wk)
@@ -180,6 +187,10 @@ func (s *Server) writeOwnProfile(w http.ResponseWriter, r *http.Request, ref wor
 			sent = append(sent, wk)
 		}
 	}
+	for _, list := range [][]workout.Workout{out, sent} {
+		s.annotateFlags(r.Context(), list)
+	}
+
 	prefs, err := s.settings.UserPreferences(r.Context(), ref.ID)
 	if err != nil {
 		prefs = settings.UserPrefs{}

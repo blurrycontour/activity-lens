@@ -189,6 +189,7 @@ export default function UserProfile({ id, onBack, onSelect, onOpenUser }: {
           // rows belong to the person in the header, and naming them again
           // under every card says nothing.
           byline={data.self && tab === 'with-them' ? 'recipients' : undefined}
+          mine={data.self}
           onOpenUser={onOpenUser}
         />
       </div>

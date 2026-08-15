@@ -562,7 +562,19 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
    * List rows carry no `isOwner`, so until the full record loads we fall back
    * to `owner`, which the API sets on feed rows and never on your own.
    */
-  const readOnly = w.isOwner === undefined ? w.owner !== undefined : !w.isOwner
+  /**
+   * Whether this workout belongs to somebody else.
+   *
+   * `isOwner` is authoritative but only single-workout responses carry it, so a
+   * row opened from a list is judged by whether it names an author — with one
+   * exception: an author who is *you*. A list that attaches your own name would
+   * otherwise open your workout as a guest's view, captioned "Shared by <you>",
+   * until the full fetch arrived and took it back. The server does not send
+   * that any more; this makes it harmless if it ever does again.
+   */
+  const readOnly = w.isOwner === undefined
+    ? w.owner !== undefined && w.owner.id !== user?.id
+    : !w.isOwner
   // Undefined while preferences load, and on a server too old to send the
   // field. Both mean "assume on", which matches the server default — the
   // alternative is telling the user their lookups are off when they are not.

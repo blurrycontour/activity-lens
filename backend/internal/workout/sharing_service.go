@@ -72,6 +72,12 @@ func (s *Service) ShareCounts(ctx context.Context, ownerID int64) (map[string]in
 	return s.repo.ShareCounts(ctx, ownerID)
 }
 
+// FlagsFor counts the photos and comments on a set of workouts, for lists that
+// can be filtered by whether a workout has either.
+func (s *Service) FlagsFor(ctx context.Context, ids []string) (map[string]RowFlags, error) {
+	return s.repo.FlagsFor(ctx, ids)
+}
+
 // ShareRecipientsByWorkout lists, per workout, who the owner has shared it with.
 func (s *Service) ShareRecipientsByWorkout(ctx context.Context, ownerID int64) (map[string][]int64, error) {
 	return s.repo.ShareRecipientsByWorkout(ctx, ownerID)

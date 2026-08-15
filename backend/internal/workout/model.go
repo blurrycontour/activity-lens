@@ -201,6 +201,16 @@ type Workout struct {
 	// Owner is populated by the API layer on responses to someone other than
 	// the owner, and is nil on your own workouts.
 	Owner *OwnerRef `json:"owner,omitempty"`
+
+	// HasRoute reports whether this workout recorded a track, for list rows
+	// which carry no route of their own. Read from the stored point count, so
+	// it costs nothing beyond a column.
+	HasRoute bool `json:"hasRoute,omitempty"`
+	// PhotoCount and CommentCount are filled by the API layer from one grouped
+	// query per list, so a list can be filtered by "has photos" without
+	// carrying the photos themselves.
+	PhotoCount   int `json:"photoCount,omitempty"`
+	CommentCount int `json:"commentCount,omitempty"`
 	// Weather holds the conditions this workout happened in, or nil when there
 	// are none to show. The pointer is what distinguishes "we do not know" from
 	// a genuine 0 °C, since every stored column is NOT NULL DEFAULT 0.

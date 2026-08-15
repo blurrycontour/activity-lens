@@ -22,9 +22,17 @@ export interface FilterGroup {
   key: string
   label: string
   options: FilterOption<any>[]
+  /**
+   * The chosen value, or — when `multi` is set — the array of chosen values.
+   * Tapping an option in a multi group toggles it rather than replacing the
+   * selection, and `onChange` is handed the option, not the new array: the
+   * group does not know what the caller stores it in.
+   */
   value: any
   onChange: (v: any) => void
   /* eslint-enable @typescript-eslint/no-explicit-any */
+  /** Several options may be on at once, and they narrow together. */
+  multi?: boolean
 }
 
 interface FilterSheetProps {
@@ -78,11 +86,15 @@ export default function FilterSheet({ groups, onClose, onReset }: FilterSheetPro
             <div key={g.key} className="sheet-group">
               <div className="sheet-group-label">{g.label}</div>
               <div className="chip-row" role="group" aria-label={g.label}>
-                {g.options.map(o => (
+                {g.options.map(o => {
+                  const on = g.multi
+                    ? Array.isArray(g.value) && g.value.includes(o.value)
+                    : o.value === g.value
+                  return (
                   <button
                     key={String(o.value)}
-                    className={`chip${o.value === g.value ? ' active' : ''}`}
-                    aria-pressed={o.value === g.value}
+                    className={`chip${on ? ' active' : ''}`}
+                    aria-pressed={on}
                     onClick={() => g.onChange(o.value)}
                   >
                     {o.glyph ?? (o.color && (
@@ -90,7 +102,8 @@ export default function FilterSheet({ groups, onClose, onReset }: FilterSheetPro
                     ))}
                     {o.label}
                   </button>
-                ))}
+                  )
+                })}
               </div>
             </div>
           ))}

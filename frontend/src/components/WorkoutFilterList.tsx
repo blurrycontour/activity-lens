@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Handshake, Layers, LoaderCircle, Search, Send, SlidersHorizontal, X } from 'lucide-react'
 import { ALL_WORKOUT_TYPES, type Workout, type WorkoutType } from '../data/workouts'
-import { applyWorkoutFilters, DEFAULT_FILTERS, type Scope } from '../lib/workoutFilters'
+import { applyWorkoutFilters, DEFAULT_FILTERS, type Has, type Scope } from '../lib/workoutFilters'
 import { RANGE_OPTIONS } from '../lib/range'
 import { useIsMobile } from '../lib/useIsMobile'
 import { useSessionState } from '../lib/useSessionState'
+import ContainsDropdown, { containsLabel, containsOptions } from './ContainsDropdown'
 import FilterSheet, { type FilterGroup } from './FilterSheet'
 import RangeDropdown from './RangeDropdown'
 import SortDropdown, { SORT_OPTIONS, type SortKey } from './SortDropdown'
@@ -22,6 +23,7 @@ interface Narrowing {
   typeFilter: WorkoutType | 'All'
   sortBy: SortKey
   rangeDays: number
+  has: Has[]
 }
 
 const NONE: Narrowing = {
@@ -29,6 +31,7 @@ const NONE: Narrowing = {
   typeFilter: 'All',
   sortBy: DEFAULT_FILTERS.sortBy,
   rangeDays: 0,
+  has: [],
 }
 
 /**
@@ -63,6 +66,12 @@ interface Props {
    * theirs, and a byline repeating the name at the top of the page is noise.
    */
   byline?: 'owner' | 'recipients'
+  /**
+   * Whether these are the caller's own workouts. Only that unlocks the notes
+   * filter — notes are redacted on everyone else's — and it is the same flag
+   * the sharing filter reads.
+   */
+  mine?: boolean
   /** Opens a person named in the byline. */
   onOpenUser?: (id: number) => void
 }
@@ -78,13 +87,15 @@ interface Props {
  * this the more complicated thing rather than the shared one.
  */
 export default function WorkoutFilterList({
-  rows, scope, storageKey, emptyMessage, error, onSelect, byline, onOpenUser,
+  rows, scope, storageKey, emptyMessage, error, onSelect, byline, mine = false, onOpenUser,
 }: Props) {
   const isMobile = useIsMobile()
   // Opening a workout unmounts this, so a search typed here would otherwise be
   // gone by the time the reader pressed back. Same lifetime as the library's.
   const [narrow, setNarrow] = useSessionState<Narrowing>(storageKey, NONE)
-  const { search, typeFilter, sortBy, rangeDays } = narrow
+  const { search, typeFilter, sortBy, rangeDays, has } = narrow
+  /** Adds or removes one attribute; they narrow together. */
+  const toggleHas = (v: Has) => patch({ has: has.includes(v) ? has.filter(h => h !== v) : [...has, v] })
   const [showFilters, setShowFilters] = useState(false)
   const [shown, setShown] = useState(PAGE_SIZE)
 
@@ -141,6 +152,14 @@ export default function WorkoutFilterList({
       onChange: v => patch({ rangeDays: v as number }),
       options: RANGE_OPTIONS.map(o => ({ value: o.value, label: o.label })),
     },
+    {
+      key: 'has',
+      label: 'Contains',
+      multi: true,
+      value: has,
+      onChange: v => toggleHas(v as Has),
+      options: containsOptions(mine).map(o => ({ value: o.value, label: o.label, glyph: o.glyph })),
+    },
   ]
 
   const active = [
@@ -155,6 +174,7 @@ export default function WorkoutFilterList({
       label: SORT_OPTIONS.find(o => o.value === sortBy)?.label ?? 'Sorted',
       clear: () => patch({ sortBy: NONE.sortBy }),
     },
+    ...has.map(h => ({ key: `has-${h}`, label: containsLabel(h), clear: () => toggleHas(h) })),
   ].filter(Boolean) as { key: string; label: string; clear: () => void }[]
 
   return (
@@ -184,6 +204,7 @@ export default function WorkoutFilterList({
             <TypeDropdown value={typeFilter} onChange={v => patch({ typeFilter: v })} />
             <SortDropdown value={sortBy} onChange={v => patch({ sortBy: v })} />
             <RangeDropdown value={rangeDays} onChange={v => patch({ rangeDays: v })} />
+            <ContainsDropdown value={has} onToggle={toggleHas} mine={mine} />
           </>
         )}
       </div>

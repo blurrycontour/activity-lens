@@ -6,16 +6,46 @@ import { filterByRange } from './range'
 export type Scope = 'mine' | 'shared' | 'public'
 
 /**
+ * Something a workout either has or does not, filterable independently of the
+ * others.
+ *
+ * They combine with AND — asking for photos *and* heart rate means both — which
+ * is the only reading of several switches that does not surprise anyone.
+ *
+ * `notes` is deliberately last and deliberately owner-only: notes are redacted
+ * on other people's workouts, so on a feed the filter could only ever answer
+ * "none of them", which is worse than not offering it. See CONTAINS_OPTIONS in
+ * ContainsDropdown for where that is decided.
+ */
+export type Has = 'photos' | 'gps' | 'hr' | 'steps' | 'comments' | 'weather' | 'notes'
+
+/** Whether one workout satisfies one attribute. */
+function hasAttribute(w: Workout, k: Has): boolean {
+  switch (k) {
+    case 'photos': return (w.photoCount ?? 0) > 0
+    // hasRoute rather than route.length: a list row carries no route, which is
+    // the whole reason the server sends the flag.
+    case 'gps': return w.hasRoute === true
+    case 'hr': return (w.avgHR ?? 0) > 0
+    case 'steps': return (w.steps ?? 0) > 0
+    case 'comments': return (w.commentCount ?? 0) > 0
+    case 'weather': return w.weather !== undefined
+    case 'notes': return (w.notes ?? '').trim() !== ''
+  }
+}
+
+/**
  * Everything the workout list is narrowed and ordered by, kept together so it
  * can be persisted, reset and reasoned about as one value.
  */
 export interface WorkoutFilters {
   scope: Scope
   search: string
+  /** Attributes every shown workout must have. Empty means no such filter. */
+  has: Has[]
   typeFilter: WorkoutType | 'All'
   sortBy: SortKey
   rangeDays: number
-  sharedOnly: boolean
   /** Set by a notification link; shows only what the folder watch brought in. */
   originFilter: 'autoimport' | null
   /** Epoch millis. With originFilter, narrows it to one scan's worth. */
@@ -31,10 +61,10 @@ export interface WorkoutFilters {
 export const DEFAULT_FILTERS: WorkoutFilters = {
   scope: 'mine',
   search: '',
+  has: [],
   typeFilter: 'All',
   sortBy: 'date-desc',
   rangeDays: 0,
-  sharedOnly: false,
   originFilter: null,
   since: null,
   until: null,
@@ -76,10 +106,9 @@ export function applyWorkoutFilters(list: Workout[], f: WorkoutFilters): Workout
       })
     }
   }
-  // Sharing only narrows your own library; elsewhere every row is someone
-  // else's and the filter would mean nothing.
-  if (f.scope === 'mine' && f.sharedOnly) {
-    result = result.filter(w => w.visibility === 'public' || (w.sharedWithCount ?? 0) > 0)
+  // Every attribute asked for, not any of them.
+  for (const k of f.has) {
+    result = result.filter(w => hasAttribute(w, k))
   }
   result = filterByRange(result, f.rangeDays)
   result.sort(compareBySort(f.sortBy))

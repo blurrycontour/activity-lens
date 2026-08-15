@@ -8,6 +8,7 @@ import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
 import SortDropdown, { SORT_OPTIONS, type SortKey } from '../components/SortDropdown'
 import FilterSheet, { type FilterGroup } from '../components/FilterSheet'
+import ContainsDropdown, { containsLabel, containsOptions } from '../components/ContainsDropdown'
 import MenuButton from '../components/MenuButton'
 import ShareDialog from '../components/ShareDialog'
 import ShareCardDialog from '../components/ShareCardDialog'
@@ -22,7 +23,7 @@ import { LOCATION_EVENT } from '../App'
 import { useSessionState } from '../lib/useSessionState'
 import {
   applyWorkoutFilters, DEFAULT_FILTERS, describeImportWindow, parseAutoImportParams,
-  type WorkoutFilters,
+  type Has, type WorkoutFilters,
 } from '../lib/workoutFilters'
 
 const FILTERS_KEY = 'workouts.filters'
@@ -57,7 +58,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
   // still starts clean in a new session, which is what someone expects of a
   // search box they typed into an hour ago.
   const [filters, setFilters] = useSessionState<WorkoutFilters>(FILTERS_KEY, DEFAULT_FILTERS)
-  const { search, typeFilter, sortBy, rangeDays, sharedOnly, originFilter, since } = filters
+  const { search, typeFilter, sortBy, rangeDays, has, originFilter, since } = filters
   /**
    * How much of the filtered list is rendered. A library runs to thousands of
    * workouts and every card draws a sparkline, so the whole thing is a slow
@@ -101,7 +102,8 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
   const setTypeFilter = (v: WorkoutType | 'All') => patch({ typeFilter: v })
   const setSortBy = (v: SortKey) => patch({ sortBy: v })
   const setRangeDays = (v: number) => patch({ rangeDays: v })
-  const setSharedOnly = (v: boolean) => patch({ sharedOnly: v })
+  /** Adds or removes one attribute; they narrow together. */
+  const toggleHas = (v: Has) => patch({ has: has.includes(v) ? has.filter(h => h !== v) : [...has, v] })
   const [sharing, setSharing] = useState<Workout | null>(null)
   const [cardFor, setCardFor] = useState<Workout | null>(null)
   /** A bulk delete that partly failed, shown above the list. */
@@ -200,7 +202,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
     typeFilter !== 'All' && { key: 'type', label: typeFilter, clear: () => setTypeFilter('All') },
     rangeDays !== 0 && { key: 'range', label: RANGE_OPTIONS.find(o => o.value === rangeDays)?.label ?? '', clear: () => setRangeDays(0) },
     sortBy !== 'date-desc' && { key: 'sort', label: SORT_OPTIONS.find(o => o.value === sortBy)?.label ?? '', clear: () => setSortBy('date-desc') },
-    sharedOnly && { key: 'shared', label: 'Shared only', clear: () => setSharedOnly(false) },
+    ...has.map(h => ({ key: `has-${h}`, label: containsLabel(h), clear: () => toggleHas(h) })),
     originFilter === 'autoimport' && {
       key: 'origin',
       label: describeImportWindow(since),
@@ -469,11 +471,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
               <TypeDropdown value={typeFilter} onChange={v => setTypeFilter(v)} />
               <SortDropdown value={sortBy} onChange={setSortBy} />
               <RangeDropdown value={rangeDays} onChange={setRangeDays} />
-              <label className="switch" title="Show only workouts you have made public or shared">
-                <input type="checkbox" checked={sharedOnly} onChange={e => setSharedOnly(e.target.checked)} />
-                <span className="switch-track" />
-                Shared only
-              </label>
+              <ContainsDropdown value={has} onToggle={toggleHas} mine />
               {listTools}
             </>
           ) : null}
@@ -506,7 +504,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
             <p style={{ fontSize: 14 }}>
               {busy
                 ? 'Loading workouts…'
-                : sharedOnly ? 'You have not shared any workouts yet' : 'No workouts found'}
+                : 'No workouts found'}
             </p>
           </div>
         ) : (
@@ -560,11 +558,12 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
       {showFilters && (
         <FilterSheet
           groups={[...filterGroups, {
-            key: 'shared',
-            label: 'Sharing',
-            value: sharedOnly,
-            onChange: v => setSharedOnly(v as boolean),
-            options: [{ value: false, label: 'All workouts' }, { value: true, label: 'Shared only' }],
+            key: 'has',
+            label: 'Contains',
+            multi: true,
+            value: has,
+            onChange: v => toggleHas(v as Has),
+            options: containsOptions(true).map(o => ({ value: o.value, label: o.label, glyph: o.glyph })),
           }]}
           onClose={() => setShowFilters(false)}
           onReset={activeFilters.length > 0 ? resetFilters : undefined}
