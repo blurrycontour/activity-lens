@@ -192,6 +192,35 @@ export default function App() {
     void loadAboutInfo()
   }, [user])
 
+  /*
+   * Fetch the map's code once the app is idle, so the Map page opens without a
+   * wait even though it is not in the startup bundle.
+   *
+   * MapLibre is about a megabyte, and most sessions never open a map — loading
+   * it eagerly put that on the critical path for everyone, including the phone
+   * app, which starts cold every launch. Loading it only on demand moved the
+   * cost to a spinner the first time you visit the page. Doing it here costs
+   * neither: first paint is already done, and by the time anyone reaches the
+   * page the chunk is in memory.
+   *
+   * Skipped when the browser says the connection is metered — spending a
+   * megabyte on a page that may never be opened is exactly what that flag is
+   * asking us not to do. Those sessions fall back to loading it on demand.
+   *
+   * The specifier must match the lazy import above verbatim, or Vite treats it
+   * as a second module and this warms nothing.
+   */
+  useEffect(() => {
+    if (!user) return
+    if ((navigator as { connection?: { saveData?: boolean } }).connection?.saveData) return
+    const warm = () => { void import('./pages/MapPage') }
+    // requestIdleCallback is still missing on Safari; a timeout is a fine
+    // stand-in, since the only requirement is "not during startup".
+    const idle = typeof window.requestIdleCallback === 'function'
+    const id = idle ? window.requestIdleCallback(warm, { timeout: 5000 }) : window.setTimeout(warm, 3000)
+    return () => { if (idle) window.cancelIdleCallback(id); else window.clearTimeout(id) }
+  }, [user])
+
   // Pick up a workout file shared into the installed app from the Android
   // share sheet. The service worker stashed it and redirected here with
   // ?share=; claim it and open the import modal ready to go. Waits for auth so
