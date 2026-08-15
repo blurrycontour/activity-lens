@@ -18,6 +18,7 @@ import (
 	"github.com/blurrycontour/activity-lens/backend/internal/feedback"
 	"github.com/blurrycontour/activity-lens/backend/internal/httpapi"
 	"github.com/blurrycontour/activity-lens/backend/internal/notify"
+	"github.com/blurrycontour/activity-lens/backend/internal/sessions"
 	"github.com/blurrycontour/activity-lens/backend/internal/settings"
 	"github.com/blurrycontour/activity-lens/backend/internal/store"
 	"github.com/blurrycontour/activity-lens/backend/internal/weather"
@@ -128,6 +129,10 @@ func run() error {
 	// user who has switched it off, and nothing already in the library is looked
 	// up unless they ask for a backfill.
 	apiServer.UseWeather(weather.New().At)
+	// Which client each session is, and what each account has accumulated —
+	// both only ever read by Settings -> Security and the admin screens.
+	apiServer.UseSessionClients(sessions.NewStore(db))
+	apiServer.UseAdminStats(httpapi.NewAdminStatsStore(db, cfg.DataDir))
 
 	handler, err := apiServer.Handler()
 	if err != nil {

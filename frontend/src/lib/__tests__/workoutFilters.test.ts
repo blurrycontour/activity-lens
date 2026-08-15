@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { type Workout } from '../../data/workouts'
 import {
   applyWorkoutFilters, DEFAULT_FILTERS, describeImportWindow, parseAutoImportParams, searchWorkouts,
+  type HasFilter,
 } from '../workoutFilters'
 
 /**
@@ -207,5 +208,59 @@ describe('searchWorkouts', () => {
     const got = searchWorkouts([...many, newest], 'run', new Set(), 10)
     expect(got).toHaveLength(10)
     expect(got[0].id).toBe('newest')
+  })
+})
+
+/**
+ * The "contains" filters. Each attribute reads a different field, and several
+ * of them read a field that is absent rather than false on rows the server did
+ * not annotate — so the failure mode is a filter that silently matches nothing,
+ * or worse, everything.
+ */
+describe('applyWorkoutFilters — what a workout contains', () => {
+  const withPhotos = workout({ id: 'photos', photoCount: 2 })
+  const withGps = workout({ id: 'gps', hasRoute: true })
+  const withBoth = workout({ id: 'both', photoCount: 1, hasRoute: true, notes: 'felt good' })
+  // Nothing annotated at all: what a row from an older server looks like.
+  const bare = workout({ id: 'bare', avgHR: 0, notes: '' })
+  const list = [withPhotos, withGps, withBoth, bare]
+
+  const ids = (has: HasFilter[]) =>
+    applyWorkoutFilters(list, { ...DEFAULT_FILTERS, has }).map(w => w.id).sort()
+
+  it('keeps only workouts with the attribute', () => {
+    expect(ids(['photos'])).toEqual(['both', 'photos'])
+    expect(ids(['gps'])).toEqual(['both', 'gps'])
+    expect(ids(['notes'])).toEqual(['both'])
+  })
+
+  it('narrows on every attribute asked for, not any of them', () => {
+    expect(ids(['photos', 'gps'])).toEqual(['both'])
+  })
+
+  it('leaves the list alone when nothing is asked for', () => {
+    expect(ids([])).toHaveLength(4)
+  })
+
+  // An absent count is "we were not told", which for a filter has to mean the
+  // same as none: matching it would put every unannotated row into every list.
+  it('treats a missing count as not having it', () => {
+    expect(ids(['comments'])).toEqual([])
+    expect(ids(['weather'])).toEqual([])
+  })
+
+  it('reads heart rate from the row itself, and cadence from its flag', () => {
+    // The shared workout() helper carries a heart rate; only `bare` clears it.
+    expect(ids(['hr'])).toEqual(['both', 'gps', 'photos'])
+    expect(ids(['cadence'])).toEqual([])
+  })
+
+  // "Without" is the more useful half for finding what needs fixing: the runs
+  // with no GPS, the ones never written up.
+  it('filters for the absence of an attribute', () => {
+    expect(ids(['no-gps'])).toEqual(['bare', 'photos'])
+    expect(ids(['no-photos'])).toEqual(['bare', 'gps'])
+    // With and without combine like any other pair.
+    expect(ids(['no-photos', 'gps'])).toEqual(['gps'])
   })
 })

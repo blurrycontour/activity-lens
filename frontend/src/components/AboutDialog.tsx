@@ -4,6 +4,7 @@ import { api, type BuildInfo } from '../lib/api'
 import { installedApp } from '../lib/native/appUpdate'
 import { isNative } from '../lib/serverConfig'
 import Logo from './Logo'
+import Modal from './Modal'
 
 /** Fallback link when the build carries no source URL of its own. */
 const REPO_URL = 'https://github.com/blurrycontour/activity-lens'
@@ -62,9 +63,7 @@ export default function AboutDialog({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <>
-      <div className="overlay" onClick={onClose} />
-      <div className="modal">
+    <Modal onClose={onClose} label="About Activity Lens">
         <div className="modal-box about-box">
           <button
             className="btn-icon"
@@ -128,7 +127,6 @@ export default function AboutDialog({ onClose }: { onClose: () => void }) {
             </a>
           </div>
         </div>
-      </div>
-    </>
+    </Modal>
   )
 }

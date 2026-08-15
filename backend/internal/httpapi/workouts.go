@@ -43,6 +43,7 @@ func (s *Server) handleListWorkouts(w http.ResponseWriter, r *http.Request) {
 	} else {
 		slog.Warn("could not load share counts", "error", err)
 	}
+	s.annotateFlags(r.Context(), list)
 	writeJSON(w, http.StatusOK, list)
 }
 
@@ -280,13 +281,8 @@ func (s *Server) handlePatchWorkout(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.attachEquipment(r, user.ID, wk)
-	// The client splices this response back into its cached list, so the share
-	// count has to come along or an unrelated edit would blank the row's badge.
-	if ids, err := s.workout.ShareRecipients(r.Context(), user.ID, wk.ID); err == nil {
-		wk.SharedWithCount = len(ids)
-	}
 	slog.Info("workout updated", "workout_id", wk.ID, "user_id", user.ID)
-	writeJSON(w, http.StatusOK, wk)
+	s.writeOwnedWorkout(w, r, wk)
 }
 
 // linkEquipment associates the given equipment ids with a workout (best-effort;
@@ -702,19 +698,13 @@ func (s *Server) handleRecalculateWorkout(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	wk, err := s.workout.Recalculate(r.Context(), user.ID, r.PathValue("id"), parts, workout.CalorieProfile{
-		Method:      prefs.CalorieMethod,
-		WeightKg:    prefs.BodyWeightKg,
-		Age:         ageFromPrefs(prefs),
-		Sex:         prefs.Sex,
-		StepLengthM: stepLengthMeters(prefs),
-	})
+	wk, err := s.workout.Recalculate(r.Context(), user.ID, r.PathValue("id"), parts, calorieProfile(prefs))
 	if err != nil {
 		s.writeWorkoutError(w, err)
 		return
 	}
 	slog.Info("workout recalculated", "workout_id", wk.ID, "user_id", user.ID)
-	writeJSON(w, http.StatusOK, wk)
+	s.writeOwnedWorkout(w, r, wk)
 }
 
 func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
@@ -779,6 +769,10 @@ type savePrefsRequest struct {
 	// disabling a feature is the worst way for that to fail. Absent means
 	// "leave it on".
 	WeatherEnabled *bool `json:"weatherEnabled"`
+
+	// Cleaned rather than validated: a tagline that is too long or carries a
+	// newline is a tagline to trim, not a save to reject. See CleanTagline.
+	Tagline string `json:"tagline"`
 }
 
 func (s *Server) handleSavePreferences(w http.ResponseWriter, r *http.Request) {
@@ -804,6 +798,7 @@ func (s *Server) handleSavePreferences(w http.ResponseWriter, r *http.Request) {
 		}
 		return n
 	}
+	tagline := settings.CleanTagline(req.Tagline)
 	sex := req.Sex
 	if sex != "male" && sex != "female" {
 		sex = ""
@@ -845,6 +840,7 @@ func (s *Server) handleSavePreferences(w http.ResponseWriter, r *http.Request) {
 
 		Goals:          goals,
 		WeatherEnabled: req.WeatherEnabled == nil || *req.WeatherEnabled,
+		Tagline:        tagline,
 	}
 	// Unknown kinds are dropped so a stale or hand-crafted client cannot write
 	// switches that nothing reads.
@@ -899,4 +895,125 @@ func maxGoalTarget(g settings.Goal) float64 {
 		return float64(days) * 12
 	}
 	return float64(days) * 3
+}
+
+// handleReshapeWorkout trims a workout to a window and drops the series named.
+//
+// Its own endpoint rather than a field on the ordinary edit, because it is a
+// different kind of change: the edit renames and reclassifies, this rewrites
+// what was recorded. Every derived number is recomputed from what survives, so
+// the response is the whole workout rather than an acknowledgement.
+func (s *Server) handleReshapeWorkout(w http.ResponseWriter, r *http.Request) {
+	user := httpmw.UserFrom(r)
+	var req struct {
+		// Seconds from the original start. End of 0 means "to the end".
+		Start int      `json:"start"`
+		End   int      `json:"end"`
+		Drop  []string `json:"drop"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	drop := make([]workout.Stream, 0, len(req.Drop))
+	for _, d := range req.Drop {
+		drop = append(drop, workout.Stream(d))
+	}
+	prefs, err := s.settings.UserPreferences(r.Context(), user.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load preferences")
+		return
+	}
+	wk, err := s.workout.Reshape(r.Context(), user.ID, r.PathValue("id"),
+		workout.Reshape{Start: req.Start, End: req.End, Drop: drop}, calorieProfile(prefs))
+	if err != nil {
+		s.writeWorkoutError(w, err)
+		return
+	}
+	slog.Info("workout reshaped", "workout_id", wk.ID, "user_id", user.ID,
+		"start", req.Start, "end", req.End, "dropped", req.Drop)
+	s.writeOwnedWorkout(w, r, wk)
+}
+
+// handleRestoreWorkout rebuilds a workout's recorded data from the file it was
+// imported from.
+//
+// The undo for the endpoint above, and the reason trimming is safe to offer at
+// all. It reparses the archived upload rather than keeping a second copy of the
+// series: the file is already kept, it is the authoritative version, and a
+// snapshot table would be a second thing to migrate, purge and get wrong.
+func (s *Server) handleRestoreWorkout(w http.ResponseWriter, r *http.Request) {
+	user := httpmw.UserFrom(r)
+	wk, err := s.workout.Get(r.Context(), user.ID, r.PathValue("id"))
+	if err != nil {
+		s.writeWorkoutError(w, err)
+		return
+	}
+	if s.rawUploads == nil || wk.RawFilename == "" {
+		writeError(w, http.StatusNotFound, "no original file was archived for this workout")
+		return
+	}
+	data, err := s.rawUploads.Open(r.Context(), wk.ID, wk.RawFilename)
+	if errors.Is(err, workout.ErrNoRawUpload) {
+		writeError(w, http.StatusNotFound, "no original file was archived for this workout")
+		return
+	}
+	if err != nil {
+		slog.Error("could not read archived upload", "workout_id", wk.ID, "error", err)
+		writeError(w, http.StatusInternalServerError, "could not read the original file")
+		return
+	}
+	in, err := ingest.Parse(wk.RawFilename, data, wk.Type)
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, "could not read the original file: "+err.Error())
+		return
+	}
+	prefs, err := s.settings.UserPreferences(r.Context(), user.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load preferences")
+		return
+	}
+	restored, err := s.workout.Restore(r.Context(), user.ID, wk.ID, in, calorieProfile(prefs))
+	if err != nil {
+		s.writeWorkoutError(w, err)
+		return
+	}
+	slog.Info("workout restored from original", "workout_id", wk.ID, "user_id", user.ID)
+	s.writeOwnedWorkout(w, r, restored)
+}
+
+// writeOwnedWorkout answers with a workout the caller owns, in the same shape
+// the detail page was loaded with.
+//
+// Every path that hands the page a new copy of the workout it is showing goes
+// through here: an edit, a recalculation, a trim, a restore. The bare workout
+// is missing isOwner and hasOriginal, and the client replaces its copy with
+// whatever comes back — so saving a change of distance made "Download original"
+// and "Restore from original" disappear, which reads as the archived file
+// having been thrown away. Nothing had touched it; the response simply did not
+// mention it.
+func (s *Server) writeOwnedWorkout(w http.ResponseWriter, r *http.Request, wk *workout.Workout) {
+	shared := wk.Visibility == workout.VisibilityPublic
+	// One query for both answers: the client splices this back into its cached
+	// list, so the share count has to come along or an unrelated edit would
+	// blank the row's badge.
+	if ids, err := s.workout.ShareRecipients(r.Context(), wk.UserID, wk.ID); err == nil {
+		wk.SharedWithCount = len(ids)
+		shared = shared || len(ids) > 0
+	}
+	writeJSON(w, http.StatusOK, workoutDetailResponse{
+		Workout: wk, IsOwner: true, HasOriginal: wk.RawFilename != "", Shared: shared,
+	})
+}
+
+// calorieProfile gathers the body data the derivations need. Three call sites
+// built it by hand, which is three chances for one of them to forget a field.
+func calorieProfile(prefs settings.UserPrefs) workout.CalorieProfile {
+	return workout.CalorieProfile{
+		Method:      prefs.CalorieMethod,
+		WeightKg:    prefs.BodyWeightKg,
+		Age:         ageFromPrefs(prefs),
+		Sex:         prefs.Sex,
+		StepLengthM: stepLengthMeters(prefs),
+	}
 }

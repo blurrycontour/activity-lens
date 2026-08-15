@@ -14,6 +14,7 @@ export default function RangeDropdown({ value, onChange }: {
       options={RANGE_OPTIONS}
       onChange={onChange}
       ariaLabel="Time range"
+      active={value !== 0}
       icon={<CalendarRange size={13} color="var(--text-3)" style={{ flexShrink: 0 }} />}
     />
   )

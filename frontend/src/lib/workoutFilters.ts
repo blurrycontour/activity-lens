@@ -6,16 +6,70 @@ import { filterByRange } from './range'
 export type Scope = 'mine' | 'shared' | 'public'
 
 /**
+ * Something a workout either has or does not, filterable independently of the
+ * others.
+ *
+ * They combine with AND — asking for photos *and* heart rate means both — which
+ * is the only reading of several switches that does not surprise anyone.
+ *
+ * `notes` is deliberately last and deliberately owner-only: notes are redacted
+ * on other people's workouts, so on a feed the filter could only ever answer
+ * "none of them", which is worse than not offering it. See CONTAINS_OPTIONS in
+ * ContainsDropdown for where that is decided.
+ */
+export type Has = 'photos' | 'gps' | 'hr' | 'cadence' | 'comments' | 'weather' | 'notes'
+
+/**
+ * One attribute, and whether it must be present or absent.
+ *
+ * "Without" is as useful as "with" and is often the more useful of the two:
+ * finding the runs with no GPS, or the ones you never wrote a note on, is how
+ * you find what needs fixing. A prefix rather than a second list, so the two
+ * cannot drift apart and a filter is one value either way.
+ */
+export type HasFilter = Has | `no-${Has}`
+
+/** The attribute a filter is about, with any negation stripped. */
+export function hasKey(f: HasFilter): Has {
+  return (f.startsWith('no-') ? f.slice(3) : f) as Has
+}
+
+/** Whether a filter asks for the attribute to be absent. */
+export function isNegated(f: HasFilter): boolean {
+  return f.startsWith('no-')
+}
+
+/** Whether one workout satisfies one attribute. */
+function hasAttribute(w: Workout, k: Has): boolean {
+  switch (k) {
+    // hasRoute and hasCadence rather than the series themselves: a list row
+    // carries neither, which is the whole reason the server sends the flags.
+    case 'photos': return (w.photoCount ?? 0) > 0
+    case 'gps': return w.hasRoute === true
+    case 'hr': return (w.avgHR ?? 0) > 0
+    case 'cadence': return w.hasCadence === true
+    case 'comments': return (w.commentCount ?? 0) > 0
+    case 'weather': return w.weather !== undefined
+    case 'notes': return (w.notes ?? '').trim() !== ''
+  }
+}
+
+/**
  * Everything the workout list is narrowed and ordered by, kept together so it
  * can be persisted, reset and reasoned about as one value.
  */
 export interface WorkoutFilters {
   scope: Scope
   search: string
+  /**
+   * Attributes every shown workout must have, or must not. Empty means no such
+   * filter; one attribute never appears twice, since asking for photos and no
+   * photos at once would simply be an empty list.
+   */
+  has: HasFilter[]
   typeFilter: WorkoutType | 'All'
   sortBy: SortKey
   rangeDays: number
-  sharedOnly: boolean
   /** Set by a notification link; shows only what the folder watch brought in. */
   originFilter: 'autoimport' | null
   /** Epoch millis. With originFilter, narrows it to one scan's worth. */
@@ -31,10 +85,10 @@ export interface WorkoutFilters {
 export const DEFAULT_FILTERS: WorkoutFilters = {
   scope: 'mine',
   search: '',
+  has: [],
   typeFilter: 'All',
   sortBy: 'date-desc',
   rangeDays: 0,
-  sharedOnly: false,
   originFilter: null,
   since: null,
   until: null,
@@ -76,10 +130,12 @@ export function applyWorkoutFilters(list: Workout[], f: WorkoutFilters): Workout
       })
     }
   }
-  // Sharing only narrows your own library; elsewhere every row is someone
-  // else's and the filter would mean nothing.
-  if (f.scope === 'mine' && f.sharedOnly) {
-    result = result.filter(w => w.visibility === 'public' || (w.sharedWithCount ?? 0) > 0)
+  // Every attribute asked for, not any of them — and "without" is the same
+  // question with the answer reversed.
+  for (const k of f.has) {
+    const want = !isNegated(k)
+    const key = hasKey(k)
+    result = result.filter(w => hasAttribute(w, key) === want)
   }
   result = filterByRange(result, f.rangeDays)
   result.sort(compareBySort(f.sortBy))

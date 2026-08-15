@@ -54,6 +54,14 @@ func (s *Service) SetVisibility(ctx context.Context, ownerID int64, id string, v
 	return s.repo.SetVisibility(ctx, ownerID, id, v)
 }
 
+// ListSharedByMeWith returns the caller's own workouts shared with one person.
+//
+// Not redacted, unlike the feeds: these are the caller's own workouts and they
+// are looking at their own sharing from the other end.
+func (s *Service) ListSharedByMeWith(ctx context.Context, ownerID, recipientID int64) ([]Workout, error) {
+	return s.repo.ListSharedByMeWithSummary(ctx, ownerID, recipientID)
+}
+
 // ShareRecipients lists the users a workout the caller owns is shared with.
 func (s *Service) ShareRecipients(ctx context.Context, ownerID int64, workoutID string) ([]int64, error) {
 	return s.repo.ShareRecipients(ctx, ownerID, workoutID)
@@ -62,6 +70,22 @@ func (s *Service) ShareRecipients(ctx context.Context, ownerID int64, workoutID 
 // ShareCounts maps workout id to recipient count for the caller's whole library.
 func (s *Service) ShareCounts(ctx context.Context, ownerID int64) (map[string]int, error) {
 	return s.repo.ShareCounts(ctx, ownerID)
+}
+
+// CountCadence settles the cadence sample count for a batch of legacy rows.
+func (s *Service) CountCadence(ctx context.Context, limit int) (int, error) {
+	return s.repo.CountCadence(ctx, limit)
+}
+
+// FlagsFor counts the photos and comments on a set of workouts, for lists that
+// can be filtered by whether a workout has either.
+func (s *Service) FlagsFor(ctx context.Context, ids []string) (map[string]RowFlags, error) {
+	return s.repo.FlagsFor(ctx, ids)
+}
+
+// ShareRecipientsByWorkout lists, per workout, who the owner has shared it with.
+func (s *Service) ShareRecipientsByWorkout(ctx context.Context, ownerID int64) (map[string][]int64, error) {
+	return s.repo.ShareRecipientsByWorkout(ctx, ownerID)
 }
 
 // AddShare grants targetID read access to a workout the caller owns. It is

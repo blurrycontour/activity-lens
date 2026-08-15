@@ -165,6 +165,7 @@ func (s *Server) writeFeed(w http.ResponseWriter, r *http.Request, load func(ctx
 		list[i].Owner = &ref
 		out = append(out, list[i])
 	}
+	s.annotateFlags(r.Context(), out)
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -184,22 +185,57 @@ func (s *Server) handleListUserDirectory(w http.ResponseWriter, r *http.Request)
 		limit = min(v, directoryMaxLimit)
 	}
 
-	out := make([]workout.OwnerRef, 0, limit)
+	// The share picker wants everyone but you; the Discover page wants everyone
+	// including you, because "who else is on this server" reads oddly with
+	// yourself missing from it. One list, one flag.
+	includeSelf := r.URL.Query().Get("includeSelf") == "true"
+
+	out := make([]directoryUser, 0, limit)
 	for _, u := range users {
-		if u.ID == user.ID || !u.IsActive {
+		if !u.IsActive || (u.ID == user.ID && !includeSelf) {
 			continue
 		}
 		if q != "" && !strings.Contains(strings.ToLower(u.Username), q) &&
 			!strings.Contains(strings.ToLower(u.DisplayName), q) {
 			continue
 		}
-		out = append(out, userRef(u))
+		out = append(out, directoryUser{OwnerRef: userRef(u), Self: u.ID == user.ID})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Username < out[j].Username })
+	// You first when you are in the list, then everyone else by name: a
+	// directory you appear in should open on the entry you recognise.
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Self != out[j].Self {
+			return out[i].Self
+		}
+		return out[i].Username < out[j].Username
+	})
 	if len(out) > limit {
 		out = out[:limit]
 	}
+
+	// Taglines in one query for the page, rather than one per person.
+	ids := make([]int64, 0, len(out))
+	for _, u := range out {
+		ids = append(ids, u.ID)
+	}
+	if taglines, err := s.settings.Taglines(r.Context(), ids); err == nil {
+		for i := range out {
+			out[i].Tagline = taglines[out[i].ID]
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"users": out})
+}
+
+// directoryUser is a person as the picker and the Discover page see them:
+// never an email, a role or an activity status, because this is the one user
+// listing open to everyone rather than to administrators.
+type directoryUser struct {
+	workout.OwnerRef
+	// Self marks the caller's own entry, so the page can label it rather than
+	// the client having to know its own id.
+	Self bool `json:"self,omitempty"`
+	// Tagline is what they wrote about themselves; absent when they wrote none.
+	Tagline string `json:"tagline,omitempty"`
 }
 
 // userDirectory indexes every user by id in one lookup, so rendering a feed or

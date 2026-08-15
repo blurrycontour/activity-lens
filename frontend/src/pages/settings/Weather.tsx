@@ -4,6 +4,7 @@ import SettingsCard from '../../components/SettingsCard'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import { usePreferences } from '../../context/PreferencesContext'
 import { type WeatherCounts } from '../../data/workouts'
+import { useRefreshHandler } from '../../context/RefreshContext'
 import { api } from '../../lib/api'
 
 /**
@@ -80,6 +81,7 @@ export default function WeatherSettings() {
   }, [])
 
   useEffect(() => { void refresh() }, [refresh])
+  useRefreshHandler(refresh)
 
   async function toggle(on: boolean) {
     setMsg(null)

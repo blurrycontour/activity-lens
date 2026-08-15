@@ -27,6 +27,13 @@ import { FINISH_ANCHOR, FINISH_BOX, FINISH_FLAG_D, FINISH_POLE_D } from './mapMa
 
 /** Portrait, which is what messaging apps and stories show without cropping. */
 export const CARD_W = 1080
+/**
+ * The full card: route, four figures, footer.
+ *
+ * Not the only height any more — see cardHeight. Kept as the number it always
+ * was so a card with everything on it is pixel-identical to the ones people
+ * have already sent.
+ */
 export const CARD_H = 1350
 
 const PAD = 72
@@ -35,6 +42,16 @@ const HEAD_H = 172
 /** One stat tile. Two rows of two sit under the route. */
 const STAT_H = 152
 const STAT_GAP = 24
+/**
+ * One row of the list layout, used when there are too few figures to grid.
+ *
+ * Deliberately shorter than a tile and tighter between rows: three rows have to
+ * come out *shorter* than the 2×2 grid they replace, or hiding a figure would
+ * make the card taller, which is the opposite of what switching it off is for.
+ * A row is one line — label left, value right — so it needs no tile's height.
+ */
+const LIST_H = 84
+const LIST_GAP = 18
 /** Attribution strip at the foot. */
 const FOOT_H = 96
 /** Between the route and the first row of tiles. */
@@ -42,6 +59,41 @@ const GAP = 36
 
 const MAP_Y = PAD + HEAD_H
 const MAP_H = CARD_H - PAD - FOOT_H - (STAT_H * 2 + STAT_GAP) - GAP - MAP_Y
+
+/**
+ * How the figures are laid out, and how tall that makes them.
+ *
+ * Four fill a 2×2 grid, which is what the card was built around. Fewer than
+ * four cannot: three in a grid leaves a hole, and a hole reads as something
+ * that failed to draw. They become full-width rows instead — label on the left,
+ * value on the right — which is both honest about there being three of them and
+ * shorter, which is the point of hiding something in the first place.
+ */
+export function statsLayout(count: number): 'grid' | 'list' {
+  return count >= 4 ? 'grid' : 'list'
+}
+
+/** The height the block of figures needs. */
+function statsHeight(count: number): number {
+  if (count === 0) return 0
+  if (statsLayout(count) === 'grid') {
+    const rows = Math.ceil(count / 2)
+    return rows * STAT_H + (rows - 1) * STAT_GAP
+  }
+  return count * LIST_H + (count - 1) * LIST_GAP
+}
+
+/**
+ * How tall this card comes out.
+ *
+ * The card grows and shrinks with what is on it, so the preview has to ask
+ * rather than assume: a card with no route and three figures is nearly half the
+ * height of the full one, and a fixed aspect ratio would letterbox it.
+ */
+export function cardHeight(workout: Workout, options: CardOptions = {}): number {
+  const map = options.showRoute === false ? 0 : MAP_H + GAP
+  return MAP_Y + map + statsHeight(cardStats(workout, options).length) + FOOT_H + PAD
+}
 
 export interface CardTheme {
   bg: string
@@ -60,6 +112,15 @@ export type CardTitleMode = 'type' | 'name'
 export interface CardOptions {
   /** Defaults to the sport, which is the version that needs no explaining. */
   titleMode?: CardTitleMode
+  /**
+   * Draw the route panel. Off for a workout with no GPS, where the panel is a
+   * large box saying so, and for anyone who would rather not publish where
+   * they run — a track outside a front door is the most identifying thing on
+   * the card. Omitting it shortens the card by the panel's height.
+   */
+  showRoute?: boolean
+  /** Include the average heart rate among the figures. */
+  showHR?: boolean
 }
 
 /**
@@ -108,8 +169,8 @@ export interface CardStat {
  * The four figures on the card, in reading order: the two that every workout
  * has first, the two that depend on the sport and the device second.
  */
-export function cardStats(w: Workout): CardStat[] {
-  return [
+export function cardStats(w: Workout, options: CardOptions = {}): CardStat[] {
+  const stats: CardStat[] = [
     { label: 'Time', value: w.duration > 0 ? fmtDuration(w.duration) : '—', icon: Clock },
     { label: 'Distance', value: w.distance > 0 ? fmtDist(w.distance) : '—', icon: Navigation },
     { label: 'Avg HR', value: w.avgHR > 0 ? `${w.avgHR} bpm` : '—', icon: Heart },
@@ -117,6 +178,9 @@ export function cardStats(w: Workout): CardStat[] {
     // rather than as an absence.
     { label: 'Avg Pace', value: w.avgPace > 0 ? `${fmtPace(w.avgPace)} /km` : '—', icon: Gauge },
   ]
+  // Dropped, not blanked. A tile reading "Avg HR —" is the fact the sender
+  // chose to leave out, printed anyway.
+  return options.showHR === false ? stats.filter(s => s.label !== 'Avg HR') : stats
 }
 
 /** "Saturday, 12 July 2025", or the raw value if it will not parse. */
@@ -337,18 +401,22 @@ export async function drawShareCard(
   options: CardOptions = {},
 ): Promise<void> {
   await ready()
+  // Height follows the content: no route and one fewer figure is a shorter
+  // card, not the same card with a gap in it.
+  const cardH = cardHeight(workout, options)
   canvas.width = CARD_W
-  canvas.height = CARD_H
+  canvas.height = cardH
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('Could not draw the card')
-  ctx.clearRect(0, 0, CARD_W, CARD_H)
+  ctx.clearRect(0, 0, CARD_W, cardH)
 
   ctx.fillStyle = theme.bg
-  ctx.fillRect(0, 0, CARD_W, CARD_H)
+  ctx.fillRect(0, 0, CARD_W, cardH)
 
   const sport = workout.type
   const sportColor = literalColor(TYPE_COLOR[sport] ?? 'var(--primary)', theme.accent)
-  const stats = cardStats(workout)
+  const stats = cardStats(workout, options)
+  const withRoute = options.showRoute !== false
 
   // Every icon up front: the layout below is a straight sequence of draws, and
   // awaiting in the middle of it would leave the card half-painted on screen.
@@ -386,7 +454,10 @@ export async function drawShareCard(
   ctx.fillText(ellipsize(ctx, cardWhen(workout), CARD_W - PAD - textX), textX, markY + 92)
 
   // ── The route ──────────────────────────────────────────────────────────────
+  // Skipped entirely rather than drawn empty: the panel is most of the card,
+  // and a sender who turned it off wants the height back, not a blank box.
   const mapBox = { x: PAD, y: MAP_Y, w: CARD_W - PAD * 2, h: MAP_H }
+  if (withRoute) {
   ctx.save()
   roundRect(ctx, mapBox.x, mapBox.y, mapBox.w, mapBox.h, 32)
   ctx.fillStyle = theme.panel
@@ -431,18 +502,22 @@ export async function drawShareCard(
     ctx.fillText('No route recorded', mapBox.x + mapBox.w / 2, mapBox.y + mapBox.h / 2)
   }
   ctx.restore()
+  }
 
   // ── Stats, two by two ──────────────────────────────────────────────────────
   // A grid rather than four columns across one line: four values on one row
   // gives each of them a quarter of the width, which is where "1:23:45" started
   // being trimmed. Two per row is also the shape people expect on a phone.
-  const tileW = (CARD_W - PAD * 2 - STAT_GAP) / 2
-  const gridY = MAP_Y + MAP_H + GAP
+  const list = statsLayout(stats.length) === 'list'
+  const tileW = list ? CARD_W - PAD * 2 : (CARD_W - PAD * 2 - STAT_GAP) / 2
+  const rowH = list ? LIST_H : STAT_H
+  const rowGap = list ? LIST_GAP : STAT_GAP
+  const gridY = MAP_Y + (withRoute ? MAP_H + GAP : 0)
   stats.forEach((s, i) => {
-    const x = PAD + (i % 2) * (tileW + STAT_GAP)
-    const y = gridY + Math.floor(i / 2) * (STAT_H + STAT_GAP)
+    const x = list ? PAD : PAD + (i % 2) * (tileW + STAT_GAP)
+    const y = gridY + (list ? i : Math.floor(i / 2)) * (rowH + rowGap)
 
-    roundRect(ctx, x, y, tileW, STAT_H, 26)
+    roundRect(ctx, x, y, tileW, rowH, 26)
     ctx.fillStyle = theme.panel
     ctx.fill()
     ctx.strokeStyle = theme.border
@@ -451,6 +526,24 @@ export async function drawShareCard(
 
     const inner = x + 32
     const icon = statIcons[i]
+
+    if (list) {
+      // Label and value on one line, the value against the right edge. A row
+      // this wide with the value under the label would be mostly empty panel.
+      if (icon) ctx.drawImage(icon, inner, y + rowH / 2 - 16, 32, 32)
+      ctx.textAlign = 'left'
+      ctx.fillStyle = theme.muted
+      ctx.font = `500 26px ${SANS}`
+      ctx.fillText(s.label.toUpperCase(), inner + (icon ? 46 : 0), y + rowH / 2 + 9)
+
+      ctx.textAlign = 'right'
+      ctx.fillStyle = theme.text
+      ctx.font = `500 42px ${MONO}`
+      ctx.fillText(ellipsize(ctx, s.value, tileW / 2), x + tileW - 32, y + rowH / 2 + 15)
+      ctx.textAlign = 'left'
+      return
+    }
+
     if (icon) ctx.drawImage(icon, inner, y + 30, 34, 34)
 
     ctx.textAlign = 'left'
@@ -464,7 +557,7 @@ export async function drawShareCard(
   })
 
   // ── Footer ─────────────────────────────────────────────────────────────────
-  const footY = CARD_H - PAD + 4
+  const footY = cardH - PAD + 4
   drawLogo(ctx, PAD, footY - 36, 40, theme.muted)
   ctx.textAlign = 'left'
   ctx.fillStyle = theme.muted

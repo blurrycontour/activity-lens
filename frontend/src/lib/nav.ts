@@ -5,15 +5,26 @@ export type Page =
   | 'consistency'
   | 'map'
   | 'equipment'
+  /** Everyone on this instance; each entry opens their profile. */
+  | 'discover'
   | 'help'
   | 'settings'
   | 'admin'
+  /**
+   * Another member's profile, at /users/{id}.
+   *
+   * Not in MOBILE_PAGES or the sidebar: there is no "users" hub to navigate
+   * to, only individual people reached from a shared or public workout. It
+   * owns a route so the back gesture returns to the workout you came from and
+   * so a profile can be linked.
+   */
+  | 'users'
 
 /**
  * The primary pages, in order. Mobile swipe navigation walks this list
  * cyclically, so swiping right on the first page wraps around to the last.
  */
-export const MOBILE_PAGES: Page[] = ['dashboard', 'workouts', 'analysis', 'consistency', 'map', 'equipment']
+export const MOBILE_PAGES: Page[] = ['dashboard', 'workouts', 'discover', 'analysis', 'consistency', 'map', 'equipment']
 
 /** Sidebar order on desktop: the mobile set plus Help. */
 export const DESKTOP_PAGES: Page[] = [...MOBILE_PAGES, 'help']
@@ -29,13 +40,13 @@ export const DESKTOP_PAGES: Page[] = [...MOBILE_PAGES, 'help']
  * Everything still reachable: the rest live behind More, and swipe navigation
  * walks all of MOBILE_PAGES regardless.
  */
-export const BOTTOM_BAR_PAGES: Page[] = ['dashboard', 'workouts', 'analysis', 'consistency']
+export const BOTTOM_BAR_PAGES: Page[] = ['dashboard', 'workouts', 'discover', 'analysis']
 
 /** The pages behind "More" on a phone. */
-export const MORE_PAGES: Page[] = ['map', 'equipment', 'help']
+export const MORE_PAGES: Page[] = ['consistency', 'map', 'equipment', 'help']
 
 /** Every page that owns a route, including the ones reached from the user menu. */
-export const PAGES: Page[] = [...DESKTOP_PAGES, 'settings', 'admin']
+export const PAGES: Page[] = [...DESKTOP_PAGES, 'settings', 'admin', 'users']
 
 /**
  * Settings and admin are hubs: each category is a page of its own at
@@ -73,7 +84,7 @@ function sectionsFor(page: Page): readonly string[] {
  * component unmounts and any id it was holding in local state goes with it.
  * Coming back then landed on the inventory rather than the gear you left.
  */
-const ID_SECTION_PAGES: readonly Page[] = ['equipment']
+const ID_SECTION_PAGES: readonly Page[] = ['equipment', 'users']
 
 /**
  * Routes that no longer exist, pointing at whatever absorbed them. Timeline was
@@ -97,15 +108,25 @@ export interface AppLocation {
   page: Page
   /** The category within a hub page, or null for the hub itself. */
   section: string | null
+  /**
+   * One record inside a category — the account open under Admin > Users.
+   *
+   * In the URL for the same reason equipment's id is: which account is open was
+   * component state, so leaving the page for a workout or a profile unmounted
+   * the thing holding it, and the back gesture landed on the list of categories
+   * rather than on the user you were looking at.
+   */
+  detail: string | null
   workoutId: string | null
   /** The URL was a legacy form and should be rewritten. */
   redirect?: boolean
 }
 
 /** The path for a page, optionally drilled into one of its categories. */
-export function pathForPage(p: Page, section?: string | null): string {
+export function pathForPage(p: Page, section?: string | null, detail?: string | null): string {
   const base = p === 'dashboard' ? '/' : `/${p}`
-  return section ? `${base}/${section}` : base
+  if (!section) return base
+  return detail ? `${base}/${section}/${detail}` : `${base}/${section}`
 }
 
 /**
@@ -115,10 +136,10 @@ export function pathForPage(p: Page, section?: string | null): string {
  */
 export function parseLocation(pathname = window.location.pathname): AppLocation {
   const segs = pathname.split('/').filter(Boolean)
-  if (segs.length === 0) return { page: 'dashboard', section: null, workoutId: null }
+  if (segs.length === 0) return { page: 'dashboard', section: null, detail: null, workoutId: null }
 
   if (segs[0] === 'workouts' && segs[1]) {
-    return { page: 'workouts', section: null, workoutId: segs[1] }
+    return { page: 'workouts', section: null, detail: null, workoutId: segs[1] }
   }
 
   const candidate = segs[0] as Page
@@ -128,18 +149,20 @@ export function parseLocation(pathname = window.location.pathname): AppLocation 
     const section = segs[1] && (ID_SECTION_PAGES.includes(candidate) || sectionsFor(candidate).includes(segs[1]))
       ? segs[1]
       : null
-    return { page: candidate, section, workoutId: null }
+    // A detail only means anything under a category, and only the pages that
+    // render one look at it — an unknown trailing segment elsewhere is inert.
+    return { page: candidate, section, detail: section ? segs[2] ?? null : null, workoutId: null }
   }
 
   const moved = LEGACY_SECTION_ROUTES[segs[0]]
-  if (moved) return { ...moved, workoutId: null, redirect: true }
+  if (moved) return { ...moved, detail: null, workoutId: null, redirect: true }
 
   // Timeline was folded into Analysis and Heatmap became Consistency; keep old
   // links and open tabs working instead of dumping them on the dashboard.
   const legacy = LEGACY_ROUTES[segs[0]]
-  if (legacy) return { page: legacy, section: null, workoutId: null, redirect: true }
+  if (legacy) return { page: legacy, section: null, detail: null, workoutId: null, redirect: true }
 
-  return { page: 'dashboard', section: null, workoutId: null }
+  return { page: 'dashboard', section: null, detail: null, workoutId: null }
 }
 
 /** The page `steps` positions away from `from` in MOBILE_PAGES, wrapping. */

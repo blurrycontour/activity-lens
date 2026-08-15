@@ -1,0 +1,11 @@
+-- A line a user writes about themselves, shown on their profile.
+--
+-- Here rather than on the users table because that one belongs to go-authkit;
+-- user_prefs is this app's own per-user store and already holds everything else
+-- a person sets about themselves.
+--
+-- Unlike the rest of user_prefs this is read by *other* people, which is the
+-- only thing about it worth being careful with: it is rendered on a profile
+-- page, so it is length-capped and stripped of control characters on the way in
+-- rather than trusted on the way out. See settings.CleanTagline.
+ALTER TABLE user_prefs ADD COLUMN tagline TEXT NOT NULL DEFAULT '';

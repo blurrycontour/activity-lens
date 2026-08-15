@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react'
-import { AlertTriangle, Trash2, Upload } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { AlertTriangle, ExternalLink, Trash2, Upload } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { api, ApiError } from '../../lib/api'
 import { avatarUrl } from '../../components/UserAvatar'
@@ -7,9 +7,48 @@ import SettingsCard from '../../components/SettingsCard'
 import Field from '../../components/Field'
 import StatusMsg, { type Msg } from '../../components/StatusMsg'
 
-/** Name, email, picture — and the account itself. */
-export default function ProfileSettings() {
+/** Matches settings.MaxTaglineLen on the server, which trims to the same. */
+const MAX_TAGLINE = 140
+
+/** Name, email, picture, tagline — and the account itself. */
+export default function ProfileSettings({ onViewProfile }: { onViewProfile?: () => void }) {
   const { user, setUser, logout } = useAuth()
+
+  // Loaded from preferences rather than from the session user: it lives in
+  // user_prefs, which is this app's own store, not in go-authkit's users table.
+  const [tagline, setTagline] = useState('')
+  const [savedTagline, setSavedTagline] = useState('')
+  const [taglineBusy, setTaglineBusy] = useState(false)
+  const [taglineMsg, setTaglineMsg] = useState<Msg | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    api.getPreferences()
+      .then(p => {
+        if (!alive) return
+        setTagline(p.tagline ?? '')
+        setSavedTagline(p.tagline ?? '')
+      })
+      .catch(() => { /* an empty tagline is a fine starting point */ })
+    return () => { alive = false }
+  }, [])
+
+  async function saveTagline() {
+    setTaglineBusy(true)
+    setTaglineMsg(null)
+    try {
+      // The whole record round-trips, so read it back before writing: saving
+      // only the tagline would blank every other preference.
+      const prefs = await api.getPreferences()
+      await api.savePreferences({ ...prefs, tagline })
+      setSavedTagline(tagline)
+      setTaglineMsg({ ok: true, text: 'Saved' })
+    } catch (e) {
+      setTaglineMsg({ ok: false, text: e instanceof ApiError ? e.message : 'Could not save' })
+    } finally {
+      setTaglineBusy(false)
+    }
+  }
 
   const [displayName, setDisplayName] = useState(user?.displayName ?? '')
   const [email, setEmail] = useState(user?.email ?? '')
@@ -119,6 +158,35 @@ export default function ProfileSettings() {
               {user.avatarPath ? 'Large images are scaled down.' : 'Generated from your username.'}
             </span>
           </div>
+        </div>
+      </SettingsCard>
+
+      {/* Its own card between the picture and the private details, because it
+          belongs with them: this and the picture are the two things other
+          people see, and the email and role below are not. */}
+      <SettingsCard
+        title="Tagline"
+        actions={
+          <button className="btn btn-ghost" onClick={() => onViewProfile?.()}>
+            <ExternalLink size={14} /> View my profile
+          </button>
+        }
+      >
+        <Field label={`A line about you, shown on your profile (${tagline.length}/${MAX_TAGLINE})`}>
+          <input
+            className="input"
+            style={{ width: '100%' }}
+            value={tagline}
+            maxLength={MAX_TAGLINE}
+            placeholder="Chasing a sub-20 5k, mostly at dawn."
+            onChange={e => setTagline(e.target.value)}
+          />
+        </Field>
+        <div className="settings-actions">
+          <button className="btn btn-primary" onClick={saveTagline} disabled={taglineBusy || tagline === savedTagline}>
+            {taglineBusy ? 'Saving…' : 'Save tagline'}
+          </button>
+          <StatusMsg msg={taglineMsg} />
         </div>
       </SettingsCard>
 

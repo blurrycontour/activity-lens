@@ -1,6 +1,6 @@
 import { useIsMobile } from './lib/useIsMobile'
 import NotificationBanner, { type BannerNotification } from './components/NotificationBanner'
-import { consumeOpenedParam, markNotificationOpened, PUSH_EVENT } from './lib/notifications'
+import { consumeOpenedParam, markNotificationOpened, PUSH_EVENT, READ_NOTIFICATION_EVENT } from './lib/notifications'
 import UpdateToast from './components/UpdateToast'
 import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
 import TopBar, { type ThemeMode } from './components/TopBar'
@@ -19,6 +19,8 @@ import WorkoutDetail from './pages/WorkoutDetail'
 import Consistency from './pages/Consistency'
 import Analysis from './pages/Analysis'
 import Equipment from './pages/Equipment'
+import UserProfile from './pages/UserProfile'
+import Discover from './pages/Discover'
 import Help from './pages/Help'
 import MapPage from './pages/MapPage'
 import Settings from './pages/settings'
@@ -37,9 +39,18 @@ import { useSwipeNav } from './lib/useSwipeNav'
 import { consumeShareParam, takeSharedFiles } from './lib/shareTarget'
 import { onNativeIncomingFiles, takeNativeIncomingFiles } from './lib/native/incomingFiles'
 import { applySystemBars } from './lib/native/systemBars'
-import { onPushMessage } from './lib/native/unifiedPush'
+import {
+  consumeNotificationTap, onNotificationTap, onPushMessage, type NotificationTap,
+} from './lib/native/unifiedPush'
+import { startUpdate } from './lib/appUpdate'
 import { LoaderCircle } from 'lucide-react'
 import { api } from './lib/api'
+
+/**
+ * The link an update notification carries. Handled rather than navigated to:
+ * see openLink. Kept in step with AppUpdateLink in the backend.
+ */
+const UPDATE_LINK = '/update'
 
 /** Fired when openLink changes the URL without unmounting the page it lands on. */
 export const LOCATION_EVENT = 'al:location'
@@ -76,6 +87,8 @@ export default function App() {
   const [page, setPage] = useState<Page>(initialLocation.page)
   // The open category within a hub page (settings, admin), or null for the hub.
   const [section, setSection] = useState<string | null>(initialLocation.section)
+  // The record open inside that category, e.g. the account under Admin > Users.
+  const [detail, setDetail] = useState<string | null>(initialLocation.detail)
   const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null)
   /**
    * True while a workout named in the URL is still being fetched.
@@ -144,7 +157,7 @@ export default function App() {
   // so the address bar matches the page and a reload doesn't redirect twice.
   useEffect(() => {
     if (initialLocation.redirect) {
-      window.history.replaceState(null, '', pathForPage(initialLocation.page, initialLocation.section))
+      window.history.replaceState(null, '', pathForPage(initialLocation.page, initialLocation.section, initialLocation.detail))
     }
   }, [initialLocation])
 
@@ -257,6 +270,7 @@ export default function App() {
       const loc = parseLocation()
       setPage(loc.page)
       setSection(loc.section)
+      setDetail(loc.detail)
       if (loc.workoutId) {
         // Shown again immediately when it is the one we just came from, and
         // only then refreshed. The fetch takes long enough to see, and until it
@@ -276,6 +290,7 @@ export default function App() {
   const navigate = useCallback((p: Page) => {
     setPage(p)
     setSection(null)
+    setDetail(null)
     setSelectedWorkout(null)
     window.history.pushState(null, '', pathForPage(p))
   }, [])
@@ -286,15 +301,16 @@ export default function App() {
    * Pushed rather than replaced so the phone's back gesture and the browser's
    * back button leave the category the same way the on-screen arrow does.
    */
-  const openSection = useCallback((p: Page, s: string | null) => {
+  const openSection = useCallback((p: Page, s: string | null, d: string | null = null) => {
     setPage(p)
     setSection(s)
+    setDetail(d)
     // A workout being open wins over the page underneath it, so leaving this
     // set meant the user menu's Profile entry changed the page and the URL and
     // then carried on showing the workout — from anywhere else it worked, which
     // is exactly what makes that kind of bug hard to describe.
     setSelectedWorkout(null)
-    window.history.pushState(null, '', pathForPage(p, s))
+    window.history.pushState(null, '', pathForPage(p, s, d))
   }, [])
 
   /**
@@ -304,6 +320,13 @@ export default function App() {
    */
   const openLink = useCallback((link: string) => {
     const target = new URL(link, window.location.origin)
+    // Not a page but an instruction: the update notification asks for the
+    // update to start, which on Android means the install dialog and on the
+    // web means picking up the build this server is now serving.
+    if (target.pathname === UPDATE_LINK) {
+      void startUpdate()
+      return
+    }
     const loc = parseLocation(target.pathname)
     if (loc.workoutId) {
       api.getWorkout(loc.workoutId)
@@ -312,7 +335,9 @@ export default function App() {
           // The query string comes along, exactly as it does for a page below:
           // a social notification links to "?tab=social", and dropping it would
           // land on the charts and leave the reader to find the comment.
-          window.history.pushState(null, '', `/workouts/${w.id}${target.search}`)
+          // Marked like any workout we open, so closing it goes back to
+          // wherever the tap came from rather than to the library.
+          window.history.pushState({ workout: true }, '', `/workouts/${w.id}${target.search}`)
         })
         // A workout that has since been unshared or deleted: land on the list
         // rather than a dead end.
@@ -320,6 +345,7 @@ export default function App() {
           setSelectedWorkout(null)
           setPage('workouts')
           setSection(null)
+          setDetail(null)
           window.history.pushState(null, '', pathForPage('workouts'))
         })
       return
@@ -327,10 +353,11 @@ export default function App() {
     setSelectedWorkout(null)
     setPage(loc.page)
     setSection(loc.section)
+    setDetail(loc.detail)
     // The query string is kept, not dropped: a notification links to a filtered
     // list ("/workouts?source=autoimport"), and pathForPage alone would land on
     // the unfiltered page and leave the user hunting.
-    window.history.pushState(null, '', pathForPage(loc.page, loc.section) + target.search)
+    window.history.pushState(null, '', pathForPage(loc.page, loc.section, loc.detail) + target.search)
     // The destination page may already be mounted, in which case nothing about
     // it re-renders and a filter in the query string would be ignored. This says
     // "the URL changed" to whoever cares.
@@ -361,6 +388,38 @@ export default function App() {
     return () => navigator.serviceWorker.removeEventListener('message', onMessage)
   }, [openLink])
 
+  /**
+   * A tapped Android notification.
+   *
+   * Here rather than in the bell, which is only mounted once someone is signed
+   * in: an update notification is delivered to a device whose session may well
+   * have ended, and tapping it has to work anyway — starting an update needs no
+   * session, and the endpoints it uses are deliberately unauthenticated.
+   *
+   * Both polled and subscribed to: a cold start delivers the intent before this
+   * code exists, and a tap while the app is open delivers it after. The plugin
+   * hands a tap over exactly once, so this being the only consumer is what
+   * makes it handled exactly once.
+   */
+  useEffect(() => {
+    const go = (tap: NotificationTap) => {
+      // Marked read before acting, not after: the user has dealt with this one,
+      // and leaving it bold in the list they are about to see is the bug this
+      // fixes. Fails quietly when signed out, which is the case where there is
+      // no list to leave it bold in.
+      void markNotificationOpened(tap.id)
+      if (tap.link) {
+        openLink(tap.link)
+      } else if (tap.id) {
+        // Nothing to navigate to — a broadcast is the message itself, so ask
+        // the bell to show it in full rather than doing nothing at all.
+        window.dispatchEvent(new CustomEvent(READ_NOTIFICATION_EVENT, { detail: tap.id }))
+      }
+    }
+    void consumeNotificationTap().then(tap => { if (tap) go(tap) })
+    return onNotificationTap(go)
+  }, [openLink])
+
   // A cold start from a tapped notification, where the worker had no window to
   // message and put the id in the URL instead. Waits for auth: marking one read
   // needs a session.
@@ -377,10 +436,39 @@ export default function App() {
     window.dispatchEvent(new Event(PUSH_EVENT))
   }), [])
 
-  const selectWorkout = useCallback((w: Workout | null) => {
-    setSelectedWorkout(w)
-    window.history.pushState(null, '', w ? `/workouts/${w.id}` : pathForPage('workouts'))
+  /**
+   * Closes the workout, landing where it was opened from.
+   *
+   * It used to push the library, so the header's back arrow and the phone's
+   * back gesture disagreed with each other: opening a workout from Discover, a
+   * profile or a piece of equipment and pressing the arrow dumped you in your
+   * own library, while the gesture returned you where you came from. Going back
+   * through history is the one behaviour that is right from everywhere.
+   *
+   * The state marker is what distinguishes an entry this app pushed from a cold
+   * load of /workouts/{id} — a deep link, a reload, a shared URL — where there
+   * is nothing behind us and going back would leave the app entirely.
+   */
+  const closeWorkout = useCallback(() => {
+    if (window.history.state?.workout) {
+      window.history.back()
+      return
+    }
+    setSelectedWorkout(null)
+    window.history.replaceState(null, '', pathForPage('workouts'))
   }, [])
+
+  /**
+   * Opens a workout, marking the history entry as one we pushed.
+   *
+   * The marker is what lets closing it go *back* rather than forward to the
+   * library — see closeWorkout.
+   */
+  const selectWorkout = useCallback((w: Workout | null) => {
+    if (!w) { closeWorkout(); return }
+    setSelectedWorkout(w)
+    window.history.pushState({ workout: true }, '', `/workouts/${w.id}`)
+  }, [closeWorkout])
 
   const toggleSidebar = useCallback(() => {
     setSidebarCollapsed(c => !c)
@@ -397,13 +485,13 @@ export default function App() {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return
       if (gPressed) {
         gPressed = false
-        const map: Record<string, Page> = { d: 'dashboard', w: 'workouts', a: 'analysis', c: 'consistency', m: 'map', e: 'equipment' }
+        const map: Record<string, Page> = { d: 'dashboard', w: 'workouts', a: 'analysis', c: 'consistency', m: 'map', e: 'equipment', p: 'discover' }
         if (map[e.key]) { navigate(map[e.key]); return }
       }
       if (e.key === 'g') { gPressed = true; setTimeout(() => { gPressed = false }, 1000); return }
       if (e.key === '[') toggleSidebar()
       if (e.key === 'Escape') {
-        selectWorkout(null)
+        closeWorkout()
         setShowUserMenu(false)
         setShowImport(false)
       }
@@ -414,7 +502,7 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [navigate, toggleSidebar, selectWorkout])
+  }, [navigate, toggleSidebar, closeWorkout])
 
   // The <main> element, tracked as state via a callback ref rather than a
   // plain useRef. isMobile can already be true (and so gesturesEnabled true)
@@ -564,7 +652,8 @@ export default function App() {
             key={selectedWorkout.id}
             workout={selectedWorkout}
             accent={accent}
-            onBack={() => selectWorkout(null)}
+            onBack={closeWorkout}
+            onOpenUser={id => openSection('users', String(id))}
             onOpenSettings={() => navigate('settings')}
           />
         ) : openingWorkout ? (
@@ -585,6 +674,19 @@ export default function App() {
           <MapPage />
         ) : page === 'consistency' ? (
           <Consistency />
+        ) : page === 'discover' ? (
+          <Discover
+            onOpenUser={id => openSection('users', String(id))}
+            onSelectWorkout={selectWorkout}
+          />
+        ) : page === 'users' ? (
+          // section carries the user id; see ID_SECTION_PAGES in nav.ts.
+          <UserProfile
+            id={Number(section)}
+            onBack={() => window.history.back()}
+            onSelect={selectWorkout}
+            onOpenUser={id => openSection('users', String(id))}
+          />
         ) : page === 'equipment' ? (
           <Equipment
             detail={section}
@@ -600,11 +702,14 @@ export default function App() {
             onAccentChange={setAccent}
             themeMode={themeMode}
             onThemeChange={setThemeMode}
+            onViewProfile={() => { if (user) openSection('users', String(user.id)) }}
           />
         ) : page === 'admin' ? (
           <Admin
             section={section as AdminSection | null}
+            userId={detail}
             onOpen={s => openSection('admin', s)}
+            onOpenUser={id => openSection('admin', 'users', id === null ? null : String(id))}
             onBack={() => openSection('admin', null)}
           />
         ) : (

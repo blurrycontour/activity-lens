@@ -58,6 +58,7 @@ export default function SortDropdown({ value, onChange }: {
       options={SORT_OPTIONS}
       onChange={onChange}
       ariaLabel="Sort order"
+      active={value !== 'date-desc'}
       icon={<ArrowUpDown size={13} color="var(--text-3)" style={{ flexShrink: 0 }} />}
     />
   )

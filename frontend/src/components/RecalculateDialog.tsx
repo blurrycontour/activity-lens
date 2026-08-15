@@ -1,7 +1,7 @@
-import { createPortal } from 'react-dom'
 import { RotateCcw } from 'lucide-react'
 import { type RecalcParts } from '../data/workouts'
 import useDismissOnBack from '../lib/useDismissOnBack'
+import Modal from './Modal'
 
 /**
  * Which values a recalculation replaces.
@@ -71,11 +71,9 @@ export default function RecalculateDialog({ parts, onChange, busy, error, onClos
   // context — so a dialog left in the page is capped at that level and the top
   // and bottom bars draw over it. A short dialog never reaches them; a tall one
   // does, which is how this surfaced.
-  return createPortal(
-    <>
-      <div className="overlay" onClick={() => { if (!busy) onClose() }} />
-      <div className="modal">
-        <div className="modal-box recalc-modal" role="dialog" aria-modal="true" aria-label="Recalculate workout">
+  return (
+    <Modal onClose={onClose} dismissable={!busy} label="Recalculate workout">
+        <div className="modal-box recalc-modal">
           <h3 className="recalc-title"><RotateCcw size={16} /> Recalculate</h3>
           <p className="recalc-note">
             Each of these is worked out again from the recorded track and your
@@ -121,8 +119,6 @@ export default function RecalculateDialog({ parts, onChange, busy, error, onClos
             </button>
           </div>
         </div>
-      </div>
-    </>,
-    document.body,
+    </Modal>
   )
 }

@@ -4,6 +4,7 @@ import { api, ApiError, type UserRef, type WorkoutShares } from '../lib/api'
 import { fmtDist, fmtDuration, TYPE_COLOR, type Workout } from '../data/workouts'
 import TypeIcon from './TypeIcon'
 import UserAvatar, { userLabel } from './UserAvatar'
+import Modal from './Modal'
 
 interface ShareDialogProps {
   /** The workout being shared. Identified prominently so there is no doubt
@@ -69,9 +70,7 @@ export default function ShareDialog({ workout, onClose, onChange }: ShareDialogP
   const isPublic = state?.visibility === 'public'
 
   return (
-    <>
-      <div className="overlay" onClick={onClose} />
-      <div className="modal">
+    <Modal onClose={onClose} label="Share workout">
         <div className="modal-box" style={{ maxWidth: 480 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
             <h3 style={{ fontSize: 16, fontWeight: 700, flex: 1 }}>Share workout</h3>
@@ -209,7 +208,6 @@ export default function ShareDialog({ workout, onClose, onChange }: ShareDialogP
             </>
           )}
         </div>
-      </div>
-    </>
+    </Modal>
   )
 }

@@ -148,6 +148,22 @@ export interface Workout {
   visibility?: 'private' | 'public'
   /** How many people this workout is shared with directly. Your own only. */
   sharedWithCount?: number
+  /**
+   * Who those people are. Sent only on your own profile — who else can see a
+   * workout is the owner's business — so a list row that has it is one of
+   * yours, and one without it may simply not have been asked for.
+   */
+  sharedWith?: { id: number; username: string; displayName: string; avatarPath: string }[]
+  /**
+   * Whether this workout recorded a track. On list rows only, which carry no
+   * route of their own — read it as "there is a map to open", not as the map.
+   */
+  hasRoute?: boolean
+  /** Whether it recorded cadence — same reasoning, same absence from list rows. */
+  hasCadence?: boolean
+  /** Photos and comments, counted by the server so a list can be filtered by them. */
+  photoCount?: number
+  commentCount?: number
   /** The author, present only on workouts belonging to someone else. */
   owner?: { id: number; username: string; displayName: string; avatarPath: string }
   /**

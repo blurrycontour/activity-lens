@@ -16,6 +16,11 @@ import StatusMsg, { type Msg } from '../../components/StatusMsg'
  * reads as a broken feature rather than an inapplicable one.
  */
 const NOTIFY_KINDS: { id: NotificationKind; label: string; adminOnly?: boolean }[] = [
+  { id: 'broadcast', label: 'Application broadcasts' },
+  // Worth its own switch rather than riding on broadcasts: this one is sent by
+  // the server itself when it starts on a new release, and it is the only way
+  // the Android app hears about an update it has not been opened to find.
+  { id: 'app_update', label: 'A new version of the app is available' },
   { id: 'workout_shared', label: 'Someone shares a workout with me' },
   // One switch for comments and reactions together: they are one feature, and
   // a page is either one you follow or one you do not.

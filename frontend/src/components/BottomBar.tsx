@@ -3,6 +3,7 @@ import { MoreHorizontal, X } from 'lucide-react'
 import { BOTTOM_BAR_PAGES, MORE_PAGES, type Page } from '../lib/nav'
 import { PAGE_META } from './Sidebar'
 import useSheetDrag from '../lib/useSheetDrag'
+import Modal from './Modal'
 
 interface BottomBarProps {
   currentPage: Page
@@ -35,8 +36,7 @@ export default function BottomBar({ currentPage, onNavigate }: BottomBarProps) {
           that matters — a z-index that clears the overlay. A hand-rolled one at
           z-index 60 sat behind the blur and showed nothing at all. */}
       {open && (
-        <>
-          <div className="overlay" onClick={() => setOpen(false)} />
+        <Modal onClose={() => setOpen(false)} wrapper="none">
           <div
             className="sheet"
             role="dialog"
@@ -67,7 +67,7 @@ export default function BottomBar({ currentPage, onNavigate }: BottomBarProps) {
               })}
             </div>
           </div>
-        </>
+        </Modal>
       )}
 
       <nav className="bottom-bar">

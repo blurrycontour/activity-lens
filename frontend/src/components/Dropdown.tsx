@@ -34,6 +34,15 @@ interface DropdownProps<T extends string | number> {
   placeholder?: string
   /** Open upwards, for a trigger too near the bottom of its container. */
   dropUp?: boolean
+  /**
+   * Marks the trigger as holding something other than its default.
+   *
+   * Driven by the caller because only the caller knows what the default is —
+   * "All types" and "Newest first" are unremarkable, "Runs" and "Longest" are
+   * a filter someone left on. Without it a narrowed list on a desktop looks
+   * exactly like an empty one, which is how a filter gets forgotten.
+   */
+  active?: boolean
   disabled?: boolean
   ariaLabel?: string
 }
@@ -51,7 +60,7 @@ interface DropdownProps<T extends string | number> {
 const MIN_MENU_WIDTH = 170
 
 export default function Dropdown<T extends string | number>({
-  value, options, onChange, icon, block, disabled, ariaLabel, placeholder, dropUp,
+  value, options, onChange, icon, block, disabled, ariaLabel, placeholder, dropUp, active,
 }: DropdownProps<T>) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -148,7 +157,7 @@ export default function Dropdown<T extends string | number>({
   return (
     <div className={`al-dropdown${block ? ' block' : ''}${dropUp ? ' drop-up' : ''}`} ref={ref}>
       <button
-        className="al-dropdown-trigger"
+        className={`al-dropdown-trigger${active ? ' active' : ''}`}
         onClick={() => setOpen(o => !o)}
         type="button"
         disabled={disabled}

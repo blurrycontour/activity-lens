@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
-import { Bell, Check, Share2, Footprints, Trophy, Clock, X, Trash2, FolderDown, MessageSquare, Target } from 'lucide-react'
+import { Bell, Check, Download, Share2, Footprints, Trophy, Clock, X, Trash2, FolderDown, MessageSquare, Target, Megaphone } from 'lucide-react'
 import { api, apiURL, type AppNotification, type NotificationKind } from '../lib/api'
 import { dismissOSNotification, enablePush, maybePromptForPush, pushState, syncPushSubscription, type PushState } from '../lib/push'
-import { consumeNotificationTap, maybeEnrolNativePush, onNotificationTap, syncNativePush, watchNativeEndpoint, type NotificationTap } from '../lib/native/unifiedPush'
-import { markNotificationOpened, PUSH_EVENT } from '../lib/notifications'
+import { maybeEnrolNativePush, syncNativePush, watchNativeEndpoint } from '../lib/native/unifiedPush'
+import { PUSH_EVENT, READ_NOTIFICATION_EVENT } from '../lib/notifications'
 import { useIsMobile } from '../lib/useIsMobile'
+import Modal from './Modal'
 
 /** How often to re-check the unread count while the app is open. */
 const POLL_MS = 60_000
@@ -13,6 +13,8 @@ const POLL_MS = 60_000
 const MAX_BADGE = 9
 
 const KIND_ICON: Record<NotificationKind, React.ReactNode> = {
+  broadcast: <Megaphone size={14} />,
+  app_update: <Download size={14} />,
   workout_shared: <Share2 size={14} />,
   workout_social: <MessageSquare size={14} />,
   gear_worn: <Footprints size={14} />,
@@ -50,11 +52,22 @@ interface NotificationBellProps {
  */
 export default function NotificationBell({ onNavigate }: NotificationBellProps) {
   const [open, setOpen] = useState(false)
+  /**
+   * A notification opened for reading rather than for navigating.
+   *
+   * Most notifications point somewhere, and tapping one goes there. A broadcast
+   * points nowhere — it *is* the message — and tapping it used to do nothing at
+   * all, on a row whose text was clamped to two lines. This shows it in full.
+   */
+  const [reading, setReading] = useState<AppNotification | null>(null)
   const [items, setItems] = useState<AppNotification[]>([])
   const [unread, setUnread] = useState(0)
   const [loaded, setLoaded] = useState(false)
   const [push, setPush] = useState<PushState>('unsupported')
   const [pushKey, setPushKey] = useState('')
+  // The same key, readable straight after a load: the mount effect needs it
+  // before React has re-rendered with the state above.
+  const pushKeyRef = useRef('')
   // Where to pin the panel, measured from the bell. Needed because the panel is
   // portalled out of the top bar (see the render), so it can no longer be
   // positioned relative to its trigger by CSS alone.
@@ -70,14 +83,15 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
       const res = await api.notifications()
       setItems(res.notifications)
       setUnread(res.unread)
+      pushKeyRef.current = res.pushKey ?? ''
       setPushKey(res.pushKey ?? '')
       setPush(res.pushKey ? await pushState() : 'unsupported')
       setLoaded(true)
-      return res.pushKey ?? ''
+      return res.notifications
     } catch {
       // A failed poll is not worth surfacing; the next one may well succeed.
     }
-    return ''
+    return null
   }, [])
 
   // An endpoint the distributor issues later — a refresh, a registration it had
@@ -103,7 +117,8 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
         .then(p => maybeEnrolNativePush(p.notify?.push ?? true))
         .catch(() => {})
 
-      const key = await load()
+      await load()
+      const key = pushKeyRef.current
       if (!key) return
       // Keep the server's record of this device in step with the browser's.
       await syncPushSubscription()
@@ -113,20 +128,16 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // A tapped Android notification names the page it belongs to. Both asked for
-  // and subscribed to: a cold start delivers the intent before this component
-  // exists, and a tap while the app is open delivers it after.
+  // A linkless notification tapped outside the app — the tap itself is handled
+  // above this component, which is mounted only when signed in.
   useEffect(() => {
-    const go = (tap: NotificationTap) => {
-      // Marked read before navigating, not after: the user has dealt with this
-      // one, and leaving it bold in the list they are about to see is the bug
-      // this fixes. load() then picks up the new state.
-      void markNotificationOpened(tap.id).then(() => load())
-      if (tap.link) onNavigate(tap.link)
+    const onRead = (e: Event) => {
+      const id = (e as CustomEvent<string>).detail
+      void load().then(list => setReading(list?.find(n => n.id === id) ?? null))
     }
-    void consumeNotificationTap().then(tap => { if (tap) go(tap) })
-    return onNotificationTap(go)
-  }, [load, onNavigate])
+    window.addEventListener(READ_NOTIFICATION_EVENT, onRead)
+    return () => window.removeEventListener(READ_NOTIFICATION_EVENT, onRead)
+  }, [load])
 
   // Poll while the tab is visible. Push covers the app being closed, so this
   // only has to catch changes made in another session or on another device.
@@ -146,11 +157,15 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
 
   // The backdrop handles dismissal by click; this covers the keyboard.
   useEffect(() => {
-    if (!open) return
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setOpen(false) }
+    if (!open && !reading) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      setOpen(false)
+      setReading(null)
+    }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [open])
+  }, [open, reading])
 
   useLayoutEffect(() => {
     if (!open || !btnRef.current) return
@@ -176,6 +191,7 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
     // Reading it here should clear it from the OS tray too.
     void dismissOSNotification(n.id)
     if (n.link) onNavigate(n.link)
+    else setReading(n)
   }
 
   async function turnOnPush() {
@@ -230,9 +246,8 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
           The backdrop matters because without one, a tap outside the panel
           closes it *and* activates whatever was underneath — easy to do on a
           phone, where the panel is nearly full width. */}
-      {open && createPortal(
-        <>
-        <div className="overlay" onClick={() => setOpen(false)} />
+      {open && (
+        <Modal onClose={() => setOpen(false)} wrapper="none">
         <div
           className="notif-panel"
           role="dialog"
@@ -304,8 +319,29 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
             ))}
           </div>
         </div>
-        </>,
-        document.body,
+        </Modal>
+      )}
+
+      {reading && (
+        <Modal onClose={() => setReading(null)} label={reading.title}>
+            <div className="modal-box notif-read">
+              <div className="notif-read-head">
+                {reading.icon
+                  ? <img className="notif-avatar" src={apiURL(reading.icon)} alt="" />
+                  : <span className="notif-icon">{KIND_ICON[reading.kind] ?? <Bell size={14} />}</span>}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <h3 className="notif-read-title">{reading.title}</h3>
+                  <span className="notif-time">{ago(reading.createdAt)}</span>
+                </div>
+                <button className="btn-icon" onClick={() => setReading(null)} aria-label="Close">
+                  <X size={16} />
+                </button>
+              </div>
+              {/* Whitespace preserved: a broadcast is typed by a person, and the
+                  line breaks they put in are part of what they wrote. */}
+              {reading.body && <p className="notif-read-body">{reading.body}</p>}
+            </div>
+        </Modal>
       )}
     </div>
   )

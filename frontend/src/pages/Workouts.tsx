@@ -3,16 +3,15 @@ import { ALL_WORKOUT_TYPES, type WorkoutType, type Workout } from '../data/worko
 import TypeIcon from '../components/TypeIcon'
 import ShareBadge from '../components/ShareBadge'
 import { useWorkouts } from '../context/WorkoutsContext'
-import { useRefreshHandler } from '../context/RefreshContext'
-import { Search, Download, Plus, Grid2X2, List, Library, Inbox, Globe, Share2, SlidersHorizontal, X, Trash2, CheckCheck, LoaderCircle, Handshake, Layers, Image as ImageIcon, MoreVertical, Copy } from 'lucide-react'
+import { Search, Download, Plus, Grid2X2, List, Share2, FilterX, SlidersHorizontal, X, Trash2, CheckCheck, LoaderCircle, Layers, Image as ImageIcon, MoreVertical, Copy } from 'lucide-react'
 import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
 import SortDropdown, { SORT_OPTIONS, type SortKey } from '../components/SortDropdown'
 import FilterSheet, { type FilterGroup } from '../components/FilterSheet'
+import ContainsDropdown, { containsLabel, containsSheetOptions, containsState, cycleHas } from '../components/ContainsDropdown'
 import MenuButton from '../components/MenuButton'
 import ShareDialog from '../components/ShareDialog'
 import ShareCardDialog from '../components/ShareCardDialog'
-import UserAvatar, { userLabel } from '../components/UserAvatar'
 import WorkoutCard from '../components/WorkoutCard'
 import ConfirmDialog from '../components/ConfirmDialog'
 import DuplicatesDialog from '../components/DuplicatesDialog'
@@ -24,7 +23,7 @@ import { LOCATION_EVENT } from '../App'
 import { useSessionState } from '../lib/useSessionState'
 import {
   applyWorkoutFilters, DEFAULT_FILTERS, describeImportWindow, parseAutoImportParams,
-  type Scope, type WorkoutFilters,
+  type Has, type WorkoutFilters,
 } from '../lib/workoutFilters'
 
 const FILTERS_KEY = 'workouts.filters'
@@ -40,18 +39,17 @@ interface WorkoutsProps {
   onImport: () => void
 }
 
-/*
- * Scope — which library is on screen — is defined with the filters it belongs
- * to. "Mine" comes from WorkoutsContext, which is shared with the dashboard and
- * analytics and must stay owner-only; the other two are fetched here and kept in
- * local state so they never contaminate it.
+/**
+ * Your training log, and only ever yours.
+ *
+ * It used to carry two more tabs — shared with me, and public — which made this
+ * page answer two unrelated questions at once: how your own training is going,
+ * and what everyone else has been posting. Every control here had to be
+ * qualified by which tab was showing: the count in the header, the import
+ * button, bulk selection, the sharing filter, the duplicate finder. All of that
+ * moved to Discover, where other people's workouts belong, and what is left is
+ * one library with nothing to disambiguate.
  */
-const SCOPES: { id: Scope; label: string; icon: React.ReactNode }[] = [
-  { id: 'mine', label: 'My workouts', icon: <Library size={15} /> },
-  { id: 'shared', label: 'Shared with me', icon: <Inbox size={15} /> },
-  { id: 'public', label: 'Public', icon: <Globe size={15} /> },
-]
-
 export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
   const { workouts, loading, refresh } = useWorkouts()
   // Opening a workout unmounts this page, so every filter lived exactly as long
@@ -60,7 +58,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
   // still starts clean in a new session, which is what someone expects of a
   // search box they typed into an hour ago.
   const [filters, setFilters] = useSessionState<WorkoutFilters>(FILTERS_KEY, DEFAULT_FILTERS)
-  const { scope, search, typeFilter, sortBy, rangeDays, sharedOnly, originFilter, since } = filters
+  const { search, typeFilter, sortBy, rangeDays, has, originFilter, since } = filters
   /**
    * How much of the filtered list is rendered. A library runs to thousands of
    * workouts and every card draws a sparkline, so the whole thing is a slow
@@ -100,16 +98,16 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
     },
     [setFilters],
   )
-  const setScope = (v: Scope) => patch({ scope: v })
   const setSearch = (v: string) => patch({ search: v })
   const setTypeFilter = (v: WorkoutType | 'All') => patch({ typeFilter: v })
   const setSortBy = (v: SortKey) => patch({ sortBy: v })
   const setRangeDays = (v: number) => patch({ rangeDays: v })
-  const setSharedOnly = (v: boolean) => patch({ sharedOnly: v })
+  /** with → without → off, for one attribute; they narrow together. */
+  const toggleHas = (v: Has) => patch({ has: cycleHas(has, v) })
   const [sharing, setSharing] = useState<Workout | null>(null)
   const [cardFor, setCardFor] = useState<Workout | null>(null)
-  const [feeds, setFeeds] = useState<Partial<Record<Scope, Workout[]>>>({})
-  const [feedError, setFeedError] = useState<string | null>(null)
+  /** A bulk delete that partly failed, shown above the list. */
+  const [listError, setListError] = useState<string | null>(null)
   const [showFilters, setShowFilters] = useState(false)
   /**
    * Bulk selection, entered by pressing and holding a workout.
@@ -118,8 +116,6 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
    * stay distinct: the second is a real state the user can reach by deselecting
    * their last row, and the toolbar has to stay up when they do.
    *
-   * Your own library only. The other two tabs are other people's workouts, and
-   * there is nothing to bulk do to them.
    */
   const [selected, setSelected] = useState<Set<string> | null>(null)
   // Whether a history entry is standing in for the selection, so Android's back
@@ -130,7 +126,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [showDuplicates, setShowDuplicates] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const selecting = selected !== null && scope === 'mine'
+  const selecting = selected !== null
   const isMobile = useIsMobile()
   const [view, setView] = useState<'list' | 'grid'>(() => {
     const saved = localStorage.getItem('workouts.view')
@@ -142,25 +138,13 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
     localStorage.setItem('workouts.view', v)
   }
 
-  const loadFeed = useCallback(async (s: Scope) => {
-    if (s === 'mine') return
-    setFeedError(null)
-    try {
-      const rows = s === 'public' ? await api.feedPublic() : await api.feedShared()
-      setFeeds(f => ({ ...f, [s]: rows }))
-    } catch {
-      setFeedError('Could not load these workouts.')
-    }
-  }, [])
-
   // Claims a ?source= filter from the URL, on mount and whenever a link lands
   // here while this page is already showing.
   useEffect(() => {
     const claim = () => {
       const claimed = parseAutoImportParams(window.location.search)
       if (!claimed) return
-      // Auto-imported workouts are always your own.
-      patch({ ...claimed, scope: 'mine' })
+      patch(claimed)
       // The library was loaded before these existed — the app was closed when
       // they arrived — so without this the filtered list is empty until the user
       // thinks to pull down.
@@ -178,19 +162,6 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
     window.addEventListener(LOCATION_EVENT, claim)
     return () => window.removeEventListener(LOCATION_EVENT, claim)
   }, [patch, refresh])
-
-  // Feeds load on first visit to their tab rather than on mount, so opening
-  // Workouts costs the same as it always did.
-  useEffect(() => {
-    if (scope !== 'mine' && feeds[scope] === undefined) void loadFeed(scope)
-  }, [scope, feeds, loadFeed])
-
-  // Pull-to-refresh reloads whatever tab is showing. WorkoutsContext already
-  // registers the owned library, so this only has to cover the feeds.
-  useRefreshHandler(useCallback(
-    () => (scope === 'mine' ? Promise.resolve() : loadFeed(scope)),
-    [scope, loadFeed],
-  ))
 
   /**
    * The three filters, described once. Desktop renders them as dropdowns and
@@ -231,8 +202,11 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
     typeFilter !== 'All' && { key: 'type', label: typeFilter, clear: () => setTypeFilter('All') },
     rangeDays !== 0 && { key: 'range', label: RANGE_OPTIONS.find(o => o.value === rangeDays)?.label ?? '', clear: () => setRangeDays(0) },
     sortBy !== 'date-desc' && { key: 'sort', label: SORT_OPTIONS.find(o => o.value === sortBy)?.label ?? '', clear: () => setSortBy('date-desc') },
-    // Sharing only filters your own library, so it never counts elsewhere.
-    scope === 'mine' && sharedOnly && { key: 'shared', label: 'Shared only', clear: () => setSharedOnly(false) },
+    ...has.map(h => ({
+      key: `has-${h}`,
+      label: containsLabel(h),
+      clear: () => patch({ has: has.filter(f => f !== h) }),
+    })),
     originFilter === 'autoimport' && {
       key: 'origin',
       label: describeImportWindow(since),
@@ -240,12 +214,10 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
     },
   ].filter(Boolean) as { key: string; label: string; clear: () => void }[]
 
+  /** Back to an unfiltered library, search included. */
   function resetFilters() {
-    setTypeFilter('All')
-    setSortBy('date-desc')
-    setRangeDays(0)
     setShown(PAGE_SIZE)
-    setFilters({ ...DEFAULT_FILTERS, scope })
+    setFilters(DEFAULT_FILTERS)
   }
 
   /**
@@ -285,10 +257,6 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
   }, [stopSelecting])
-
-  // A selection is a set of ids from one library; carrying it to another tab
-  // would leave the toolbar counting rows that are no longer on screen.
-  useEffect(() => { stopSelecting() }, [scope, stopSelecting])
 
   function toggle(id: string) {
     setSelected(prev => {
@@ -334,7 +302,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
     try {
       await deleteIds([...(selected ?? [])])
     } catch (e) {
-      setFeedError(e instanceof Error ? e.message : 'Some workouts could not be deleted.')
+      setListError(e instanceof Error ? e.message : 'Some workouts could not be deleted.')
     } finally {
       setDeleting(false)
       setConfirmDelete(false)
@@ -347,22 +315,24 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
    *
    * Its own menu because there is exactly one of them today and a button
    * labelled "Find duplicates" sitting permanently in a filter row would claim
-   * more of it than a maintenance task deserves. Your own library only: the
-   * feed tabs are other people's workouts.
+   * more of it than a maintenance task deserves.
    */
-  const listTools = scope === 'mine' ? (
+  const listTools = (
     <MenuButton icon={<MoreVertical size={15} />} label="Library options">
       <button className="options-menu-item" onClick={() => setShowDuplicates(true)}>
         <Copy size={14} /> Find duplicates
       </button>
     </MenuButton>
-  ) : null
+  )
 
-  const source = scope === 'mine' ? workouts : feeds[scope]
-  const busy = source === undefined || (scope === 'mine' && loading)
+  const source = workouts
+  const busy = loading
 
   const filtered = useMemo(
-    () => applyWorkoutFilters(source ?? [], filters),
+    // Scope pinned rather than read from the stored filters: a session that
+    // started before the feeds moved to Discover still has "shared" saved, and
+    // that would quietly disable the sharing filter on your own library.
+    () => applyWorkoutFilters(source ?? [], { ...filters, scope: 'mine' }),
     [source, filters],
   )
   const visible = useMemo(() => filtered.slice(0, shown), [filtered, shown])
@@ -437,20 +407,6 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
           </div>
         </div>
 
-        <nav className="tab-strip" style={{ marginBottom: 12 }} aria-label="Workout scope">
-          {SCOPES.map(t => (
-            <button
-              key={t.id}
-              className={`tab-strip-item${scope === t.id ? ' active' : ''}`}
-              onClick={() => setScope(t.id)}
-              aria-current={scope === t.id ? 'page' : undefined}
-            >
-              {t.icon}
-              {t.label}
-            </button>
-          ))}
-        </nav>
-
         {/* While selecting, the toolbar takes the filter row's place rather than
             adding a second bar: the two are never useful at once, and pushing the
             list down a row on a phone would cost more than it gives. */}
@@ -517,12 +473,20 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
               <TypeDropdown value={typeFilter} onChange={v => setTypeFilter(v)} />
               <SortDropdown value={sortBy} onChange={setSortBy} />
               <RangeDropdown value={rangeDays} onChange={setRangeDays} />
-              {scope === 'mine' && (
-                <label className="switch" title="Show only workouts you have made public or shared">
-                  <input type="checkbox" checked={sharedOnly} onChange={e => setSharedOnly(e.target.checked)} />
-                  <span className="switch-track" />
-                  Shared only
-                </label>
+              <ContainsDropdown value={has} onToggle={toggleHas} mine />
+              {/* Icon only: the row already carries four dropdowns and a menu,
+                  and this appears only when there is something to clear — a
+                  permanently visible "Reset" would be a word of nothing most
+                  of the time. */}
+              {activeFilters.length > 0 && (
+                <button
+                  className="btn-icon"
+                  onClick={resetFilters}
+                  title={`Clear ${activeFilters.length} filter${activeFilters.length === 1 ? '' : 's'}`}
+                  aria-label="Clear filters"
+                >
+                  <FilterX size={15} />
+                </button>
               )}
               {listTools}
             </>
@@ -544,14 +508,30 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
       </div>
 
       <div className="page-content tight">
-        {feedError ? (
+        {listError ? (
           <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-3)' }}>
-            <p style={{ fontSize: 14 }}>{feedError}</p>
+            <p style={{ fontSize: 14 }}>{listError}</p>
           </div>
         ) : filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-3)' }}>
-            <EmptyScopeIcon busy={busy} scope={scope} />
-            <p style={{ fontSize: 14 }}>{busy ? 'Loading workouts…' : emptyMessage(scope, sharedOnly)}</p>
+            {busy
+              ? <LoaderCircle size={32} strokeWidth={1.5} className="spin" style={{ margin: '0 auto 12px' }} aria-hidden />
+              : <Search size={32} strokeWidth={1.5} style={{ margin: '0 auto 12px' }} aria-hidden />}
+            <p style={{ fontSize: 14 }}>
+              {busy
+                ? 'Loading workouts…'
+                : activeFilters.length > 0 || search
+                  ? 'No workouts match these filters'
+                  : 'No workouts found'}
+            </p>
+            {/* The way out, where the problem is. A desktop had no reset at
+                all, so a filter left on from an earlier visit read as an empty
+                library with nothing to explain it. */}
+            {!busy && (activeFilters.length > 0 || search) && (
+              <button className="btn btn-ghost" style={{ marginTop: 12 }} onClick={resetFilters}>
+                <FilterX size={14} /> Clear filters
+              </button>
+            )}
           </div>
         ) : (
           <div className={view === 'grid' ? 'workout-grid' : 'workout-list'}>
@@ -560,47 +540,35 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
                 key={w.id}
                 workout={w}
                 variant={view}
-                selectable={scope === 'mine'}
+                selectable
                 selected={selected?.has(w.id) ?? false}
                 selecting={selecting}
                 onLongPress={() => startSelecting(w.id)}
                 onClick={() => (selecting ? toggle(w.id) : openWorkout(w))}
-                badge={scope === 'mine' ? <ShareBadge workout={w} /> : undefined}
-                aside={scope === 'mine'
-                  ? (
-                    <>
-                      {/* Both ways of sharing, the same pair the detail page
-                          offers. A link needs the server and the workout to be
-                          shareable; a card is made from what is already here. */}
-                      <MenuButton icon={<Share2 size={15} />} label="Share">
-                        <button className="options-menu-item" onClick={() => setSharing(w)}>
-                          <Share2 size={14} /> Share
-                        </button>
-                        <button className="options-menu-item" onClick={() => setCardFor(w)}>
-                          <ImageIcon size={14} /> Share card
-                        </button>
-                      </MenuButton>
-                      <button
-                        className="btn-icon card-export-btn"
-                        title="Export as GPX"
-                        onClick={e => { void exportWorkout(w, e) }}
-                        style={{ opacity: 0.6 }}
-                      >
-                        <Download size={15} />
+                badge={<ShareBadge workout={w} />}
+                aside={(
+                  <>
+                    {/* Both ways of sharing, the same pair the detail page
+                        offers. A link needs the server and the workout to be
+                        shareable; a card is made from what is already here. */}
+                    <MenuButton icon={<Share2 size={15} />} label="Share">
+                      <button className="options-menu-item" onClick={() => setSharing(w)}>
+                        <Share2 size={14} /> Share
                       </button>
-                    </>
-                  )
-                  : undefined}
-                // Owner names can be long, so they get their own row rather
-                // than competing with the pace figure for the trailing cluster.
-                footer={scope !== 'mine' && w.owner
-                  ? (
-                    <span className="owner-byline">
-                      <UserAvatar user={w.owner} size={18} />
-                      <span>{userLabel(w.owner)}</span>
-                    </span>
-                  )
-                  : undefined}
+                      <button className="options-menu-item" onClick={() => setCardFor(w)}>
+                        <ImageIcon size={14} /> Share card
+                      </button>
+                    </MenuButton>
+                    <button
+                      className="btn-icon card-export-btn"
+                      title="Export as GPX"
+                      onClick={e => { void exportWorkout(w, e) }}
+                      style={{ opacity: 0.6 }}
+                    >
+                      <Download size={15} />
+                    </button>
+                  </>
+                )}
               />
             ))}
           </div>
@@ -615,15 +583,15 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
 
       {showFilters && (
         <FilterSheet
-          groups={scope === 'mine'
-            ? [...filterGroups, {
-              key: 'shared',
-              label: 'Sharing',
-              value: sharedOnly,
-              onChange: v => setSharedOnly(v as boolean),
-              options: [{ value: false, label: 'All workouts' }, { value: true, label: 'Shared only' }],
-            }]
-            : filterGroups}
+          groups={[...filterGroups, {
+            key: 'has',
+            label: 'Contains',
+            multi: true,
+            value: has,
+            onChange: v => toggleHas(v as Has),
+            state: v => containsState(has, v),
+            options: containsSheetOptions(true, has),
+          }]}
           onClose={() => setShowFilters(false)}
           onReset={activeFilters.length > 0 ? resetFilters : undefined}
         />
@@ -667,37 +635,10 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
         />
       )}
 
-      {/* Importing only makes sense in your own library. */}
-      {scope === 'mine' && (
-        <button className="fab" onClick={onImport} title="Add Workout" aria-label="Add workout">
-          <Plus size={24} strokeWidth={2.5} />
-        </button>
-      )}
+      <button className="fab" onClick={onImport} title="Add Workout" aria-label="Add workout">
+        <Plus size={24} strokeWidth={2.5} />
+      </button>
     </div>
-  )
-}
-
-function emptyMessage(scope: Scope, sharedOnly: boolean): string {
-  if (scope === 'shared') return 'Nobody has shared a workout with you yet'
-  if (scope === 'public') return 'No public workouts on this instance yet'
-  return sharedOnly ? 'You have not shared any workouts yet' : 'No workouts found'
-}
-
-/**
- * The mark above an empty list, matching whichever tab is empty — so "nothing
- * shared with you" and "nothing matched your filter" do not look like the same
- * outcome. Pairs with `emptyMessage`, which is why they sit together.
- */
-function EmptyScopeIcon({ busy, scope }: { busy: boolean; scope: Scope }) {
-  const Icon = busy ? LoaderCircle : scope === 'public' ? Globe : scope === 'shared' ? Handshake : Search
-  return (
-    <Icon
-      size={32}
-      strokeWidth={1.5}
-      className={busy ? 'spin' : undefined}
-      style={{ margin: '0 auto 12px' }}
-      aria-hidden
-    />
   )
 }
 

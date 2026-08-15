@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { X } from 'lucide-react'
 import useSheetDrag from '../lib/useSheetDrag'
+import Modal from './Modal'
 
 /** One selectable value within a group. */
 export interface FilterOption<T> {
@@ -22,9 +23,23 @@ export interface FilterGroup {
   key: string
   label: string
   options: FilterOption<any>[]
+  /**
+   * The chosen value, or — when `multi` is set — the array of chosen values.
+   * Tapping an option in a multi group toggles it rather than replacing the
+   * selection, and `onChange` is handed the option, not the new array: the
+   * group does not know what the caller stores it in.
+   */
   value: any
   onChange: (v: any) => void
   /* eslint-enable @typescript-eslint/no-explicit-any */
+  /** Several options may be on at once, and they narrow together. */
+  multi?: boolean
+  /**
+   * A third state for options that can also be *excluded*, which "on or off"
+   * cannot express. The sheet only draws it; what the states mean, and what
+   * tapping does next, belong to the caller.
+   */
+  state?: (value: unknown) => 'on' | 'excluded' | undefined
 }
 
 interface FilterSheetProps {
@@ -52,8 +67,7 @@ export default function FilterSheet({ groups, onClose, onReset }: FilterSheetPro
   }, [onClose])
 
   return (
-    <>
-      <div className="overlay" onClick={onClose} />
+    <Modal onClose={onClose} wrapper="none">
       <div
         className="sheet"
         role="dialog"
@@ -78,11 +92,18 @@ export default function FilterSheet({ groups, onClose, onReset }: FilterSheetPro
             <div key={g.key} className="sheet-group">
               <div className="sheet-group-label">{g.label}</div>
               <div className="chip-row" role="group" aria-label={g.label}>
-                {g.options.map(o => (
+                {g.options.map(o => {
+                  const state = g.state?.(o.value)
+                  const on = state !== undefined
+                    ? true
+                    : g.multi
+                      ? Array.isArray(g.value) && g.value.includes(o.value)
+                      : o.value === g.value
+                  return (
                   <button
                     key={String(o.value)}
-                    className={`chip${o.value === g.value ? ' active' : ''}`}
-                    aria-pressed={o.value === g.value}
+                    className={`chip${on ? ' active' : ''}${state === 'excluded' ? ' excluded' : ''}`}
+                    aria-pressed={on}
                     onClick={() => g.onChange(o.value)}
                   >
                     {o.glyph ?? (o.color && (
@@ -90,7 +111,8 @@ export default function FilterSheet({ groups, onClose, onReset }: FilterSheetPro
                     ))}
                     {o.label}
                   </button>
-                ))}
+                  )
+                })}
               </div>
             </div>
           ))}
@@ -103,6 +125,6 @@ export default function FilterSheet({ groups, onClose, onReset }: FilterSheetPro
           </button>
         </div>
       </div>
-    </>
+    </Modal>
   )
 }

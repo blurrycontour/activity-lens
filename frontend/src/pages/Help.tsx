@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import {
   ChevronDown, Upload, LayoutDashboard, Activity, CalendarCheck,
-  Watch, LineChart, Settings as SettingsIcon, Keyboard, HelpCircle,
+  Watch, LineChart, Settings as SettingsIcon, Keyboard, HelpCircle, Users,
 } from 'lucide-react'
 
 const features = [
   { icon: LayoutDashboard, title: 'Dashboard', text: 'Your at-a-glance view: totals with period-on-period change, goal streaks, this week against your usual week, training load, and gear wear.' },
-  { icon: Activity, title: 'Workouts', text: 'Browse every workout in list or grid view, and switch tabs to see what others have shared with you or made public. Open one for charts, splits, and its route on the map.' },
+  { icon: Activity, title: 'Workouts', text: 'Your own library, in list or grid view. Open one for charts, splits, and its route on the map.' },
+  { icon: Users, title: 'Discover', text: 'Everyone else on this server: the people, what they have shared with you, and what they have made public. Opening a person shows their profile and the workouts you can see of theirs.' },
   { icon: LineChart, title: 'Analysis', text: 'Everything about how you are performing, split into four tabs: Records, Trends, Efficiency and Load. One time range and sport filter drives them all.' },
   { icon: CalendarCheck, title: 'Consistency', text: 'Everything about whether you are showing up: a calendar heatmap, day-of-week habits, year-over-year comparisons and cumulative distance.' },
   { icon: Watch, title: 'Equipment', text: 'Track gear like shoes, watches and bikes, and see the workouts logged against each.' },
@@ -15,8 +16,10 @@ const features = [
 const shortcuts = [
   { key: 'G then D', action: 'Go to Dashboard' },
   { key: 'G then W', action: 'Go to Workouts' },
+  { key: 'G then P', action: 'Go to Discover (people)' },
   { key: 'G then A', action: 'Go to Analysis' },
   { key: 'G then C', action: 'Go to Consistency' },
+  { key: 'G then M', action: 'Go to Map' },
   { key: 'G then E', action: 'Go to Equipment' },
   { key: 'Cmd / Ctrl + I', action: 'Add a workout' },
   { key: '[', action: 'Collapse / expand sidebar' },
@@ -25,9 +28,10 @@ const shortcuts = [
 
 const faqs = [
   { q: 'How do I share a workout?', a: 'Open the workout and choose Share from the ⋮ menu, or use the share icon on any row in your list. You can make it public — visible to everyone signed in to this instance — and separately share it with specific people. Nothing is ever readable without an account; there are no public links.' },
-  { q: 'Where do I see what I have shared?', a: 'On the Workouts page, your own rows carry a small badge: a globe if the workout is public, and a person icon with a count if you have shared it with specific people. Flip on "Shared only" to filter down to just those. Opening the share dialog shows exactly who has access.' },
+  { q: 'Where do I see what I have shared?', a: 'Open your own profile — from Discover, where you are pinned first, or from Settings → Profile. It has two tabs: Shared, everything you have sent to specific people, and Public, everything anyone signed in here can see. On the Workouts page your rows also carry a badge: a globe if public, a person icon with a count if shared. Opening the share dialog shows exactly who has access.' },
+  { q: "What are the tabs on someone else's profile?", a: 'Three: "Shared with me" is what they have sent you, "Shared by me" is what you have sent them, and "Public" is what they have opened to everyone on this server. Your own profile has the first two collapsed into one Shared tab, since nobody shares a workout with themselves.' },
   { q: 'What can other people see?', a: 'Everything you see on the workout page — the route, map, heart rate, pace, cadence and splits — except your private notes and your equipment. They cannot edit, delete, recalculate or change anything.' },
-  { q: 'If I make a workout private again, does that unshare it?', a: 'No. The public toggle and direct shares are independent, so switching back to private removes it from the Public tab but the people you shared it with keep access. Remove them individually in the share dialog, or use "Remove everyone".' },
+  { q: 'If I make a workout private again, does that unshare it?', a: 'No. The public toggle and direct shares are independent, so switching back to private removes it from the Public tab on Discover but the people you shared it with keep access. Remove them individually in the share dialog, or use "Remove everyone".' },
   { q: 'How do I add a workout?', a: 'Click "Add Workout" in the sidebar (or press Cmd/Ctrl + I). Upload a .gpx or .tcx file to import a recorded activity — you\'ll see a preview of the numbers before saving — or switch to Manual Entry to type in the details yourself.' },
   { q: 'Which file formats are supported?', a: 'Activity Lens imports .gpx (universal GPS exchange) and .tcx (Training Center XML) files. Most watches and apps can export one of these.' },
   { q: 'How are calories estimated?', a: 'When an imported file doesn\'t include calories, they are estimated for you. Under Settings → Calorie Estimation you can choose a heart-rate based method (which uses your sex, age, and weight from the About You section) or a distance-only method.' },
@@ -38,6 +42,7 @@ const faqs = [
   { q: 'When does gear tell me to replace it?', a: 'Each piece of equipment has a replacement distance you can set when editing it; shoes default to 600 km. Once total linked distance passes 80% of that, the dashboard surfaces the most worn item. Gear types with no distance-based wear, like watches, are never nudged about.' },
   { q: 'What does the info icon next to a chart title do?', a: 'It opens a longer explanation of what that chart measures and how to read it — including the caveats worth knowing before you act on it. Hover it on desktop, tap it on mobile.' },
   { q: 'Where did the Timeline and Heatmap pages go?', a: 'Timeline was merged into Analysis, which now has Records, Trends, Efficiency and Load tabs sharing one filter. Heatmap became Consistency and gained year-over-year and cumulative-distance charts. Old links to /timeline and /heatmap redirect automatically.' },
+  { q: 'How do I know when there is a new version?', a: 'The server tells you. When it starts up on a release it has not announced before, everyone gets one notification, and opening it starts the update — on Android that is the download and the system installer, in a browser it is simply loading the new build. It arrives even if you are signed out on that device, which is the case it exists for: a phone nobody has opened in a while is exactly the one running an old app. Turn it off under Settings → Notifications if you would rather find updates yourself.' },
   { q: 'Can I install Activity Lens as an app?', a: 'Yes. It\'s a Progressive Web App, so you can add it to your home screen or desktop from your browser for a full-screen, app-like experience.' },
 ]
 

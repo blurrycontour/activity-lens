@@ -7,6 +7,7 @@ import { isNative } from '../lib/serverConfig'
 import { api, ApiError, type Equipment } from '../lib/api'
 import { type Workout, type WorkoutType, fmtDist, fmtDuration, fmtPace } from '../data/workouts'
 import BatchImportList from './BatchImportList'
+import Modal from './Modal'
 import {
   expand, preflight, runImport, summarize,
   type ImportItem, type ImportRunResult, type SkippedFile,
@@ -296,9 +297,7 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
   }, [file, fileSupported, tab])
 
   return (
-    <>
-      <div className="overlay" onClick={onClose} />
-      <div className="modal">
+    <Modal onClose={onClose} label="Add workout">
         <div className="modal-box">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
             <div>
@@ -674,7 +673,6 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
             </>
           )}
         </div>
-      </div>
-    </>
+    </Modal>
   )
 }

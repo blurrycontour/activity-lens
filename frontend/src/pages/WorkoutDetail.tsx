@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { type RecalcParts, type Workout, type WorkoutType, fmtClock, fmtDuration, fmtDist, fmtPace, TYPE_COLOR } from '../data/workouts'
 import TypeIcon from '../components/TypeIcon'
@@ -7,7 +7,7 @@ import Dropdown from '../components/Dropdown'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ReferenceDot, ReferenceArea, BarChart, Bar } from 'recharts'
 import {
   ArrowLeft, Heart, Mountain, Zap, Clock, TrendingUp, Navigation, Download, Pencil, Trash2, Gauge,
-  Check, X as XIcon, Play, Pause as PauseIcon, LoaderCircle, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, AlertTriangle, Activity, Share2, Lock, FileDown, Plus, Image as ImageIcon, NotebookPen, Images, MessageSquare, ClipboardList, Watch } from 'lucide-react'
+  Check, X as XIcon, Play, Pause as PauseIcon, LoaderCircle, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, AlertTriangle, Activity, Share2, Lock, FileDown, Plus, Image as ImageIcon, NotebookPen, Images, MessageSquare, ClipboardList, Watch, Undo2, ChevronDown } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
@@ -38,6 +38,7 @@ const RouteMap = lazy(() => import('../components/RouteMap'))
 import ExpandModal from '../components/ExpandModal'
 import TabStrip, { type TabStripItem } from '../components/TabStrip'
 import ShareBadge from '../components/ShareBadge'
+import { useRefreshHandler } from '../context/RefreshContext'
 import { inlineTicks } from '../lib/chartTicks'
 const WorkoutGallery = lazy(() => import('../components/WorkoutGallery'))
 const WorkoutSocial = lazy(() => import('../components/WorkoutSocial'))
@@ -49,9 +50,12 @@ import SessionContext from '../components/SessionContext'
 import { sessionStanding } from '../lib/standing'
 import RecalculateDialog from '../components/RecalculateDialog'
 import UserAvatar, { avatarUrl, userLabel } from '../components/UserAvatar'
+import ConfirmDialog from '../components/ConfirmDialog'
 import MenuButton from '../components/MenuButton'
+import WorkoutReshape, { emptyPlan, planChanges, presentStreams, type ReshapePlan } from '../components/WorkoutReshape'
 import ShareDialog from '../components/ShareDialog'
 import ShareCardDialog from '../components/ShareCardDialog'
+import Modal from '../components/Modal'
 
 interface WorkoutDetailProps {
   workout: Workout
@@ -59,6 +63,8 @@ interface WorkoutDetailProps {
   onBack: () => void
   /** Opens Settings, for the weather panel's "turn it on" link. */
   onOpenSettings?: () => void
+  /** Opens another member's profile, from the byline on their workout. */
+  onOpenUser?: (id: number) => void
 }
 
 /** Small marker shown next to stat values that are derived from recorded
@@ -92,7 +98,7 @@ function StatChip({ icon, label, value, calculated, manual }: { icon?: React.Rea
   )
 }
 
-function OptionsMenu({ onEdit, onExport, onDownloadOriginal, onShare, onShareCard, onRecalculate, onDelete, deleting }: { onEdit: () => void; onExport: () => void; onDownloadOriginal?: () => void; onShare?: () => void; onShareCard: () => void; onRecalculate: () => void; onDelete: () => void; deleting: boolean }) {
+function OptionsMenu({ onEdit, onExport, onDownloadOriginal, onRestore, onShare, onShareCard, onRecalculate, onDelete, deleting }: { onEdit: () => void; onExport: () => void; onDownloadOriginal?: () => void; onRestore?: () => void; onShare?: () => void; onShareCard: () => void; onRecalculate: () => void; onDelete: () => void; deleting: boolean }) {
   return (
     <MenuButton icon={<MoreVertical size={18} />} label="Workout options">
       <button className="options-menu-item" onClick={onEdit}>
@@ -120,6 +126,14 @@ function OptionsMenu({ onEdit, onExport, onDownloadOriginal, onShare, onShareCar
       {onDownloadOriginal && (
         <button className="options-menu-item" onClick={onDownloadOriginal}>
           <FileDown size={14} /> Download original
+        </button>
+      )}
+      {/* The undo for a trim or a removal, and only offered when there is a
+          file to undo from — the archive is an admin setting, so plenty of
+          workouts have none. */}
+      {onRestore && (
+        <button className="options-menu-item" onClick={onRestore}>
+          <Undo2 size={14} /> Restore from original
         </button>
       )}
       <button className="options-menu-item danger" onClick={onDelete} disabled={deleting}>
@@ -528,8 +542,8 @@ function preparePlot<T extends { t: number }>(data: T[], key: string): PlotSerie
   }
 }
 
-export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSettings }: WorkoutDetailProps) {
-  const { updateWorkout, removeWorkout, workouts: library } = useWorkouts()
+export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSettings, onOpenUser }: WorkoutDetailProps) {
+  const { updateWorkout, removeWorkout, refresh: refreshLibrary, workouts: library } = useWorkouts()
   const { user } = useAuth()
   const [w, setW] = useState(w0)
   /*
@@ -559,7 +573,19 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
    * List rows carry no `isOwner`, so until the full record loads we fall back
    * to `owner`, which the API sets on feed rows and never on your own.
    */
-  const readOnly = w.isOwner === undefined ? w.owner !== undefined : !w.isOwner
+  /**
+   * Whether this workout belongs to somebody else.
+   *
+   * `isOwner` is authoritative but only single-workout responses carry it, so a
+   * row opened from a list is judged by whether it names an author — with one
+   * exception: an author who is *you*. A list that attaches your own name would
+   * otherwise open your workout as a guest's view, captioned "Shared by <you>",
+   * until the full fetch arrived and took it back. The server does not send
+   * that any more; this makes it harmless if it ever does again.
+   */
+  const readOnly = w.isOwner === undefined
+    ? w.owner !== undefined && w.owner.id !== user?.id
+    : !w.isOwner
   // Undefined while preferences load, and on a server too old to send the
   // field. Both mean "assume on", which matches the server default — the
   // alternative is telling the user their lookups are off when they are not.
@@ -591,7 +617,24 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // The page owns this workout, so a pull has to refetch it — otherwise the
+  // gesture does nothing on the one screen where a comment or a photo someone
+  // else just added is exactly what you pulled to see.
+  useRefreshHandler(useCallback(async () => {
+    try { setW(await api.getWorkout(w0.id)) } catch { /* keep what is on screen */ }
+  }, [w0.id]))
+
   const [editing, setEditing] = useState(false)
+  /**
+   * The staged trim and stream removals. Held beside the other edit fields and
+   * applied only on Save, so nothing here touches the workout until asked.
+   */
+  const [plan, setPlan] = useState<ReshapePlan>(() => emptyPlan(w))
+  // Raised on Save when the plan would destroy something, naming what.
+  const [confirmReshape, setConfirmReshape] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [restoring, setRestoring] = useState(false)
+  const [confirmRestore, setConfirmRestore] = useState(false)
   const [editName, setEditName] = useState(w.name)
   const [editDate, setEditDate] = useState(w.date)
   const [editType, setEditType] = useState<WorkoutType>(w.type)
@@ -963,11 +1006,27 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
     setEditCalories(initial.calories)
     setEditSteps(initial.steps)
     setEditDistance(initial.distance)
+    setPlan(emptyPlan(w))
+    setShowAdvanced(false)
     setSaveErr(null)
     setEditing(true)
   }
 
+  /**
+   * Saves the form, and the reshape with it when one is staged.
+   *
+   * The field patch goes first and the reshape second, because the reshape
+   * returns the whole recomputed workout: doing it the other way round would
+   * render the trimmed workout and then overwrite it with the response to the
+   * rename, whose numbers are the old ones.
+   */
   async function saveEdit() {
+    // A staged trim or removal is destructive, so it is confirmed once, here,
+    // rather than per control while the user is still experimenting.
+    if (planChanges(w, plan) && !confirmReshape) {
+      setConfirmReshape(true)
+      return
+    }
     setSaving(true)
     setSaveErr(null)
     try {
@@ -984,17 +1043,43 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
 
       // Nothing moved: the request would be a no-op that still bumps the
       // updated-at stamp and re-renders the list for no reason.
-      if (Object.keys(patch).length === 0) {
-        setEditing(false)
-        return
+      if (Object.keys(patch).length > 0) {
+        setW(await updateWorkout(w.id, patch))
       }
-      const updated = await updateWorkout(w.id, patch)
-      setW(updated)
+      if (planChanges(w, plan)) {
+        setW(await api.reshapeWorkout(w.id, {
+          start: plan.start,
+          // The server reads 0 as "to the end", which is what an untouched
+          // handle means — and avoids sending a duration it would clamp anyway.
+          end: plan.end >= w.duration ? 0 : plan.end,
+          drop: plan.drop,
+        }))
+        // The library cache holds this workout's distance and duration, and
+        // both just changed. Without this the list, dashboard and charts keep
+        // the old figures until something else reloads them.
+        void refreshLibrary()
+      }
+      setConfirmReshape(false)
       setEditing(false)
     } catch (err) {
       setSaveErr(err instanceof Error ? err.message : 'Failed to save changes')
+      setConfirmReshape(false)
     } finally {
       setSaving(false)
+    }
+  }
+
+  /** Rebuilds the recorded data from the archived original. */
+  async function handleRestore() {
+    setRestoring(true)
+    try {
+      setW(await api.restoreWorkout(w.id))
+      void refreshLibrary()
+      setConfirmRestore(false)
+    } catch (err) {
+      setSaveErr(err instanceof Error ? err.message : 'Could not restore from the original file')
+    } finally {
+      setRestoring(false)
     }
   }
 
@@ -1285,11 +1370,12 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
         />
       )}
       {editing && (
-        <>
-          <div className="overlay" onClick={() => { if (!saving) setEditing(false) }} />
-          <div className="modal">
-            <div className="modal-box">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+        <Modal onClose={() => setEditing(false)} dismissable={!saving} label="Edit workout">
+            {/* Scrolls rather than growing past the viewport: with the
+                recording section open this is taller than a laptop screen, and
+                the Save button was the part that fell off the bottom. */}
+            <div className="modal-box edit-modal">
+              <div className="edit-modal-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
                   <h2 style={{ fontSize: 16, fontWeight: 700 }}>Edit Workout</h2>
                   <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>Update the workout's details</p>
@@ -1297,6 +1383,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
                 <button className="btn-icon" onClick={() => setEditing(false)} disabled={saving}><XIcon size={16} /></button>
               </div>
 
+              <div className="edit-modal-body">
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div style={{ gridColumn: '1 / -1' }}>
                   <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Workout Name</label>
@@ -1329,6 +1416,28 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
                 </div>
               </div>
 
+              {/* What the workout recorded, as opposed to what it is called.
+                  Folded away, because it is the rarer edit and the destructive
+                  one: renaming a workout should not open with a pair of trim
+                  handles in front of it. Only for workouts that have something
+                  to trim or drop — a hand-entered one has neither. */}
+              {(w.duration > 0 || presentStreams(w).length > 0) && (
+                <div className="edit-advanced">
+                  <button
+                    type="button"
+                    className="edit-advanced-toggle"
+                    onClick={() => setShowAdvanced(a => !a)}
+                    aria-expanded={showAdvanced}
+                  >
+                    <ChevronDown size={14} className={showAdvanced ? 'open' : undefined} aria-hidden />
+                    Advanced
+                    {planChanges(w, plan) && <span className="edit-advanced-mark">edited</span>}
+                  </button>
+                  {showAdvanced && <WorkoutReshape workout={w} plan={plan} onChange={setPlan} hasOriginal={!!w.hasOriginal} />}
+                </div>
+              )}
+              </div>
+
               {saveErr && (
                 <div style={{ display: 'flex', gap: 6, marginTop: 16, alignItems: 'center', color: 'var(--danger)', fontSize: 12 }}>
                   {saveErr}
@@ -1342,13 +1451,48 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
                 </button>
               </div>
             </div>
-          </div>
-        </>
+        </Modal>
       )}
+      {/* Named rather than generic: "this cannot be undone" is not true here —
+          there may be an original to restore from — and what is actually going
+          is the only thing worth reading twice. */}
+      {confirmReshape && (
+        <ConfirmDialog
+          title="Save these changes to the recording?"
+          message={[
+            plan.start > 0 || plan.end < w.duration
+              ? `Trims the workout to ${fmtDuration(plan.end - plan.start)} of ${fmtDuration(w.duration)}. Distance, pace, calories and the rest are recalculated from what is left.`
+              : '',
+            plan.drop.length > 0
+              ? `Removes ${plan.drop.map(d => presentStreams(w).find(s => s.id === d)?.label.toLowerCase() ?? d).join(', ')}.`
+              : '',
+            w.hasOriginal
+              ? 'The file you imported is kept, so this can be undone with "Restore from original".'
+              : 'There is no archived original for this workout, so this cannot be undone.',
+          ].filter(Boolean).join(' ')}
+          confirmLabel="Save changes"
+          danger={!w.hasOriginal}
+          busy={saving}
+          busyLabel="Saving…"
+          onConfirm={() => void saveEdit()}
+          onCancel={() => setConfirmReshape(false)}
+        />
+      )}
+
+      {confirmRestore && (
+        <ConfirmDialog
+          title="Restore from the original file?"
+          message="Rebuilds the route, heart rate, cadence and elevation from the file you imported, undoing any trim or removal. The name, sport, notes, sharing, equipment, photos and comments are left alone."
+          confirmLabel="Restore"
+          busy={restoring}
+          busyLabel="Restoring…"
+          onConfirm={() => void handleRestore()}
+          onCancel={() => setConfirmRestore(false)}
+        />
+      )}
+
       {confirmDelete && (
-        <>
-          <div className="overlay" onClick={() => { if (!deleting) setConfirmDelete(false) }} />
-          <div className="modal">
+        <Modal onClose={() => setConfirmDelete(false)} dismissable={!deleting}>
             <div className="modal-box" style={{ maxWidth: 420 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
                 <AlertTriangle size={20} style={{ color: 'var(--warning)' }} />
@@ -1364,8 +1508,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
                 </button>
               </div>
             </div>
-          </div>
-        </>
+        </Modal>
       )}
       <div className="page-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -1376,8 +1519,14 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
               <span className={`badge tag-${w.type.toLowerCase()}`}><TypeIcon type={w.type} size={12} /> {w.type}</span>
               {/* The same mark the list row carries. It was only ever on the
                   list, which meant the one page you would open to check
-                  whether a workout is shared was the one that did not say. */}
-              <ShareBadge workout={w} />
+                  whether a workout is shared was the one that did not say.
+
+                  Owner only, and that is the whole meaning of it: the badge
+                  says "you have shared this". On someone else's workout the
+                  server sets `shared` unconditionally — that is how the Social
+                  tab knows it has an audience — so rendering it here told you
+                  that a workout you are merely a guest on is one you shared. */}
+              {!readOnly && <ShareBadge workout={w} />}
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
               {new Date(w.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
@@ -1385,11 +1534,18 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             {/* Its own line rather than sharing one with the date: a long
                 display name would otherwise squeeze the date or wrap raggedly. */}
             {readOnly && w.owner && (
-              <span className="owner-byline" style={{ marginTop: 4 }}>
+              /* Opens their profile: the workouts of theirs you can see,
+                 gathered by person rather than by recency. */
+              <button
+                type="button"
+                className="owner-byline owner-byline-link"
+                style={{ marginTop: 4 }}
+                onClick={() => onOpenUser?.(w.owner!.id)}
+              >
                 <span>Shared by</span>
                 <UserAvatar user={w.owner} size={20} />
                 <span>{userLabel(w.owner)}</span>
-              </span>
+              </button>
             )}
           </div>
           <div style={{ marginLeft: 'auto', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1404,6 +1560,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
                 onEdit={startEdit}
                 onExport={() => void downloadWorkoutGPX(w).catch(reportSaveFailure)}
                 onDownloadOriginal={w.hasOriginal ? downloadOriginal : undefined}
+                onRestore={w.hasOriginal ? () => setConfirmRestore(true) : undefined}
                 onShare={() => setSharing(true)}
                 onShareCard={() => setCardOpen(true)}
                 onRecalculate={() => { setRecalcErr(null); setConfirmRecalc(true) }}

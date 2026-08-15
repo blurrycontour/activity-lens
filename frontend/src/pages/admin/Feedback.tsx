@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Bug, Check, ChevronDown, Lightbulb, MessageSquare, RotateCcw, Trash2 } from 'lucide-react'
+import { useRefreshHandler } from '../../context/RefreshContext'
 import { api, ApiError, type Feedback } from '../../lib/api'
 import SettingsCard from '../../components/SettingsCard'
 import StatusMsg, { type Msg } from '../../components/StatusMsg'
@@ -36,6 +37,7 @@ export default function FeedbackAdmin() {
   }, [])
 
   useEffect(() => { void load() }, [load])
+  useRefreshHandler(load)
 
   async function expand(item: Feedback) {
     if (open === item.id) { setOpen(null); return }

@@ -50,7 +50,7 @@ export interface BuildInfo {
 }
 
 /** What happened, driving the icon the notification panel renders. */
-export type NotificationKind = 'workout_shared' | 'workout_social' | 'gear_worn' | 'goal_met' | 'goal_at_risk' | 'goal_none_set' | 'workout_imported' | 'feedback'
+export type NotificationKind = 'broadcast' | 'app_update' | 'workout_shared' | 'workout_social' | 'gear_worn' | 'goal_met' | 'goal_at_risk' | 'goal_none_set' | 'workout_imported' | 'feedback'
 
 export interface AppNotification {
   id: string
@@ -111,6 +111,14 @@ export interface AuthFeatures {
   oidcLogoUrlDark: string
 }
 
+/**
+ * A signed-in device.
+ *
+ * Everything but `userAgent` is derived or client-reported and may be absent:
+ * a user agent can be anything, and a session predating the client header has
+ * nothing to report. The UI shows what is there and falls back to the raw
+ * agent, rather than filling gaps with "Unknown".
+ */
 export interface SessionInfo {
   id: string
   userAgent: string
@@ -118,6 +126,16 @@ export interface SessionInfo {
   createdAt: string
   expiresAt: string
   current: boolean
+  /** Read off the user agent, e.g. "Chrome 141". */
+  browser?: string
+  /** Read off the user agent, e.g. "Android", "Windows". */
+  platform?: string
+  mobile?: boolean
+  /** What the client called itself. Absent for sessions predating the header. */
+  kind?: 'web' | 'android'
+  appVersion?: string
+  /** Most recent request on this session, to within a few minutes. */
+  lastSeen?: string
 }
 
 export interface SmtpSettings {
@@ -172,6 +190,14 @@ export interface UserPreferences {
   /** Notification switches; absent until the user saves them once. */
   notify?: NotifyPrefs
   /**
+   * A line the user writes about themselves, shown on their profile.
+   *
+   * The one preference other people read. The server trims it to 140 runes and
+   * strips control characters, so what comes back may be shorter than what was
+   * sent.
+   */
+  tagline?: string
+  /**
    * Whether newly imported workouts get their historical conditions looked up.
    *
    * On by default, because it only ever covers workouts imported from now on —
@@ -221,6 +247,45 @@ export interface OidcInput {
   scopes: string[]
 }
 
+/** A person as everyone (not just admins) may see them. */
+export interface DirectoryUser {
+  id: number
+  username: string
+  displayName: string
+  avatarPath: string
+  /** The caller's own entry. */
+  self?: boolean
+  /** What they wrote about themselves; absent when they wrote none. */
+  tagline?: string
+}
+
+/** Another member, and the workouts you and they can see of each other's. */
+export interface UserProfileData {
+  user: { id: number; username: string; displayName: string; avatarPath: string }
+  tagline?: string
+  /** True when this is your own profile, which carries only the public half. */
+  self?: boolean
+  /** Theirs, sent to you directly. */
+  sharedWithMe: import('../data/workouts').Workout[]
+  /** Theirs, open to everyone signed in here. */
+  publicWorkouts: import('../data/workouts').Workout[]
+  /** Yours, sent to them. Empty on your own profile. */
+  sharedWithThem: import('../data/workouts').Workout[]
+}
+
+/** What one account has accumulated on this instance. */
+export interface UserStats {
+  workouts: number
+  equipment: number
+  photos: number
+  /** Gallery photos on disk. */
+  photoBytes: number
+  /** Archived original uploads on disk; zero unless an admin kept them. */
+  originalBytes: number
+  firstWorkout?: string
+  lastWorkout?: string
+}
+
 export interface AdminUser {
   id: number
   username: string
@@ -232,6 +297,17 @@ export interface AdminUser {
   role: string
   hasPassword: boolean
   lastLoginAt: string
+  /** How many devices this account is signed in on. */
+  sessions?: number
+  /** Absent when the totals could not be computed — not the same as zero. */
+  stats?: UserStats
+}
+
+/** Everything the admin screen shows about one account. */
+export interface AdminUserDetail {
+  user: AdminUser
+  stats: UserStats
+  sessions: SessionInfo[]
 }
 
 const CSRF_COOKIE = 'authkit_csrf'
@@ -262,6 +338,20 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
+/**
+ * How this client names itself to the server, as "<kind>/<version>".
+ *
+ * The server cannot work either half out on its own. The Android app is a
+ * WebView, so its user agent is a Chrome agent — the same one a browser on that
+ * phone sends, give or take a "wv" — and no user agent anywhere carries the
+ * version of this app. Both facts matter on a screen whose job is deciding
+ * whether a signed-in device is still you, so the client is the one that says.
+ *
+ * Computed once: neither half can change without a reload.
+ */
+const CLIENT_HEADER = 'X-Activity-Lens-Client'
+const clientTag = `${isNative() ? 'android' : 'web'}/${__APP_VERSION__}`
+
 function readCookie(name: string): string | null {
   const match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'))
   return match ? decodeURIComponent(match[1]) : null
@@ -276,7 +366,7 @@ interface RequestOptions {
 
 async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const method = opts.method ?? 'GET'
-  const headers: Record<string, string> = { ...opts.headers, ...authHeaders() }
+  const headers: Record<string, string> = { ...opts.headers, ...authHeaders(), [CLIENT_HEADER]: clientTag }
 
   // CSRF is a cookie-client concern. A bearer token is never attached by the
   // browser on its own, so there is nothing to double-submit and the server
@@ -579,7 +669,25 @@ export const api = {
     request<AdminSettings>('/api/admin/settings/storage', { method: 'PUT', body: payload }),
   testEmail: (to: string) =>
     request<{ status: string; to: string }>('/api/admin/settings/smtp/test', { method: 'POST', body: { to } }),
+  /**
+   * Another member, and the workouts of theirs you can see.
+   *
+   * The list is the intersection of what they have shared with you and what
+   * they have made public — the server builds it from the two feeds rather
+   * than by owner, so this can never surface a workout that was not already
+   * yours to read.
+   */
+  getUserProfile: (id: number) => request<UserProfileData>(`/api/users/${id}`),
   listAdminUsers: () => request<{ users: AdminUser[] }>('/api/admin/users'),
+  getAdminUser: (id: number) => request<AdminUserDetail>(`/api/admin/users/${id}`),
+  revokeUserSession: (id: number, sessionId: string) =>
+    request<unknown>(`/api/admin/users/${id}/sessions/${sessionId}`, { method: 'DELETE' }),
+  /** Signs a user out everywhere but the caller's own current device. */
+  revokeUserSessions: (id: number) =>
+    request<{ revoked: number }>(`/api/admin/users/${id}/sessions`, { method: 'DELETE' }),
+  /** Sends one message to every active account but the sender's. */
+  broadcast: (payload: { title: string; body: string; includeInactive?: boolean }) =>
+    request<{ sent: number }>('/api/admin/broadcast', { method: 'POST', body: payload }),
   createUser: (payload: { username: string; email: string; displayName: string; password: string; role: string }) =>
     request<{ user: ApiUser }>('/api/admin/users', { method: 'POST', body: payload }),
   updateUser: (id: number, payload: { role: string; isActive: boolean }) =>
@@ -603,6 +711,21 @@ export const api = {
    * Re-derives the named values. Everything named is overwritten, including
    * anything entered by hand, which is why the caller has to name them.
    */
+  /**
+   * Trims a workout to a window and drops the series named, then re-derives
+   * everything that depended on them. Destructive to the stored workout; the
+   * archived original, when there is one, is what restoreWorkout reads back.
+   */
+  reshapeWorkout: (id: string, plan: { start: number; end: number; drop: string[] }) =>
+    request<import('../data/workouts').Workout>(`/api/workouts/${id}/reshape`, {
+      method: 'POST',
+      body: plan,
+    }),
+
+  /** Rebuilds a workout's recorded data from the file it was imported from. */
+  restoreWorkout: (id: string) =>
+    request<import('../data/workouts').Workout>(`/api/workouts/${id}/restore`, { method: 'POST' }),
+
   recalcWorkout: (id: string, parts: import('../data/workouts').RecalcParts) =>
     request<import('../data/workouts').Workout>(`/api/workouts/${id}/recalculate`, {
       method: 'POST',
@@ -699,9 +822,21 @@ export const api = {
     request<WorkoutShares>(`/api/workouts/${id}/shares`, { method: 'POST', body: { userId } }),
   removeShare: (id: string, userId: number) =>
     request<unknown>(`/api/workouts/${id}/shares/${userId}`, { method: 'DELETE' }),
-  /** Minimal user directory backing the share picker. */
-  listUserDirectory: (q?: string) =>
-    request<{ users: UserRef[] }>(`/api/users${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+  /**
+   * Everyone on this instance.
+   *
+   * Backs both the share picker and the Discover page; `includeSelf` is the
+   * difference between them, since you belong in a directory of members and
+   * not in a list of people to share with.
+   */
+  listUserDirectory: (opts: string | { q?: string; includeSelf?: boolean } = {}) => {
+    const o = typeof opts === 'string' ? { q: opts } : opts
+    const p = new URLSearchParams()
+    if (o.q) p.set('q', o.q)
+    if (o.includeSelf) p.set('includeSelf', 'true')
+    const qs = p.toString()
+    return request<{ users: DirectoryUser[] }>(`/api/users${qs ? `?${qs}` : ''}`)
+  },
 
   // --- Equipment ---
   listEquipment: () => request<Equipment[]>('/api/equipment'),

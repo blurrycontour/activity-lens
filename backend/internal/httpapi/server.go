@@ -9,6 +9,7 @@ import (
 	"github.com/blurrycontour/activity-lens/backend/internal/equipment"
 	"github.com/blurrycontour/activity-lens/backend/internal/feedback"
 	"github.com/blurrycontour/activity-lens/backend/internal/notify"
+	"github.com/blurrycontour/activity-lens/backend/internal/sessions"
 	"github.com/blurrycontour/activity-lens/backend/internal/settings"
 	"github.com/blurrycontour/activity-lens/backend/internal/weather"
 	"github.com/blurrycontour/activity-lens/backend/internal/web"
@@ -55,6 +56,15 @@ type Server struct {
 	// import that sends five hundred of them should cost one wakeup. Nil when no
 	// scheduler is running, which NudgeWeather treats as "nothing to tell".
 	weatherWake chan struct{}
+	// sessionClients records what kind of client each session is. Nil disables
+	// the whole feature, which keeps every existing Server construction in the
+	// tests valid.
+	sessionClients *sessions.Store
+	// sessionSeen throttles the "last active" writes; see sessiontrack.go.
+	sessionSeen *sessionTracker
+	// adminStats computes per-user totals for the admin screens. Nil leaves
+	// those numbers at zero rather than failing the page.
+	adminStats *AdminStatsStore
 }
 
 // New constructs a Server and its auth middleware/OIDC handler.
@@ -63,6 +73,7 @@ func New(cfg config.Config, authSvc *auth.Service, workoutSvc *workout.Service, 
 	s.apk = loadBundledAPK(cfg.AndroidAPKDir)
 	s.nativeCodes = newNativeAuthCodes()
 	s.weatherWake = make(chan struct{}, 1)
+	s.sessionSeen = newSessionTracker()
 	s.mw = &httpmw.Middleware{
 		Auth:   authSvc,
 		Secure: s.secure,
@@ -94,6 +105,14 @@ func New(cfg config.Config, authSvc *auth.Service, workoutSvc *workout.Service, 
 // for free and what a deployment that would rather not call out gets by
 // leaving it unset.
 func (s *Server) UseWeather(f weather.Fetcher) { s.weather = f }
+
+// UseSessionClients wires per-session client tracking. Optional for the same
+// reason UseWeather is: without it the device lists fall back to the user agent
+// go-authkit already stores, and every existing test's Server stays valid.
+func (s *Server) UseSessionClients(store *sessions.Store) { s.sessionClients = store }
+
+// UseAdminStats wires the per-user totals shown in Admin -> Users.
+func (s *Server) UseAdminStats(store *AdminStatsStore) { s.adminStats = store }
 
 // Handler builds the top-level http.Handler: API routes plus the SPA.
 func (s *Server) Handler() (http.Handler, error) {
@@ -183,6 +202,8 @@ func (s *Server) apiRoutes() http.Handler {
 	mux.Handle("DELETE /api/workouts/{id}/comments/{commentID}", s.authedCSRF(s.handleDeleteComment))
 	mux.Handle("PUT /api/workouts/{id}/reaction", s.authedCSRF(s.handleSetReaction))
 	mux.Handle("POST /api/workouts/{id}/recalculate", s.authedCSRF(s.handleRecalculateWorkout))
+	mux.Handle("POST /api/workouts/{id}/reshape", s.authedCSRF(s.handleReshapeWorkout))
+	mux.Handle("POST /api/workouts/{id}/restore", s.authedCSRF(s.handleRestoreWorkout))
 	// Weather a person typed in, for when the grid average is not good enough.
 	mux.Handle("PUT /api/workouts/{id}/weather", s.authedCSRF(s.handleSetWorkoutWeather))
 	mux.Handle("DELETE /api/workouts/{id}/weather", s.authedCSRF(s.handleClearWorkoutWeather))
@@ -214,6 +235,8 @@ func (s *Server) apiRoutes() http.Handler {
 	mux.Handle("GET /api/feed/shared", s.authed(s.handleFeedShared))
 	// Minimal user directory backing the share picker.
 	mux.Handle("GET /api/users", s.authed(s.handleListUserDirectory))
+	// Another member, and the workouts of theirs you can already see.
+	mux.Handle("GET /api/users/{id}", s.authed(s.handleUserProfile))
 
 	// --- Notifications (authenticated) ---
 	mux.Handle("GET /api/notifications", s.authed(s.handleListNotifications))
@@ -251,6 +274,11 @@ func (s *Server) apiRoutes() http.Handler {
 	mux.Handle("POST /api/admin/users", s.authedAdminCSRF(s.handleCreateUser))
 	mux.Handle("PATCH /api/admin/users/{id}", s.authedAdminCSRF(s.handleUpdateUser))
 	mux.Handle("DELETE /api/admin/users/{id}", s.authedAdminCSRF(s.handleDeleteUser))
+	// Everything one admin screen shows about one account, in one response.
+	mux.Handle("GET /api/admin/users/{id}", s.authedAdmin(s.handleGetAdminUser))
+	mux.Handle("DELETE /api/admin/users/{id}/sessions/{sessionId}", s.authedAdminCSRF(s.handleRevokeUserSession))
+	mux.Handle("DELETE /api/admin/users/{id}/sessions", s.authedAdminCSRF(s.handleRevokeUserSessions))
+	mux.Handle("POST /api/admin/broadcast", s.authedAdminCSRF(s.handleBroadcast))
 
 	// Unknown API route -> JSON 404 (never fall through to the SPA).
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {
@@ -264,23 +292,27 @@ func (s *Server) apiRoutes() http.Handler {
 // applied to cookie clients only. See bearer.go for why.
 
 // authed wraps a handler with RequireAuth.
+//
+// withSessionTracking sits inside RequireAuth in all four of these, so it runs
+// with a resolved user and session id, and only for requests that got that far.
+// See sessiontrack.go.
 func (s *Server) authed(h http.HandlerFunc) http.Handler {
-	return s.withBearerSession(s.mw.RequireAuth(h))
+	return s.withBearerSession(s.mw.RequireAuth(s.withSessionTracking(h)))
 }
 
 // authedCSRF wraps a handler with RequireAuth + CSRF (cookie clients only).
 func (s *Server) authedCSRF(h http.HandlerFunc) http.Handler {
-	return s.withBearerSession(s.mw.RequireAuth(s.csrfUnlessBearer(h)))
+	return s.withBearerSession(s.mw.RequireAuth(s.withSessionTracking(s.csrfUnlessBearer(h))))
 }
 
 // authedAdmin wraps a handler with RequireAuth + RequireAdmin.
 func (s *Server) authedAdmin(h http.HandlerFunc) http.Handler {
-	return s.withBearerSession(s.mw.RequireAuth(s.mw.RequireAdmin(h)))
+	return s.withBearerSession(s.mw.RequireAuth(s.withSessionTracking(s.mw.RequireAdmin(h))))
 }
 
 // authedAdminCSRF wraps a handler with RequireAuth + RequireAdmin + CSRF.
 func (s *Server) authedAdminCSRF(h http.HandlerFunc) http.Handler {
-	return s.withBearerSession(s.mw.RequireAuth(s.mw.RequireAdmin(s.csrfUnlessBearer(h))))
+	return s.withBearerSession(s.mw.RequireAuth(s.withSessionTracking(s.mw.RequireAdmin(s.csrfUnlessBearer(h)))))
 }
 
 // secure reports whether cookies should carry the Secure flag for this request.

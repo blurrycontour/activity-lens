@@ -96,10 +96,13 @@ func (s *Server) StartScheduler(ctx context.Context) {
 	weatherTicker := time.NewTicker(weatherInterval)
 	defer weatherTicker.Stop()
 
+	// A deployment is a restart, so this is the moment a new release exists.
+	s.announceAppUpdate(ctx)
 	// One pass at startup, so a restart does not skip that day's window.
 	s.sweep(ctx)
 	s.runWeatherPass(ctx)
 	s.trackPass(ctx)
+	s.cadencePass(ctx)
 	for {
 		select {
 		case <-ctx.Done():
@@ -108,10 +111,11 @@ func (s *Server) StartScheduler(ctx context.Context) {
 			s.sweep(ctx)
 		case <-weatherTicker.C:
 			s.runWeatherPass(ctx)
-			// Shares the weather tick rather than adding a third: it is local
-			// work that drains and then costs one indexed query that matches
+			// Share the weather tick rather than adding more tickers: these are
+			// local passes that drain and then cost one indexed query matching
 			// nothing, which is the same bargain the notification sweep makes.
 			s.trackPass(ctx)
+			s.cadencePass(ctx)
 		case <-s.weatherWake:
 			// Something was just imported. Without this the workout waits for the
 			// next tick — up to five minutes of a page saying "scheduled" for a
@@ -319,6 +323,19 @@ func (s *Server) sweep(ctx context.Context) {
 	} else if n > 0 {
 		slog.Info("pruned stale push subscriptions", "count", n)
 	}
+
+	// Client rows whose session has been revoked, expired or logged out.
+	// go-authkit deletes those sessions and knows nothing about our table, so
+	// this is the only thing that ever clears them. Same bargain as above: one
+	// DELETE that matches nothing on most passes.
+	if s.sessionClients != nil {
+		if n, err := s.sessionClients.PruneOrphans(ctx); err != nil {
+			slog.Warn("could not prune session clients", "error", err)
+		} else if n > 0 {
+			slog.Info("pruned session clients", "count", n)
+		}
+		s.sessionSeen.sweep(time.Now())
+	}
 }
 
 // trackPass gives simplified routes to workouts that predate the overview map.
@@ -351,4 +368,20 @@ func (s *Server) trackPass(ctx context.Context) {
 		}
 	}
 	slog.Info("prepared workouts for the map", "count", len(pending))
+}
+
+// cadencePass settles the cadence sample count on rows that predate the column.
+//
+// The same shape as the track pass, and for the same reason: the answer lives
+// inside a compressed blob, so it cannot be a migration. It drains once and
+// then costs one indexed query that matches nothing.
+func (s *Server) cadencePass(ctx context.Context) {
+	n, err := s.workout.CountCadence(ctx, trackBatch)
+	if err != nil {
+		slog.Warn("cadence pass: could not count", "error", err)
+		return
+	}
+	if n > 0 {
+		slog.Info("counted cadence samples", "count", n)
+	}
 }

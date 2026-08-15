@@ -14,6 +14,7 @@ import WorkoutCard from '../components/WorkoutCard'
 import ConfirmDialog from '../components/ConfirmDialog'
 import { searchWorkouts } from '../lib/workoutFilters'
 import { fmtDist, type Workout } from '../data/workouts'
+import Modal from '../components/Modal'
 
 interface EquipmentPageProps {
   onSelectWorkout: (id: string) => void
@@ -406,9 +407,7 @@ function LinkWorkoutsDialog({ equipmentId, linked, onLinked, onClose }: {
   }
 
   return (
-    <>
-      <div className="overlay" onClick={() => { if (!saving) onClose() }} />
-      <div className="modal" role="dialog" aria-modal="true" aria-label="Add workouts">
+    <Modal onClose={onClose} dismissable={!saving} label="Add workouts">
         <div className="modal-box link-picker-box">
           <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>Add workouts</h3>
           <div style={{ position: 'relative', marginBottom: 10 }}>
@@ -469,8 +468,7 @@ function LinkWorkoutsDialog({ equipmentId, linked, onLinked, onClose }: {
           </button>
           </div>
         </div>
-      </div>
-    </>
+    </Modal>
   )
 }
 
@@ -644,9 +642,7 @@ function EquipmentDetail({ id, reloadToken, onBack, onSelectWorkout, onEdit, onD
       )}
 
       {confirmDelete && (
-        <>
-          <div className="overlay" onClick={() => setConfirmDelete(false)} />
-          <div className="modal">
+        <Modal onClose={() => setConfirmDelete(false)}>
             <div className="modal-box" style={{ maxWidth: 420 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
                 <AlertTriangle size={20} style={{ color: 'var(--warning)' }} />
@@ -662,8 +658,7 @@ function EquipmentDetail({ id, reloadToken, onBack, onSelectWorkout, onEdit, onD
                 <button className="btn btn-primary" style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={() => void doDelete()}>Delete</button>
               </div>
             </div>
-          </div>
-        </>
+        </Modal>
       )}
     </div>
   )
@@ -695,9 +690,7 @@ function EquipmentForm({ initial, onClose, onSaved }: {
   }
 
   return (
-    <>
-      <div className="overlay" onClick={onClose} />
-      <div className="modal">
+    <Modal onClose={onClose}>
         <div className="modal-box" style={{ maxWidth: 480 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
             <div>
@@ -758,7 +751,6 @@ function EquipmentForm({ initial, onClose, onSaved }: {
             <button className="btn btn-primary" onClick={() => void save()} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
           </div>
         </div>
-      </div>
-    </>
+    </Modal>
   )
 }
