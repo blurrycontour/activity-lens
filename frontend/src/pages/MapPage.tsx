@@ -543,8 +543,8 @@ export default function MapPage() {
         </div>
       )}
       {!loading && shown.length === 0 && !error && (
-        <div className="map-page-empty overlay-note">
-          No routes in this view. Try a wider date range, or zoom out.
+        <div className="map-page-note">
+          No routes in this view — zoom out, reset the view, or widen the dates.
         </div>
       )}
     </>

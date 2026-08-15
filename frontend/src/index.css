@@ -1825,10 +1825,29 @@ body {
   font-size: 13px;
   color: var(--text-3);
 }
-/* Sits over the map without swallowing a drag through it. */
-.map-page-empty.overlay-note {
+/* "Nothing here" while the map is still usable: panning off the routes is a
+   normal thing to do, and the way back is the reset control in the corner. So
+   this is a pill at the top rather than a full-panel wash — a wash dimmed the
+   zoom and reset buttons it was telling you to press, and covered the map you
+   were navigating. Left of the maximize button, and out of the way of the
+   bottom-right controls entirely. */
+.map-page-note {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  right: 56px;
+  margin: 0 auto;
+  width: fit-content;
+  max-width: 100%;
+  z-index: var(--z-map-panel);
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  background: var(--bg-2);
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-2);
   pointer-events: none;
-  background: color-mix(in srgb, var(--bg) 55%, transparent);
 }
 
 @media (max-width: 768px) {
