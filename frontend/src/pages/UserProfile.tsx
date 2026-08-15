@@ -172,13 +172,14 @@ export default function UserProfile({ id, onBack, onSelect, onOpenUser }: {
           <p className="profile-handle">@{data.user.username}</p>
           {data.tagline && <p className="profile-tagline">{data.tagline}</p>}
         </div>
-        {/* Beside the person rather than under the tabs: a nudge is aimed at
-            whoever is in the header, not at whichever list is on screen. Only
-            on someone else's profile, and only when the server offers it. */}
-        {!data.self && data.ping && <PingRow userId={id} name={name} info={data.ping} />}
       </div>
 
       <div className="page-content">
+        {/* Between the person and the lists: a nudge is aimed at whoever is in
+            the header, not at whichever tab is on screen. Only on someone
+            else's profile, and only when the server offers it. */}
+        {!data.self && data.ping && <PingRow userId={id} name={name} info={data.ping} />}
+
         <TabStrip items={tabs} value={tab} onChange={setTab} ariaLabel="Which workouts" fill />
 
         <WorkoutFilterList

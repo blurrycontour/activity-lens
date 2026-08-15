@@ -4358,35 +4358,41 @@ body:has(.overlay) .fab { display: none; }
 }
 /* The search and filters above the list, matching the library's row. */
 /* ── Pings ──
-   The nudge button sits at the end of the profile header, so it reads as
-   something you do to the person beside it. Its label drops on a phone, where
-   the header already carries an avatar, a name, a handle and a tagline. */
-.ping-open { margin-left: auto; flex-shrink: 0; align-self: flex-start; }
-@media (max-width: 768px) {
-  .ping-open-label { display: none; }
-}
-/* The nudges themselves: full-width rows, because each one is a sentence and a
-   grid of six wordless circles asks the reader to guess. */
-.ping-list { display: flex; flex-direction: column; gap: 6px; }
-.ping-item {
-  display: flex;
+   A row of nudges between the profile header and the tabs. The buttons are the
+   message, so they are sized for a thumb and carry the sport's own colour, and
+   they centre on a phone where the header above them is centred by the avatar
+   rather than aligned to the text. */
+.ping-row { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; }
+.ping-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+.ping-btn {
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  font-size: 13px;
-  color: var(--text);
-  text-align: left;
-  background: var(--bg-3);
+  justify-content: center;
+  background: var(--bg-2);
+  color: var(--text-2);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 50%;
   cursor: pointer;
   transition: all 0.15s;
 }
-.ping-item:hover:not(:disabled) { border-color: var(--primary); background: var(--primary-dim); }
-.ping-item:disabled { opacity: 0.45; cursor: default; }
-/* Holds its line whatever it says, so sending one does not shift the list. */
-.ping-status { display: block; margin-top: 12px; font-size: 11px; color: var(--text-3); min-height: 15px; }
-.ping-status.err { color: var(--danger); }
+.ping-btn:hover:not(:disabled) { background: var(--bg-3); color: var(--text); transform: translateY(-1px); }
+.ping-btn:disabled { opacity: 0.4; cursor: default; }
+/* The receipt for the one just sent. It stays lit for the whole cooldown, so it
+   reads as "this went, and nothing more can go yet" rather than dimming with
+   the rest and leaving no trace of which was pressed. */
+.ping-btn.sent {
+  opacity: 1;
+  color: var(--primary);
+  border-color: var(--primary);
+  background: var(--primary-dim);
+}
+.ping-err { font-size: 11px; color: var(--danger); }
+@media (max-width: 768px) {
+  .ping-buttons { justify-content: center; }
+  .ping-err { text-align: center; }
+}
 
 .profile-tools {
   display: flex;
