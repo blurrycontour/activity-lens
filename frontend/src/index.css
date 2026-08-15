@@ -1274,8 +1274,8 @@ body {
   inset: 0;
   background: rgba(0, 0, 0, 0.6);
   z-index: 1100;
-  backdrop-filter: blur(6px) saturate(80%);
-  -webkit-backdrop-filter: blur(6px) saturate(80%);
+  backdrop-filter: blur(10px) saturate(80%);
+  -webkit-backdrop-filter: blur(10px) saturate(80%);
 }
 /* Backdrop blur silently does nothing on some browsers; darken instead, so the
    separation survives either way. */
@@ -1304,6 +1304,22 @@ body {
   padding: 24px;
   position: relative;
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+}
+
+/* The account menu, hung under the top bar and against its right edge. */
+.user-menu-panel {
+  position: fixed;
+  top: calc(var(--topbar-h) + 8px);
+  right: calc(12px + var(--safe-right));
+  width: 300px;
+  max-width: calc(100vw - 24px);
+  background: var(--bg-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  z-index: 1101;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  animation: fadeIn 0.15s ease;
 }
 
 /* The avatar and name in the user menu, which open your profile. */

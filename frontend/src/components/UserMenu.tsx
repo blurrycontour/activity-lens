@@ -51,21 +51,12 @@ export default function UserMenu({ onClose, onSettings, onProfile, onAdmin, onLo
 
   return (
     <Modal onClose={onClose} wrapper="none" label="Account menu">
+      {/* Hung off the bar rather than a fixed 56px: the bar grows by the
+          status-bar inset on a phone, so a constant put the menu over the very
+          avatar that opened it. --topbar-h already includes that inset. */}
       <div
         ref={ref}
-        style={{
-          position: 'fixed',
-          top: 56,
-          right: 12,
-          width: 300,
-          background: 'var(--bg-2)',
-          border: '1px solid var(--border-strong)',
-          borderRadius: 12,
-          zIndex: 1101,
-          overflow: 'hidden',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
-          animation: 'fadeIn 0.15s ease',
-        }}
+        className="user-menu-panel"
       >
         <div style={{ padding: '16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12 }}>
           {/* The picture and name are the obvious thing to press to get at your

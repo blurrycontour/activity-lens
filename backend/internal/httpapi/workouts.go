@@ -281,13 +281,8 @@ func (s *Server) handlePatchWorkout(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.attachEquipment(r, user.ID, wk)
-	// The client splices this response back into its cached list, so the share
-	// count has to come along or an unrelated edit would blank the row's badge.
-	if ids, err := s.workout.ShareRecipients(r.Context(), user.ID, wk.ID); err == nil {
-		wk.SharedWithCount = len(ids)
-	}
 	slog.Info("workout updated", "workout_id", wk.ID, "user_id", user.ID)
-	writeJSON(w, http.StatusOK, wk)
+	s.writeOwnedWorkout(w, r, wk)
 }
 
 // linkEquipment associates the given equipment ids with a workout (best-effort;
@@ -709,7 +704,7 @@ func (s *Server) handleRecalculateWorkout(w http.ResponseWriter, r *http.Request
 		return
 	}
 	slog.Info("workout recalculated", "workout_id", wk.ID, "user_id", user.ID)
-	writeJSON(w, http.StatusOK, wk)
+	s.writeOwnedWorkout(w, r, wk)
 }
 
 func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
@@ -990,16 +985,21 @@ func (s *Server) handleRestoreWorkout(w http.ResponseWriter, r *http.Request) {
 // writeOwnedWorkout answers with a workout the caller owns, in the same shape
 // the detail page was loaded with.
 //
-// The bare workout would be missing isOwner and hasOriginal, and the client
-// replaces its copy with whatever comes back: after a trim the page would
-// quietly lose the "Restore from original" entry — the undo for the thing that
-// just happened — until it was reloaded.
+// Every path that hands the page a new copy of the workout it is showing goes
+// through here: an edit, a recalculation, a trim, a restore. The bare workout
+// is missing isOwner and hasOriginal, and the client replaces its copy with
+// whatever comes back — so saving a change of distance made "Download original"
+// and "Restore from original" disappear, which reads as the archived file
+// having been thrown away. Nothing had touched it; the response simply did not
+// mention it.
 func (s *Server) writeOwnedWorkout(w http.ResponseWriter, r *http.Request, wk *workout.Workout) {
 	shared := wk.Visibility == workout.VisibilityPublic
-	if !shared {
-		if ids, err := s.workout.ShareRecipients(r.Context(), wk.UserID, wk.ID); err == nil {
-			shared = len(ids) > 0
-		}
+	// One query for both answers: the client splices this back into its cached
+	// list, so the share count has to come along or an unrelated edit would
+	// blank the row's badge.
+	if ids, err := s.workout.ShareRecipients(r.Context(), wk.UserID, wk.ID); err == nil {
+		wk.SharedWithCount = len(ids)
+		shared = shared || len(ids) > 0
 	}
 	writeJSON(w, http.StatusOK, workoutDetailResponse{
 		Workout: wk, IsOwner: true, HasOriginal: wk.RawFilename != "", Shared: shared,
