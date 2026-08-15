@@ -7,7 +7,7 @@ import Dropdown from '../components/Dropdown'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ReferenceDot, ReferenceArea, BarChart, Bar } from 'recharts'
 import {
   ArrowLeft, Heart, Mountain, Zap, Clock, TrendingUp, Navigation, Download, Pencil, Trash2, Gauge,
-  Check, X as XIcon, Play, Pause as PauseIcon, LoaderCircle, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, AlertTriangle, Activity, Share2, Lock, FileDown, Plus, Image as ImageIcon, NotebookPen, Images, MessageSquare, ClipboardList, Watch, Undo2 } from 'lucide-react'
+  Check, X as XIcon, Play, Pause as PauseIcon, LoaderCircle, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, AlertTriangle, Activity, Share2, Lock, FileDown, Plus, Image as ImageIcon, NotebookPen, Images, MessageSquare, ClipboardList, Watch, Undo2, ChevronDown } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
@@ -631,6 +631,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
   const [plan, setPlan] = useState<ReshapePlan>(() => emptyPlan(w))
   // Raised on Save when the plan would destroy something, naming what.
   const [confirmReshape, setConfirmReshape] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const [restoring, setRestoring] = useState(false)
   const [confirmRestore, setConfirmRestore] = useState(false)
   const [editName, setEditName] = useState(w.name)
@@ -1005,6 +1006,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
     setEditSteps(initial.steps)
     setEditDistance(initial.distance)
     setPlan(emptyPlan(w))
+    setShowAdvanced(false)
     setSaveErr(null)
     setEditing(true)
   }
@@ -1370,8 +1372,11 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
         <>
           <div className="overlay" onClick={() => { if (!saving) setEditing(false) }} />
           <div className="modal">
-            <div className="modal-box">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+            {/* Scrolls rather than growing past the viewport: with the
+                recording section open this is taller than a laptop screen, and
+                the Save button was the part that fell off the bottom. */}
+            <div className="modal-box edit-modal">
+              <div className="edit-modal-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
                   <h2 style={{ fontSize: 16, fontWeight: 700 }}>Edit Workout</h2>
                   <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>Update the workout's details</p>
@@ -1379,6 +1384,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
                 <button className="btn-icon" onClick={() => setEditing(false)} disabled={saving}><XIcon size={16} /></button>
               </div>
 
+              <div className="edit-modal-body">
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div style={{ gridColumn: '1 / -1' }}>
                   <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Workout Name</label>
@@ -1412,12 +1418,26 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
               </div>
 
               {/* What the workout recorded, as opposed to what it is called.
-                  Only for workouts that have something to trim or drop — a
-                  hand-entered one has neither, and an empty section would just
-                  be a question with no answer. */}
+                  Folded away, because it is the rarer edit and the destructive
+                  one: renaming a workout should not open with a pair of trim
+                  handles in front of it. Only for workouts that have something
+                  to trim or drop — a hand-entered one has neither. */}
               {(w.duration > 0 || presentStreams(w).length > 0) && (
-                <WorkoutReshape workout={w} plan={plan} onChange={setPlan} />
+                <div className="edit-advanced">
+                  <button
+                    type="button"
+                    className="edit-advanced-toggle"
+                    onClick={() => setShowAdvanced(a => !a)}
+                    aria-expanded={showAdvanced}
+                  >
+                    <ChevronDown size={14} className={showAdvanced ? 'open' : undefined} aria-hidden />
+                    Advanced: trim and recorded data
+                    {planChanges(w, plan) && <span className="edit-advanced-mark">edited</span>}
+                  </button>
+                  {showAdvanced && <WorkoutReshape workout={w} plan={plan} onChange={setPlan} hasOriginal={!!w.hasOriginal} />}
+                </div>
               )}
+              </div>
 
               {saveErr && (
                 <div style={{ display: 'flex', gap: 6, marginTop: 16, alignItems: 'center', color: 'var(--danger)', fontSize: 12 }}>

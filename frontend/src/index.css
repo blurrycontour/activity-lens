@@ -2029,7 +2029,8 @@ body {
      left it a letterbox. The safe-area insets come off as well: .modal centres
      in the whole viewport, which on a notched phone includes the status bar. */
   .dup-modal,
-  .recalc-modal {
+  .recalc-modal,
+  .edit-modal {
     max-height: calc(100dvh - 32px - var(--safe-top) - var(--safe-bottom));
   }
   .dup-row { padding: 10px; }
@@ -2580,6 +2581,14 @@ body:has(.overlay) .fab { display: none; }
   transition: border-color 0.15s;
 }
 .al-dropdown-trigger:hover { border-color: var(--border-strong); }
+/* Holding something other than its default. On a desktop the dropdowns are the
+   only sign a list is narrowed — there is no chip row as there is on a phone —
+   so a filter left on has to be visible without opening anything. */
+.al-dropdown-trigger.active {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--primary-dim);
+}
 .al-dropdown-menu {
   position: absolute;
   top: calc(100% + 4px);
@@ -4035,6 +4044,70 @@ body:has(.overlay) .fab { display: none; }
    eliding, since which of them can see it is the whole point of the line. */
 .owner-byline { flex-wrap: wrap; gap: 6px 8px; }
 .owner-byline-more { font-size: 12px; color: var(--text-3); white-space: nowrap; }
+
+/* Search and sort above the directory. */
+.discover-tools {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 14px 0 16px;
+}
+
+/* The edit dialog scrolls: with the advanced section open it is taller than a
+   laptop screen, and the Save button was what fell off the bottom. Head and
+   footer stay put so the way out is always on screen. */
+.edit-modal {
+  display: flex;
+  flex-direction: column;
+  max-height: 82vh;
+}
+.edit-modal-head { margin-bottom: 16px; }
+.edit-modal-body {
+  overflow-y: auto;
+  /* Room for the focus ring on the last control, which a flush edge clips. */
+  padding: 2px;
+  margin: -2px;
+}
+
+/* The fold in front of trimming and removing: the rarer edit, and the
+   destructive one. */
+.edit-advanced { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 14px; }
+.edit-advanced-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.edit-advanced-toggle:hover { color: var(--text); }
+.edit-advanced-toggle svg { transition: transform 0.15s; }
+.edit-advanced-toggle svg.open { transform: rotate(180deg); }
+.edit-advanced-mark {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 7px;
+  border-radius: 99px;
+  color: var(--primary);
+  background: var(--primary-dim);
+  border: 1px solid var(--primary);
+}
+
+/* Whether this edit can be taken back, which depends on a server setting. */
+.reshape-undo {
+  margin-top: 12px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+.reshape-undo.warn { color: var(--warning); }
 
 /* ── Editing what a workout recorded: the trim strip and the series list ──
    Sits inside the edit dialog, so it borrows the dialog's spacing and only

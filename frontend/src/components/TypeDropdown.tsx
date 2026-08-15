@@ -32,5 +32,5 @@ export default function TypeDropdown({ value, onChange }: {
   value: Option
   onChange: (v: Option) => void
 }) {
-  return <Dropdown value={value} options={OPTIONS} onChange={onChange} ariaLabel="Activity type" />
+  return <Dropdown value={value} options={OPTIONS} onChange={onChange} ariaLabel="Activity type" active={value !== 'All'} />
 }

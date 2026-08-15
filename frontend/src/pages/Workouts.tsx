@@ -3,7 +3,7 @@ import { ALL_WORKOUT_TYPES, type WorkoutType, type Workout } from '../data/worko
 import TypeIcon from '../components/TypeIcon'
 import ShareBadge from '../components/ShareBadge'
 import { useWorkouts } from '../context/WorkoutsContext'
-import { Search, Download, Plus, Grid2X2, List, Share2, SlidersHorizontal, X, Trash2, CheckCheck, LoaderCircle, Layers, Image as ImageIcon, MoreVertical, Copy } from 'lucide-react'
+import { Search, Download, Plus, Grid2X2, List, Share2, FilterX, SlidersHorizontal, X, Trash2, CheckCheck, LoaderCircle, Layers, Image as ImageIcon, MoreVertical, Copy } from 'lucide-react'
 import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
 import SortDropdown, { SORT_OPTIONS, type SortKey } from '../components/SortDropdown'
@@ -214,10 +214,8 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
     },
   ].filter(Boolean) as { key: string; label: string; clear: () => void }[]
 
+  /** Back to an unfiltered library, search included. */
   function resetFilters() {
-    setTypeFilter('All')
-    setSortBy('date-desc')
-    setRangeDays(0)
     setShown(PAGE_SIZE)
     setFilters(DEFAULT_FILTERS)
   }
@@ -476,6 +474,20 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
               <SortDropdown value={sortBy} onChange={setSortBy} />
               <RangeDropdown value={rangeDays} onChange={setRangeDays} />
               <ContainsDropdown value={has} onToggle={toggleHas} mine />
+              {/* Icon only: the row already carries four dropdowns and a menu,
+                  and this appears only when there is something to clear — a
+                  permanently visible "Reset" would be a word of nothing most
+                  of the time. */}
+              {activeFilters.length > 0 && (
+                <button
+                  className="btn-icon"
+                  onClick={resetFilters}
+                  title={`Clear ${activeFilters.length} filter${activeFilters.length === 1 ? '' : 's'}`}
+                  aria-label="Clear filters"
+                >
+                  <FilterX size={15} />
+                </button>
+              )}
               {listTools}
             </>
           ) : null}
@@ -508,8 +520,18 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
             <p style={{ fontSize: 14 }}>
               {busy
                 ? 'Loading workouts…'
-                : 'No workouts found'}
+                : activeFilters.length > 0 || search
+                  ? 'No workouts match these filters'
+                  : 'No workouts found'}
             </p>
+            {/* The way out, where the problem is. A desktop had no reset at
+                all, so a filter left on from an earlier visit read as an empty
+                library with nothing to explain it. */}
+            {!busy && (activeFilters.length > 0 || search) && (
+              <button className="btn btn-ghost" style={{ marginTop: 12 }} onClick={resetFilters}>
+                <FilterX size={14} /> Clear filters
+              </button>
+            )}
           </div>
         ) : (
           <div className={view === 'grid' ? 'workout-grid' : 'workout-list'}>

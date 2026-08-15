@@ -120,7 +120,7 @@ export default function ContainsDropdown({ value, onToggle, mine }: {
     <div className="al-dropdown" ref={ref}>
       <button
         type="button"
-        className="al-dropdown-trigger"
+        className={`al-dropdown-trigger${value.length > 0 ? ' active' : ''}`}
         onClick={() => setOpen(o => !o)}
         aria-haspopup="listbox"
         aria-expanded={open}

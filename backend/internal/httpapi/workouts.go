@@ -937,7 +937,7 @@ func (s *Server) handleReshapeWorkout(w http.ResponseWriter, r *http.Request) {
 	}
 	slog.Info("workout reshaped", "workout_id", wk.ID, "user_id", user.ID,
 		"start", req.Start, "end", req.End, "dropped", req.Drop)
-	writeJSON(w, http.StatusOK, wk)
+	s.writeOwnedWorkout(w, r, wk)
 }
 
 // handleRestoreWorkout rebuilds a workout's recorded data from the file it was
@@ -984,7 +984,26 @@ func (s *Server) handleRestoreWorkout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("workout restored from original", "workout_id", wk.ID, "user_id", user.ID)
-	writeJSON(w, http.StatusOK, restored)
+	s.writeOwnedWorkout(w, r, restored)
+}
+
+// writeOwnedWorkout answers with a workout the caller owns, in the same shape
+// the detail page was loaded with.
+//
+// The bare workout would be missing isOwner and hasOriginal, and the client
+// replaces its copy with whatever comes back: after a trim the page would
+// quietly lose the "Restore from original" entry — the undo for the thing that
+// just happened — until it was reloaded.
+func (s *Server) writeOwnedWorkout(w http.ResponseWriter, r *http.Request, wk *workout.Workout) {
+	shared := wk.Visibility == workout.VisibilityPublic
+	if !shared {
+		if ids, err := s.workout.ShareRecipients(r.Context(), wk.UserID, wk.ID); err == nil {
+			shared = len(ids) > 0
+		}
+	}
+	writeJSON(w, http.StatusOK, workoutDetailResponse{
+		Workout: wk, IsOwner: true, HasOriginal: wk.RawFilename != "", Shared: shared,
+	})
 }
 
 // calorieProfile gathers the body data the derivations need. Three call sites

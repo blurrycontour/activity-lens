@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Globe, Inbox, Search, Users as UsersIcon } from 'lucide-react'
+import { ArrowDownAZ, ArrowUpAZ, Globe, Inbox, Search, Users as UsersIcon } from 'lucide-react'
 import { api, type DirectoryUser } from '../lib/api'
 import type { Workout } from '../data/workouts'
 import { useRefreshHandler } from '../context/RefreshContext'
@@ -42,6 +42,12 @@ export default function Discover({ onOpenUser, onSelectWorkout }: {
   const [users, setUsers] = useState<DirectoryUser[]>([])
   const [loadingPeople, setLoadingPeople] = useState(true)
   const [query, setQuery] = useState('')
+  /**
+   * Alphabetical, either way round. Not persisted: a directory of a dozen
+   * people is read at a glance, and a remembered Z→A would be a puzzle on the
+   * next visit rather than a preference honoured.
+   */
+  const [az, setAz] = useState(true)
   // undefined until fetched, which is what tells the list to say "loading"
   // rather than "nothing here".
   const [feeds, setFeeds] = useState<Partial<Record<'shared' | 'public', Workout[]>>>({})
@@ -86,12 +92,19 @@ export default function Discover({ onOpenUser, onSelectWorkout }: {
   // one server, which is a list that fits in memory several times over.
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return users
-    return users.filter(u =>
-      u.username.toLowerCase().includes(q)
-      || u.displayName.toLowerCase().includes(q)
-      || (u.tagline ?? '').toLowerCase().includes(q))
-  }, [users, query])
+    const matched = q
+      ? users.filter(u =>
+        u.username.toLowerCase().includes(q)
+        || u.displayName.toLowerCase().includes(q)
+        || (u.tagline ?? '').toLowerCase().includes(q))
+      : users
+    // You stay pinned to the top whichever way the rest is sorted: this is a
+    // directory you appear in, and hunting for yourself under S is silly.
+    // localeCompare, so accented names sort where a reader expects them.
+    const rest = matched.filter(u => !u.self)
+      .sort((a, b) => userLabel(a).localeCompare(userLabel(b)) * (az ? 1 : -1))
+    return [...matched.filter(u => u.self), ...rest]
+  }, [users, query, az])
 
   return (
     <>
@@ -106,7 +119,8 @@ export default function Discover({ onOpenUser, onSelectWorkout }: {
 
         {tab === 'people' ? (
           <>
-            <div style={{ position: 'relative', margin: '14px 0 16px' }}>
+            <div className="discover-tools">
+            <div style={{ position: 'relative', flex: 1, minWidth: 160 }}>
               <Search size={14} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', pointerEvents: 'none' }} />
               <input
                 className="input"
@@ -116,6 +130,16 @@ export default function Discover({ onOpenUser, onSelectWorkout }: {
                 style={{ paddingLeft: 30, width: '100%' }}
                 aria-label="Search people"
               />
+            </div>
+            <button
+              className="btn btn-ghost"
+              onClick={() => setAz(v => !v)}
+              title={az ? 'Sorted A to Z' : 'Sorted Z to A'}
+              aria-label={az ? 'Sorted A to Z; switch to Z to A' : 'Sorted Z to A; switch to A to Z'}
+            >
+              {az ? <ArrowDownAZ size={15} /> : <ArrowUpAZ size={15} />}
+              {az ? 'A–Z' : 'Z–A'}
+            </button>
             </div>
 
             {loadingPeople ? (

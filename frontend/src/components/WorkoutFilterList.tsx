@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Handshake, Layers, LoaderCircle, Search, Send, SlidersHorizontal, X } from 'lucide-react'
+import { FilterX, Handshake, Layers, LoaderCircle, Search, Send, SlidersHorizontal, X } from 'lucide-react'
 import { ALL_WORKOUT_TYPES, type Workout, type WorkoutType } from '../data/workouts'
 import { applyWorkoutFilters, DEFAULT_FILTERS, type Has, type HasFilter, type Scope } from '../lib/workoutFilters'
 import { RANGE_OPTIONS } from '../lib/range'
@@ -210,6 +210,16 @@ export default function WorkoutFilterList({
             <SortDropdown value={sortBy} onChange={v => patch({ sortBy: v })} />
             <RangeDropdown value={rangeDays} onChange={v => patch({ rangeDays: v })} />
             <ContainsDropdown value={has} onToggle={toggleHas} mine={mine} />
+            {active.length > 0 && (
+              <button
+                className="btn-icon"
+                onClick={() => { setShown(PAGE_SIZE); setNarrow({ ...NONE, search }) }}
+                title={`Clear ${active.length} filter${active.length === 1 ? '' : 's'}`}
+                aria-label="Clear filters"
+              >
+                <FilterX size={15} />
+              </button>
+            )}
           </>
         )}
       </div>
@@ -236,7 +246,20 @@ export default function WorkoutFilterList({
       ) : filtered.length === 0 ? (
         <div className="feed-empty">
           {rows.length > 0 ? (
-            'No workouts match that.'
+            <>
+              No workouts match that.
+              {(active.length > 0 || search) && (
+                <div>
+                  <button
+                    className="btn btn-ghost"
+                    style={{ marginTop: 12 }}
+                    onClick={() => { setShown(PAGE_SIZE); setNarrow(NONE) }}
+                  >
+                    <FilterX size={14} /> Clear filters
+                  </button>
+                </div>
+              )}
+            </>
           ) : (
             <>
               <Handshake size={28} strokeWidth={1.5} style={{ margin: '0 auto 10px' }} aria-hidden />

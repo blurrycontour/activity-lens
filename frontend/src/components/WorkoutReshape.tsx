@@ -79,10 +79,20 @@ export function parseClock(text: string): number | null {
  * to let you see where the extra time is: a run that ends with four flat
  * minutes in a car park looks exactly like that in the pace or elevation trace.
  */
-export default function WorkoutReshape({ workout: w, plan, onChange }: {
+export default function WorkoutReshape({ workout: w, plan, onChange, hasOriginal }: {
   workout: Workout
   plan: ReshapePlan
   onChange: (p: ReshapePlan) => void
+  /**
+   * Whether the file this was imported from is still archived.
+   *
+   * Said out loud rather than left to be discovered: it is the difference
+   * between an edit you can undo from the workout's own menu and one you
+   * cannot, and it depends on a server setting the person editing may not have
+   * chosen. Without this the Restore entry is simply missing with no
+   * explanation.
+   */
+  hasOriginal: boolean
 }) {
   const streams = presentStreams(w)
 
@@ -113,8 +123,17 @@ export default function WorkoutReshape({ workout: w, plan, onChange }: {
     return Math.round(ratio * w.duration)
   }, [w.duration])
 
+  /** Moves whichever handle is nearer to a point on the track. */
+  const moveNearest = useCallback((at: number) => {
+    const toStart = Math.abs(at - plan.start)
+    const toEnd = Math.abs(at - plan.end)
+    if (toStart <= toEnd) onChange({ ...plan, start: Math.max(0, Math.min(at, plan.end - MIN_KEPT)) })
+    else onChange({ ...plan, end: Math.min(w.duration, Math.max(at, plan.start + MIN_KEPT)) })
+  }, [plan, onChange, w.duration])
+
   const drag = (edge: 'start' | 'end') => (e: React.PointerEvent) => {
     e.preventDefault()
+    e.stopPropagation()
     const el = e.currentTarget
     el.setPointerCapture(e.pointerId)
     const move = (ev: Event) => {
@@ -164,7 +183,15 @@ export default function WorkoutReshape({ workout: w, plan, onChange }: {
         </span>
       </div>
 
-      <div className="reshape-track" ref={trackRef}>
+      {/* Clicking the track pulls the nearer handle to the click: it is what
+          everyone tries first, and dragging a 22px handle to the far end of a
+          two-hour workout is the alternative. The handles stop the event, so
+          this never fires from a drag that started on one. */}
+      <div
+        className="reshape-track"
+        ref={trackRef}
+        onPointerDown={e => moveNearest(secondsAt(e.clientX))}
+      >
         {shape && (
           <svg className="reshape-shape" viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden>
             <polyline points={shape} />
@@ -242,6 +269,13 @@ export default function WorkoutReshape({ workout: w, plan, onChange }: {
           </button>
         )}
       </div>
+
+      {/* What Save will and will not be able to take back. */}
+      <p className={`reshape-undo${hasOriginal ? '' : ' warn'}`}>
+        {hasOriginal
+          ? 'The file you imported is kept, so this can be undone later with "Restore from original".'
+          : 'No original file is archived for this workout, so trimming and removals cannot be undone. Ask an administrator to turn on "Keep original uploads" to change that for future imports.'}
+      </p>
 
       {streams.length > 0 && (
         <>
