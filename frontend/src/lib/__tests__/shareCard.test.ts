@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { type Workout } from '../../data/workouts'
-import { cardDate, cardFilename, cardStats, cardWhen, projectRoute } from '../shareCard'
+import {
+  CARD_H, cardDate, cardFilename, cardHeight, cardStats, cardWhen, projectRoute, statsLayout,
+} from '../shareCard'
 
 const BOX = { x: 0, y: 0, w: 100, h: 100 }
 
@@ -85,6 +87,43 @@ describe('cardStats', () => {
 
   it('gives every figure an icon to draw', () => {
     expect(cardStats(workout()).every(s => typeof s.icon === 'object' || typeof s.icon === 'function')).toBe(true)
+  })
+
+  // Dropped rather than blanked: a tile reading "Avg HR —" prints the very
+  // thing the sender chose to leave out.
+  it('leaves heart rate out entirely when it is switched off', () => {
+    const s = cardStats(workout(), { showHR: false })
+    expect(s.map(x => x.label)).toEqual(['Time', 'Distance', 'Avg Pace'])
+  })
+})
+
+/*
+ * The card grows and shrinks with what is on it, and the preview is sized from
+ * these numbers — so a wrong height here is a letterboxed or clipped preview of
+ * an image that is itself fine, which is a confusing thing to debug.
+ */
+describe('card geometry', () => {
+  it('keeps the full card exactly as it was', () => {
+    // Every card sent before this existed is this size; a change here would
+    // quietly reframe them all.
+    expect(cardHeight(workout())).toBe(CARD_H)
+  })
+
+  it('is shorter without the route', () => {
+    expect(cardHeight(workout(), { showRoute: false })).toBeLessThan(CARD_H)
+  })
+
+  it('is shorter again with one fewer figure', () => {
+    const noRoute = cardHeight(workout(), { showRoute: false })
+    expect(cardHeight(workout(), { showRoute: false, showHR: false })).toBeLessThan(noRoute)
+  })
+
+  // Three in a 2×2 grid leaves a hole, and a hole reads as something that
+  // failed to draw.
+  it('grids four figures and lists fewer', () => {
+    expect(statsLayout(4)).toBe('grid')
+    expect(statsLayout(3)).toBe('list')
+    expect(statsLayout(1)).toBe('list')
   })
 })
 

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { Download, Loader2, Share2, X } from 'lucide-react'
+import { Download, Heart, Loader2, MapPin, Share2, X } from 'lucide-react'
 import { type Workout } from '../data/workouts'
 import {
-  CARD_H, CARD_W, cardFilename, drawShareCard, encodeCard, themeFromDocument,
+  CARD_W, cardFilename, cardHeight, drawShareCard, encodeCard, themeFromDocument,
   type CardFormat, type CardTitleMode,
 } from '../lib/shareCard'
 import { reportSaveFailure, shareFile } from '../lib/download'
@@ -32,6 +32,17 @@ export default function ShareCardDialog({ workout, onClose }: {
   // word "Run" does. A name someone actually chose is worth showing, hence the
   // toggle rather than a decision made for them.
   const [titleMode, setTitleMode] = useState<CardTitleMode>('type')
+  /**
+   * What to leave off.
+   *
+   * Both default to on, because the card is a picture of a workout and those
+   * are part of it. They are worth being able to drop for two different
+   * reasons: a route drawn from your front door is the most identifying thing
+   * on the card, and a workout with no GPS spends half its height on a panel
+   * saying so.
+   */
+  const [showRoute, setShowRoute] = useState(true)
+  const [showHR, setShowHR] = useState(true)
 
   /**
    * The workout with its route attached.
@@ -62,11 +73,11 @@ export default function ShareCardDialog({ workout, onClose }: {
     const canvas = canvasRef.current
     if (!canvas) return
     setReady(false)
-    drawShareCard(canvas, full, themeFromDocument(), { titleMode })
+    drawShareCard(canvas, full, themeFromDocument(), { titleMode, showRoute, showHR })
       .then(() => { if (alive) setReady(true) })
       .catch(() => { if (alive) setNote('Could not draw the card.') })
     return () => { alive = false }
-  }, [full, titleMode])
+  }, [full, titleMode, showRoute, showHR])
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
@@ -111,7 +122,10 @@ export default function ShareCardDialog({ workout, onClose }: {
 
           {/* Sized by aspect ratio rather than by the canvas, so the dialog does
               not resize when the image lands. */}
-          <div className="share-card-preview" style={{ aspectRatio: `${CARD_W} / ${CARD_H}` }}>
+          <div
+            className="share-card-preview"
+            style={{ aspectRatio: `${CARD_W} / ${cardHeight(full, { showRoute, showHR })}` }}
+          >
             {/* Always mounted, so the effect has something to draw on and React
                 keeps ownership of every node in here. Hidden until it has been
                 painted rather than swapped in afterwards. */}
@@ -141,6 +155,30 @@ export default function ShareCardDialog({ workout, onClose }: {
                 {o.label}
               </button>
             ))}
+          </div>
+
+          {/* What is on the card, as switches rather than a menu: there are two
+              of them and the preview answers immediately. Heart rate is offered
+              only when there is one — a switch that removes nothing reads as
+              broken. */}
+          <div className="share-card-titles" role="group" aria-label="What to show">
+            <span className="share-card-titles-label">Show</span>
+            <button
+              className={`chip${showRoute ? ' active' : ''}`}
+              aria-pressed={showRoute}
+              onClick={() => setShowRoute(v => !v)}
+            >
+              <MapPin size={13} /> Route
+            </button>
+            {full.avgHR > 0 && (
+              <button
+                className={`chip${showHR ? ' active' : ''}`}
+                aria-pressed={showHR}
+                onClick={() => setShowHR(v => !v)}
+              >
+                <Heart size={13} /> Heart rate
+              </button>
+            )}
           </div>
 
           {note && <p className="share-card-note">{note}</p>}
