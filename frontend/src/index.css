@@ -82,6 +82,31 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
+
+  /* ── Stacking order ──────────────────────────────────────────────────
+     Every layer that has to sit above another one, named and in order, so
+     the question is which layer this belongs to rather than which number
+     is big enough. The gaps are deliberate: room to slot something in
+     without renumbering, and far enough apart that a local `z-index: 2`
+     inside a component can never collide with a layer.
+
+     Anything not listed here is local to a component and stays a small
+     number in its own stacking context. */
+  --z-chrome: 50;        /* top bar, bottom bar, sidebar — the app frame */
+  --z-fab: 40;           /* floats over the page, under the frame */
+  --z-popover: 60;       /* menus anchored inside the page flow */
+  --z-map-ui: 400;       /* controls drawn over a map canvas */
+  --z-map-panel: 500;    /* the maximize button */
+  --z-map-picker: 1000;  /* a picker opened from a map control, over both */
+  --z-overlay: 1100;     /* the dimming behind a dialog */
+  --z-dialog: 1101;      /* dialogs, sheets, panels: the overlay's content */
+  --z-banner: 1150;      /* a push arriving over a dialog */
+  --z-menu: 1200;        /* menus opened from inside a dialog */
+  --z-tooltip: 2000;     /* explains a control, so it clears the menu it is in */
+  --z-status: 2100;      /* offline bar, update toast: app-wide, always visible */
+  --z-toast: 2200;
+  --z-floating: 3000;    /* portalled pickers, which must clear every surface */
+  --z-confetti: 9999;    /* purely decorative, on top of everything, inert */
 }
 
 :root.light {
@@ -165,7 +190,7 @@ body {
   gap: 12px;
   position: sticky;
   top: 0;
-  z-index: 50;
+  z-index: var(--z-chrome);
   /* Reaches up behind the status bar and pushes its contents clear of it, so
      the bar's own colour sits behind the clock and battery — and follows the
      theme for free, which a natively-painted bar cannot do. The grid row above
@@ -1119,9 +1144,9 @@ body {
   align-items: flex-start;
   gap: 7px;
   font-size: 12px;
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 20%, transparent);
   border-radius: var(--radius);
   padding: 8px 10px;
 }
@@ -1239,6 +1264,31 @@ body {
 .page-header-row { display: flex; align-items: center; gap: 12px; }
 .page-header-back { flex-shrink: 0; }
 .page-header-text { flex: 1; min-width: 0; }
+/* The label above a control inside a dialog form.
+   Distinct from .field-label, which is the uppercase mono micro-label the
+   settings pages use through <Field>. Two label styles is one too many, but
+   unifying them is a visible restyle of twenty labels rather than a cleanup —
+   this class exists so the decision is made in one place when it is made. */
+.form-label {
+  display: block;
+  font-size: 11px;
+  color: var(--text-3);
+  margin-bottom: 4px;
+}
+
+/* A search box with the magnifier inside it. The icon's offset and the input's
+   leading padding have to agree; keeping them in one rule is the point. */
+.search-field { position: relative; }
+.search-field .input { padding-left: 30px; width: 100%; }
+.search-field-icon {
+  position: absolute;
+  left: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-3);
+  pointer-events: none;
+}
+
 .page-header-title { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
 .page-header-sub { font-size: 13px; color: var(--text-3); margin-top: 4px; }
 .page-header-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -1273,7 +1323,7 @@ body {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.6);
-  z-index: 1100;
+  z-index: var(--z-overlay);
   backdrop-filter: blur(10px) saturate(80%);
   -webkit-backdrop-filter: blur(10px) saturate(80%);
 }
@@ -1289,7 +1339,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1101;
+  z-index: var(--z-dialog);
   padding: 16px;
   pointer-events: none;
 }
@@ -1316,7 +1366,7 @@ body {
   background: var(--bg-2);
   border: 1px solid var(--border-strong);
   border-radius: 12px;
-  z-index: 1101;
+  z-index: var(--z-dialog);
   overflow: hidden;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
   animation: fadeIn 0.15s ease;
@@ -1347,7 +1397,7 @@ body {
   gap: 10px;
   padding: 12px;
   border-radius: var(--radius);
-  background: rgba(239, 68, 68, 0.08);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
   border: 1px solid var(--danger-border);
   color: var(--danger);
 }
@@ -1760,7 +1810,7 @@ body {
   position: absolute;
   top: 10px;
   right: 10px;
-  z-index: 500;
+  z-index: var(--z-map-panel);
   background: var(--bg-2);
   border: 1px solid var(--border);
 }
@@ -1775,10 +1825,29 @@ body {
   font-size: 13px;
   color: var(--text-3);
 }
-/* Sits over the map without swallowing a drag through it. */
-.map-page-empty.overlay-note {
+/* "Nothing here" while the map is still usable: panning off the routes is a
+   normal thing to do, and the way back is the reset control in the corner. So
+   this is a pill at the top rather than a full-panel wash — a wash dimmed the
+   zoom and reset buttons it was telling you to press, and covered the map you
+   were navigating. Left of the maximize button, and out of the way of the
+   bottom-right controls entirely. */
+.map-page-note {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  right: 56px;
+  margin: 0 auto;
+  width: fit-content;
+  max-width: 100%;
+  z-index: var(--z-map-panel);
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  background: var(--bg-2);
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-2);
   pointer-events: none;
-  background: color-mix(in srgb, var(--bg) 55%, transparent);
 }
 
 @media (max-width: 768px) {
@@ -1802,11 +1871,19 @@ body {
   flex-direction: column;
   gap: 12px;
 }
-.share-card-head {
+/* A dialog's title row: its name on the left, the close button on the right.
+   Every dialog that is not a confirmation carries one, so it is one class. */
+.dialog-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
 }
+/* Dialogs that space their children with a flex gap already have the room. */
+.dup-modal > .dialog-head,
+.recalc-modal > .dialog-head,
+.share-card-modal > .dialog-head { margin-bottom: 0; }
 .share-card-title { font-size: 15px; font-weight: 600; }
 .share-card-preview {
   display: flex;
@@ -1928,11 +2005,6 @@ body {
   gap: 14px;
   max-height: 80vh;
 }
-.dup-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
 .dup-note { font-size: 12.5px; color: var(--text-3); line-height: 1.6; flex-shrink: 0; }
 /* The only thing that scrolls, so the heading, the note and the actions stay
    put however many groups there are. `min-height: 0` is what lets a flex item
@@ -2051,9 +2123,14 @@ body {
 
 @media (max-width: 640px) {
   /* Nearly full height, because the group list is the content and 80vh of cap
-     left it a letterbox. The safe-area insets come off as well: .modal centres
-     in the whole viewport, which on a notched phone includes the status bar. */
-  .dup-modal,
+     left it a letterbox. `100%` is of what .modal allows after the padding
+     below, so the insets are already accounted for.
+
+     This and the rule after it were one selector list, with the comment
+     between them reading as a separator — so the dialog box took the wrapper's
+     bar-clearance as its own padding, on top of the 24px it already had, and
+     its own max-height was never set at all. */
+  .dup-modal { max-height: 100%; }
   /* Clear of both bars, not merely of the screen edges: a dialog that runs
      under the tab bar hides its own buttons, and one under the top bar looks
      like part of it. .modal's padding does the work, so every dialog gets it
@@ -2265,7 +2342,7 @@ body {
   align-items: center;
   justify-content: center;
   box-shadow: 0 4px 20px var(--primary-glow);
-  z-index: 40;
+  z-index: var(--z-fab);
   transition: transform 0.2s, box-shadow 0.2s;
 }
 /* Out of the way while anything modal is open. The button is `position: fixed`
@@ -2506,7 +2583,7 @@ body:has(.overlay) .fab { display: none; }
   line-height: 1.55;
   color: var(--text-2);
   box-shadow: 0 10px 34px rgba(0, 0, 0, 0.45);
-  z-index: 2000;
+  z-index: var(--z-tooltip);
   animation: infotipIn 0.12s ease;
   white-space: normal;
   text-align: left;
@@ -2578,8 +2655,10 @@ body:has(.overlay) .fab { display: none; }
   .tab-strip.fill .tab-strip-item { flex: 1 0 auto; justify-content: center; }
 }
 
-/* Compact filter dropdown, shared by the type and time-range pickers. */
-.al-dropdown {
+/* Compact filter dropdown, shared by the type and time-range pickers. The
+   icon-button menu's wrapper is the same anchor, so it shares this rule. */
+.al-dropdown,
+.options-menu-wrap {
   position: relative;
   display: inline-block;
 }
@@ -2629,7 +2708,7 @@ body:has(.overlay) .fab { display: none; }
   border: 1px solid var(--border-strong);
   border-radius: calc(var(--radius) * 1.5);
   padding: 4px;
-  z-index: 60;
+  z-index: var(--z-popover);
   min-width: 170px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
@@ -2642,10 +2721,15 @@ body:has(.overlay) .fab { display: none; }
   top: auto;
   bottom: auto;
   right: auto;
-  z-index: 3000;
+  z-index: var(--z-floating);
 }
 
-.al-dropdown-item {
+/* A row in a popup menu. Both menu implementations — the app's picker and the
+   icon-button menu — draw the same row, and did so from two identical copies of
+   this block. One rule, two names, because the two menus are otherwise
+   different components. */
+.al-dropdown-item,
+.options-menu-item {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -2660,8 +2744,10 @@ body:has(.overlay) .fab { display: none; }
   width: 100%;
   text-align: left;
 }
-.al-dropdown-item:hover { background: var(--bg-3); color: var(--text); }
-.al-dropdown-item.active { color: var(--text); font-weight: 600; }
+.al-dropdown-item:hover,
+.options-menu-item:hover { background: var(--bg-3); color: var(--text); }
+.al-dropdown-item.active,
+.options-menu-item.active { color: var(--text); font-weight: 600; }
 
 /* Workout detail summary stat grid: readable multi-column layout that
  * collapses to 3-per-row on mobile. */
@@ -2757,11 +2843,8 @@ body:has(.overlay) .fab { display: none; }
   white-space: nowrap;
 }
 
-/* Right-anchored options dropdown (workout detail actions) */
-.options-menu-wrap {
-  position: relative;
-  display: inline-block;
-}
+/* Right-anchored options dropdown (workout detail actions). The wrapper shares
+   .al-dropdown's rule above; only the panel differs. */
 .options-menu {
   position: absolute;
   top: calc(100% + 4px);
@@ -2770,29 +2853,12 @@ body:has(.overlay) .fab { display: none; }
   border: 1px solid var(--border-strong);
   border-radius: calc(var(--radius) * 1.5);
   padding: 4px;
-  z-index: 1200;
+  z-index: var(--z-menu);
   min-width: 170px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
-.options-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  border-radius: var(--radius);
-  cursor: pointer;
-  font-size: 13px;
-  color: var(--text-2);
-  transition: background 0.1s, color 0.1s;
-  border: none;
-  background: transparent;
-  width: 100%;
-  text-align: left;
-}
-.options-menu-item:hover { background: var(--bg-3); color: var(--text); }
-.options-menu-item.active { color: var(--text); font-weight: 600; }
-.options-menu-item.danger { color: var(--red, #dc2626); }
-.options-menu-item.danger:hover { background: rgba(220, 38, 38, 0.12); }
+.options-menu-item.danger { color: var(--danger); }
+.options-menu-item.danger:hover { background: var(--danger-dim); }
 
 /* Connectivity banner. Occupies its own grid row and collapses to nothing when
    online, so it pushes content down instead of covering it. */
@@ -2820,7 +2886,7 @@ body:has(.overlay) .fab { display: none; }
   top: 0;
   left: 0;
   right: 0;
-  z-index: 2100;
+  z-index: var(--z-status);
 }
 
 /* Placeholder block for content that is still loading. The sweep runs left to
@@ -2879,13 +2945,6 @@ body:has(.overlay) .fab { display: none; }
 .grid-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-
-/* Main content + fixed-ish sidebar column, collapses to one on mobile. */
-.grid-main-side {
-  display: grid;
-  grid-template-columns: 1fr 280px;
   gap: 16px;
 }
 
@@ -3085,7 +3144,7 @@ body:has(.overlay) .fab { display: none; }
   position: absolute;
   top: 10px;
   left: 10px;
-  z-index: 400;
+  z-index: var(--z-map-ui);
   padding: 6px 8px;
   border-radius: var(--radius);
   border: 1px solid var(--border-strong);
@@ -3499,7 +3558,7 @@ body:has(.overlay) .fab { display: none; }
   border: 1px solid var(--border-strong);
   border-radius: calc(var(--radius) * 1.5);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-  z-index: 1101;
+  z-index: var(--z-dialog);
   overflow: hidden;
   animation: fadeIn 0.12s ease;
 }
@@ -3672,7 +3731,7 @@ body:has(.overlay) .fab { display: none; }
   transform: translateX(-50%);
   /* Above every other layer, including modals (2000) — an update is worth
      seeing whatever else is on screen. */
-  z-index: 2200;
+  z-index: var(--z-toast);
   display: flex;
   align-items: center;
   gap: 10px;
@@ -3742,7 +3801,7 @@ body:has(.overlay) .fab { display: none; }
   left: auto;
   width: 340px;
   max-width: calc(100vw - 24px);
-  z-index: 1150;
+  z-index: var(--z-banner);
   display: flex;
   align-items: center;
   gap: 10px;
@@ -3896,7 +3955,7 @@ body:has(.overlay) .fab { display: none; }
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 1101;
+  z-index: var(--z-dialog);
   display: flex;
   flex-direction: column;
   max-height: 80vh;
@@ -4549,7 +4608,7 @@ body:has(.overlay) .fab { display: none; }
   position: absolute;
   bottom: 8px;
   left: 8px;
-  z-index: 1000;
+  z-index: var(--z-map-picker);
   max-width: calc(100% - 20px);
 }
 
@@ -4580,8 +4639,7 @@ body:has(.overlay) .fab { display: none; }
   }
 
   .charts-grid,
-  .grid-2,
-  .grid-main-side {
+  .grid-2 {
     grid-template-columns: 1fr;
   }
 
@@ -4616,6 +4674,11 @@ body:has(.overlay) .fab { display: none; }
      summary beside them, so both take a share of the screen instead. */
   .detail-map-card,
   .detail-hero-card { min-height: min(56vh, 420px); }
+  /* Except the standing panel, which is words rather than a drawing. A map or
+     an elevation profile is worth a share of the screen because it is the
+     thing you came to look at; a paragraph stretched to 56vh is just a
+     paragraph with empty space under it. */
+  .detail-hero-card:has(.session-context) { min-height: 0; }
   /* The playback bar's stacked layout used to live here. It is a container
      query now — see .playback-card — because the card's width, not the
      viewport's, is what decides whether the three parts fit on one line. */
@@ -4683,7 +4746,7 @@ body:has(.overlay) .fab { display: none; }
     padding-right: var(--safe-right);
     background: var(--bg-2);
     border-top: 1px solid var(--border);
-    z-index: 50;
+    z-index: var(--z-chrome);
     align-items: center;
     justify-content: space-around;
     padding: 0 8px;
@@ -5387,7 +5450,7 @@ body:has(.overlay) .fab { display: none; }
   width: 100%;
   height: 100%;
   pointer-events: none;
-  z-index: 9999;
+  z-index: var(--z-confetti);
 }
 
 @media (max-width: 480px) {
@@ -5506,7 +5569,7 @@ body:has(.overlay) .fab { display: none; }
 .lightbox {
   position: fixed;
   inset: 0;
-  z-index: 1200;
+  z-index: var(--z-menu);
   display: grid;
   place-items: center;
   padding: 24px;
@@ -5704,3 +5767,13 @@ body:has(.overlay) .fab { display: none; }
 .session-expanded { display: flex; }
 .session-expanded .session-profile { flex: 1; min-width: 0; min-height: 0; }
 .session-expanded .session-sky { border-radius: 0; border: none; }
+
+/* A page that is still arriving. Only the map is loaded this way — it is the
+   one page heavy enough to be worth a separate chunk. */
+.page-loading {
+  display: grid;
+  place-items: center;
+  min-height: 40vh;
+  color: var(--text-3);
+  font-size: 13px;
+}

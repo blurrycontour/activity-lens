@@ -6,7 +6,10 @@ import PageHeader from '../components/PageHeader'
 import ExpandModal from '../components/ExpandModal'
 import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
-import { LayerSwitcher, MAP_LAYERS, MAP_LAYER_KEY, ResetViewControl, hasWebGL, type MapLayerId } from '../components/RouteMap'
+// From mapLayers, not RouteMap: importing them from there would pull the map
+// component into this page's graph statically, and undo the lazy import that
+// WorkoutDetail uses to keep MapLibre out of the first paint.
+import { LayerSwitcher, MAP_LAYERS, MAP_LAYER_KEY, ResetViewControl, hasWebGL, type MapLayerId } from '../components/mapLayers'
 import { TYPE_COLOR, type WorkoutType } from '../data/workouts'
 import { api, type Track } from '../lib/api'
 import { useLocalStorage } from '../lib/useLocalStorage'
@@ -176,14 +179,8 @@ export default function MapPage() {
 
   // Not the Fullscreen API: it is unreliable inside an Android WebView and on
   // iOS Safari, and this has to work in the app as well as the browser. The
-  // modal handles the back gesture and the close button; Escape is here so a
-  // keyboard has the same way out as every other dismissible surface.
-  useEffect(() => {
-    if (!full) return
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setFull(false) }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [full])
+  // ExpandModal below is what closes it — back, Escape and the close button all
+  // come from Modal, so there is nothing to handle here.
 
   /*
    * The map runs to the bottom of the viewport, measured rather than computed.
@@ -546,8 +543,8 @@ export default function MapPage() {
         </div>
       )}
       {!loading && shown.length === 0 && !error && (
-        <div className="map-page-empty overlay-note">
-          No routes in this view. Try a wider date range, or zoom out.
+        <div className="map-page-note">
+          No routes in this view — zoom out, reset the view, or widen the dates.
         </div>
       )}
     </>

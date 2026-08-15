@@ -57,7 +57,7 @@ export default function Help() {
   return (
     <>
       <div className="page-header">
-        <h1 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>Help</h1>
+        <h1 className="page-header-title">Help</h1>
         <p style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 4 }}>How Activity Lens works</p>
       </div>
 

@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Globe, Lock, Search, X, Loader2 } from 'lucide-react'
+import { Globe, Lock, X, Loader2 } from 'lucide-react'
 import { api, ApiError, type UserRef, type WorkoutShares } from '../lib/api'
 import { fmtDist, fmtDuration, TYPE_COLOR, type Workout } from '../data/workouts'
 import TypeIcon from './TypeIcon'
 import UserAvatar, { userLabel } from './UserAvatar'
 import Modal from './Modal'
+import SearchInput from './SearchInput'
+import Skeleton from './Skeleton'
 
 interface ShareDialogProps {
   /** The workout being shared. Identified prominently so there is no doubt
@@ -20,6 +22,43 @@ interface ShareDialogProps {
  * shared with directly. The two are deliberately independent — see the copy
  * under the toggle.
  */
+/**
+ * The dialog's shape while its two requests are in flight.
+ *
+ * A centred "Loading…" line was honest but a quarter of the height of what
+ * replaced it, so the dialog visibly grew a moment after opening — under a
+ * cursor already on its way to a control. This is not the real layout, only
+ * its proportions.
+ */
+function LoadingShape() {
+  return (
+    <div aria-busy="true" aria-label="Loading sharing settings">
+      <div className="share-section">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <Skeleton width={16} height={16} radius={8} />
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <Skeleton width="45%" height={13} />
+            <Skeleton width="80%" height={11} />
+          </div>
+          <Skeleton width={34} height={20} radius={99} />
+        </div>
+      </div>
+      <div className="share-section">
+        <Skeleton width="35%" height={12} />
+        <div style={{ marginTop: 10 }}><Skeleton width="100%" height={34} radius={8} /></div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
+          {[0, 1, 2].map(i => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Skeleton width={28} height={28} radius={99} />
+              <Skeleton width={`${55 - i * 8}%`} height={13} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function ShareDialog({ workout, onClose, onChange }: ShareDialogProps) {
   const workoutId = workout.id
   const [state, setState] = useState<WorkoutShares | null>(null)
@@ -97,7 +136,7 @@ export default function ShareDialog({ workout, onClose, onChange }: ShareDialogP
           )}
 
           {state === null ? (
-            <p style={{ fontSize: 13, color: 'var(--text-3)', padding: '20px 0', textAlign: 'center' }}>Loading…</p>
+            <LoadingShape />
           ) : (
             <>
               {/* Visibility */}
@@ -166,14 +205,13 @@ export default function ShareDialog({ workout, onClose, onChange }: ShareDialogP
                   </div>
                 )}
 
-                <div style={{ position: 'relative', marginTop: 10 }}>
-                  <Search size={14} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', pointerEvents: 'none' }} />
-                  <input
-                    className="input"
-                    placeholder="Find someone…"
+                <div style={{ marginTop: 10 }}>
+                  <SearchInput
                     value={search}
-                    onChange={e => setSearch(e.target.value)}
-                    style={{ paddingLeft: 30, width: '100%' }}
+                    onChange={setSearch}
+                    placeholder="Find someone…"
+                    grow={false}
+                    minWidth={0}
                   />
                 </div>
 

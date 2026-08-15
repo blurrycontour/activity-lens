@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Plus, Watch, Bike, Shirt, Package, SportShoe, Pencil, Trash2, X, ChevronRight,
-  ArrowLeft, AlertTriangle, Search, SlidersHorizontal, ArrowUpDown, Layers,
+  ArrowLeft, AlertTriangle, SlidersHorizontal, ArrowUpDown, Layers,
   ArrowDownAZ, Activity, Route, Gauge, Shapes, Check,
 } from 'lucide-react'
 import { api, type Equipment, type EquipmentInput, type LinkedWorkout } from '../lib/api'
@@ -15,6 +15,7 @@ import ConfirmDialog from '../components/ConfirmDialog'
 import { searchWorkouts } from '../lib/workoutFilters'
 import { fmtDist, type Workout } from '../data/workouts'
 import Modal from '../components/Modal'
+import SearchInput from '../components/SearchInput'
 
 interface EquipmentPageProps {
   onSelectWorkout: (id: string) => void
@@ -193,16 +194,11 @@ export default function EquipmentPage({ onSelectWorkout, detail, onOpenDetail }:
             below the fold. */}
         {!detail && (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            <div style={{ position: 'relative', flex: 1, minWidth: 180 }}>
-              <Search size={14} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', pointerEvents: 'none' }} />
-              <input
-                className="input"
-                placeholder="Search equipment..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                style={{ paddingLeft: 30, width: '100%' }}
-              />
-            </div>
+            <SearchInput
+              value={search}
+              onChange={setSearch}
+              placeholder="Search equipment..."
+            />
 
             {isMobile ? (
               <button
@@ -409,17 +405,19 @@ function LinkWorkoutsDialog({ equipmentId, linked, onLinked, onClose }: {
   return (
     <Modal onClose={onClose} dismissable={!saving} label="Add workouts">
         <div className="modal-box link-picker-box">
-          <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>Add workouts</h3>
-          <div style={{ position: 'relative', marginBottom: 10 }}>
-            <Search size={14} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', pointerEvents: 'none' }} />
-            <input
-              className="input"
-              placeholder="Search workouts by name, sport or date…"
+          <div className="dialog-head">
+            <h3 style={{ fontSize: 16, fontWeight: 700 }}>Add workouts</h3>
+            <button className="btn-icon" onClick={onClose} disabled={saving} aria-label="Close"><X size={16} /></button>
+          </div>
+          <div style={{ marginBottom: 10 }}>
+            <SearchInput
               value={query}
-              onChange={e => setQuery(e.target.value)}
-              style={{ paddingLeft: 30, width: '100%' }}
+              onChange={setQuery}
+              placeholder="Search workouts by name, sport or date…"
+              label="Search workouts to link"
+              grow={false}
+              minWidth={0}
               autoFocus
-              aria-label="Search workouts to link"
             />
           </div>
 
@@ -697,16 +695,16 @@ function EquipmentForm({ initial, onClose, onSaved }: {
               <h2 style={{ fontSize: 16, fontWeight: 700 }}>{initial ? 'Edit Equipment' : 'Add Equipment'}</h2>
               <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>Track gear like shoes, watches, and bikes</p>
             </div>
-            <button className="btn-icon" onClick={onClose}><X size={16} /></button>
+            <button className="btn-icon" onClick={onClose} aria-label="Close"><X size={16} /></button>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Name</label>
+              <label className="form-label">Name</label>
               <input className="input" style={{ width: '100%' }} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g. Nike Pegasus 40" />
             </div>
             <div>
-              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Type</label>
+              <label className="form-label">Type</label>
               <Dropdown
                 value={form.type}
                 options={FORM_TYPE_OPTIONS}
@@ -716,15 +714,15 @@ function EquipmentForm({ initial, onClose, onSaved }: {
               />
             </div>
             <div>
-              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Brand</label>
+              <label className="form-label">Brand</label>
               <input className="input" style={{ width: '100%' }} value={form.brand} onChange={e => setForm({ ...form, brand: e.target.value })} placeholder="e.g. Nike" />
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Model</label>
+              <label className="form-label">Model</label>
               <input className="input" style={{ width: '100%' }} value={form.model} onChange={e => setForm({ ...form, model: e.target.value })} placeholder="e.g. Air Zoom" />
             </div>
             <div>
-              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Replace at (km)</label>
+              <label className="form-label">Replace at (km)</label>
               <input
                 className="input" type="number" min="0" style={{ width: '100%' }}
                 value={form.retireAtKm || ''}
@@ -733,7 +731,7 @@ function EquipmentForm({ initial, onClose, onSaved }: {
               />
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Notes (optional)</label>
+              <label className="form-label">Notes (optional)</label>
               <textarea className="input" style={{ width: '100%', resize: 'vertical', minHeight: 60 }} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="Purchase date, size, etc." />
             </div>
             <label style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', color: 'var(--text-2)' }}>

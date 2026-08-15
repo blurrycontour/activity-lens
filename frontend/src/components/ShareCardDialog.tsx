@@ -5,7 +5,7 @@ import {
   CARD_W, cardFilename, cardHeight, drawShareCard, encodeCard, themeFromDocument,
   type CardFormat, type CardTitleMode,
 } from '../lib/shareCard'
-import { reportSaveFailure, shareFile } from '../lib/download'
+import { reportSaveFailure, saveFile, shareFile } from '../lib/download'
 import { isNative } from '../lib/serverConfig'
 import { api } from '../lib/api'
 import Modal from './Modal'
@@ -79,12 +79,6 @@ export default function ShareCardDialog({ workout, onClose }: {
     return () => { alive = false }
   }, [full, titleMode, showRoute, showHR])
 
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [onClose])
-
   async function run(what: CardFormat | 'share') {
     if (!canvasRef.current) return
     setBusy(what)
@@ -101,7 +95,6 @@ export default function ShareCardDialog({ workout, onClose }: {
         // sheet that did open.
         if (!shared) setNote('No share sheet here — saved the image instead.')
       } else {
-        const { saveFile } = await import('../lib/download')
         await saveFile(name, blob)
       }
     } catch (err) {
@@ -115,7 +108,7 @@ export default function ShareCardDialog({ workout, onClose }: {
   return (
     <Modal onClose={onClose} label="Share card">
         <div className="modal-box share-card-modal">
-          <div className="share-card-head">
+          <div className="dialog-head">
             <h3 className="share-card-title">Share card</h3>
             <button className="btn-icon" onClick={onClose} aria-label="Close"><X size={16} /></button>
           </div>

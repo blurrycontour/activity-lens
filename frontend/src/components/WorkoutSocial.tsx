@@ -4,6 +4,7 @@ import ConfirmDialog from './ConfirmDialog'
 import UserAvatar, { userLabel } from './UserAvatar'
 import { useAuth } from '../context/AuthContext'
 import { api, ApiError, type WorkoutComment, type WorkoutSocial as Social } from '../lib/api'
+import useEscape from '../lib/useEscape'
 
 /**
  * Reactions and comments on a shared workout.
@@ -46,18 +47,14 @@ export default function WorkoutSocial({ workoutId, isOwner }: WorkoutSocialProps
   // dismiss by using it. Pointerdown rather than click, so it closes on the
   // press that starts an interaction elsewhere rather than on its release —
   // and capture, so a control underneath cannot stop the event first.
+  useEscape(picking, () => setPicking(false))
   useEffect(() => {
     if (!picking) return
     const away = (e: Event) => {
       if (!pickerWrap.current?.contains(e.target as Node)) setPicking(false)
     }
-    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') setPicking(false) }
     document.addEventListener('pointerdown', away, true)
-    document.addEventListener('keydown', key)
-    return () => {
-      document.removeEventListener('pointerdown', away, true)
-      document.removeEventListener('keydown', key)
-    }
+    return () => document.removeEventListener('pointerdown', away, true)
   }, [picking])
 
   const load = useCallback(async () => {

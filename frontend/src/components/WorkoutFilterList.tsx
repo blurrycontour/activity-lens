@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FilterX, Ghost, Layers, LoaderCircle, Search, Send, SlidersHorizontal, X } from 'lucide-react'
+import { FilterX, Ghost, Layers, LoaderCircle, Send, SlidersHorizontal, X } from 'lucide-react'
 import { ALL_WORKOUT_TYPES, type Workout, type WorkoutType } from '../data/workouts'
 import { applyWorkoutFilters, DEFAULT_FILTERS, type Has, type HasFilter, type Scope } from '../lib/workoutFilters'
 import { RANGE_OPTIONS } from '../lib/range'
@@ -13,6 +13,7 @@ import TypeDropdown from './TypeDropdown'
 import TypeIcon from './TypeIcon'
 import UserAvatar, { userLabel } from './UserAvatar'
 import WorkoutCard from './WorkoutCard'
+import SearchInput from './SearchInput'
 
 /** Rendered per page, and how many more each time the end comes into view. */
 const PAGE_SIZE = 20
@@ -185,16 +186,12 @@ export default function WorkoutFilterList({
   return (
     <>
       <div className="profile-tools">
-        <div style={{ position: 'relative', flex: 1, minWidth: 160 }}>
-          <Search size={14} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', pointerEvents: 'none' }} />
-          <input
-            className="input"
-            placeholder="Search workouts..."
-            value={search}
-            onChange={e => patch({ search: e.target.value })}
-            style={{ paddingLeft: 30, width: '100%' }}
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={v => patch({ search: v })}
+          placeholder="Search workouts..."
+          minWidth={160}
+        />
         {isMobile ? (
           <button
             className="btn btn-ghost filter-btn"

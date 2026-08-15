@@ -250,13 +250,8 @@ function Lightbox({ workoutId, photo, onClose }: {
   photo: WorkoutPhoto
   onClose: () => void
 }) {
+  // Escape and the back gesture both come from here.
   useDismissOnBack(true, onClose)
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [onClose])
 
   // Portalled, because the page lives inside the swipe pager, which is a
   // stacking context — no z-index from in here can get above the top and

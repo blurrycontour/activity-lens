@@ -754,7 +754,7 @@ export default function Dashboard({ onSelect }: { onSelect: (w: Workout) => void
       {celebrating && <Confetti onDone={() => setCelebrating(false)} />}
       <div className="page-header">
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
-          <h1 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>Dashboard</h1>
+          <h1 className="page-header-title">Dashboard</h1>
           <span style={{ fontSize: 12, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
             {d.now.count} activities · {caption}
           </span>

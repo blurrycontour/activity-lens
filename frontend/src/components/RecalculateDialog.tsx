@@ -1,6 +1,5 @@
-import { RotateCcw } from 'lucide-react'
+import { RotateCcw, X } from 'lucide-react'
 import { type RecalcParts } from '../data/workouts'
-import useDismissOnBack from '../lib/useDismissOnBack'
 import Modal from './Modal'
 
 /**
@@ -63,7 +62,6 @@ export default function RecalculateDialog({ parts, onChange, busy, error, onClos
   onClose: () => void
   onConfirm: () => void
 }) {
-  useDismissOnBack(true, () => { if (!busy) onClose() })
   const chosen = PARTS.filter(p => parts[p.key]).length
 
   // Portalled to the body, and not merely fixed-positioned. Pages render inside
@@ -74,7 +72,10 @@ export default function RecalculateDialog({ parts, onChange, busy, error, onClos
   return (
     <Modal onClose={onClose} dismissable={!busy} label="Recalculate workout">
         <div className="modal-box recalc-modal">
-          <h3 className="recalc-title"><RotateCcw size={16} /> Recalculate</h3>
+          <div className="dialog-head">
+            <h3 className="recalc-title"><RotateCcw size={16} /> Recalculate</h3>
+            <button className="btn-icon" onClick={onClose} disabled={busy} aria-label="Close"><X size={16} /></button>
+          </div>
           <p className="recalc-note">
             Each of these is worked out again from the recorded track and your
             settings, replacing whatever is there now — including anything you

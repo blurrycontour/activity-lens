@@ -1,4 +1,5 @@
 import { createPortal } from 'react-dom'
+import useDismissOnBack from '../lib/useDismissOnBack'
 
 /**
  * The backdrop and centring every dialog in the app sits in.
@@ -12,9 +13,16 @@ import { createPortal } from 'react-dom'
  * dialog can be written without it.
  *
  * Every dialog therefore behaves the same: the page dims and blurs behind it,
- * nothing underneath can be tapped through, and a tap outside dismisses.
+ * nothing underneath can be tapped through, a tap outside dismisses, and
+ * Escape and the system back gesture close it.
+ *
+ * Back is handled here rather than by each dialog because getting it wrong is
+ * invisible on a desktop and awful on a phone: nothing in the page knows a
+ * dialog is up, so back reached the router and navigated away, dropping the
+ * user a page back from where they were with their dialog silently gone. Three
+ * dialogs had solved it locally; the other thirteen had not.
  */
-export default function Modal({ onClose, children, dismissable = true, wrapper = 'modal', label }: {
+export default function Modal({ onClose, children, dismissable = true, wrapper = 'modal', label, onBack }: {
   /** Dismiss, from the backdrop. Omit `dismissable` to make the backdrop inert. */
   onClose?: () => void
   children: React.ReactNode
@@ -30,7 +38,21 @@ export default function Modal({ onClose, children, dismissable = true, wrapper =
   wrapper?: 'modal' | 'none'
   /** Names the dialog for assistive tech when the child does not. */
   label?: string
+  /**
+   * What back and Escape do, when that is not simply "dismiss" — a dialog with
+   * a confirmation step inside it wants back to close that step first, one
+   * surface at a time. Rarely needed; the default is right nearly always.
+   */
+  onBack?: () => void
 }) {
+  /*
+   * `true`, not `dismissable`: the history entry has to exist even while a
+   * dialog refuses to be dismissed, or back escapes to the page underneath —
+   * which is the very thing this prevents. Non-dismissable means the gesture
+   * does nothing, not that it does something worse.
+   */
+  useDismissOnBack(true, onBack ?? (() => { if (dismissable) onClose?.() }))
+
   return createPortal(
     <>
       <div className="overlay" onClick={dismissable ? onClose : undefined} />

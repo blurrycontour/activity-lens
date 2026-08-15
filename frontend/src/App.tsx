@@ -2,7 +2,7 @@ import { useIsMobile } from './lib/useIsMobile'
 import NotificationBanner, { type BannerNotification } from './components/NotificationBanner'
 import { consumeOpenedParam, markNotificationOpened, PUSH_EVENT, READ_NOTIFICATION_EVENT } from './lib/notifications'
 import UpdateToast from './components/UpdateToast'
-import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, useRef, lazy, Suspense } from 'react'
 import TopBar, { type ThemeMode } from './components/TopBar'
 import Sidebar from './components/Sidebar'
 import BottomBar from './components/BottomBar'
@@ -22,7 +22,14 @@ import Equipment from './pages/Equipment'
 import UserProfile from './pages/UserProfile'
 import Discover from './pages/Discover'
 import Help from './pages/Help'
-import MapPage from './pages/MapPage'
+/*
+ * Lazily, because it is the only page that needs MapLibre and MapLibre is a
+ * megabyte of JavaScript. Imported statically it sat in the entry chunk, so
+ * every session parsed the map engine on first paint whether or not a map was
+ * ever opened — and it made WorkoutDetail's lazy import of RouteMap pointless,
+ * since the library was already loaded by then.
+ */
+const MapPage = lazy(() => import('./pages/MapPage'))
 import Settings from './pages/settings'
 import Admin from './pages/admin'
 import Login from './pages/Login'
@@ -43,6 +50,7 @@ import {
   consumeNotificationTap, onNotificationTap, onPushMessage, type NotificationTap,
 } from './lib/native/unifiedPush'
 import { startUpdate } from './lib/appUpdate'
+import { loadAboutInfo } from './lib/buildInfo'
 import { LoaderCircle } from 'lucide-react'
 import { api } from './lib/api'
 
@@ -174,6 +182,43 @@ export default function App() {
     return () => { cancelled = true }
     // Only run once, when auth resolves.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user])
+
+  // Warmed in the background, so the About dialog opens at its final size
+  // rather than growing as two requests land. Nothing here changes while the
+  // app runs, and it is a few hundred bytes.
+  useEffect(() => {
+    if (!user) return
+    void loadAboutInfo()
+  }, [user])
+
+  /*
+   * Fetch the map's code once the app is idle, so the Map page opens without a
+   * wait even though it is not in the startup bundle.
+   *
+   * MapLibre is about a megabyte, and most sessions never open a map — loading
+   * it eagerly put that on the critical path for everyone, including the phone
+   * app, which starts cold every launch. Loading it only on demand moved the
+   * cost to a spinner the first time you visit the page. Doing it here costs
+   * neither: first paint is already done, and by the time anyone reaches the
+   * page the chunk is in memory.
+   *
+   * Skipped when the browser says the connection is metered — spending a
+   * megabyte on a page that may never be opened is exactly what that flag is
+   * asking us not to do. Those sessions fall back to loading it on demand.
+   *
+   * The specifier must match the lazy import above verbatim, or Vite treats it
+   * as a second module and this warms nothing.
+   */
+  useEffect(() => {
+    if (!user) return
+    if ((navigator as { connection?: { saveData?: boolean } }).connection?.saveData) return
+    const warm = () => { void import('./pages/MapPage') }
+    // requestIdleCallback is still missing on Safari; a timeout is a fine
+    // stand-in, since the only requirement is "not during startup".
+    const idle = typeof window.requestIdleCallback === 'function'
+    const id = idle ? window.requestIdleCallback(warm, { timeout: 5000 }) : window.setTimeout(warm, 3000)
+    return () => { if (idle) window.cancelIdleCallback(id); else window.clearTimeout(id) }
   }, [user])
 
   // Pick up a workout file shared into the installed app from the Android
@@ -671,7 +716,9 @@ export default function App() {
         ) : page === 'analysis' ? (
           <Analysis />
         ) : page === 'map' ? (
-          <MapPage />
+          <Suspense fallback={<div className="page-content page-loading">Loading map…</div>}>
+            <MapPage />
+          </Suspense>
         ) : page === 'consistency' ? (
           <Consistency />
         ) : page === 'discover' ? (

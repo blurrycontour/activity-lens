@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowDownAZ, ArrowUpAZ, Globe, Inbox, Search, Users as UsersIcon } from 'lucide-react'
+import { ArrowDownAZ, ArrowUpAZ, Globe, Inbox, Users as UsersIcon } from 'lucide-react'
 import { api, type DirectoryUser } from '../lib/api'
 import type { Workout } from '../data/workouts'
 import { useRefreshHandler } from '../context/RefreshContext'
@@ -8,6 +8,7 @@ import TabStrip from '../components/TabStrip'
 import UserAvatar, { userLabel } from '../components/UserAvatar'
 import WorkoutFilterList from '../components/WorkoutFilterList'
 import { useSessionState } from '../lib/useSessionState'
+import SearchInput from '../components/SearchInput'
 
 type Tab = 'people' | 'shared' | 'public'
 
@@ -120,17 +121,13 @@ export default function Discover({ onOpenUser, onSelectWorkout }: {
         {tab === 'people' ? (
           <>
             <div className="discover-tools">
-            <div style={{ position: 'relative', flex: 1, minWidth: 160 }}>
-              <Search size={14} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', pointerEvents: 'none' }} />
-              <input
-                className="input"
-                placeholder="Search people…"
-                value={query}
-                onChange={e => setQuery(e.target.value)}
-                style={{ paddingLeft: 30, width: '100%' }}
-                aria-label="Search people"
-              />
-            </div>
+            <SearchInput
+              value={query}
+              onChange={setQuery}
+              placeholder="Search people…"
+              label="Search people"
+              minWidth={160}
+            />
             <button
               className="btn btn-ghost"
               onClick={() => setAz(v => !v)}

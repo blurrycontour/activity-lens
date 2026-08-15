@@ -1380,25 +1380,25 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
                   <h2 style={{ fontSize: 16, fontWeight: 700 }}>Edit Workout</h2>
                   <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>Update the workout's details</p>
                 </div>
-                <button className="btn-icon" onClick={() => setEditing(false)} disabled={saving}><XIcon size={16} /></button>
+                <button className="btn-icon" onClick={() => setEditing(false)} disabled={saving} aria-label="Close"><XIcon size={16} /></button>
               </div>
 
               <div className="edit-modal-body">
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div style={{ gridColumn: '1 / -1' }}>
-                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Workout Name</label>
+                  <label className="form-label">Workout Name</label>
                   <input className="input" style={{ width: '100%' }} value={editName} onChange={e => setEditName(e.target.value)} placeholder="Workout name" />
                 </div>
                 <div>
-                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Sport Type</label>
+                  <label className="form-label">Sport Type</label>
                   <SportDropdown value={editType} onChange={setEditType} />
                 </div>
                 <div>
-                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Date</label>
+                  <label className="form-label">Date</label>
                   <input className="input" style={{ width: '100%' }} type="date" value={editDate} onChange={e => setEditDate(e.target.value)} />
                 </div>
                 <div>
-                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Distance (km)</label>
+                  <label className="form-label">Distance (km)</label>
                   <input
                     className="input" style={{ width: '100%' }} type="number" min="0" step="0.01"
                     value={editDistance}
@@ -1407,11 +1407,11 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Calories (kcal)</label>
+                  <label className="form-label">Calories (kcal)</label>
                   <input className="input" style={{ width: '100%' }} type="number" min="0" value={editCalories} onChange={e => setEditCalories(e.target.value)} placeholder="Calories" />
                 </div>
                 <div>
-                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Steps</label>
+                  <label className="form-label">Steps</label>
                   <input className="input" style={{ width: '100%' }} type="number" min="0" value={editSteps} onChange={e => setEditSteps(e.target.value)} placeholder="Steps" />
                 </div>
               </div>
@@ -1515,7 +1515,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
           <button className="btn-icon" onClick={onBack}><ArrowLeft size={18} /></button>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <h1 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>{w.name}</h1>
+              <h1 className="page-header-title">{w.name}</h1>
               <span className={`badge tag-${w.type.toLowerCase()}`}><TypeIcon type={w.type} size={12} /> {w.type}</span>
               {/* The same mark the list row carries. It was only ever on the
                   list, which meant the one page you would open to check
@@ -2007,7 +2007,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             onClick={() => setExpanded('map')}
             title="Expand map"
             aria-label="Expand map"
-            style={{ position: 'absolute', top: 10, right: 10, zIndex: 500, background: 'var(--bg-2)', border: '1px solid var(--border)' }}
+            style={{ position: 'absolute', top: 10, right: 10, zIndex: 'var(--z-map-panel)', background: 'var(--bg-2)', border: '1px solid var(--border)' }}
           >
             <Maximize2 size={14} />
           </button>

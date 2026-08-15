@@ -532,7 +532,7 @@ export default function Analysis() {
     <div>
       <div className="page-header">
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 16 }}>
-          <h1 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>Analysis</h1>
+          <h1 className="page-header-title">Analysis</h1>
           <span style={{ fontSize: 12, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
             {workouts.length} activities · {scope}
           </span>

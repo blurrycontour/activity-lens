@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import { AlertTriangle, Copy, Trash2, X } from 'lucide-react'
 import { fmtDist, fmtDuration, type Workout } from '../data/workouts'
 import { findDuplicateGroups, redundantIds } from '../lib/duplicates'
-import useDismissOnBack from '../lib/useDismissOnBack'
 import TypeIcon from './TypeIcon'
 import SourceMark from './SourceMark'
 import InfoTip from './InfoTip'
@@ -52,11 +51,11 @@ export default function DuplicatesDialog({ workouts, onClose, onDelete }: {
   // Back closes the confirmation first, then the dialog behind it — one step
   // per surface, which is what the gesture means everywhere else in the app.
   // Never mid-delete, which would leave the outcome unreported.
-  useDismissOnBack(true, () => {
+  const onBack = () => {
     if (deleting) return
     if (confirming) setConfirming(false)
     else onClose()
-  })
+  }
   const groups = useMemo(() => findDuplicateGroups(workouts), [workouts])
 
   /*
@@ -86,9 +85,9 @@ export default function DuplicatesDialog({ workouts, onClose, onDelete }: {
   // and bottom bars draw over it. A short dialog never reaches them; a tall one
   // does, which is how this surfaced.
   return (
-    <Modal onClose={onClose}>
+    <Modal onClose={onClose} onBack={onBack}>
         <div className="modal-box dup-modal" role="dialog" aria-modal="true" aria-label="Possible duplicates">
-          <div className="dup-head">
+          <div className="dialog-head">
             <h3 style={{ fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
               <Copy size={15} /> Possible duplicates
               {/* The caveats matter and are too long to leave in front of the

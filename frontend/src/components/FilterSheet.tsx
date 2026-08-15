@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useRef } from 'react'
 import { X } from 'lucide-react'
 import useSheetDrag from '../lib/useSheetDrag'
 import Modal from './Modal'
@@ -58,13 +58,6 @@ interface FilterSheetProps {
 export default function FilterSheet({ groups, onClose, onReset }: FilterSheetProps) {
   const bodyRef = useRef<HTMLDivElement>(null)
   const sheet = useSheetDrag(onClose, bodyRef)
-
-  // A sheet is a modal surface, so Escape should dismiss it like any other.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [onClose])
 
   return (
     <Modal onClose={onClose} wrapper="none">
