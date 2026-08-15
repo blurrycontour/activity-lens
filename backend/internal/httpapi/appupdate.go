@@ -79,9 +79,12 @@ func (s *Server) announceAppUpdate(ctx context.Context) {
 		s.notify.Notify(ctx, notify.Event{
 			UserID: u.ID,
 			Kind:   notify.KindAppUpdate,
-			Title:  fmt.Sprintf("Activity Lens %s is available", version),
-			Body:   "A new version of the Android app is ready. Open to install it.",
-			Link:   AppUpdateLink,
+			// No product name in the title: Android already puts the app's own
+			// name above the notification, so "Activity Lens 2.1.0 is
+			// available" arrived as Activity Lens saying its own name twice.
+			Title: fmt.Sprintf("Update %s available", version),
+			Body:  "A new version of app is ready. Don't be a dinosaur and Update now!",
+			Link:  AppUpdateLink,
 			// Keyed on the version, so this is at most one notification per
 			// user per release however many times the server restarts.
 			DedupeKey: "app-update:" + version,

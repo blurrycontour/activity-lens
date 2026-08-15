@@ -4362,7 +4362,11 @@ body:has(.overlay) .fab { display: none; }
    message, so they are sized for a thumb and carry the sport's own colour, and
    they centre on a phone where the header above them is centred by the avatar
    rather than aligned to the text. */
-.ping-row { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; }
+/* The gap above comes from the page's own top padding; the margin here is only
+   the one separating the row from the tabs under it, which nothing else
+   provides. Adding both left the row hanging off the header with the tabs
+   pressed against its underside. */
+.ping-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
 .ping-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
 .ping-btn {
   width: 38px;

@@ -1,6 +1,6 @@
 module github.com/blurrycontour/activity-lens/backend
 
-go 1.26
+go 1.26.6
 
 require (
 	github.com/SherClockHolmes/webpush-go v1.4.0
