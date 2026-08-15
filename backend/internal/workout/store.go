@@ -179,6 +179,9 @@ type Repository interface {
 	SetTrack(ctx context.Context, workoutID string, route []LatLng) error
 	// CountMissingTracks reports how much of the backfill is left.
 	CountMissingTracks(ctx context.Context, userID int64) (int, error)
+	// CountCadence settles the cadence sample count for rows that predate the
+	// column, in batches, and reports how many it did.
+	CountCadence(ctx context.Context, limit int) (int, error)
 }
 
 // SQLiteRepository implements Repository on top of *sql.DB (SQLite dialect).
@@ -231,8 +234,7 @@ const (
 	// carries the route itself, so only a list has to be told whether there is
 	// one. Appended, like every column added since — the scanners read by
 	// position, and inserting anywhere else moves every field after it.
-	selectSummaryCols = workoutSummaryCols + `, visibility, created_at, ` + weatherCols + `, moving_time, track_points,
-		(cadence_timeline IS NOT NULL AND LENGTH(cadence_timeline) > 2)`
+	selectSummaryCols = workoutSummaryCols + `, visibility, created_at, ` + weatherCols + `, moving_time, track_points, cadence_points`
 )
 
 func (r *SQLiteRepository) Create(ctx context.Context, w *Workout) error {
@@ -259,8 +261,8 @@ func (r *SQLiteRepository) Create(ctx context.Context, w *Workout) error {
 	_, err = r.db.ExecContext(ctx, `INSERT INTO workouts (`+insertCols+`, created_at, updated_at,
 		start_lat, start_lon, weather_status,
 		track, track_points, bbox_min_lat, bbox_max_lat, bbox_min_lon, bbox_max_lon,
-		moving_time, pauses)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		cadence_points, moving_time, pauses)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		w.ID, w.UserID, w.Name, string(w.Type), w.StartTime.UTC().Format(time.RFC3339),
 		w.Duration, w.Distance, w.AvgHR, w.MaxHR, w.ElevationGain, w.Calories, w.Steps,
 		w.AvgPace, w.AvgSpeed, s.route, s.hr, s.pace, s.elev, s.cadence, w.Notes,
@@ -268,6 +270,7 @@ func (r *SQLiteRepository) Create(ctx context.Context, w *Workout) error {
 		string(w.Source), nullIfEmpty(w.ExternalID), nullIfEmpty(w.ContentHash), now, now,
 		lat, lon, string(weatherStatus),
 		track.blob, track.points, box.MinLat, box.MaxLat, box.MinLon, box.MaxLon,
+		len(w.CadenceTimeline),
 		w.MovingTime, pauses)
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -343,7 +346,8 @@ func (r *SQLiteRepository) Update(ctx context.Context, w *Workout) error {
 	res, err := r.db.ExecContext(ctx, `UPDATE workouts SET name=?, type=?, start_time=?, duration=?,
 		distance=?, avg_hr=?, max_hr=?, elevation_gain=?, calories=?, steps=?, avg_pace=?, avg_speed=?,
 		route=?, hr_timeline=?, pace_timeline=?, elev_timeline=?, cadence_timeline=?, notes=?,
-		calories_manual=?, calories_reported=?, steps_manual=?, moving_time=?, pauses=?, updated_at=?
+		calories_manual=?, calories_reported=?, steps_manual=?, moving_time=?, pauses=?,
+		cadence_points=?, updated_at=?
 		WHERE id=? AND user_id=?`,
 		w.Name, string(w.Type), w.StartTime.UTC().Format(time.RFC3339), w.Duration, w.Distance,
 		w.AvgHR, w.MaxHR, w.ElevationGain, w.Calories, w.Steps, w.AvgPace, w.AvgSpeed,
@@ -352,6 +356,9 @@ func (r *SQLiteRepository) Update(ctx context.Context, w *Workout) error {
 		// Derived, so unlike the weather columns these are refreshed here: a
 		// Recalculate is how a workout imported before pauses existed gets them.
 		w.MovingTime, pauses,
+		// Recounted here, so dropping the series in a reshape is visible to the
+		// list filter immediately rather than at the next backfill.
+		len(w.CadenceTimeline),
 		time.Now().UTC().Format(time.RFC3339), w.ID, w.UserID)
 	if err != nil {
 		return fmt.Errorf("update workout: %w", err)
@@ -1038,16 +1045,17 @@ func scanWorkoutSummary(row interface{ Scan(...any) error }) (*Workout, error) {
 		createdAt   string
 		wx          weatherScan
 		trackPoints int
-		// Asked of the blob's length rather than by reading it: the cadence
-		// series is one of the larger columns and a list has no use for its
-		// contents, only for whether there are any. "[]" is two bytes.
-		hasCadence bool
+		// -1 until the backfill has decompressed the series and counted it; see
+		// the migration. Negative reads as "no cadence" here, which is the safe
+		// way round for a filter — it can only omit a row that has some, never
+		// claim one that has none.
+		cadencePoints int
 	)
 	if err := row.Scan(&w.ID, &w.UserID, &w.Name, &typ, &startTime, &w.Duration, &w.Distance,
 		&w.AvgHR, &w.MaxHR, &w.ElevationGain, &w.Calories, &w.Steps, &w.AvgPace, &w.AvgSpeed, &w.Notes,
 		&calManual, &calReported, &stepManual, &source, &visibility, &createdAt,
 		&wx.status, &wx.temp, &wx.apparent, &wx.humidity, &wx.wind, &wx.precip, &wx.code,
-		&w.MovingTime, &trackPoints, &hasCadence); err != nil {
+		&w.MovingTime, &trackPoints, &cadencePoints); err != nil {
 		return nil, err
 	}
 	// A row whose simplified track has not been built yet reads as "no route",
@@ -1055,7 +1063,7 @@ func scanWorkoutSummary(row interface{ Scan(...any) error }) (*Workout, error) {
 	// within a few minutes of an upgrade; a filter briefly missing an old
 	// workout beats decompressing every route blob to answer a list.
 	w.HasRoute = trackPoints > 0
-	w.HasCadence = hasCadence
+	w.HasCadence = cadencePoints > 0
 	wx.applyTo(&w)
 	w.CaloriesManual = calManual != 0
 	w.CaloriesReported = calReported != 0
@@ -1316,4 +1324,48 @@ func (r *SQLiteRepository) CountMissingTracks(ctx context.Context, userID int64)
 		return 0, fmt.Errorf("count missing tracks: %w", err)
 	}
 	return n, nil
+}
+
+// CountCadence fills in the cadence sample count for rows that predate the
+// column, and reports how many it settled.
+//
+// One statement per batch, and the counting happens here rather than in SQL
+// because the series is gzipped JSON: only Go can tell an empty one from a
+// full one. Rows that fail to decompress are settled at zero rather than left
+// pending, or the pass would pick the same ones up forever and never reach the
+// rest — the same rule the track backfill follows.
+func (r *SQLiteRepository) CountCadence(ctx context.Context, limit int) (int, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, cadence_timeline FROM workouts WHERE cadence_points < 0 LIMIT ?`, limit)
+	if err != nil {
+		return 0, fmt.Errorf("list uncounted cadence: %w", err)
+	}
+	counts := make(map[string]int)
+	for rows.Next() {
+		var (
+			id   string
+			blob []byte
+		)
+		if err := rows.Scan(&id, &blob); err != nil {
+			rows.Close()
+			return 0, fmt.Errorf("scan cadence: %w", err)
+		}
+		var series []CadencePoint
+		_ = unmarshalInto(blob, &series)
+		counts[id] = len(series)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return 0, err
+	}
+	// Materialised before writing: the rows above hold the only connection when
+	// the pool is small, and an UPDATE inside the loop would wait on it forever.
+	for id, n := range counts {
+		if _, err := r.db.ExecContext(ctx,
+			`UPDATE workouts SET cadence_points = ? WHERE id = ?`, n, id); err != nil {
+			return 0, fmt.Errorf("set cadence points: %w", err)
+		}
+	}
+	return len(counts), nil
 }

@@ -711,6 +711,21 @@ export const api = {
    * Re-derives the named values. Everything named is overwritten, including
    * anything entered by hand, which is why the caller has to name them.
    */
+  /**
+   * Trims a workout to a window and drops the series named, then re-derives
+   * everything that depended on them. Destructive to the stored workout; the
+   * archived original, when there is one, is what restoreWorkout reads back.
+   */
+  reshapeWorkout: (id: string, plan: { start: number; end: number; drop: string[] }) =>
+    request<import('../data/workouts').Workout>(`/api/workouts/${id}/reshape`, {
+      method: 'POST',
+      body: plan,
+    }),
+
+  /** Rebuilds a workout's recorded data from the file it was imported from. */
+  restoreWorkout: (id: string) =>
+    request<import('../data/workouts').Workout>(`/api/workouts/${id}/restore`, { method: 'POST' }),
+
   recalcWorkout: (id: string, parts: import('../data/workouts').RecalcParts) =>
     request<import('../data/workouts').Workout>(`/api/workouts/${id}/recalculate`, {
       method: 'POST',

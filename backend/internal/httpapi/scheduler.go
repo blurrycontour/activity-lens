@@ -102,6 +102,7 @@ func (s *Server) StartScheduler(ctx context.Context) {
 	s.sweep(ctx)
 	s.runWeatherPass(ctx)
 	s.trackPass(ctx)
+	s.cadencePass(ctx)
 	for {
 		select {
 		case <-ctx.Done():
@@ -110,10 +111,11 @@ func (s *Server) StartScheduler(ctx context.Context) {
 			s.sweep(ctx)
 		case <-weatherTicker.C:
 			s.runWeatherPass(ctx)
-			// Shares the weather tick rather than adding a third: it is local
-			// work that drains and then costs one indexed query that matches
+			// Share the weather tick rather than adding more tickers: these are
+			// local passes that drain and then cost one indexed query matching
 			// nothing, which is the same bargain the notification sweep makes.
 			s.trackPass(ctx)
+			s.cadencePass(ctx)
 		case <-s.weatherWake:
 			// Something was just imported. Without this the workout waits for the
 			// next tick — up to five minutes of a page saying "scheduled" for a
@@ -366,4 +368,20 @@ func (s *Server) trackPass(ctx context.Context) {
 		}
 	}
 	slog.Info("prepared workouts for the map", "count", len(pending))
+}
+
+// cadencePass settles the cadence sample count on rows that predate the column.
+//
+// The same shape as the track pass, and for the same reason: the answer lives
+// inside a compressed blob, so it cannot be a migration. It drains once and
+// then costs one indexed query that matches nothing.
+func (s *Server) cadencePass(ctx context.Context) {
+	n, err := s.workout.CountCadence(ctx, trackBatch)
+	if err != nil {
+		slog.Warn("cadence pass: could not count", "error", err)
+		return
+	}
+	if n > 0 {
+		slog.Info("counted cadence samples", "count", n)
+	}
 }

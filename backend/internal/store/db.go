@@ -96,6 +96,9 @@ var sessionClientsSchema string
 //go:embed migrations/0028_user_tagline.sql
 var userTaglineSchema string
 
+//go:embed migrations/0029_cadence_points.sql
+var cadencePointsSchema string
+
 // maxOpenConns is how many connections the pool will open.
 //
 // It was 1, which made every request in the process queue behind every other
@@ -194,6 +197,7 @@ func MigrateApp(ctx context.Context, db *sql.DB) error {
 		{"workout social", workoutSocialSchema},
 		{"session clients", sessionClientsSchema},
 		{"user tagline", userTaglineSchema},
+		{"cadence points", cadencePointsSchema},
 	} {
 		if err := applyAlters(ctx, db, m.schema); err != nil {
 			return fmt.Errorf("apply %s schema: %w", m.name, err)

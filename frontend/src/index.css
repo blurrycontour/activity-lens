@@ -4036,6 +4036,124 @@ body:has(.overlay) .fab { display: none; }
 .owner-byline { flex-wrap: wrap; gap: 6px 8px; }
 .owner-byline-more { font-size: 12px; color: var(--text-3); white-space: nowrap; }
 
+/* ── Editing what a workout recorded: the trim strip and the series list ──
+   Sits inside the edit dialog, so it borrows the dialog's spacing and only
+   defines the parts that are its own. */
+.reshape { margin-top: 18px; }
+.reshape-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.reshape-title { font-size: 12px; font-weight: 600; }
+.reshape-note { font-size: 11px; color: var(--text-3); }
+
+/* The strip. Tall enough to read the trace and to put a finger on a handle,
+   which is the same requirement twice. */
+.reshape-track {
+  position: relative;
+  height: 56px;
+  border-radius: var(--radius);
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  touch-action: none;
+}
+.reshape-shape {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.reshape-shape polyline {
+  fill: none;
+  stroke: var(--text-3);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+/* What is being thrown away. Dimmed rather than hidden, so the size of the cut
+   is visible while it is being made. */
+.reshape-cut {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--bg);
+  opacity: 0.72;
+}
+.reshape-keep {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-top: 2px solid var(--primary);
+  border-bottom: 2px solid var(--primary);
+  background: var(--primary-dim);
+  pointer-events: none;
+}
+.reshape-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  /* Centred on its position, and wide enough to grab on a touchscreen — the
+     visible line is drawn inside it. */
+  width: 22px;
+  margin-left: -11px;
+  cursor: ew-resize;
+  touch-action: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.reshape-handle::before {
+  content: '';
+  width: 3px;
+  height: 100%;
+  background: var(--primary);
+}
+.reshape-handle::after {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--primary);
+  border: 2px solid var(--bg-2);
+}
+.reshape-handle:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+.reshape-times {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.reshape-times label { display: flex; flex-direction: column; gap: 4px; }
+.reshape-times span { font-size: 11px; color: var(--text-3); }
+.reshape-times .input { width: 96px; font-family: var(--font-mono); }
+
+.reshape-streams { display: flex; flex-direction: column; gap: 6px; }
+.reshape-stream {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  cursor: pointer;
+}
+.reshape-stream-mark { color: var(--text-3); display: flex; }
+.reshape-stream-name { flex: 1; min-width: 0; }
+.reshape-stream-count { font-size: 11px; color: var(--text-3); font-family: var(--font-mono); }
+/* Staged for removal: quiet, and saying so, but still on screen and still
+   switchable — nothing has happened yet. */
+.reshape-stream.dropped { border-color: var(--danger); background: var(--danger-dim); }
+.reshape-stream.dropped .reshape-stream-name { text-decoration: line-through; color: var(--text-3); }
+.reshape-stream.dropped .reshape-stream-count { color: var(--danger); }
+
 /* ── Discover: everyone on this instance ── */
 /* One column at every width. A grid of tiles read as a gallery of strangers;
    a list reads as a directory, which is what this is — and it keeps the row

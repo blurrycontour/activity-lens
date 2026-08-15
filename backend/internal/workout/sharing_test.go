@@ -83,6 +83,9 @@ func (unimplementedSharing) ShareCounts(context.Context, int64) (map[string]int,
 func (unimplementedSharing) ShareRecipientsByWorkout(context.Context, int64) (map[string][]int64, error) {
 	panic("sharing is only exercised against the real schema; see sharing_test.go")
 }
+func (unimplementedSharing) CountCadence(context.Context, int) (int, error) {
+	panic("sharing is only exercised against the real schema; see sharing_test.go")
+}
 func (unimplementedSharing) FlagsFor(context.Context, []string) (map[string]RowFlags, error) {
 	panic("sharing is only exercised against the real schema; see sharing_test.go")
 }

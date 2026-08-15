@@ -262,6 +262,21 @@ func (s *Service) Recalculate(ctx context.Context, userID int64, id string, part
 	if !parts.Any() {
 		return nil, fmt.Errorf("%w: nothing selected to recalculate", ErrInvalid)
 	}
+	recalcInto(w, parts, profile)
+	if err := s.repo.Update(ctx, w); err != nil {
+		return nil, err
+	}
+	w.Date = w.StartTime.Format("2006-01-02")
+	return w, nil
+}
+
+// recalcInto re-derives the selected metrics in place.
+//
+// Split out of Recalculate so a reshape can run the same derivations: trimming
+// a workout invalidates every number computed from its series, and two paths
+// deriving them differently is exactly the bug nobody spots — the figures would
+// simply be a little wrong.
+func recalcInto(w *Workout, parts RecalcParts, profile CalorieProfile) {
 	// Always, and not a part: the series are stored in whatever order they were
 	// written, and everything below reads them in order. It changes no value.
 	sortTimelines(w)
@@ -308,11 +323,6 @@ func (s *Service) Recalculate(ctx context.Context, userID int64, id string, part
 		w.CaloriesManual = false
 		w.CaloriesReported = false
 	}
-	if err := s.repo.Update(ctx, w); err != nil {
-		return nil, err
-	}
-	w.Date = w.StartTime.Format("2006-01-02")
-	return w, nil
 }
 
 // Delete removes a workout the user owns.

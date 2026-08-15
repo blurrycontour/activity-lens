@@ -72,6 +72,11 @@ func (s *Service) ShareCounts(ctx context.Context, ownerID int64) (map[string]in
 	return s.repo.ShareCounts(ctx, ownerID)
 }
 
+// CountCadence settles the cadence sample count for a batch of legacy rows.
+func (s *Service) CountCadence(ctx context.Context, limit int) (int, error) {
+	return s.repo.CountCadence(ctx, limit)
+}
+
 // FlagsFor counts the photos and comments on a set of workouts, for lists that
 // can be filtered by whether a workout has either.
 func (s *Service) FlagsFor(ctx context.Context, ids []string) (map[string]RowFlags, error) {

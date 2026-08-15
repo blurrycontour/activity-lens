@@ -202,6 +202,8 @@ func (s *Server) apiRoutes() http.Handler {
 	mux.Handle("DELETE /api/workouts/{id}/comments/{commentID}", s.authedCSRF(s.handleDeleteComment))
 	mux.Handle("PUT /api/workouts/{id}/reaction", s.authedCSRF(s.handleSetReaction))
 	mux.Handle("POST /api/workouts/{id}/recalculate", s.authedCSRF(s.handleRecalculateWorkout))
+	mux.Handle("POST /api/workouts/{id}/reshape", s.authedCSRF(s.handleReshapeWorkout))
+	mux.Handle("POST /api/workouts/{id}/restore", s.authedCSRF(s.handleRestoreWorkout))
 	// Weather a person typed in, for when the grid average is not good enough.
 	mux.Handle("PUT /api/workouts/{id}/weather", s.authedCSRF(s.handleSetWorkoutWeather))
 	mux.Handle("DELETE /api/workouts/{id}/weather", s.authedCSRF(s.handleClearWorkoutWeather))

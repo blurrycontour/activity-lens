@@ -703,13 +703,7 @@ func (s *Server) handleRecalculateWorkout(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	wk, err := s.workout.Recalculate(r.Context(), user.ID, r.PathValue("id"), parts, workout.CalorieProfile{
-		Method:      prefs.CalorieMethod,
-		WeightKg:    prefs.BodyWeightKg,
-		Age:         ageFromPrefs(prefs),
-		Sex:         prefs.Sex,
-		StepLengthM: stepLengthMeters(prefs),
-	})
+	wk, err := s.workout.Recalculate(r.Context(), user.ID, r.PathValue("id"), parts, calorieProfile(prefs))
 	if err != nil {
 		s.writeWorkoutError(w, err)
 		return
@@ -906,4 +900,101 @@ func maxGoalTarget(g settings.Goal) float64 {
 		return float64(days) * 12
 	}
 	return float64(days) * 3
+}
+
+// handleReshapeWorkout trims a workout to a window and drops the series named.
+//
+// Its own endpoint rather than a field on the ordinary edit, because it is a
+// different kind of change: the edit renames and reclassifies, this rewrites
+// what was recorded. Every derived number is recomputed from what survives, so
+// the response is the whole workout rather than an acknowledgement.
+func (s *Server) handleReshapeWorkout(w http.ResponseWriter, r *http.Request) {
+	user := httpmw.UserFrom(r)
+	var req struct {
+		// Seconds from the original start. End of 0 means "to the end".
+		Start int      `json:"start"`
+		End   int      `json:"end"`
+		Drop  []string `json:"drop"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	drop := make([]workout.Stream, 0, len(req.Drop))
+	for _, d := range req.Drop {
+		drop = append(drop, workout.Stream(d))
+	}
+	prefs, err := s.settings.UserPreferences(r.Context(), user.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load preferences")
+		return
+	}
+	wk, err := s.workout.Reshape(r.Context(), user.ID, r.PathValue("id"),
+		workout.Reshape{Start: req.Start, End: req.End, Drop: drop}, calorieProfile(prefs))
+	if err != nil {
+		s.writeWorkoutError(w, err)
+		return
+	}
+	slog.Info("workout reshaped", "workout_id", wk.ID, "user_id", user.ID,
+		"start", req.Start, "end", req.End, "dropped", req.Drop)
+	writeJSON(w, http.StatusOK, wk)
+}
+
+// handleRestoreWorkout rebuilds a workout's recorded data from the file it was
+// imported from.
+//
+// The undo for the endpoint above, and the reason trimming is safe to offer at
+// all. It reparses the archived upload rather than keeping a second copy of the
+// series: the file is already kept, it is the authoritative version, and a
+// snapshot table would be a second thing to migrate, purge and get wrong.
+func (s *Server) handleRestoreWorkout(w http.ResponseWriter, r *http.Request) {
+	user := httpmw.UserFrom(r)
+	wk, err := s.workout.Get(r.Context(), user.ID, r.PathValue("id"))
+	if err != nil {
+		s.writeWorkoutError(w, err)
+		return
+	}
+	if s.rawUploads == nil || wk.RawFilename == "" {
+		writeError(w, http.StatusNotFound, "no original file was archived for this workout")
+		return
+	}
+	data, err := s.rawUploads.Open(r.Context(), wk.ID, wk.RawFilename)
+	if errors.Is(err, workout.ErrNoRawUpload) {
+		writeError(w, http.StatusNotFound, "no original file was archived for this workout")
+		return
+	}
+	if err != nil {
+		slog.Error("could not read archived upload", "workout_id", wk.ID, "error", err)
+		writeError(w, http.StatusInternalServerError, "could not read the original file")
+		return
+	}
+	in, err := ingest.Parse(wk.RawFilename, data, wk.Type)
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, "could not read the original file: "+err.Error())
+		return
+	}
+	prefs, err := s.settings.UserPreferences(r.Context(), user.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load preferences")
+		return
+	}
+	restored, err := s.workout.Restore(r.Context(), user.ID, wk.ID, in, calorieProfile(prefs))
+	if err != nil {
+		s.writeWorkoutError(w, err)
+		return
+	}
+	slog.Info("workout restored from original", "workout_id", wk.ID, "user_id", user.ID)
+	writeJSON(w, http.StatusOK, restored)
+}
+
+// calorieProfile gathers the body data the derivations need. Three call sites
+// built it by hand, which is three chances for one of them to forget a field.
+func calorieProfile(prefs settings.UserPrefs) workout.CalorieProfile {
+	return workout.CalorieProfile{
+		Method:      prefs.CalorieMethod,
+		WeightKg:    prefs.BodyWeightKg,
+		Age:         ageFromPrefs(prefs),
+		Sex:         prefs.Sex,
+		StepLengthM: stepLengthMeters(prefs),
+	}
 }

@@ -7,7 +7,7 @@ import Dropdown from '../components/Dropdown'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ReferenceDot, ReferenceArea, BarChart, Bar } from 'recharts'
 import {
   ArrowLeft, Heart, Mountain, Zap, Clock, TrendingUp, Navigation, Download, Pencil, Trash2, Gauge,
-  Check, X as XIcon, Play, Pause as PauseIcon, LoaderCircle, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, AlertTriangle, Activity, Share2, Lock, FileDown, Plus, Image as ImageIcon, NotebookPen, Images, MessageSquare, ClipboardList, Watch } from 'lucide-react'
+  Check, X as XIcon, Play, Pause as PauseIcon, LoaderCircle, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, AlertTriangle, Activity, Share2, Lock, FileDown, Plus, Image as ImageIcon, NotebookPen, Images, MessageSquare, ClipboardList, Watch, Undo2 } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
@@ -50,7 +50,9 @@ import SessionContext from '../components/SessionContext'
 import { sessionStanding } from '../lib/standing'
 import RecalculateDialog from '../components/RecalculateDialog'
 import UserAvatar, { avatarUrl, userLabel } from '../components/UserAvatar'
+import ConfirmDialog from '../components/ConfirmDialog'
 import MenuButton from '../components/MenuButton'
+import WorkoutReshape, { emptyPlan, planChanges, presentStreams, type ReshapePlan } from '../components/WorkoutReshape'
 import ShareDialog from '../components/ShareDialog'
 import ShareCardDialog from '../components/ShareCardDialog'
 
@@ -95,7 +97,7 @@ function StatChip({ icon, label, value, calculated, manual }: { icon?: React.Rea
   )
 }
 
-function OptionsMenu({ onEdit, onExport, onDownloadOriginal, onShare, onShareCard, onRecalculate, onDelete, deleting }: { onEdit: () => void; onExport: () => void; onDownloadOriginal?: () => void; onShare?: () => void; onShareCard: () => void; onRecalculate: () => void; onDelete: () => void; deleting: boolean }) {
+function OptionsMenu({ onEdit, onExport, onDownloadOriginal, onRestore, onShare, onShareCard, onRecalculate, onDelete, deleting }: { onEdit: () => void; onExport: () => void; onDownloadOriginal?: () => void; onRestore?: () => void; onShare?: () => void; onShareCard: () => void; onRecalculate: () => void; onDelete: () => void; deleting: boolean }) {
   return (
     <MenuButton icon={<MoreVertical size={18} />} label="Workout options">
       <button className="options-menu-item" onClick={onEdit}>
@@ -123,6 +125,14 @@ function OptionsMenu({ onEdit, onExport, onDownloadOriginal, onShare, onShareCar
       {onDownloadOriginal && (
         <button className="options-menu-item" onClick={onDownloadOriginal}>
           <FileDown size={14} /> Download original
+        </button>
+      )}
+      {/* The undo for a trim or a removal, and only offered when there is a
+          file to undo from — the archive is an admin setting, so plenty of
+          workouts have none. */}
+      {onRestore && (
+        <button className="options-menu-item" onClick={onRestore}>
+          <Undo2 size={14} /> Restore from original
         </button>
       )}
       <button className="options-menu-item danger" onClick={onDelete} disabled={deleting}>
@@ -532,7 +542,7 @@ function preparePlot<T extends { t: number }>(data: T[], key: string): PlotSerie
 }
 
 export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSettings, onOpenUser }: WorkoutDetailProps) {
-  const { updateWorkout, removeWorkout, workouts: library } = useWorkouts()
+  const { updateWorkout, removeWorkout, refresh: refreshLibrary, workouts: library } = useWorkouts()
   const { user } = useAuth()
   const [w, setW] = useState(w0)
   /*
@@ -614,6 +624,15 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
   }, [w0.id]))
 
   const [editing, setEditing] = useState(false)
+  /**
+   * The staged trim and stream removals. Held beside the other edit fields and
+   * applied only on Save, so nothing here touches the workout until asked.
+   */
+  const [plan, setPlan] = useState<ReshapePlan>(() => emptyPlan(w))
+  // Raised on Save when the plan would destroy something, naming what.
+  const [confirmReshape, setConfirmReshape] = useState(false)
+  const [restoring, setRestoring] = useState(false)
+  const [confirmRestore, setConfirmRestore] = useState(false)
   const [editName, setEditName] = useState(w.name)
   const [editDate, setEditDate] = useState(w.date)
   const [editType, setEditType] = useState<WorkoutType>(w.type)
@@ -985,11 +1004,26 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
     setEditCalories(initial.calories)
     setEditSteps(initial.steps)
     setEditDistance(initial.distance)
+    setPlan(emptyPlan(w))
     setSaveErr(null)
     setEditing(true)
   }
 
+  /**
+   * Saves the form, and the reshape with it when one is staged.
+   *
+   * The field patch goes first and the reshape second, because the reshape
+   * returns the whole recomputed workout: doing it the other way round would
+   * render the trimmed workout and then overwrite it with the response to the
+   * rename, whose numbers are the old ones.
+   */
   async function saveEdit() {
+    // A staged trim or removal is destructive, so it is confirmed once, here,
+    // rather than per control while the user is still experimenting.
+    if (planChanges(w, plan) && !confirmReshape) {
+      setConfirmReshape(true)
+      return
+    }
     setSaving(true)
     setSaveErr(null)
     try {
@@ -1006,17 +1040,43 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
 
       // Nothing moved: the request would be a no-op that still bumps the
       // updated-at stamp and re-renders the list for no reason.
-      if (Object.keys(patch).length === 0) {
-        setEditing(false)
-        return
+      if (Object.keys(patch).length > 0) {
+        setW(await updateWorkout(w.id, patch))
       }
-      const updated = await updateWorkout(w.id, patch)
-      setW(updated)
+      if (planChanges(w, plan)) {
+        setW(await api.reshapeWorkout(w.id, {
+          start: plan.start,
+          // The server reads 0 as "to the end", which is what an untouched
+          // handle means — and avoids sending a duration it would clamp anyway.
+          end: plan.end >= w.duration ? 0 : plan.end,
+          drop: plan.drop,
+        }))
+        // The library cache holds this workout's distance and duration, and
+        // both just changed. Without this the list, dashboard and charts keep
+        // the old figures until something else reloads them.
+        void refreshLibrary()
+      }
+      setConfirmReshape(false)
       setEditing(false)
     } catch (err) {
       setSaveErr(err instanceof Error ? err.message : 'Failed to save changes')
+      setConfirmReshape(false)
     } finally {
       setSaving(false)
+    }
+  }
+
+  /** Rebuilds the recorded data from the archived original. */
+  async function handleRestore() {
+    setRestoring(true)
+    try {
+      setW(await api.restoreWorkout(w.id))
+      void refreshLibrary()
+      setConfirmRestore(false)
+    } catch (err) {
+      setSaveErr(err instanceof Error ? err.message : 'Could not restore from the original file')
+    } finally {
+      setRestoring(false)
     }
   }
 
@@ -1351,6 +1411,14 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
                 </div>
               </div>
 
+              {/* What the workout recorded, as opposed to what it is called.
+                  Only for workouts that have something to trim or drop — a
+                  hand-entered one has neither, and an empty section would just
+                  be a question with no answer. */}
+              {(w.duration > 0 || presentStreams(w).length > 0) && (
+                <WorkoutReshape workout={w} plan={plan} onChange={setPlan} />
+              )}
+
               {saveErr && (
                 <div style={{ display: 'flex', gap: 6, marginTop: 16, alignItems: 'center', color: 'var(--danger)', fontSize: 12 }}>
                   {saveErr}
@@ -1367,6 +1435,44 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
           </div>
         </>
       )}
+      {/* Named rather than generic: "this cannot be undone" is not true here —
+          there may be an original to restore from — and what is actually going
+          is the only thing worth reading twice. */}
+      {confirmReshape && (
+        <ConfirmDialog
+          title="Save these changes to the recording?"
+          message={[
+            plan.start > 0 || plan.end < w.duration
+              ? `Trims the workout to ${fmtDuration(plan.end - plan.start)} of ${fmtDuration(w.duration)}. Distance, pace, calories and the rest are recalculated from what is left.`
+              : '',
+            plan.drop.length > 0
+              ? `Removes ${plan.drop.map(d => presentStreams(w).find(s => s.id === d)?.label.toLowerCase() ?? d).join(', ')}.`
+              : '',
+            w.hasOriginal
+              ? 'The file you imported is kept, so this can be undone with "Restore from original".'
+              : 'There is no archived original for this workout, so this cannot be undone.',
+          ].filter(Boolean).join(' ')}
+          confirmLabel="Save changes"
+          danger={!w.hasOriginal}
+          busy={saving}
+          busyLabel="Saving…"
+          onConfirm={() => void saveEdit()}
+          onCancel={() => setConfirmReshape(false)}
+        />
+      )}
+
+      {confirmRestore && (
+        <ConfirmDialog
+          title="Restore from the original file?"
+          message="Rebuilds the route, heart rate, cadence and elevation from the file you imported, undoing any trim or removal. The name, sport, notes, sharing, equipment, photos and comments are left alone."
+          confirmLabel="Restore"
+          busy={restoring}
+          busyLabel="Restoring…"
+          onConfirm={() => void handleRestore()}
+          onCancel={() => setConfirmRestore(false)}
+        />
+      )}
+
       {confirmDelete && (
         <>
           <div className="overlay" onClick={() => { if (!deleting) setConfirmDelete(false) }} />
@@ -1439,6 +1545,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
                 onEdit={startEdit}
                 onExport={() => void downloadWorkoutGPX(w).catch(reportSaveFailure)}
                 onDownloadOriginal={w.hasOriginal ? downloadOriginal : undefined}
+                onRestore={w.hasOriginal ? () => setConfirmRestore(true) : undefined}
                 onShare={() => setSharing(true)}
                 onShareCard={() => setCardOpen(true)}
                 onRecalculate={() => { setRecalcErr(null); setConfirmRecalc(true) }}
