@@ -6,7 +6,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
   RadialBarChart, RadialBar,
 } from 'recharts'
-import { TrendingUp, Zap, Flame, Clock, Mountain, Heart, Trophy, Target, Activity, Footprints, ChartColumnBig } from 'lucide-react'
+import { TrendingUp, Zap, Flame, Clock, Mountain, Heart, Trophy, Target, Activity, Footprints, ChartColumnBig, Play } from 'lucide-react'
 import Confetti from '../components/Confetti'
 import GoalSportMark, { goalColor } from '../components/GoalSportMark'
 import { useLocalStorage } from '../lib/useLocalStorage'
@@ -14,6 +14,7 @@ import { useIsMobile } from '../lib/useIsMobile'
 import InfoTip from '../components/InfoTip'
 import Sparkline from '../components/Sparkline'
 import { api, type Equipment } from '../lib/api'
+import { durationLabel, elapsedMin, type PlanSession } from '../data/plans'
 import { AXIS_TICK, GRID_PROPS, HOVER_FILL, recencyRamp } from '../lib/chartColors'
 import { useThemeTokens } from '../lib/useThemeTokens'
 import {
@@ -609,11 +610,18 @@ function CompareRow({ label, value, average, format }: {
   )
 }
 
-export default function Dashboard({ onSelect }: { onSelect: (w: Workout) => void }) {
+export default function Dashboard({ onSelect, onResumeSession }: {
+  onSelect: (w: Workout) => void
+  /** Opens the training session that is currently running. */
+  onResumeSession: (id: string) => void
+}) {
   const { workouts, loading } = useWorkouts()
   const [cfg] = useLocalStorage<DashboardConfig>(DASHBOARD_CFG_KEY, defaultDashboardConfig())
   const [goals, setGoals] = useState<Goal[]>([])
   const [equipment, setEquipment] = useState<Equipment[]>([])
+  // A training session left running, so the dashboard can offer the way back
+  // into it. Undefined until asked; null once the answer is "none".
+  const [running, setRunning] = useState<PlanSession | null>(null)
 
   useEffect(() => {
     let active = true
@@ -624,6 +632,12 @@ export default function Dashboard({ onSelect }: { onSelect: (w: Workout) => void
       })
       .catch(() => { /* goal tile simply stays hidden */ })
     api.listEquipment().then(e => { if (active) setEquipment(e) }).catch(() => {})
+    // 204 when nothing is running, which the client turns into undefined. A
+    // failure here leaves the tile hidden rather than showing an error for
+    // something the user did not ask about.
+    api.activePlanSession()
+      .then(s => { if (active) setRunning(s ?? null) })
+      .catch(() => {})
     return () => { active = false }
   }, [])
 
@@ -762,6 +776,22 @@ export default function Dashboard({ onSelect }: { onSelect: (w: Workout) => void
       </div>
 
       <div className="page-content">
+        {/* Above everything, including the empty state: a session in progress
+            is the only thing on this page that is happening right now. */}
+        {running && (
+          <button className="card plan-resume" onClick={() => onResumeSession(running.id)}>
+            <span className="plan-resume-dot" aria-hidden />
+            <div className="plan-resume-text">
+              <span className="field-label">Session in progress</span>
+              <strong>{running.dayName}</strong>
+              <span className="plan-resume-meta plan-num">
+                {running.planName} · {durationLabel(elapsedMin(running.startedAt))} so far
+              </span>
+            </div>
+            <span className="btn btn-primary plan-resume-cta"><Play size={14} /> Resume</span>
+          </button>
+        )}
+
         {loading && workouts.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-3)', fontSize: 13 }}>Loading…</div>
         ) : workouts.length === 0 ? (

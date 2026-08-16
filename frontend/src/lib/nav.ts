@@ -5,6 +5,8 @@ export type Page =
   | 'consistency'
   | 'map'
   | 'equipment'
+  /** Training plans, and the sessions run against them. */
+  | 'plans'
   /** Everyone on this instance; each entry opens their profile. */
   | 'discover'
   | 'help'
@@ -24,7 +26,7 @@ export type Page =
  * The primary pages, in order. Mobile swipe navigation walks this list
  * cyclically, so swiping right on the first page wraps around to the last.
  */
-export const MOBILE_PAGES: Page[] = ['dashboard', 'workouts', 'discover', 'analysis', 'consistency', 'map', 'equipment']
+export const MOBILE_PAGES: Page[] = ['dashboard', 'workouts', 'discover', 'plans', 'analysis', 'consistency', 'map', 'equipment']
 
 /** Sidebar order on desktop: the mobile set plus Help. */
 export const DESKTOP_PAGES: Page[] = [...MOBILE_PAGES, 'help']
@@ -43,7 +45,7 @@ export const DESKTOP_PAGES: Page[] = [...MOBILE_PAGES, 'help']
 export const BOTTOM_BAR_PAGES: Page[] = ['dashboard', 'workouts', 'discover', 'analysis']
 
 /** The pages behind "More" on a phone. */
-export const MORE_PAGES: Page[] = ['consistency', 'map', 'equipment', 'help']
+export const MORE_PAGES: Page[] = ['plans', 'consistency', 'map', 'equipment', 'help']
 
 /** Every page that owns a route, including the ones reached from the user menu. */
 export const PAGES: Page[] = [...DESKTOP_PAGES, 'settings', 'admin', 'users']
@@ -58,6 +60,7 @@ export const SETTINGS_SECTIONS = [
   'profile', 'security', 'body',
   'appearance', 'dashboard', 'goals', 'notifications', 'weather',
   'feedback',
+  'plans',
   'autoimport', 'app', 'server',
 ] as const
 export type SettingsSection = typeof SETTINGS_SECTIONS[number]
@@ -84,7 +87,7 @@ function sectionsFor(page: Page): readonly string[] {
  * component unmounts and any id it was holding in local state goes with it.
  * Coming back then landed on the inventory rather than the gear you left.
  */
-const ID_SECTION_PAGES: readonly Page[] = ['equipment', 'users']
+const ID_SECTION_PAGES: readonly Page[] = ['equipment', 'users', 'plans']
 
 /**
  * Routes that no longer exist, pointing at whatever absorbed them. Timeline was

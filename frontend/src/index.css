@@ -5768,12 +5768,450 @@ body:has(.overlay) .fab { display: none; }
 .session-expanded .session-profile { flex: 1; min-width: 0; min-height: 0; }
 .session-expanded .session-sky { border-radius: 0; border: none; }
 
-/* A page that is still arriving. Only the map is loaded this way — it is the
-   one page heavy enough to be worth a separate chunk. */
+/* A page that is still arriving. The map and the plans pages are loaded this
+   way — both are heavy enough, and reached rarely enough, to be worth their
+   own chunk. */
 .page-loading {
   display: grid;
   place-items: center;
   min-height: 40vh;
   color: var(--text-3);
   font-size: 13px;
+}
+
+/* ── Training plans ──────────────────────────────────────────────────
+   Three surfaces: the list of plans, the editor, and the runner. They share
+   the row rhythm and accent rail the Workouts list already uses, so the page
+   reads as part of the app rather than a feature bolted to the side.
+
+   Purple is not decoration here. --strength is what this app already paints
+   strength workouts, so the choose-one group — the one genuinely new concept —
+   inherits a meaning instead of inventing one. It is deliberately not the
+   accent: the accent is the user's choice and carries none. */
+
+/* Numbers, wherever they line up or get compared. */
+.plan-num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+}
+
+/* A shared empty state. Every page had grown its own — .feed-empty,
+   .notif-empty, .gallery-empty, .social-empty — so this one is written to be
+   adopted by them rather than to be a fifth. */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 40px 24px;
+  text-align: center;
+  color: var(--text-2);
+  font-size: 14px;
+}
+.empty-state svg { color: var(--text-3); }
+.empty-state-hint {
+  font-size: 12.5px;
+  color: var(--text-3);
+  line-height: 1.55;
+  max-width: 46ch;
+}
+
+/* --- The list --- */
+
+.plan-list { display: flex; flex-direction: column; gap: 9px; margin-top: 14px; }
+.plan-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 15px;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  width: 100%;
+}
+.plan-card:hover { border-color: var(--border-strong); }
+.plan-card-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.plan-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.plan-card-meta { font-size: 11.5px; color: var(--text-3); }
+.plan-card-figures {
+  display: flex;
+  gap: 14px;
+  font-size: 11.5px;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.plan-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 2px 8px;
+}
+.plan-badge.running { color: var(--primary); border-color: var(--primary); }
+
+/* The way back into a session already running. Deliberately loud: it is the
+   one thing on this page that is time-sensitive. */
+.plan-resume {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 13px 15px;
+  margin-bottom: 14px;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, var(--bg-2));
+}
+.plan-resume-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 99px;
+  background: var(--primary);
+  flex: 0 0 auto;
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .plan-resume-dot { animation: none; }
+}
+.plan-resume-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.plan-resume-text strong { font-size: 14px; letter-spacing: -0.01em; }
+.plan-resume-meta { font-size: 11.5px; color: var(--text-2); }
+.plan-resume-cta { flex: 0 0 auto; pointer-events: none; }
+
+/* --- The runner --- */
+
+.plan-run-actions { display: flex; gap: 8px; }
+.plan-run-summary {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+.plan-run-figures { display: flex; gap: 26px; flex-wrap: wrap; }
+.plan-ring { position: relative; flex: 0 0 auto; width: 62px; height: 62px; }
+.plan-ring svg { display: block; }
+.plan-ring circle { transition: stroke-dashoffset 0.3s ease; }
+@media (prefers-reduced-motion: reduce) {
+  .plan-ring circle { transition: none; }
+}
+.plan-ring-num {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: -0.03em;
+}
+
+.plan-rows { display: flex; flex-direction: column; gap: 9px; }
+.plan-ex {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) * 1.5);
+  padding: 12px 14px;
+}
+/* The rail the Workouts row uses, in the sport's own colour, turning green
+   when the block is finished — state in form as well as in the count. */
+.plan-ex::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--strength);
+  opacity: 0.5;
+}
+.plan-ex.done::before { background: var(--success); opacity: 1; }
+.plan-ex.done .plan-ex-title { color: var(--text-3); text-decoration: line-through; }
+.plan-ex.open { border-color: var(--border-strong); }
+
+.plan-ex-top { display: flex; align-items: flex-start; gap: 10px; }
+.plan-ex-name {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.plan-ex-index {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+  flex: 0 0 auto;
+}
+.plan-ex-title { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+.plan-ex-caret { color: var(--text-3); transition: transform 0.15s; flex: 0 0 auto; }
+.plan-ex.open .plan-ex-caret { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) {
+  .plan-ex-caret { transition: none; }
+}
+.plan-ex-target { font-size: 12.5px; color: var(--text-2); white-space: nowrap; }
+
+/* Sets as squares. 36px, above the 44px-with-padding touch target, because
+   this is tapped with gym hands and often one-handed. */
+.plan-sets { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 11px; }
+.plan-set {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.plan-set:hover { border-color: var(--border-strong); color: var(--text); }
+.plan-set[aria-pressed='true'] {
+  background: var(--success);
+  border-color: var(--success);
+  color: var(--bg);
+}
+
+/* The expanded row: direction B's readability, without leaving the list. */
+.plan-ex-focus {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.plan-focus-targets { display: flex; gap: 26px; flex-wrap: wrap; }
+.plan-setrows { display: flex; flex-direction: column; gap: 7px; }
+.plan-setrow {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 8px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.plan-setrow.done { border-color: var(--success); }
+.plan-setrow-tick {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border-radius: 99px;
+  border: 1.5px solid var(--border-strong);
+  background: transparent;
+  color: transparent;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.plan-setrow-tick[aria-pressed='true'] {
+  background: var(--success);
+  border-color: var(--success);
+  color: var(--bg);
+}
+.plan-setrow-n { font-size: 13px; }
+.plan-setrow-reps { font-size: 12.5px; color: var(--text-3); }
+.plan-setrow-kg { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.plan-setrow-kg .input { width: 76px; text-align: right; font-family: var(--font-mono); }
+.plan-setrow-kg span { font-size: 11.5px; color: var(--text-3); }
+.plan-ex-note { font-size: 12.5px; color: var(--text-3); line-height: 1.5; }
+
+.plan-rest {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.plan-rest.running { color: var(--warning); border-color: var(--warning); cursor: default; }
+.plan-rest.up { color: var(--success); border-color: var(--success); }
+
+/* The choose-one strip under a row. */
+.plan-alt {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  margin-top: 11px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+.plan-swap {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  padding: 5px 11px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.plan-swap:hover { border-color: var(--strength); color: var(--text); }
+.plan-swap.on {
+  background: color-mix(in srgb, var(--strength) 15%, transparent);
+  border-color: var(--strength);
+  color: var(--text);
+}
+
+.plan-snapshot-note { margin: 18px 0 9px; }
+.plan-session-notes {
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--text-2);
+  line-height: 1.55;
+}
+
+/* --- The editor --- */
+
+.plan-tabs {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+  margin: 16px 0 14px;
+  scrollbar-width: none;
+}
+.plan-tabs::-webkit-scrollbar { display: none; }
+.plan-tab {
+  font: inherit;
+  font-size: 13px;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 9px 13px;
+  color: var(--text-3);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.plan-tab:hover { color: var(--text); }
+.plan-tab.active { color: var(--text); border-bottom-color: var(--primary); }
+.plan-tab.add { display: inline-flex; align-items: center; gap: 5px; }
+
+.plan-day-head { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+.plan-day-head .input { flex: 1; min-width: 0; font-weight: 600; }
+
+/* Queried against itself, not the viewport: what squeezes an exercise row is
+   the width of the editor column, which on a desktop is the page content and
+   inside a narrow window is something else entirely. A 768px media query got
+   this wrong in both directions — it stacked the fields on a phone-sized
+   viewport even where the column was wide, and left the name crushed to "Be"
+   in a narrow column on a wide screen. */
+.plan-edit-rows { display: flex; flex-direction: column; gap: 10px; container-type: inline-size; }
+.plan-edit-block { display: flex; flex-direction: column; gap: 6px; }
+.plan-erow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-2);
+}
+.plan-grip { display: flex; align-items: center; gap: 2px; color: var(--text-3); flex: 0 0 auto; }
+.plan-grip .btn-icon { width: 24px; height: 24px; font-size: 13px; }
+.plan-ename { flex: 1; min-width: 0; }
+.plan-efields { display: flex; gap: 7px; flex: 0 0 auto; }
+.plan-efields label { display: flex; flex-direction: column; gap: 3px; }
+.plan-efields .input {
+  width: 62px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  padding: 6px 7px;
+}
+.plan-erow-x { flex: 0 0 auto; }
+
+/* The choose-one group: the only new idea in the feature, so the only thing
+   here wearing the strength colour. */
+.plan-group {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid var(--strength);
+  border-radius: calc(var(--radius) * 1.5);
+  background: color-mix(in srgb, var(--strength) 10%, transparent);
+}
+.plan-group-head { display: flex; align-items: center; gap: 8px; }
+.plan-group-head .field-label { color: var(--strength); }
+.plan-group-head .btn-icon { margin-left: auto; }
+
+.plan-add-row,
+.plan-add-alt {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 12.5px;
+  background: transparent;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--text-3);
+  padding: 9px 11px;
+  cursor: pointer;
+}
+.plan-add-row:hover,
+.plan-add-alt:hover { color: var(--text); border-color: var(--strength); }
+.plan-add-alt { align-self: flex-start; border-style: dashed; padding: 6px 10px; font-size: 12px; }
+
+/* The three number fields leave the name a stub in a narrow column, and "Be"
+   is not an exercise. Name on its own line, fields under it. min-width: 0 is
+   load-bearing: an <input> has an intrinsic width from its size attribute, and
+   without it each field claims a line of its own. */
+@container (max-width: 520px) {
+  .plan-erow { flex-wrap: wrap; }
+  .plan-ename { flex: 1 0 100%; }
+  /* min-width: 0 on the group as well as the inputs. A flex item defaults to
+     min-width: auto, so the row of fields refuses to shrink below the sum of
+     its contents and spills out of the card instead. */
+  /* Basis 0 so the fields take what is left after the remove button,
+     which otherwise wraps to a line of its own. */
+  .plan-efields { flex: 1 1 0; min-width: 0; }
+  .plan-efields label { flex: 1; min-width: 0; }
+  .plan-efields .input { width: auto; min-width: 0; }
+}
+
+@media (max-width: 768px) {
+  .plan-run-summary { gap: 14px; }
+  .plan-run-figures { gap: 18px; }
+  .plan-resume { flex-wrap: wrap; }
+  .plan-resume-cta { width: 100%; justify-content: center; }
+  .plan-card-figures { flex-direction: column; gap: 2px; text-align: right; }
 }

@@ -30,6 +30,9 @@ import Help from './pages/Help'
  * since the library was already loaded by then.
  */
 const MapPage = lazy(() => import('./pages/MapPage'))
+// Lazy for the same reason: the editor and the runner are a page most sessions
+// never open, and they are only ever reached by navigating to them.
+const PlansPage = lazy(() => import('./pages/plans/PlansPage'))
 import Settings from './pages/settings'
 import Admin from './pages/admin'
 import Login from './pages/Login'
@@ -710,7 +713,10 @@ export default function App() {
             Loading workout…
           </div>
         ) : page === 'dashboard' ? (
-          <Dashboard onSelect={selectWorkout} />
+          <Dashboard
+            onSelect={selectWorkout}
+            onResumeSession={id => openSection('plans', 'session', id)}
+          />
         ) : page === 'workouts' ? (
           <Workouts onSelect={selectWorkout} onImport={() => setShowImport(true)} />
         ) : page === 'analysis' ? (
@@ -740,6 +746,16 @@ export default function App() {
             onOpenDetail={id => openSection('equipment', id)}
             onSelectWorkout={id => { api.getWorkout(id).then(selectWorkout).catch(() => {}) }}
           />
+        ) : page === 'plans' ? (
+          // section is a plan id, or "session" with the id in detail; see
+          // ID_SECTION_PAGES in nav.ts.
+          <Suspense fallback={<div className="page-content page-loading">Loading plans…</div>}>
+            <PlansPage
+              section={section}
+              detail={detail}
+              onOpen={(sec, det) => openSection('plans', sec, det ?? null)}
+            />
+          </Suspense>
         ) : page === 'settings' ? (
           <Settings
             section={section as SettingsSection | null}

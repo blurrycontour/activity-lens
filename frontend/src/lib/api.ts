@@ -4,6 +4,9 @@
 import { reportReachability, respondedFromBackend } from './network'
 import { fetchWithCache } from './nativeCache'
 import { apiBase, authToken, isNative } from './serverConfig'
+// Training-plan shapes live with the other domain types in data/, beside the
+// helpers that read them, rather than being declared here like the older ones.
+import type { PlanDay, PlanSession, SessionProgress, TrainingPlan } from '../data/plans'
 
 /** What kind of report this is — mirrors feedback.AllCategories on the server. */
 export type FeedbackCategory = 'bug' | 'idea' | 'other'
@@ -212,6 +215,14 @@ export interface UserPreferences {
    * explicit backfill below.
    */
   weatherEnabled?: boolean
+  /**
+   * Record a finished training session as a manual strength workout.
+   *
+   * Off by default: everything else in the library was measured by a device,
+   * and folding hand-entered gym work into the same totals is a decision about
+   * what those totals mean.
+   */
+  planWorkouts?: boolean
 }
 
 export interface ApiGoal {
@@ -890,6 +901,42 @@ export const api = {
     request<Equipment & { workouts: LinkedWorkout[] }>(`/api/equipment/${id}/workouts`, { method: 'POST', body: { workoutIds } }),
   unlinkEquipmentWorkout: (id: string, workoutId: string) =>
     request<Equipment & { workouts: LinkedWorkout[] }>(`/api/equipment/${id}/workouts/${workoutId}`, { method: 'DELETE' }),
+
+  // --- Training plans ---
+  listPlans: () => request<TrainingPlan[]>('/api/plans'),
+  getPlan: (id: string) => request<TrainingPlan>(`/api/plans/${id}`),
+  createPlan: (payload: { name: string; notes?: string }) =>
+    request<TrainingPlan>('/api/plans', { method: 'POST', body: payload }),
+  patchPlan: (id: string, patch: { name?: string; notes?: string; archived?: boolean }) =>
+    request<TrainingPlan>(`/api/plans/${id}`, { method: 'PATCH', body: patch }),
+  deletePlan: (id: string) => request<unknown>(`/api/plans/${id}`, { method: 'DELETE' }),
+  /**
+   * Saves a plan's whole day structure at once.
+   *
+   * The editor sends everything it is holding rather than a diff, and the
+   * answer carries the ids the server issued for anything newly added — so
+   * the next save updates those rows instead of creating them again.
+   */
+  savePlanDays: (id: string, days: PlanDay[]) =>
+    request<TrainingPlan>(`/api/plans/${id}/days`, { method: 'PUT', body: { days } }),
+
+  // --- Plan sessions ---
+  /** The session in progress, or undefined when nothing is running. */
+  activePlanSession: () => request<PlanSession | undefined>('/api/plan-sessions/active'),
+  listPlanSessions: (limit = 50, offset = 0) =>
+    request<PlanSession[]>(`/api/plan-sessions?limit=${limit}&offset=${offset}`),
+  getPlanSession: (id: string) => request<PlanSession>(`/api/plan-sessions/${id}`),
+  startPlanSession: (planId: string, dayId: string) =>
+    request<PlanSession>('/api/plan-sessions', { method: 'POST', body: { planId, dayId } }),
+  savePlanProgress: (id: string, progress: SessionProgress) =>
+    request<PlanSession>(`/api/plan-sessions/${id}/progress`, { method: 'PUT', body: { progress } }),
+  /**
+   * Closes a session. The progress goes along with it so the last few ticks
+   * cannot be lost to an autosave that failed on the way to the Finish tap.
+   */
+  finishPlanSession: (id: string, progress: SessionProgress, notes = '') =>
+    request<PlanSession>(`/api/plan-sessions/${id}/finish`, { method: 'POST', body: { progress, notes } }),
+  deletePlanSession: (id: string) => request<unknown>(`/api/plan-sessions/${id}`, { method: 'DELETE' }),
 }
 
 /** Who, beyond the owner, can read a workout. Direct shares are separate. */
