@@ -99,6 +99,9 @@ var userTaglineSchema string
 //go:embed migrations/0029_cadence_points.sql
 var cadencePointsSchema string
 
+//go:embed migrations/0030_training_plans.sql
+var trainingPlansSchema string
+
 // maxOpenConns is how many connections the pool will open.
 //
 // It was 1, which made every request in the process queue behind every other
@@ -167,6 +170,11 @@ func MigrateApp(ctx context.Context, db *sql.DB) error {
 	// to them.
 	if _, err := db.ExecContext(ctx, equipmentSchema); err != nil {
 		return fmt.Errorf("apply equipment schema: %w", err)
+	}
+	// Training plans reference workouts(id), so this has to follow the app
+	// schema that creates that table.
+	if _, err := db.ExecContext(ctx, trainingPlansSchema); err != nil {
+		return fmt.Errorf("apply training plans schema: %w", err)
 	}
 	// Backfill ALTER-based migrations on older databases. Each statement is
 	// executed individually so a duplicate-column error on one does not abort

@@ -773,6 +773,12 @@ type savePrefsRequest struct {
 	// Cleaned rather than validated: a tagline that is too long or carries a
 	// newline is a tagline to trim, not a save to reject. See CleanTagline.
 	Tagline string `json:"tagline"`
+
+	// A plain bool, unlike WeatherEnabled above, because this one defaults to
+	// off: an absent field and a false both mean "do not record workouts",
+	// which is the same answer, so there is nothing for a pointer to
+	// distinguish.
+	PlanWorkouts bool `json:"planWorkouts"`
 }
 
 func (s *Server) handleSavePreferences(w http.ResponseWriter, r *http.Request) {
@@ -841,6 +847,7 @@ func (s *Server) handleSavePreferences(w http.ResponseWriter, r *http.Request) {
 		Goals:          goals,
 		WeatherEnabled: req.WeatherEnabled == nil || *req.WeatherEnabled,
 		Tagline:        tagline,
+		PlanWorkouts:   req.PlanWorkouts,
 	}
 	// Unknown kinds are dropped so a stale or hand-crafted client cannot write
 	// switches that nothing reads.

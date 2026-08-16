@@ -149,6 +149,14 @@ type UserPrefs struct {
 	// column default in 0022 has to agree with the Go default below, or a user
 	// who has never saved preferences disagrees with one who has.
 	WeatherEnabled bool `json:"weatherEnabled"`
+	// PlanWorkouts records a finished training session as a manual strength
+	// workout, so it counts towards streaks, goals and the year's totals.
+	//
+	// Off by default, and deliberately a choice rather than a default-on: the
+	// rest of the library is measured by a device, and folding hand-entered
+	// gym sessions into the same totals is a decision about what those totals
+	// mean. Someone who wants it says so.
+	PlanWorkouts bool `json:"planWorkouts"`
 }
 
 // VAPID is the Web Push keypair identifying this server to browser push

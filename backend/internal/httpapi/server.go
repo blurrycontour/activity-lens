@@ -9,6 +9,7 @@ import (
 	"github.com/blurrycontour/activity-lens/backend/internal/equipment"
 	"github.com/blurrycontour/activity-lens/backend/internal/feedback"
 	"github.com/blurrycontour/activity-lens/backend/internal/notify"
+	"github.com/blurrycontour/activity-lens/backend/internal/plans"
 	"github.com/blurrycontour/activity-lens/backend/internal/sessions"
 	"github.com/blurrycontour/activity-lens/backend/internal/settings"
 	"github.com/blurrycontour/activity-lens/backend/internal/weather"
@@ -22,12 +23,15 @@ import (
 
 // Server bundles the dependencies needed to serve the API and SPA.
 type Server struct {
-	cfg        config.Config
-	auth       *auth.Service
-	mw         *httpmw.Middleware
-	oidc       *oidc.Handler
-	workout    *workout.Service
-	equipment  *equipment.Service
+	cfg       config.Config
+	auth      *auth.Service
+	mw        *httpmw.Middleware
+	oidc      *oidc.Handler
+	workout   *workout.Service
+	equipment *equipment.Service
+	// plans is training plans, or nil when this server was built without
+	// them — see UsePlans.
+	plans      *plans.Service
 	settings   *settings.Store
 	rawUploads *workout.RawUploadStore
 	// Gallery photos on disk. Always present; unlike raw uploads there is no
@@ -117,6 +121,12 @@ func (s *Server) UseSessionClients(store *sessions.Store) { s.sessionClients = s
 
 // UseAdminStats wires the per-user totals shown in Admin -> Users.
 func (s *Server) UseAdminStats(store *AdminStatsStore) { s.adminStats = store }
+
+// UsePlans wires training plans. Optional for the same reason UseWeather is:
+// New already takes nine dependencies, and leaving this unset keeps every
+// existing test's Server valid — the routes then answer 404, which is what a
+// client that asks for a feature this server does not have should hear.
+func (s *Server) UsePlans(svc *plans.Service) { s.plans = svc }
 
 // Handler builds the top-level http.Handler: API routes plus the SPA.
 func (s *Server) Handler() (http.Handler, error) {
@@ -261,6 +271,23 @@ func (s *Server) apiRoutes() http.Handler {
 	mux.Handle("GET /api/equipment/{id}", s.authed(s.handleGetEquipment))
 	mux.Handle("PATCH /api/equipment/{id}", s.authedCSRF(s.handlePatchEquipment))
 	mux.Handle("DELETE /api/equipment/{id}", s.authedCSRF(s.handleDeleteEquipment))
+	// --- Training plans (authenticated) ---
+	mux.Handle("GET /api/plans", s.authed(s.withPlans(s.handleListPlans)))
+	mux.Handle("POST /api/plans", s.authedCSRF(s.withPlans(s.handleCreatePlan)))
+	mux.Handle("GET /api/plans/{id}", s.authed(s.withPlans(s.handleGetPlan)))
+	mux.Handle("PATCH /api/plans/{id}", s.authedCSRF(s.withPlans(s.handlePatchPlan)))
+	mux.Handle("DELETE /api/plans/{id}", s.authedCSRF(s.withPlans(s.handleDeletePlan)))
+	mux.Handle("PUT /api/plans/{id}/days", s.authedCSRF(s.withPlans(s.handlePutPlanDays)))
+	// Sessions sit beside plans rather than under one, because a session
+	// outlives the plan it came from.
+	mux.Handle("GET /api/plan-sessions", s.authed(s.withPlans(s.handleListPlanSessions)))
+	mux.Handle("POST /api/plan-sessions", s.authedCSRF(s.withPlans(s.handleStartPlanSession)))
+	mux.Handle("GET /api/plan-sessions/active", s.authed(s.withPlans(s.handleActivePlanSession)))
+	mux.Handle("GET /api/plan-sessions/{id}", s.authed(s.withPlans(s.handleGetPlanSession)))
+	mux.Handle("PUT /api/plan-sessions/{id}/progress", s.authedCSRF(s.withPlans(s.handleSavePlanProgress)))
+	mux.Handle("POST /api/plan-sessions/{id}/finish", s.authedCSRF(s.withPlans(s.handleFinishPlanSession)))
+	mux.Handle("DELETE /api/plan-sessions/{id}", s.authedCSRF(s.withPlans(s.handleDeletePlanSession)))
+
 	mux.Handle("POST /api/equipment/{id}/workouts", s.authedCSRF(s.handleLinkWorkouts))
 	mux.Handle("DELETE /api/equipment/{id}/workouts/{workoutId}", s.authedCSRF(s.handleUnlinkWorkout))
 

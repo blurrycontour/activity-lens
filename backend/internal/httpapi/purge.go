@@ -92,6 +92,11 @@ func (s *Server) purgeUserData(ctx context.Context, user auth.User) {
 	if err := s.equipment.PurgeUser(ctx, user.ID); err != nil {
 		fail("equipment", err)
 	}
+	if s.plans != nil {
+		if err := s.plans.PurgeUser(ctx, user.ID); err != nil {
+			slog.Error("purge training plans", "user_id", user.ID, "error", err)
+		}
+	}
 	if err := s.notify.PurgeUser(ctx, user.ID); err != nil {
 		fail("notifications", err)
 	}
