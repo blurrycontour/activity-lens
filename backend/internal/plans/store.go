@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -34,6 +35,13 @@ type Repository interface {
 	UpdateSession(ctx context.Context, s *Session) error
 	ListSessions(ctx context.Context, userID int64, limit, offset int) ([]Session, error)
 	DeleteSession(ctx context.Context, userID int64, id string) error
+
+	// DeleteSessions removes several sessions at once, returning how many
+	// were actually the caller's.
+	DeleteSessions(ctx context.Context, userID int64, ids []string) (int, error)
+	// ExerciseNames returns the distinct exercise names a user has written,
+	// most recently updated first.
+	ExerciseNames(ctx context.Context, userID int64, limit int) ([]string, error)
 
 	// DeleteAllForUser removes every plan and session a user owns, for
 	// account deletion.
@@ -141,7 +149,7 @@ func (r *SQLiteRepository) loadDays(ctx context.Context, planID string) ([]Day, 
 	}
 
 	blockRows, err := r.db.QueryContext(ctx,
-		`SELECT b.id, b.day_id, b.rest_sec FROM plan_blocks b
+		`SELECT b.id, b.day_id, b.rest_sec, b.required FROM plan_blocks b
 		   JOIN plan_days d ON d.id = b.day_id
 		  WHERE d.plan_id = ? ORDER BY b.position, b.id`, planID)
 	if err != nil {
@@ -154,8 +162,8 @@ func (r *SQLiteRepository) loadDays(ctx context.Context, planID string) ([]Day, 
 	byBlock := map[string]at{}
 	for blockRows.Next() {
 		var id, dayID string
-		var restSec int
-		if err := blockRows.Scan(&id, &dayID, &restSec); err != nil {
+		var restSec, required int
+		if err := blockRows.Scan(&id, &dayID, &restSec, &required); err != nil {
 			return nil, fmt.Errorf("scan block: %w", err)
 		}
 		di, ok := byDay[dayID]
@@ -163,7 +171,8 @@ func (r *SQLiteRepository) loadDays(ctx context.Context, planID string) ([]Day, 
 			continue
 		}
 		byBlock[id] = at{di, len(days[di].Blocks)}
-		days[di].Blocks = append(days[di].Blocks, Block{ID: id, Options: []Exercise{}, RestSec: restSec})
+		days[di].Blocks = append(days[di].Blocks,
+			Block{ID: id, Options: []Exercise{}, RestSec: restSec, Required: required})
 	}
 	if err := blockRows.Err(); err != nil {
 		return nil, err
@@ -173,7 +182,8 @@ func (r *SQLiteRepository) loadDays(ctx context.Context, planID string) ([]Day, 
 	}
 
 	exRows, err := r.db.QueryContext(ctx,
-		`SELECT e.id, e.block_id, e.name, e.sets, e.reps, e.weight_kg, e.rest_sec, e.note
+		`SELECT e.id, e.block_id, e.name, e.sets, e.reps, e.weight_kg, e.rest_sec, e.note,
+		        e.kind, e.duration_sec
 		   FROM plan_exercises e
 		   JOIN plan_blocks b ON b.id = e.block_id
 		   JOIN plan_days d ON d.id = b.day_id
@@ -186,7 +196,8 @@ func (r *SQLiteRepository) loadDays(ctx context.Context, planID string) ([]Day, 
 	for exRows.Next() {
 		var e Exercise
 		var blockID string
-		if err := exRows.Scan(&e.ID, &blockID, &e.Name, &e.Sets, &e.Reps, &e.WeightKg, &e.RestSec, &e.Note); err != nil {
+		if err := exRows.Scan(&e.ID, &blockID, &e.Name, &e.Sets, &e.Reps, &e.WeightKg, &e.RestSec, &e.Note,
+			&e.Kind, &e.DurationSec); err != nil {
 			return nil, fmt.Errorf("scan exercise: %w", err)
 		}
 		pos, ok := byBlock[blockID]
@@ -293,15 +304,17 @@ func (r *SQLiteRepository) ReplaceDays(ctx context.Context, userID int64, planID
 		}
 		for bi, b := range d.Blocks {
 			if _, err := tx.ExecContext(ctx,
-				`INSERT INTO plan_blocks (id, day_id, position, rest_sec) VALUES (?,?,?,?)`,
-				b.ID, d.ID, bi, b.RestSec); err != nil {
+				`INSERT INTO plan_blocks (id, day_id, position, rest_sec, required) VALUES (?,?,?,?,?)`,
+				b.ID, d.ID, bi, b.RestSec, b.Required); err != nil {
 				return fmt.Errorf("insert block: %w", err)
 			}
 			for ei, e := range b.Options {
 				if _, err := tx.ExecContext(ctx,
-					`INSERT INTO plan_exercises (id, block_id, position, name, sets, reps, weight_kg, rest_sec, note)
-					 VALUES (?,?,?,?,?,?,?,?,?)`,
-					e.ID, b.ID, ei, e.Name, e.Sets, e.Reps, e.WeightKg, e.RestSec, e.Note); err != nil {
+					`INSERT INTO plan_exercises
+					   (id, block_id, position, name, sets, reps, weight_kg, rest_sec, note, kind, duration_sec)
+					 VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+					e.ID, b.ID, ei, e.Name, e.Sets, e.Reps, e.WeightKg, e.RestSec, e.Note,
+					string(e.Kind), e.DurationSec); err != nil {
 					return fmt.Errorf("insert exercise: %w", err)
 				}
 			}
@@ -442,6 +455,65 @@ func (r *SQLiteRepository) DeleteSession(ctx context.Context, userID int64, id s
 		return fmt.Errorf("delete session: %w", err)
 	}
 	return affected(res)
+}
+
+// DeleteSessions removes a batch of sessions in one statement.
+//
+// One round trip rather than one per row: clearing a year of history from the
+// history page is a plausible thing to do, and doing it as N deletes would
+// hold the single write connection for N round trips.
+func (r *SQLiteRepository) DeleteSessions(ctx context.Context, userID int64, ids []string) (int, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	args := make([]any, 0, len(ids)+1)
+	args = append(args, userID)
+	placeholders := make([]string, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args = append(args, id)
+	}
+	res, err := r.db.ExecContext(ctx,
+		`DELETE FROM plan_sessions WHERE user_id = ? AND id IN (`+strings.Join(placeholders, ",")+`)`, args...)
+	if err != nil {
+		return 0, fmt.Errorf("delete sessions: %w", err)
+	}
+	n, err := res.RowsAffected()
+	return int(n), err
+}
+
+// ExerciseNames answers the editor's name suggestions.
+//
+// Read from the plans themselves rather than kept in a list of their own:
+// there is no catalogue of exercises in this app, and a second table would be
+// one more thing to keep in step with the only place the names actually live.
+// Ordered by when the plan holding them was last touched, so the names in
+// current use come first.
+func (r *SQLiteRepository) ExerciseNames(ctx context.Context, userID int64, limit int) ([]string, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT e.name, MAX(p.updated_at) AS used_at
+		   FROM plan_exercises e
+		   JOIN plan_blocks b ON b.id = e.block_id
+		   JOIN plan_days d ON d.id = b.day_id
+		   JOIN training_plans p ON p.id = d.plan_id
+		  WHERE p.user_id = ?
+		  GROUP BY LOWER(e.name)
+		  ORDER BY used_at DESC
+		  LIMIT ?`, userID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("exercise names: %w", err)
+	}
+	defer rows.Close()
+
+	names := []string{}
+	for rows.Next() {
+		var name, usedAt string
+		if err := rows.Scan(&name, &usedAt); err != nil {
+			return nil, fmt.Errorf("scan name: %w", err)
+		}
+		names = append(names, name)
+	}
+	return names, rows.Err()
 }
 
 func (r *SQLiteRepository) DeleteAllForUser(ctx context.Context, userID int64) error {

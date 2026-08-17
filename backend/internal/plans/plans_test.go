@@ -3,6 +3,7 @@ package plans
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"testing"
@@ -222,13 +223,15 @@ func TestStatsCountTheChosenAlternative(t *testing.T) {
 	// 4 sets of bench at 60 kg × 8, of which three done; the last heavier.
 	// Push-ups (the unpicked option) must not contribute.
 	got, err := s.SaveProgress(ctx, 1, sess.ID, Progress{Blocks: map[string]BlockProgress{
-		bench.ID: {Pick: 0, Sets: []SetLog{
-			{Done: true},
-			{Done: true},
-			{Done: true, WeightKg: 65},
-			{Done: false},
+		bench.ID: {Picks: []int{0}, Sets: map[string][]SetLog{
+			bench.Options[0].ID: {
+				{Done: true},
+				{Done: true},
+				{Done: true, WeightKg: 65},
+				{Done: false},
+			},
 		}},
-		fly.ID: {Sets: []SetLog{{Done: true}}},
+		fly.ID: {Sets: map[string][]SetLog{fly.Options[0].ID: {{Done: true}}}},
 	}})
 	if err != nil {
 		t.Fatalf("SaveProgress() error = %v", err)
@@ -256,7 +259,9 @@ func TestPickingAnAlternativeChangesTheTargets(t *testing.T) {
 	// Push-ups: bodyweight, so they add sets but no volume — the number people
 	// would otherwise expect to see inflated by 60 kg per rep.
 	got, err := s.SaveProgress(ctx, 1, sess.ID, Progress{Blocks: map[string]BlockProgress{
-		bench.ID: {Pick: 1, Sets: []SetLog{{Done: true}, {Done: true}}},
+		bench.ID: {Picks: []int{1}, Sets: map[string][]SetLog{
+			bench.Options[1].ID: {{Done: true}, {Done: true}},
+		}},
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -278,14 +283,15 @@ func TestDurationRepsAddNoVolume(t *testing.T) {
 	}
 	pl, err = s.ReplaceDays(ctx, 1, pl.ID, []Day{{
 		Name:   "Core",
-		Blocks: []Block{{Options: []Exercise{{Name: "Plank", Sets: 3, Reps: "45 s", WeightKg: 0}}}},
+		Blocks: []Block{{Options: []Exercise{{Name: "Plank", Kind: KindTime, Sets: 3, DurationSec: 45}}}},
 	}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	sess, _ := s.StartSession(ctx, 1, pl.ID, pl.Days[0].ID)
+	block := sess.Snapshot.Blocks[0]
 	got, err := s.SaveProgress(ctx, 1, sess.ID, Progress{Blocks: map[string]BlockProgress{
-		sess.Snapshot.Blocks[0].ID: {Sets: []SetLog{{Done: true}, {Done: true}, {Done: true}}},
+		block.ID: {Sets: map[string][]SetLog{block.Options[0].ID: {{Done: true}, {Done: true}, {Done: true}}}},
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -397,5 +403,300 @@ func TestPurgeUserRemovesOnlyThatUsersPlans(t *testing.T) {
 	}
 	if left != 0 {
 		t.Errorf("%d exercises orphaned after the plan was purged", left)
+	}
+}
+
+// --- blocks that are not "choose one" ------------------------------------
+
+func supersetPlan(t *testing.T, s *Service, userID int64) *Plan {
+	t.Helper()
+	ctx := context.Background()
+	p, err := s.CreatePlan(ctx, userID, PlanInput{Name: "Arms"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err = s.ReplaceDays(ctx, userID, p.ID, []Day{{
+		Name: "Superset day",
+		Blocks: []Block{{
+			Required: 2,
+			Options: []Exercise{
+				{Name: "Barbell curl", Sets: 3, Reps: "10", WeightKg: 25},
+				{Name: "Rope pushdown", Sets: 3, Reps: "12", WeightKg: 20},
+			},
+		}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func TestSupersetCountsEveryExerciseInTheBlock(t *testing.T) {
+	s, _ := newTestService(t)
+	ctx := context.Background()
+	p := supersetPlan(t, s, 1)
+	sess, err := s.StartSession(ctx, 1, p.ID, p.Days[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Both exercises count towards the total before anything is ticked — a
+	// superset is not a choice, so nothing is waiting to be decided.
+	if sess.TotalSets != 6 {
+		t.Errorf("totalSets = %d, want 6 (3 + 3)", sess.TotalSets)
+	}
+
+	block := sess.Snapshot.Blocks[0]
+	got, err := s.SaveProgress(ctx, 1, sess.ID, Progress{Blocks: map[string]BlockProgress{
+		block.ID: {Sets: map[string][]SetLog{
+			block.Options[0].ID: {{Done: true}, {Done: true}},
+			block.Options[1].ID: {{Done: true}},
+		}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.DoneSets != 3 {
+		t.Errorf("doneSets = %d, want 3 across both exercises", got.DoneSets)
+	}
+	if want := 25.0*10*2 + 20*12; got.VolumeKg != want {
+		t.Errorf("volumeKg = %v, want %v", got.VolumeKg, want)
+	}
+}
+
+func TestRequiredIsClampedToWhatTheBlockHolds(t *testing.T) {
+	s, _ := newTestService(t)
+	ctx := context.Background()
+	p, err := s.CreatePlan(ctx, 1, PlanInput{Name: "Plan"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// "Do 5 of these" means nothing when there are two, and zero from an
+	// older client has to read as the choose-one it used to be.
+	p, err = s.ReplaceDays(ctx, 1, p.ID, []Day{{
+		Name: "Day",
+		Blocks: []Block{
+			{Required: 5, Options: []Exercise{{Name: "A", Sets: 1}, {Name: "B", Sets: 1}}},
+			{Required: 0, Options: []Exercise{{Name: "C", Sets: 1}, {Name: "D", Sets: 1}}},
+		},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := p.Days[0].Blocks[0].Required; got != 2 {
+		t.Errorf("required = %d, want it clamped to the 2 options", got)
+	}
+	if got := p.Days[0].Blocks[1].Required; got != 1 {
+		t.Errorf("required = %d, want an absent value to read as choose-one", got)
+	}
+}
+
+func TestSwitchingAlternativeKeepsTheOtherOnesSets(t *testing.T) {
+	s, _ := newTestService(t)
+	ctx := context.Background()
+	p := samplePlan(t, s, 1)
+	sess, err := s.StartSession(ctx, 1, p.ID, p.Days[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bench := sess.Snapshot.Blocks[0]
+
+	// Two sets of bench press, then a change of mind, then back again. The
+	// bench press sets have to survive the round trip — losing them was the
+	// bug that made the swap destructive.
+	_, err = s.SaveProgress(ctx, 1, sess.ID, Progress{Blocks: map[string]BlockProgress{
+		bench.ID: {Picks: []int{0}, Sets: map[string][]SetLog{
+			bench.Options[0].ID: {{Done: true}, {Done: true}},
+		}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.SaveProgress(ctx, 1, sess.ID, Progress{Blocks: map[string]BlockProgress{
+		bench.ID: {Picks: []int{1}, Sets: map[string][]SetLog{
+			bench.Options[0].ID: {{Done: true}, {Done: true}},
+			bench.Options[1].ID: {{Done: true}},
+		}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stored, err := s.GetSession(ctx, 1, sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := len(stored.Progress.Blocks[bench.ID].Sets[bench.Options[0].ID]); n != 2 {
+		t.Errorf("the unpicked option kept %d sets, want the 2 it had", n)
+	}
+	// Only the picked one counts towards the totals, though.
+	if got.DoneSets != 1 {
+		t.Errorf("doneSets = %d, want only the picked option's set", got.DoneSets)
+	}
+}
+
+func TestProgressFromTheFirstVersionStillReads(t *testing.T) {
+	s, _ := newTestService(t)
+	ctx := context.Background()
+	p := samplePlan(t, s, 1)
+	sess, err := s.StartSession(ctx, 1, p.ID, p.Days[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bench := sess.Snapshot.Blocks[0]
+
+	// The shape the first version wrote: a single pick and a flat set list.
+	// A session already running when this shipped must not come back empty.
+	var old Progress
+	if err := json.Unmarshal([]byte(`{"blocks":{"`+bench.ID+`":{"pick":0,"sets":[{"done":true},{"done":true}]}}}`), &old); err != nil {
+		t.Fatalf("decode legacy progress: %v", err)
+	}
+	sess.Progress = old
+	done, _, _ := sess.Stats()
+	if done != 2 {
+		t.Errorf("doneSets from the old shape = %d, want 2", done)
+	}
+}
+
+// --- exercises that are not lifts ----------------------------------------
+
+func TestTimedAndBodyweightExercises(t *testing.T) {
+	s, _ := newTestService(t)
+	ctx := context.Background()
+	p, err := s.CreatePlan(ctx, 1, PlanInput{Name: "Calisthenics"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err = s.ReplaceDays(ctx, 1, p.ID, []Day{{
+		Name: "Day",
+		Blocks: []Block{
+			{Options: []Exercise{{Name: "Pull-ups", Kind: KindBody, Sets: 3, Reps: "8"}}},
+			{Options: []Exercise{{Name: "Weighted pull-ups", Kind: KindBody, Sets: 2, Reps: "5", WeightKg: 10}}},
+			{Options: []Exercise{{Name: "Plank", Kind: KindTime, Sets: 3, DurationSec: 45}}},
+		},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	day := p.Days[0]
+	if day.Blocks[0].Options[0].Kind != KindBody {
+		t.Error("bodyweight kind did not round trip")
+	}
+	if got := day.Blocks[2].Options[0].DurationSec; got != 45 {
+		t.Errorf("durationSec = %d, want 45", got)
+	}
+
+	sess, err := s.StartSession(ctx, 1, p.ID, day.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := sess.Snapshot.Blocks
+	got, err := s.SaveProgress(ctx, 1, sess.ID, Progress{Blocks: map[string]BlockProgress{
+		b[0].ID: {Sets: map[string][]SetLog{b[0].Options[0].ID: {{Done: true}, {Done: true}, {Done: true}}}},
+		b[1].ID: {Sets: map[string][]SetLog{b[1].Options[0].ID: {{Done: true}, {Done: true}}}},
+		b[2].ID: {Sets: map[string][]SetLog{b[2].Options[0].ID: {{Done: true, DurationSec: 50}}}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got.DoneSets != 6 {
+		t.Errorf("doneSets = %d, want 6", got.DoneSets)
+	}
+	// Only the added load counts: this package has no business guessing what
+	// the user weighs, and a held position has no reps to multiply.
+	if want := 10.0 * 5 * 2; got.VolumeKg != want {
+		t.Errorf("volumeKg = %v, want %v — only the weighted pull-ups", got.VolumeKg, want)
+	}
+}
+
+func TestSetTimestampsSurvive(t *testing.T) {
+	s, _ := newTestService(t)
+	ctx := context.Background()
+	p := samplePlan(t, s, 1)
+	sess, _ := s.StartSession(ctx, 1, p.ID, p.Days[0].ID)
+	bench := sess.Snapshot.Blocks[0]
+
+	if _, err := s.SaveProgress(ctx, 1, sess.ID, Progress{Blocks: map[string]BlockProgress{
+		bench.ID: {Sets: map[string][]SetLog{
+			bench.Options[0].ID: {{Done: true, At: "2026-08-17T09:30:00Z", WeightKg: 62.5, Reps: "9"}},
+		}},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+
+	stored, err := s.GetSession(ctx, 1, sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	set := stored.Progress.Blocks[bench.ID].Sets[bench.Options[0].ID][0]
+	// History shows when each set happened and what it actually was; all
+	// three have to come back out of the JSON blob.
+	if set.At != "2026-08-17T09:30:00Z" || set.WeightKg != 62.5 || set.Reps != "9" {
+		t.Errorf("set came back as %+v", set)
+	}
+}
+
+// --- history and suggestions ---------------------------------------------
+
+func TestDeleteSessionsClearsOnlyTheCallersRows(t *testing.T) {
+	s, _ := newTestService(t)
+	ctx := context.Background()
+	mine := samplePlan(t, s, 1)
+	theirs := samplePlan(t, s, 2)
+
+	var ids []string
+	for range 3 {
+		sess, err := s.StartSession(ctx, 1, mine.ID, mine.Days[0].ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.FinishSession(ctx, 1, sess.ID, "", ""); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, sess.ID)
+	}
+	other, err := s.StartSession(ctx, 2, theirs.ID, theirs.Days[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	deleted, err := s.DeleteSessions(ctx, 1, append(ids, other.ID, "", ids[0]))
+	if err != nil {
+		t.Fatalf("DeleteSessions() error = %v", err)
+	}
+	if deleted != 3 {
+		t.Errorf("deleted = %d, want 3 — not the other user's, and not the duplicate twice", deleted)
+	}
+	if _, err := s.GetSession(ctx, 2, other.ID); err != nil {
+		t.Errorf("the other user's session went too: %v", err)
+	}
+}
+
+func TestExerciseNamesComeFromThePlansThemselves(t *testing.T) {
+	s, _ := newTestService(t)
+	ctx := context.Background()
+	samplePlan(t, s, 1)
+	samplePlan(t, s, 2)
+
+	names, err := s.ExerciseNames(ctx, 1)
+	if err != nil {
+		t.Fatalf("ExerciseNames() error = %v", err)
+	}
+	want := map[string]bool{"Bench press": true, "Push-ups": true, "Cable fly": true}
+	if len(names) != len(want) {
+		t.Fatalf("got %v, want the 3 names in the plan", names)
+	}
+	for _, n := range names {
+		if !want[n] {
+			t.Errorf("unexpected name %q — is another user's plan leaking in?", n)
+		}
+	}
+
+	// A user with no plans has no suggestions, rather than everyone else's.
+	empty, err := s.ExerciseNames(ctx, 99)
+	if err != nil || len(empty) != 0 {
+		t.Errorf("ExerciseNames() for a stranger = %v, %v", empty, err)
 	}
 }

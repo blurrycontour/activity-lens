@@ -11,7 +11,10 @@
 // conversion bug waiting for the first user who switches it.
 package plans
 
-import "strings"
+import (
+	"encoding/json"
+	"strings"
+)
 
 // Plan is a training routine owned by a user.
 type Plan struct {
@@ -41,16 +44,25 @@ type Day struct {
 	Blocks []Block `json:"blocks"`
 }
 
-// Block is one slot in a day.
+// Block is one slot in a day, holding one or more exercises.
 //
-// With a single option it is a plain exercise. With several it is a
-// choose-one — bench press or push-ups — and the runner picks at the time.
-// There is no kind flag because the count already says which it is, and a flag
-// that can disagree with the options it describes is a flag that eventually
-// does.
+// Required says how many of them to do, which is the whole of the block's
+// behaviour:
+//
+//	1                 choose one — bench press *or* push-ups
+//	len(Options)      do all of them — a superset
+//	anything between  "two of these three", which is how accessory work is
+//	                  usually written
+//
+// A count rather than a mode flag, because those are three numbers of one
+// rule, and an enum would have needed a count column beside it the moment the
+// middle case turned up.
 type Block struct {
 	ID      string     `json:"id"`
 	Options []Exercise `json:"options"`
+	// Required is clamped to 1..len(Options) on the way in; zero from an old
+	// client reads as 1.
+	Required int `json:"required"`
 	// RestSec is the break taken after this block, before starting the next
 	// one. Distinct from Exercise.RestSec, which is the wait between sets of
 	// the same exercise: ninety seconds between sets and three minutes before
@@ -59,16 +71,38 @@ type Block struct {
 	RestSec int `json:"restSec"`
 }
 
+// Kind is what an exercise is measured in.
+type Kind string
+
+const (
+	// KindWeight is sets × reps at a load in kilograms.
+	KindWeight Kind = "weight"
+	// KindBody is sets × reps against bodyweight. WeightKg stays meaningful as
+	// *added* load — weighted pull-ups and dips are written this way.
+	KindBody Kind = "body"
+	// KindTime is sets × a duration: planks, dead hangs, carries.
+	KindTime Kind = "time"
+)
+
+// ValidKind reports whether k is one this package knows.
+func ValidKind(k Kind) bool {
+	return k == KindWeight || k == KindBody || k == KindTime
+}
+
 // Exercise is one option inside a block, with its own targets: swapping to
 // push-ups should bring push-up numbers, not the bench press's.
 type Exercise struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
+	Kind Kind   `json:"kind"`
 	Sets int    `json:"sets"`
-	// Reps is free text on purpose. "8", "8-10" and "45 s" are all things
-	// people write in a plan; nothing computes on it, so nothing needs it
-	// parsed, and an integer column would force the last one to lie.
-	Reps     string  `json:"reps"`
+	// Reps is free text on purpose. "8" and "8-10" are both things people
+	// write in a plan; nothing computes on the range, so nothing needs it
+	// parsed. Ignored when Kind is KindTime.
+	Reps string `json:"reps"`
+	// DurationSec is the length of one set when Kind is KindTime.
+	DurationSec int `json:"durationSec"`
+	// WeightKg is the load for KindWeight, and the *added* load for KindBody.
 	WeightKg float64 `json:"weightKg"`
 	RestSec  int     `json:"restSec"`
 	Note     string  `json:"note"`
@@ -123,15 +157,54 @@ type Progress struct {
 	Blocks map[string]BlockProgress `json:"blocks"`
 }
 
-// BlockProgress is the pick and the set log for one block.
+// BlockProgress is what was chosen and what was done inside one block.
 type BlockProgress struct {
-	// Pick indexes Block.Options. Out-of-range values are treated as 0 rather
-	// than rejected: a plan edited mid-session should not fail to load.
-	Pick int      `json:"pick"`
-	Sets []SetLog `json:"sets"`
+	// Picks indexes Block.Options — one entry for a choose-one block, several
+	// for a superset or a "two of three". Out-of-range values are ignored
+	// rather than rejected: a plan edited mid-session should still load.
+	Picks []int `json:"picks"`
+	// Sets keyed by exercise id, not one flat list for the block.
+	//
+	// Switching from bench press to push-ups used to clear the sets, because
+	// there was nowhere to put two exercises' work. Keying by exercise means
+	// changing your mind twice costs nothing, and a superset can log each of
+	// its exercises separately.
+	Sets map[string][]SetLog `json:"sets"`
+	// legacySets holds the flat list the first version wrote, until Stats can
+	// attribute it to the option that was picked. Never marshalled.
+	legacySets []SetLog
 }
 
-// SetLog is one set: whether it was done, and what was actually lifted.
+// UnmarshalJSON accepts both the current shape and the first version's, where
+// `pick` was a single index and `sets` a flat array belonging to it. Sessions
+// started before this change are still readable; without it they would come
+// back with no progress at all.
+func (b *BlockProgress) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Picks []int           `json:"picks"`
+		Pick  int             `json:"pick"`
+		Sets  json.RawMessage `json:"sets"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	b.Picks = raw.Picks
+	if len(b.Picks) == 0 && raw.Pick > 0 {
+		b.Picks = []int{raw.Pick}
+	}
+	b.Sets = map[string][]SetLog{}
+	trimmed := strings.TrimSpace(string(raw.Sets))
+	switch {
+	case trimmed == "" || trimmed == "null":
+		return nil
+	case trimmed[0] == '[':
+		return json.Unmarshal(raw.Sets, &b.legacySets)
+	default:
+		return json.Unmarshal(raw.Sets, &b.Sets)
+	}
+}
+
+// SetLog is one set: whether it was done, what was actually lifted, and when.
 //
 // The actual weight is recorded per set rather than per exercise because the
 // last set is often lighter than the first, and a plan that can only store the
@@ -142,6 +215,59 @@ type SetLog struct {
 	// Reps actually performed, free text like the target. Empty means "as
 	// planned", which is the common case and not worth storing.
 	Reps string `json:"reps,omitempty"`
+	// At is when the set was marked done, RFC 3339. It is what lets history
+	// show how long a session's work actually took, and the gap between one
+	// set and the next.
+	At string `json:"at,omitempty"`
+	// DurationSec is how long the set was held, for a timed exercise.
+	DurationSec int `json:"durationSec,omitempty"`
+}
+
+// EffectivePicks is which options are being done in this block.
+//
+// An untouched block defaults to its first Required options, so a superset
+// counts all of its exercises before anything has been ticked and the session
+// total does not jump around as the user makes choices.
+func (b Block) EffectivePicks(p BlockProgress) []int {
+	required := b.Required
+	if required < 1 {
+		required = 1
+	}
+	if required > len(b.Options) {
+		required = len(b.Options)
+	}
+
+	seen := map[int]bool{}
+	out := make([]int, 0, required)
+	for _, i := range p.Picks {
+		if i < 0 || i >= len(b.Options) || seen[i] {
+			continue
+		}
+		seen[i] = true
+		out = append(out, i)
+	}
+	// Top up with the first options not already chosen, so a half-made choice
+	// still describes a whole block.
+	for i := 0; i < len(b.Options) && len(out) < required; i++ {
+		if !seen[i] {
+			seen[i] = true
+			out = append(out, i)
+		}
+	}
+	return out
+}
+
+// SetsFor returns the logged sets for one option of a block.
+func (p BlockProgress) SetsFor(optionID string, isFirstPick bool) []SetLog {
+	if sets, ok := p.Sets[optionID]; ok {
+		return sets
+	}
+	// A session started before sets were keyed by exercise has one flat list,
+	// which belonged to whichever option was picked.
+	if isFirstPick {
+		return p.legacySets
+	}
+	return nil
 }
 
 // Stats totals a session from its snapshot and progress.
@@ -156,35 +282,49 @@ func (s *Session) Stats() (done, total int, volume float64) {
 			continue
 		}
 		p := s.Progress.Blocks[b.ID]
-		ex := b.Options[0]
-		if p.Pick > 0 && p.Pick < len(b.Options) {
-			ex = b.Options[p.Pick]
-		}
-		total += ex.Sets
-		for i, set := range p.Sets {
-			// A snapshot edited down to fewer sets than were logged should
-			// not count the orphans.
-			if i >= ex.Sets || !set.Done {
-				continue
+		for n, idx := range b.EffectivePicks(p) {
+			ex := b.Options[idx]
+			total += ex.Sets
+			for i, set := range p.SetsFor(ex.ID, n == 0) {
+				// A snapshot edited down to fewer sets than were logged should
+				// not count the orphans.
+				if i >= ex.Sets || !set.Done {
+					continue
+				}
+				done++
+				volume += ex.setVolume(set)
 			}
-			done++
-			kg := set.WeightKg
-			if kg == 0 {
-				kg = ex.WeightKg
-			}
-			volume += kg * float64(repsFor(set.Reps, ex.Reps))
 		}
 	}
 	return done, total, volume
 }
 
+// setVolume is the load moved by one set, in kilograms.
+//
+// Only weighted work counts. A held position has no repetitions to multiply,
+// and bodyweight work would need a body weight this package has no business
+// knowing — its *added* load still counts, which is what makes a weighted
+// pull-up different from an unweighted one.
+func (e Exercise) setVolume(set SetLog) float64 {
+	if e.Kind == KindTime {
+		return 0
+	}
+	kg := set.WeightKg
+	if kg == 0 {
+		kg = e.WeightKg
+	}
+	if kg == 0 {
+		return 0
+	}
+	return kg * float64(repsFor(set.Reps, e.Reps))
+}
+
 // repsFor reads a rep count out of the free-text reps field for volume
 // totalling, preferring what was actually done over what was planned.
 //
-// Best effort by design: "8-10" totals as 8 (the number the user committed
-// to), and "45 s" as 0 because seconds of plank are not kilograms lifted.
-// Volume is a rough training-load figure, and inventing a number for a
-// duration would make it a wrong one.
+// Best effort by design: "8-10" totals as 8 — the number the user committed
+// to — and anything that names a unit of time contributes nothing, because
+// seconds are not repetitions.
 func repsFor(actual, planned string) int {
 	for _, s := range []string{actual, planned} {
 		if n := leadingInt(s); n > 0 && !hasTimeUnit(s) {

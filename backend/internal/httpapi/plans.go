@@ -120,6 +120,24 @@ func (s *Server) handlePutPlanDays(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, p)
 }
 
+// handleExerciseNames answers the editor's name suggestions.
+//
+// Its own endpoint rather than widening the plans list: the list draws a dozen
+// rows and has no business downloading every exercise of every plan to do it,
+// and these names are wanted on a screen that has not loaded the other plans
+// at all.
+func (s *Server) handleExerciseNames(w http.ResponseWriter, r *http.Request) {
+	user := httpmw.UserFrom(r)
+	names, err := s.plans.ExerciseNames(r.Context(), user.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load exercise names")
+		return
+	}
+	writeJSON(w, http.StatusOK, struct {
+		Names []string `json:"names"`
+	}{names})
+}
+
 // --- Sessions ------------------------------------------------------------
 
 func (s *Server) handleStartPlanSession(w http.ResponseWriter, r *http.Request) {
@@ -292,6 +310,27 @@ func (s *Server) handleDeletePlanSession(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleDeletePlanSessions clears a batch of history rows.
+func (s *Server) handleDeletePlanSessions(w http.ResponseWriter, r *http.Request) {
+	user := httpmw.UserFrom(r)
+	var req struct {
+		IDs []string `json:"ids"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	deleted, err := s.plans.DeleteSessions(r.Context(), user.ID, req.IDs)
+	if err != nil {
+		s.writePlanError(w, err)
+		return
+	}
+	slog.Info("plan sessions deleted", "user_id", user.ID, "count", deleted)
+	writeJSON(w, http.StatusOK, struct {
+		Deleted int `json:"deleted"`
+	}{deleted})
 }
 
 func (s *Server) writePlanError(w http.ResponseWriter, err error) {

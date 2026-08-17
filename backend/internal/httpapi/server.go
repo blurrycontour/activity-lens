@@ -278,6 +278,8 @@ func (s *Server) apiRoutes() http.Handler {
 	mux.Handle("PATCH /api/plans/{id}", s.authedCSRF(s.withPlans(s.handlePatchPlan)))
 	mux.Handle("DELETE /api/plans/{id}", s.authedCSRF(s.withPlans(s.handleDeletePlan)))
 	mux.Handle("PUT /api/plans/{id}/days", s.authedCSRF(s.withPlans(s.handlePutPlanDays)))
+	// Before /api/plans/{id}, or "exercise-names" is read as a plan id.
+	mux.Handle("GET /api/plan-exercise-names", s.authed(s.withPlans(s.handleExerciseNames)))
 	// Sessions sit beside plans rather than under one, because a session
 	// outlives the plan it came from.
 	mux.Handle("GET /api/plan-sessions", s.authed(s.withPlans(s.handleListPlanSessions)))
@@ -287,6 +289,7 @@ func (s *Server) apiRoutes() http.Handler {
 	mux.Handle("PUT /api/plan-sessions/{id}/progress", s.authedCSRF(s.withPlans(s.handleSavePlanProgress)))
 	mux.Handle("POST /api/plan-sessions/{id}/finish", s.authedCSRF(s.withPlans(s.handleFinishPlanSession)))
 	mux.Handle("DELETE /api/plan-sessions/{id}", s.authedCSRF(s.withPlans(s.handleDeletePlanSession)))
+	mux.Handle("POST /api/plan-sessions/delete", s.authedCSRF(s.withPlans(s.handleDeletePlanSessions)))
 
 	mux.Handle("POST /api/equipment/{id}/workouts", s.authedCSRF(s.handleLinkWorkouts))
 	mux.Handle("DELETE /api/equipment/{id}/workouts/{workoutId}", s.authedCSRF(s.handleUnlinkWorkout))

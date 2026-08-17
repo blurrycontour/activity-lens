@@ -154,19 +154,28 @@ func normalizeDays(days []Day) ([]Day, error) {
 				if sets > MaxSetsPerExercise {
 					sets = MaxSetsPerExercise
 				}
+				kind := e.Kind
+				if !ValidKind(kind) {
+					kind = KindWeight
+				}
 				block.Options = append(block.Options, Exercise{
-					ID:       idOr(e.ID, "pe"),
-					Name:     clip(exName, MaxNameLen),
-					Sets:     sets,
-					Reps:     clip(strings.TrimSpace(e.Reps), 32),
-					WeightKg: max(e.WeightKg, 0),
-					RestSec:  min(max(e.RestSec, 0), 3600),
-					Note:     clip(e.Note, MaxNoteLen),
+					ID:          idOr(e.ID, "pe"),
+					Name:        clip(exName, MaxNameLen),
+					Kind:        kind,
+					Sets:        sets,
+					Reps:        clip(strings.TrimSpace(e.Reps), 32),
+					DurationSec: min(max(e.DurationSec, 0), 24*3600),
+					WeightKg:    max(e.WeightKg, 0),
+					RestSec:     min(max(e.RestSec, 0), 3600),
+					Note:        clip(e.Note, MaxNoteLen),
 				})
 			}
 			if len(block.Options) == 0 {
 				continue
 			}
+			// Clamped to what the block can actually satisfy: "do 3 of these"
+			// means nothing once one of the three has been deleted.
+			block.Required = min(max(b.Required, 1), len(block.Options))
 			day.Blocks = append(day.Blocks, block)
 		}
 		out = append(out, day)
@@ -290,6 +299,35 @@ func (s *Service) FinishSession(ctx context.Context, userID int64, id, notes str
 // to delete a record from history.
 func (s *Service) DeleteSession(ctx context.Context, userID int64, id string) error {
 	return s.repo.DeleteSession(ctx, userID, id)
+}
+
+// DeleteSessions removes a batch of history rows the user owns.
+func (s *Service) DeleteSessions(ctx context.Context, userID int64, ids []string) (int, error) {
+	if len(ids) > MaxSessionsPerListed {
+		return 0, fmt.Errorf("%w: at most %d at a time", ErrInvalid, MaxSessionsPerListed)
+	}
+	clean := make([]string, 0, len(ids))
+	seen := map[string]bool{}
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		clean = append(clean, id)
+	}
+	return s.repo.DeleteSessions(ctx, userID, clean)
+}
+
+// MaxExerciseNames caps the suggestion list. Long enough to hold everything a
+// real training library uses, short enough that the response stays a few
+// kilobytes on a phone.
+const MaxExerciseNames = 300
+
+// ExerciseNames returns the names the user has written, for the editor's
+// suggestions.
+func (s *Service) ExerciseNames(ctx context.Context, userID int64) ([]string, error) {
+	return s.repo.ExerciseNames(ctx, userID, MaxExerciseNames)
 }
 
 // PurgeUser removes every plan and session a user owns, for account deletion.
