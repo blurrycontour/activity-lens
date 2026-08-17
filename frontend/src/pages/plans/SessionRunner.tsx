@@ -190,17 +190,26 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
 
         <div className="plan-rows">
           {blocks.map((block, i) => (
-            <ExerciseRow
-              key={block.id}
-              block={block}
-              index={i}
-              progress={blockProgress(block)}
-              open={openBlock === block.id}
-              onOpen={() => setOpenBlock(openBlock === block.id ? null : block.id)}
-              onToggleSet={n => toggleSet(block, n)}
-              onSetWeight={(n, kg) => setWeight(block, n, kg)}
-              onPick={n => pickOption(block, n)}
-            />
+            <div key={block.id}>
+              <ExerciseRow
+                block={block}
+                index={i}
+                progress={blockProgress(block)}
+                open={openBlock === block.id}
+                onOpen={() => setOpenBlock(openBlock === block.id ? null : block.id)}
+                onToggleSet={n => toggleSet(block, n)}
+                onSetWeight={(n, kg) => setWeight(block, n, kg)}
+                onPick={n => pickOption(block, n)}
+              />
+              {/* The planned break before the next exercise. Tapping it starts
+                  the countdown — see RestTimer for why nothing starts one by
+                  itself. */}
+              {block.restSec > 0 && i < blocks.length - 1 && (
+                <div className="plan-break-run">
+                  <RestTimer seconds={block.restSec} label="Break" />
+                </div>
+              )}
+            </div>
           ))}
         </div>
       </div>
@@ -411,7 +420,7 @@ function ExerciseRow({ block, index, progress, open, onOpen, onToggleSet, onSetW
  * at once, or tick one they did five minutes ago, and a timer that starts
  * itself at those moments is wrong more often than right.
  */
-function RestTimer({ seconds }: { seconds: number }) {
+function RestTimer({ seconds, label = 'Rest' }: { seconds: number; label?: string }) {
   const [left, setLeft] = useState<number | null>(null)
 
   useEffect(() => {
@@ -424,14 +433,14 @@ function RestTimer({ seconds }: { seconds: number }) {
   if (left === null) {
     return (
       <button className="plan-rest" onClick={() => setLeft(seconds)}>
-        <Timer size={14} /> Rest {formatRest(seconds)}
+        <Timer size={14} /> {label} {formatRest(seconds)}
       </button>
     )
   }
   return (
     <div className={`plan-rest running${left <= 0 ? ' up' : ''}`}>
       <Timer size={14} />
-      {left > 0 ? formatRest(left) : 'Rest over'}
+      {left > 0 ? formatRest(left) : `${label} over`}
       <button className="btn-icon" onClick={() => setLeft(null)} aria-label="Stop the rest timer">
         <X size={14} />
       </button>

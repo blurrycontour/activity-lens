@@ -51,6 +51,12 @@ type Day struct {
 type Block struct {
 	ID      string     `json:"id"`
 	Options []Exercise `json:"options"`
+	// RestSec is the break taken after this block, before starting the next
+	// one. Distinct from Exercise.RestSec, which is the wait between sets of
+	// the same exercise: ninety seconds between sets and three minutes before
+	// changing station are two different numbers, and one field could only
+	// ever be right about one of them. Zero means no break is planned.
+	RestSec int `json:"restSec"`
 }
 
 // Exercise is one option inside a block, with its own targets: swapping to

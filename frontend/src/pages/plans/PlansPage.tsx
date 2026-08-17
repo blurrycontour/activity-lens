@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ClipboardList, History, Loader2, Play, Plus } from 'lucide-react'
+import { ClipboardList, History, Loader2, Play, Plus, X } from 'lucide-react'
 import PageHeader from '../../components/PageHeader'
 import TabStrip from '../../components/TabStrip'
+import Modal from '../../components/Modal'
+import { useRefreshHandler } from '../../context/RefreshContext'
 import PlanEditor from './PlanEditor'
 import SessionRunner from './SessionRunner'
 import SessionHistory from './SessionHistory'
@@ -34,6 +36,7 @@ export default function PlansPage({ section, detail, onOpen }: Props) {
   const [session, setSession] = useState<PlanSession | null>(null)
   const [tab, setTab] = useState<TabId>('plans')
   const [error, setError] = useState('')
+  const [naming, setNaming] = useState(false)
   const [creating, setCreating] = useState(false)
 
   const load = useCallback(async () => {
@@ -51,6 +54,10 @@ export default function PlansPage({ section, detail, onOpen }: Props) {
   }, [])
 
   useEffect(() => { void load() }, [load])
+  // Pull to refresh, and the desktop refresh button. Without this the page
+  // showed whatever it had when it mounted — including no sign of a plan
+  // written on another device.
+  useRefreshHandler(load)
 
   // The URL decides what is open, so a reload, a shared link and the back
   // gesture all land in the same place.
@@ -73,10 +80,19 @@ export default function PlansPage({ section, detail, onOpen }: Props) {
     return () => { cancelled = true }
   }, [section, detail, onOpen])
 
-  async function createPlan() {
+  /**
+   * Creating asks for the name first, and only then writes anything.
+   *
+   * It used to create a plan called "New plan" the moment the button was
+   * tapped, which left one behind for every accidental press — a row that was
+   * never wanted and had to be deleted by hand. Nothing exists until there is
+   * a name to give it.
+   */
+  async function createPlan(name: string) {
     setCreating(true)
     try {
-      const p = await api.createPlan({ name: 'New plan' })
+      const p = await api.createPlan({ name })
+      setNaming(false)
       setPlans(cur => [p, ...(cur ?? [])])
       onOpen(p.id)
     } catch {
@@ -138,9 +154,11 @@ export default function PlansPage({ section, detail, onOpen }: Props) {
       <PageHeader
         title="Plans"
         subtitle="Your training routines"
+        /* Desktop only; the phone gets the floating button below, which is
+           where the thumb already is on the Workouts page. */
         actions={
-          <button className="btn btn-primary" onClick={createPlan} disabled={creating}>
-            {creating ? <Loader2 size={15} className="spin" /> : <Plus size={15} />} New plan
+          <button className="btn btn-primary desktop-only" onClick={() => setNaming(true)}>
+            <Plus size={15} /> New plan
           </button>
         }
       />
@@ -204,7 +222,55 @@ export default function PlansPage({ section, detail, onOpen }: Props) {
           </div>
         )}
       </div>
+
+      <button className="fab" onClick={() => setNaming(true)} title="New plan" aria-label="New plan">
+        <Plus size={22} />
+      </button>
+
+      {naming && (
+        <NamePlanDialog busy={creating} onCancel={() => setNaming(false)} onCreate={createPlan} />
+      )}
     </>
+  )
+}
+
+/** Asks for a name, so that nothing is written until there is one. */
+function NamePlanDialog({ busy, onCreate, onCancel }: {
+  busy: boolean
+  onCreate: (name: string) => void
+  onCancel: () => void
+}) {
+  const [name, setName] = useState('')
+  return (
+    <Modal onClose={onCancel} label="New plan">
+      <form
+        className="modal-box"
+        style={{ maxWidth: 420 }}
+        onSubmit={e => { e.preventDefault(); if (name.trim()) onCreate(name.trim()) }}
+      >
+        <div className="dialog-head">
+          <h3 style={{ fontSize: 16, fontWeight: 700 }}>New plan</h3>
+          <button type="button" className="btn-icon" onClick={onCancel} aria-label="Close">
+            <X size={16} />
+          </button>
+        </div>
+        <label className="form-label" htmlFor="new-plan-name">Plan name</label>
+        <input
+          id="new-plan-name"
+          className="input"
+          value={name}
+          autoFocus
+          placeholder="Push / Pull / Legs"
+          onChange={e => setName(e.target.value)}
+        />
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
+          <button type="button" className="btn btn-ghost" onClick={onCancel}>Cancel</button>
+          <button type="submit" className="btn btn-primary" disabled={!name.trim() || busy}>
+            {busy ? <Loader2 size={15} className="spin" /> : <Plus size={15} />} Create
+          </button>
+        </div>
+      </form>
+    </Modal>
   )
 }
 

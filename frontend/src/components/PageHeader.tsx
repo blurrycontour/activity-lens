@@ -7,6 +7,12 @@ interface PageHeaderProps {
   onBack?: () => void
   /** Controls aligned to the right of the title, e.g. a save button. */
   actions?: React.ReactNode
+  /**
+   * A control sitting directly beside the title, for when the title *is* the
+   * editable thing — a plan's name, say. Distinct from `actions`, which is a
+   * group aligned to the far right and drops onto its own line on a phone.
+   */
+  titleAction?: React.ReactNode
 }
 
 /**
@@ -17,7 +23,7 @@ interface PageHeaderProps {
  * header as opening a workout, so going one level deep looks the same wherever
  * you do it.
  */
-export default function PageHeader({ title, subtitle, onBack, actions }: PageHeaderProps) {
+export default function PageHeader({ title, subtitle, onBack, actions, titleAction }: PageHeaderProps) {
   return (
     <div className="page-header page-header-row">
       {onBack && (
@@ -26,7 +32,10 @@ export default function PageHeader({ title, subtitle, onBack, actions }: PageHea
         </button>
       )}
       <div className="page-header-text">
-        <h1 className="page-header-title">{title}</h1>
+        <div className="page-header-title-row">
+          <h1 className="page-header-title">{title}</h1>
+          {titleAction}
+        </div>
         {subtitle && <p className="page-header-sub">{subtitle}</p>}
       </div>
       {/* Wrapped so the phone layout can drop it onto its own line. Filters

@@ -389,7 +389,12 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
           <span style={{ fontSize: 12, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
             {filtered.length} of {source?.length ?? 0}
           </span>
-          <div style={{ marginLeft: 'auto', display: 'flex', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
+          {/* Desktop only: the phone has the floating button, and a header
+              full of controls is what pushed the list below the fold there. */}
+          <button className="btn btn-primary desktop-only" style={{ marginLeft: 'auto' }} onClick={onImport}>
+            <Plus size={16} /> Add workout
+          </button>
+          <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
             {([['list', <List key="l" size={15} />], ['grid', <Grid2X2 key="g" size={15} />]] as const).map(([id, icon]) => (
               <button
                 key={id}

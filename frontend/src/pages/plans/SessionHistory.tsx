@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { History, Loader2 } from 'lucide-react'
+import { useRefreshHandler } from '../../context/RefreshContext'
 import { api } from '../../lib/api'
 import { durationLabel, elapsedMin, volumeLabel, type PlanSession } from '../../data/plans'
 
@@ -14,11 +15,17 @@ export default function SessionHistory({ onOpen }: { onOpen: (id: string) => voi
   const [sessions, setSessions] = useState<PlanSession[] | null>(null)
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    api.listPlanSessions()
-      .then(setSessions)
-      .catch(() => { setError('Could not load your history.'); setSessions([]) })
+  const load = useCallback(async () => {
+    try {
+      setSessions(await api.listPlanSessions())
+    } catch {
+      setError('Could not load your history.')
+      setSessions([])
+    }
   }, [])
+
+  useEffect(() => { void load() }, [load])
+  useRefreshHandler(load)
 
   if (sessions === null) {
     return <div className="page-loading"><Loader2 size={18} className="spin" /></div>

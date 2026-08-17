@@ -42,7 +42,7 @@ import { useRefresh } from './context/RefreshContext'
 import { WorkoutsProvider } from './context/WorkoutsContext'
 import { PreferencesProvider } from './context/PreferencesContext'
 import {
-  adjacentPage, parseLocation, pathForPage,
+  adjacentPage, navHighlight, parseLocation, pathForPage,
   type AdminSection, type Page, type SettingsSection,
 } from './lib/nav'
 import { useSwipeNav } from './lib/useSwipeNav'
@@ -683,7 +683,7 @@ export default function App() {
 
       {/* Desktop sidebar — hidden on mobile via CSS */}
       <Sidebar
-        currentPage={page}
+        currentPage={navHighlight(page)}
         onNavigate={navigate}
         collapsed={sidebarCollapsed}
         sidebarWidth={sidebarWidth}
@@ -783,7 +783,7 @@ export default function App() {
 
       {/* Mobile bottom bar */}
       {isMobile && (
-        <BottomBar currentPage={page} onNavigate={navigate} />
+        <BottomBar currentPage={navHighlight(page)} onNavigate={navigate} />
       )}
 
       {/* Overlays */}

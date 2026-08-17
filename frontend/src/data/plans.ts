@@ -31,6 +31,14 @@ export interface PlanExercise {
 export interface PlanBlock {
   id: string
   options: PlanExercise[]
+  /**
+   * The break taken after this block, before starting the next.
+   *
+   * Distinct from PlanExercise.restSec, the wait between sets of the same
+   * exercise: ninety seconds between sets and three minutes before changing
+   * station are two different numbers. Zero means none is planned.
+   */
+  restSec: number
 }
 
 export interface PlanDay {
@@ -164,7 +172,7 @@ export function newExercise(): PlanExercise {
 }
 
 export function newBlock(): PlanBlock {
-  return { id: '', options: [newExercise()] }
+  return { id: '', options: [newExercise()], restSec: 0 }
 }
 
 export function newDay(name: string): PlanDay {

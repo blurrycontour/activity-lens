@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { GripVertical, Play, Plus, Trash2, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Check, GripVertical, Pencil, Play, Plus, Timer, Trash2, X } from 'lucide-react'
 import PageHeader from '../../components/PageHeader'
 import ConfirmDialog from '../../components/ConfirmDialog'
+import ExerciseNameInput, { recentExerciseNames, rememberExerciseNames } from './ExerciseNameInput'
+import { adoptIds, namesIn, withoutDrafts } from './draftPlan'
 import { api } from '../../lib/api'
 import {
   newBlock, newDay, newExercise,
@@ -32,11 +34,32 @@ export default function PlanEditor({ plan, onBack, onStart, onDeleted, onSaved }
   const [days, setDays] = useState<PlanDay[]>(plan.days ?? [])
   const [active, setActive] = useState(0)
   const [name, setName] = useState(plan.name)
+  const [renaming, setRenaming] = useState(false)
   const [save, setSave] = useState<SaveState>('clean')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [busy, setBusy] = useState(false)
 
   const day = days[active]
+
+  // Every name in this plan, plus whatever this device has typed before.
+  const suggestions = useMemo(() => {
+    const seen = new Set<string>()
+    const out: string[] = []
+    for (const d of days) {
+      for (const b of d.blocks) {
+        for (const o of b.options) {
+          const n = o.name.trim()
+          if (!n || seen.has(n.toLowerCase())) continue
+          seen.add(n.toLowerCase())
+          out.push(n)
+        }
+      }
+    }
+    for (const n of recentExerciseNames()) {
+      if (!seen.has(n.toLowerCase())) { seen.add(n.toLowerCase()); out.push(n) }
+    }
+    return out
+  }, [days])
 
   // --- autosave ----------------------------------------------------------
   const timer = useRef<number | null>(null)
@@ -48,12 +71,16 @@ export default function PlanEditor({ plan, onBack, onStart, onDeleted, onSaved }
     pending.current = null
     setSave('saving')
     try {
-      const saved = await api.savePlanDays(plan.id, next)
-      // The answer carries the ids the server issued for newly added rows, so
-      // the next save updates them instead of creating duplicates. Taking it
-      // back wholesale would also throw away anything typed while the request
-      // was in flight, so it is only adopted when nothing else is queued.
-      if (!pending.current) setDays(saved.days ?? [])
+      const saved = await api.savePlanDays(plan.id, withoutDrafts(next))
+      // Ids only, never the whole tree.
+      //
+      // The server drops rows with no exercise name — a half-typed one is not
+      // a plan yet — so adopting its answer wholesale deleted the row the
+      // moment "Add exercise" was tapped, before there was anything to type
+      // into. Copying the ids across keeps what is on screen while still
+      // letting the next save update those rows instead of duplicating them.
+      if (!pending.current) setDays(cur => adoptIds(cur, saved.days ?? []))
+      rememberExerciseNames(namesIn(next))
       onSaved(saved)
       setSave('saved')
     } catch {
@@ -81,10 +108,11 @@ export default function PlanEditor({ plan, onBack, onStart, onDeleted, onSaved }
   }, [flush])
 
   async function renamePlan(next: string) {
-    setName(next)
+    const clean = next.trim() || plan.name
+    setName(clean)
+    setRenaming(false)
     try {
-      const saved = await api.patchPlan(plan.id, { name: next })
-      onSaved(saved)
+      onSaved(await api.patchPlan(plan.id, { name: clean }))
     } catch {
       setSave('failed')
     }
@@ -139,12 +167,21 @@ export default function PlanEditor({ plan, onBack, onStart, onDeleted, onSaved }
     }
   }
 
+  const startable = !!day && day.blocks.some(b => b.options.some(o => o.name.trim()))
+
   return (
     <>
       <PageHeader
         title={name}
         subtitle={saveLabel(save)}
         onBack={onBack}
+        /* The title is the plan name and is edited in place, so the page does
+           not carry a second field saying the same thing under a label. */
+        titleAction={
+          <button className="btn-icon" onClick={() => setRenaming(true)} aria-label="Rename this plan">
+            <Pencil size={14} />
+          </button>
+        }
         actions={
           <div className="plan-run-actions">
             <button
@@ -156,25 +193,24 @@ export default function PlanEditor({ plan, onBack, onStart, onDeleted, onSaved }
             </button>
             <button
               className="btn btn-primary"
-              disabled={!day || day.blocks.length === 0}
+              disabled={!startable}
               onClick={() => day && onStart(day.id)}
-              title={day && day.blocks.length === 0 ? 'Add an exercise first' : undefined}
+              title={startable ? undefined : 'Add an exercise first'}
             >
-              <Play size={15} /> Start {day ? day.name : ''}
+              <Play size={15} /> <span className="plan-start-label">Start</span>
             </button>
           </div>
         }
       />
 
       <div className="page-content">
-        <label className="form-label" htmlFor="plan-name">Plan name</label>
-        <input
-          id="plan-name"
-          className="input"
-          value={name}
-          onChange={e => setName(e.target.value)}
-          onBlur={e => renamePlan(e.target.value.trim() || plan.name)}
-        />
+        {renaming && (
+          <RenameDialog
+            initial={name}
+            onCancel={() => setRenaming(false)}
+            onSave={renamePlan}
+          />
+        )}
 
         <div className="plan-tabs" role="tablist" aria-label="Days">
           {days.map((d, i) => (
@@ -213,20 +249,29 @@ export default function PlanEditor({ plan, onBack, onStart, onDeleted, onSaved }
 
             <div className="plan-edit-rows">
               {day.blocks.map((block, bi) => (
-                <BlockEditor
-                  key={block.id || bi}
-                  block={block}
-                  first={bi === 0}
-                  last={bi === day.blocks.length - 1}
-                  onMove={by => move(bi, by)}
-                  onPatch={(oi, patch) => patchExercise(bi, oi, patch)}
-                  onRemove={() => patchDay(d => ({ ...d, blocks: d.blocks.filter((_, i) => i !== bi) }))}
-                  onRemoveOption={oi => patchBlock(bi, b => ({
-                    ...b,
-                    options: b.options.filter((_, i) => i !== oi),
-                  }))}
-                  onAddOption={() => patchBlock(bi, b => ({ ...b, options: [...b.options, newExercise()] }))}
-                />
+                <div key={block.id || bi}>
+                  <BlockEditor
+                    block={block}
+                    first={bi === 0}
+                    last={bi === day.blocks.length - 1}
+                    suggestions={suggestions}
+                    onMove={by => move(bi, by)}
+                    onPatch={(oi, patch) => patchExercise(bi, oi, patch)}
+                    onRemove={() => patchDay(d => ({ ...d, blocks: d.blocks.filter((_, i) => i !== bi) }))}
+                    onRemoveOption={oi => patchBlock(bi, b => ({
+                      ...b,
+                      options: b.options.filter((_, i) => i !== oi),
+                    }))}
+                    onAddOption={() => patchBlock(bi, b => ({ ...b, options: [...b.options, newExercise()] }))}
+                  />
+                  {/* The break before the next exercise, sitting between the
+                      two things it separates rather than inside either. */}
+                  <BreakRow
+                    seconds={block.restSec}
+                    last={bi === day.blocks.length - 1}
+                    onChange={secs => patchBlock(bi, b => ({ ...b, restSec: secs }))}
+                  />
+                </div>
               ))}
 
               <button
@@ -264,10 +309,94 @@ function saveLabel(s: SaveState): string {
   }
 }
 
+/** Renaming the plan, opened from the pencil beside the title. */
+function RenameDialog({ initial, onSave, onCancel }: {
+  initial: string
+  onSave: (name: string) => void
+  onCancel: () => void
+}) {
+  const [value, setValue] = useState(initial)
+  return (
+    <form
+      className="card plan-rename"
+      onSubmit={e => { e.preventDefault(); onSave(value) }}
+    >
+      <label className="field-label" htmlFor="plan-rename">Plan name</label>
+      <div className="plan-rename-row">
+        <input
+          id="plan-rename"
+          className="input"
+          value={value}
+          autoFocus
+          onChange={e => setValue(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); onCancel() } }}
+        />
+        <button type="submit" className="btn btn-primary"><Check size={15} /> Save</button>
+        <button type="button" className="btn btn-ghost" onClick={onCancel}>Cancel</button>
+      </div>
+    </form>
+  )
+}
+
+/**
+ * The break between one exercise and the next.
+ *
+ * Separate from the rest between sets, which lives on the exercise: ninety
+ * seconds between sets of the same lift and three minutes before moving to
+ * another station are different waits, and one field could only be right about
+ * one of them. Nothing is shown after the last exercise — there is no next one
+ * to rest before.
+ */
+function BreakRow({ seconds, last, onChange }: {
+  seconds: number
+  last: boolean
+  onChange: (s: number) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  if (last) return null
+
+  if (!seconds && !editing) {
+    return (
+      <button className="plan-break-add" onClick={() => setEditing(true)}>
+        <Timer size={13} /> Add a break
+      </button>
+    )
+  }
+  return (
+    <div className="plan-break">
+      <Timer size={13} aria-hidden />
+      <input
+        className="input"
+        type="number"
+        inputMode="numeric"
+        min="0"
+        step="15"
+        autoFocus={editing && !seconds}
+        value={seconds || ''}
+        placeholder="90"
+        aria-label="Break before the next exercise, in seconds"
+        onChange={e => onChange(Math.max(0, parseInt(e.target.value, 10) || 0))}
+        onBlur={() => setEditing(false)}
+      />
+      <span>seconds break</span>
+      {seconds > 0 && (
+        <button
+          className="btn-icon"
+          onClick={() => { onChange(0); setEditing(false) }}
+          aria-label="Remove this break"
+        >
+          <X size={13} />
+        </button>
+      )}
+    </div>
+  )
+}
+
 interface BlockProps {
   block: PlanBlock
   first: boolean
   last: boolean
+  suggestions: string[]
   onMove: (by: number) => void
   onPatch: (optionIndex: number, patch: Partial<PlanExercise>) => void
   onRemove: () => void
@@ -282,7 +411,7 @@ interface BlockProps {
  * bordered "choose one" group in place — the only genuinely new concept in the
  * feature, so it is the one thing here given its own colour.
  */
-function BlockEditor({ block, first, last, onMove, onPatch, onRemove, onRemoveOption, onAddOption }: BlockProps) {
+function BlockEditor({ block, first, last, suggestions, onMove, onPatch, onRemove, onRemoveOption, onAddOption }: BlockProps) {
   const group = block.options.length > 1
 
   return (
@@ -308,12 +437,11 @@ function BlockEditor({ block, first, last, onMove, onPatch, onRemove, onRemoveOp
               <GripVertical size={14} aria-hidden />
             </span>
           )}
-          <input
+          <ExerciseNameInput
             className="input plan-ename"
             value={ex.name}
-            placeholder="Exercise name"
-            aria-label="Exercise name"
-            onChange={e => onPatch(oi, { name: e.target.value })}
+            suggestions={suggestions}
+            onChange={v => onPatch(oi, { name: v })}
           />
           <div className="plan-efields">
             <label>
@@ -339,6 +467,18 @@ function BlockEditor({ block, first, last, onMove, onPatch, onRemove, onRemoveOp
                 value={ex.weightKg || ''}
                 placeholder="—"
                 onChange={e => onPatch(oi, { weightKg: parseFloat(e.target.value) || 0 })}
+              />
+            </label>
+            <label>
+              <span className="field-label">Rest</span>
+              {/* Between sets of this exercise, as opposed to the break
+                  between exercises below the card. */}
+              <input
+                className="input" type="number" inputMode="numeric" min="0" step="15"
+                value={ex.restSec || ''}
+                placeholder="—"
+                aria-label="Rest between sets, in seconds"
+                onChange={e => onPatch(oi, { restSec: Math.max(0, parseInt(e.target.value, 10) || 0) })}
               />
             </label>
           </div>

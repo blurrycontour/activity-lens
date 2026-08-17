@@ -105,6 +105,9 @@ var trainingPlansSchema string
 //go:embed migrations/0031_plan_workouts_pref.sql
 var planWorkoutsPrefSchema string
 
+//go:embed migrations/0032_plan_block_rest.sql
+var planBlockRestSchema string
+
 // maxOpenConns is how many connections the pool will open.
 //
 // It was 1, which made every request in the process queue behind every other
@@ -210,6 +213,7 @@ func MigrateApp(ctx context.Context, db *sql.DB) error {
 		{"user tagline", userTaglineSchema},
 		{"cadence points", cadencePointsSchema},
 		{"plan workouts pref", planWorkoutsPrefSchema},
+		{"plan block rest", planBlockRestSchema},
 	} {
 		if err := applyAlters(ctx, db, m.schema); err != nil {
 			return fmt.Errorf("apply %s schema: %w", m.name, err)

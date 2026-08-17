@@ -42,10 +42,17 @@ export const DESKTOP_PAGES: Page[] = [...MOBILE_PAGES, 'help']
  * Everything still reachable: the rest live behind More, and swipe navigation
  * walks all of MOBILE_PAGES regardless.
  */
-export const BOTTOM_BAR_PAGES: Page[] = ['dashboard', 'workouts', 'discover', 'analysis']
+export const BOTTOM_BAR_PAGES: Page[] = ['dashboard', 'workouts', 'discover', 'plans']
 
-/** The pages behind "More" on a phone. */
-export const MORE_PAGES: Page[] = ['plans', 'consistency', 'map', 'equipment', 'help']
+/**
+ * The pages behind "More" on a phone, in the same order they appear in the
+ * desktop sidebar.
+ *
+ * The bar and the sheet are read as one list, so what matters is that walking
+ * bar-then-sheet gives the same order as the sidebar. That is why Plans sits in
+ * the bar and Analysis leads the sheet rather than the other way round.
+ */
+export const MORE_PAGES: Page[] = ['analysis', 'consistency', 'map', 'equipment', 'help']
 
 /** Every page that owns a route, including the ones reached from the user menu. */
 export const PAGES: Page[] = [...DESKTOP_PAGES, 'settings', 'admin', 'users']
@@ -123,6 +130,22 @@ export interface AppLocation {
   workoutId: string | null
   /** The URL was a legacy form and should be rewritten. */
   redirect?: boolean
+}
+
+/**
+ * The nav item that should light up while `page` is open.
+ *
+ * A page reached *through* another one still belongs to it: opening someone's
+ * profile from Discover, or one of their workouts from there, does not stop
+ * you being in Discover. Without this the bar highlighted nothing at all, which
+ * reads as "you are nowhere" — the same failure the More button was given a
+ * highlight to avoid.
+ */
+export function navHighlight(page: Page): Page {
+  // Profiles are only ever reached from Discover, a shared workout, or a
+  // notification; Discover is the only one of those that is a nav item.
+  if (page === 'users') return 'discover'
+  return page
 }
 
 /** The path for a page, optionally drilled into one of its categories. */

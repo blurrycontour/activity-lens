@@ -141,7 +141,7 @@ func normalizeDays(days []Day) ([]Day, error) {
 			if len(b.Options) > MaxOptionsPerBlock {
 				return nil, fmt.Errorf("%w: at most %d alternatives per exercise", ErrInvalid, MaxOptionsPerBlock)
 			}
-			block := Block{ID: idOr(b.ID, "pb"), Options: []Exercise{}}
+			block := Block{ID: idOr(b.ID, "pb"), Options: []Exercise{}, RestSec: min(max(b.RestSec, 0), 3600)}
 			for _, e := range b.Options {
 				exName := strings.TrimSpace(e.Name)
 				if exName == "" {

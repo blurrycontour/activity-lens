@@ -6145,7 +6145,8 @@ body:has(.overlay) .fab { display: none; }
 }
 .plan-grip { display: flex; align-items: center; gap: 2px; color: var(--text-3); flex: 0 0 auto; }
 .plan-grip .btn-icon { width: 24px; height: 24px; font-size: 13px; }
-.plan-ename { flex: 1; min-width: 0; }
+/* The input fills its wrapper; .plan-name-field is the flex item. */
+.plan-ename { width: 100%; }
 .plan-efields { display: flex; gap: 7px; flex: 0 0 auto; }
 .plan-efields label { display: flex; flex-direction: column; gap: 3px; }
 .plan-efields .input {
@@ -6195,18 +6196,6 @@ body:has(.overlay) .fab { display: none; }
    is not an exercise. Name on its own line, fields under it. min-width: 0 is
    load-bearing: an <input> has an intrinsic width from its size attribute, and
    without it each field claims a line of its own. */
-@container (max-width: 520px) {
-  .plan-erow { flex-wrap: wrap; }
-  .plan-ename { flex: 1 0 100%; }
-  /* min-width: 0 on the group as well as the inputs. A flex item defaults to
-     min-width: auto, so the row of fields refuses to shrink below the sum of
-     its contents and spills out of the card instead. */
-  /* Basis 0 so the fields take what is left after the remove button,
-     which otherwise wraps to a line of its own. */
-  .plan-efields { flex: 1 1 0; min-width: 0; }
-  .plan-efields label { flex: 1; min-width: 0; }
-  .plan-efields .input { width: auto; min-width: 0; }
-}
 
 @media (max-width: 768px) {
   .plan-run-summary { gap: 14px; }
@@ -6214,4 +6203,127 @@ body:has(.overlay) .fab { display: none; }
   .plan-resume { flex-wrap: wrap; }
   .plan-resume-cta { width: 100%; justify-content: center; }
   .plan-card-figures { flex-direction: column; gap: 2px; text-align: right; }
+}
+
+/* Shown only where there is room for it. The counterpart is .fab below, which
+   is the same action on a phone — one control at a time, never both. */
+@media (max-width: 768px) {
+  .desktop-only { display: none; }
+}
+/* The floating button is the phone's add control and only the phone's: on a
+   desktop it floated over the page beside a header with room for a real
+   button, which is two ways to do one thing. */
+@media (min-width: 769px) {
+  .fab { display: none; }
+}
+
+/* The title and anything that acts directly on it — a plan's rename pencil.
+   Separate from .page-header-actions, which is a group pinned to the far
+   right and wraps to its own line on a phone. */
+.page-header-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.page-header-title-row .page-header-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Training plans: editor extras ─────────────────────────────────── */
+
+/* Renaming, opened from the pencil. A card in the page rather than a modal:
+   it is one field, and it is already where the eye is. */
+.plan-rename { padding: 14px; margin-bottom: 14px; }
+.plan-rename-row { display: flex; gap: 8px; margin-top: 6px; }
+.plan-rename-row .input { flex: 1; min-width: 0; }
+
+/* Exercise-name suggestions. */
+.plan-name-field { position: relative; flex: 1; min-width: 0; }
+.plan-suggest {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: var(--z-popover);
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--bg-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  max-height: 220px;
+  overflow-y: auto;
+}
+.plan-suggest-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-2);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  padding: 7px 9px;
+  cursor: pointer;
+}
+.plan-suggest-item:hover,
+.plan-suggest-item.on { background: var(--bg-3); color: var(--text); }
+
+/* The break between two exercises, drawn between the cards it separates. */
+.plan-break-add,
+.plan-break {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 6px 0 6px 22px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-3);
+  background: transparent;
+  border: 0;
+  padding: 2px 0;
+  cursor: pointer;
+}
+.plan-break-add:hover { color: var(--text-2); }
+.plan-break .input {
+  width: 68px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 4px 6px;
+}
+.plan-break { cursor: default; }
+
+/* The same break in the runner, where it is a timer you can start. */
+.plan-break-run { display: flex; justify-content: center; padding: 7px 0; }
+
+.plan-start-label { display: inline; }
+
+/* A narrow editor column: the name gets the first row with the remove button
+   beside it, and the four number fields share the row below.
+   
+   The remove button acts on the whole row and the row's identity is its name,
+   so the two belong together; DOM order stays name → fields → remove for the
+   keyboard, and only the painting order changes.
+   
+   min-width: 0 is load-bearing in three places. An <input> carries an
+   intrinsic width from its size attribute and a flex item defaults to
+   min-width: auto, so without it the fields refuse to shrink and spill out of
+   the card. */
+@container (max-width: 520px) {
+  .plan-erow { flex-wrap: wrap; align-items: flex-start; }
+  /* Basis 0, not auto: with auto the name is as wide as its text and fills
+     the first line, pushing the remove button onto one of its own. */
+  .plan-grip { order: -1; }
+  .plan-name-field { flex: 1 1 0; min-width: 0; order: 0; }
+  .plan-erow-x { order: 1; }
+  .plan-efields { order: 2; flex: 1 0 100%; min-width: 0; }
+  .plan-efields label { flex: 1; min-width: 0; }
+  .plan-efields .input { width: auto; min-width: 0; }
 }

@@ -7,44 +7,21 @@ import (
 	"path/filepath"
 	"testing"
 
-	_ "modernc.org/sqlite"
+	"github.com/blurrycontour/activity-lens/backend/internal/store"
 )
 
 func newTestService(t *testing.T) (*Service, *sql.DB) {
 	t.Helper()
-	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "test.db")+"?_pragma=foreign_keys(1)")
+	// The real schema, not a hand-written copy of it. The copy drifted the
+	// first time a column was added: every test here failed on a missing
+	// plan_blocks.rest_sec that production had.
+	db, err := store.OpenSQLite(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
-		t.Fatalf("open: %v", err)
+		t.Fatalf("OpenSQLite() error = %v", err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-
-	// The columns this package needs, without dragging the whole app schema in.
-	// workouts is here only because plan_sessions references it.
-	for _, stmt := range []string{
-		`CREATE TABLE workouts (id TEXT PRIMARY KEY)`,
-		`CREATE TABLE training_plans (id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, name TEXT NOT NULL,
-			notes TEXT NOT NULL DEFAULT '', archived INTEGER NOT NULL DEFAULT 0,
-			created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
-		`CREATE TABLE plan_days (id TEXT PRIMARY KEY, plan_id TEXT NOT NULL, name TEXT NOT NULL,
-			position INTEGER NOT NULL DEFAULT 0,
-			FOREIGN KEY (plan_id) REFERENCES training_plans(id) ON DELETE CASCADE)`,
-		`CREATE TABLE plan_blocks (id TEXT PRIMARY KEY, day_id TEXT NOT NULL, position INTEGER NOT NULL DEFAULT 0,
-			FOREIGN KEY (day_id) REFERENCES plan_days(id) ON DELETE CASCADE)`,
-		`CREATE TABLE plan_exercises (id TEXT PRIMARY KEY, block_id TEXT NOT NULL, position INTEGER NOT NULL DEFAULT 0,
-			name TEXT NOT NULL, sets INTEGER NOT NULL DEFAULT 3, reps TEXT NOT NULL DEFAULT '',
-			weight_kg REAL NOT NULL DEFAULT 0, rest_sec INTEGER NOT NULL DEFAULT 0, note TEXT NOT NULL DEFAULT '',
-			FOREIGN KEY (block_id) REFERENCES plan_blocks(id) ON DELETE CASCADE)`,
-		`CREATE TABLE plan_sessions (id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, plan_id TEXT,
-			plan_name TEXT NOT NULL, day_name TEXT NOT NULL, started_at TEXT NOT NULL, finished_at TEXT,
-			snapshot TEXT NOT NULL, progress TEXT NOT NULL DEFAULT '{}', done_sets INTEGER NOT NULL DEFAULT 0,
-			total_sets INTEGER NOT NULL DEFAULT 0, volume_kg REAL NOT NULL DEFAULT 0,
-			notes TEXT NOT NULL DEFAULT '', workout_id TEXT,
-			FOREIGN KEY (plan_id) REFERENCES training_plans(id) ON DELETE SET NULL,
-			FOREIGN KEY (workout_id) REFERENCES workouts(id) ON DELETE SET NULL)`,
-	} {
-		if _, err := db.Exec(stmt); err != nil {
-			t.Fatalf("schema: %v", err)
-		}
+	if err := store.MigrateApp(context.Background(), db); err != nil {
+		t.Fatalf("MigrateApp() error = %v", err)
 	}
 	return NewService(NewSQLiteRepository(db)), db
 }
