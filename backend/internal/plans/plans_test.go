@@ -674,6 +674,38 @@ func TestDeleteSessionsClearsOnlyTheCallersRows(t *testing.T) {
 	}
 }
 
+// A session still running is not history. Deleting it from the history list
+// would leave the runner ticking sets into something the server has forgotten,
+// so the only ways out of a session are finishing and discarding it.
+func TestDeleteSessionsLeavesTheRunningOneAlone(t *testing.T) {
+	s, _ := newTestService(t)
+	ctx := context.Background()
+	plan := samplePlan(t, s, 1)
+
+	old, err := s.StartSession(ctx, 1, plan.ID, plan.Days[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.FinishSession(ctx, 1, old.ID, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	running, err := s.StartSession(ctx, 1, plan.ID, plan.Days[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	deleted, err := s.DeleteSessions(ctx, 1, []string{old.ID, running.ID})
+	if err != nil {
+		t.Fatalf("DeleteSessions() error = %v", err)
+	}
+	if deleted != 1 {
+		t.Errorf("deleted = %d, want 1 — the finished session only", deleted)
+	}
+	if _, err := s.GetSession(ctx, 1, running.ID); err != nil {
+		t.Errorf("the running session was deleted: %v", err)
+	}
+}
+
 func TestExerciseNamesComeFromThePlansThemselves(t *testing.T) {
 	s, _ := newTestService(t)
 	ctx := context.Background()

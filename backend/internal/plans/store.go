@@ -473,8 +473,14 @@ func (r *SQLiteRepository) DeleteSessions(ctx context.Context, userID int64, ids
 		placeholders[i] = "?"
 		args = append(args, id)
 	}
+	// finished_at IS NOT NULL: a session still running is not history, and
+	// deleting it out from under the runner would leave the phone ticking sets
+	// into a session the server has forgotten. The way to end one is to finish
+	// or discard it, which is a decision that belongs on the session itself.
 	res, err := r.db.ExecContext(ctx,
-		`DELETE FROM plan_sessions WHERE user_id = ? AND id IN (`+strings.Join(placeholders, ",")+`)`, args...)
+		`DELETE FROM plan_sessions
+		  WHERE user_id = ? AND finished_at IS NOT NULL
+		    AND id IN (`+strings.Join(placeholders, ",")+`)`, args...)
 	if err != nil {
 		return 0, fmt.Errorf("delete sessions: %w", err)
 	}
