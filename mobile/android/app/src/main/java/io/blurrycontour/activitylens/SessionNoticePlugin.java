@@ -53,6 +53,7 @@ public class SessionNoticePlugin extends Plugin {
         String title = call.getString("title", "Training session");
         String body = call.getString("body", "");
         String startedAt = call.getString("startedAt", "");
+        int percent = call.getInt("percent", 0);
 
         Context context = getContext();
         createChannel(context);
@@ -86,7 +87,11 @@ public class SessionNoticePlugin extends Plugin {
             .setAutoCancel(false)
             .setShowWhen(true)
             .setOnlyAlertOnce(true)
-            .setContentIntent(tap);
+            .setContentIntent(tap)
+            // How much of the day is done, as a bar. The shade shows a
+            // collapsed notification most of the time, and a bar is readable
+            // there in a way a second line of text is not.
+            .setProgress(100, Math.max(0, Math.min(100, percent)), false);
 
         // Counts up from when the session started, so the shade shows how long
         // you have been training without the app having to post an update.

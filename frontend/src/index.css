@@ -6047,6 +6047,7 @@ body:has(.overlay) .fab { display: none; }
 
 .plan-rest {
   align-self: flex-start;
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -6054,12 +6055,19 @@ body:has(.overlay) .fab { display: none; }
   font-size: 12px;
   padding: 6px 12px;
   border-radius: 99px;
-  border: 1px solid var(--border);
-  background: transparent;
+  border: 1px dashed var(--border-strong);
+  background: var(--bg);
   color: var(--text-2);
   cursor: pointer;
 }
+.plan-rest:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--text);
+  background: var(--primary-dim);
+}
+.plan-rest:disabled { cursor: default; opacity: 0.6; }
 .plan-rest.running { color: var(--warning); border-color: var(--warning); cursor: default; }
+.plan-rest.running .btn-icon { width: 20px; height: 20px; color: inherit; }
 .plan-rest.up { color: var(--success); border-color: var(--success); }
 
 /* The choose-one strip under a row. */
@@ -6136,18 +6144,22 @@ body:has(.overlay) .fab { display: none; }
 .plan-edit-block { display: flex; flex-direction: column; gap: 6px; }
 .plan-erow {
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
+  align-items: flex-end;
   gap: 9px;
   padding: 9px 11px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg-2);
 }
-.plan-grip { display: flex; align-items: center; gap: 2px; color: var(--text-3); flex: 0 0 auto; }
-.plan-grip .btn-icon { width: 24px; height: 24px; font-size: 13px; }
-/* The input fills its wrapper; .plan-name-field is the flex item. */
+/* The name and its label. Basis 180px rather than auto: with auto the field is
+   as wide as whatever has been typed, so an empty row and a row holding
+   "Incline dumbbell press" laid the card out differently. */
+.plan-ename-field { display: flex; flex-direction: column; gap: 3px; flex: 1 1 180px; min-width: 0; }
+.plan-ename-field .plan-name-field { width: 100%; }
 .plan-ename { width: 100%; }
-.plan-efields { display: flex; gap: 7px; flex: 0 0 auto; }
+.plan-erow-menu { flex: 0 0 auto; }
+.plan-efields { display: flex; gap: 7px; flex: 0 0 auto; align-items: flex-end; }
 .plan-efields label { display: flex; flex-direction: column; gap: 3px; }
 .plan-efields .input {
   width: 62px;
@@ -6156,7 +6168,9 @@ body:has(.overlay) .fab { display: none; }
   font-size: 12.5px;
   padding: 6px 7px;
 }
-.plan-erow-x { flex: 0 0 auto; }
+/* Wide enough to read the word: "Weight" and "Bodyweight" clipped to "We" and
+   "Bo" tell you nothing. */
+.plan-kind-field { min-width: 118px; }
 
 /* The choose-one group: the only new idea in the feature, so the only thing
    here wearing the strength colour. */
@@ -6235,12 +6249,6 @@ body:has(.overlay) .fab { display: none; }
 
 /* ── Training plans: editor extras ─────────────────────────────────── */
 
-/* Renaming, opened from the pencil. A card in the page rather than a modal:
-   it is one field, and it is already where the eye is. */
-.plan-rename { padding: 14px; margin-bottom: 14px; }
-.plan-rename-row { display: flex; gap: 8px; margin-top: 6px; }
-.plan-rename-row .input { flex: 1; min-width: 0; }
-
 /* Exercise-name suggestions. */
 .plan-name-field { position: relative; flex: 1; min-width: 0; }
 .plan-suggest {
@@ -6275,35 +6283,7 @@ body:has(.overlay) .fab { display: none; }
 .plan-suggest-item:hover,
 .plan-suggest-item.on { background: var(--bg-3); color: var(--text); }
 
-/* The break between two exercises, drawn between the cards it separates. */
-.plan-break-add,
-.plan-break {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin: 6px 0 6px 22px;
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  color: var(--text-3);
-  background: transparent;
-  border: 0;
-  padding: 2px 0;
-  cursor: pointer;
-}
-.plan-break-add:hover { color: var(--text-2); }
-.plan-break .input {
-  width: 68px;
-  text-align: center;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  padding: 4px 6px;
-}
-.plan-break { cursor: default; }
 
-/* The same break in the runner, where it is a timer you can start. */
-.plan-break-run { display: flex; justify-content: center; padding: 7px 0; }
-
-.plan-start-label { display: inline; }
 
 /* A narrow editor column: the name gets the first row with the remove button
    beside it, and the four number fields share the row below.
@@ -6320,18 +6300,15 @@ body:has(.overlay) .fab { display: none; }
   /* The type is a word and the rest are two-digit numbers, so they cannot
      share a line in a narrow column without the numbers being squeezed to
      nothing. Type takes its own row; the numbers divide the one below. */
-  .plan-efields { flex-wrap: wrap; }
-  .plan-efields label:has(> .plan-kind) { flex: 1 0 100%; }
-  .plan-efields label:has(> .plan-kind) .input { width: 100%; }
-  .plan-erow { flex-wrap: wrap; align-items: flex-start; }
+  .plan-efields { flex-wrap: wrap; flex: 1 0 100%; min-width: 0; }
   /* Basis 0, not auto: with auto the name is as wide as its text and fills
-     the first line, pushing the remove button onto one of its own. */
-  .plan-grip { order: -1; }
-  .plan-name-field { flex: 1 1 0; min-width: 0; order: 0; }
-  .plan-erow-x { order: 1; }
-  .plan-efields { order: 2; flex: 1 0 100%; min-width: 0; }
+     the first line, pushing the menu button onto one of its own. */
+  .plan-ename-field { flex: 1 1 0; min-width: 0; }
   .plan-efields label { flex: 1; min-width: 0; }
   .plan-efields .input { width: auto; min-width: 0; }
+  /* After the rule above and matching it on specificity plus one class, so
+     the type really does take the whole line. */
+  .plan-efields .plan-kind-field { flex: 1 0 100%; }
 }
 
 /* A destructive action's button. Was an inline style on the confirm dialog
@@ -6361,16 +6338,6 @@ body:has(.overlay) .fab { display: none; }
   font-size: 11px;
   color: var(--text-3);
 }
-/* The break between two exercises, drawn on the rule that separates them. */
-.plan-break-read {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  font-size: 11px;
-  color: var(--text-3);
-  padding: 5px 0;
-}
 
 /* ── Training plans: the editor ─────────────────────────────────────── */
 
@@ -6380,25 +6347,6 @@ body:has(.overlay) .fab { display: none; }
   gap: 8px;
   margin-bottom: 4px;
 }
-.plan-move { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
-.plan-move .btn-icon { width: 26px; height: 26px; }
-.plan-move-option { margin-right: 2px; }
-.plan-block-x { margin-left: auto; }
-
-/* How many of a group's exercises to do, as one phrase. */
-.plan-required {
-  width: auto;
-  min-width: 0;
-  max-width: 220px;
-  padding: 4px 8px;
-  font-size: 12px;
-  color: var(--strength);
-  border-color: color-mix(in srgb, var(--strength) 45%, transparent);
-  background: transparent;
-}
-/* Wide enough to read the word: "Weight" and "Bodyweight" truncated to "We"
-   and "Bo" tell you nothing. */
-.plan-kind { min-width: 104px; }
 
 /* The break chip, on the rule between two exercise cards. It reads as the gap
    it describes rather than as another control stacked under the card. */
@@ -6555,6 +6503,136 @@ body:has(.overlay) .fab { display: none; }
      is exactly what :has answers. */
   .page-header-actions:not(:has(> :not(.desktop-only))) { display: none; }
   .plan-history-bar { flex-wrap: wrap; }
-  .plan-block-head { flex-wrap: wrap; }
-  .plan-required { order: 3; flex: 1 0 100%; }
 }
+
+/* ── Training plans: the fixes this batch ──────────────────────────── */
+
+/* A lone icon button beside the title stays on the title's row. The default —
+   actions dropping to a full-width line below — exists for groups of labelled
+   buttons that would otherwise squeeze the title to a few hyphenated
+   characters. One icon does not, and dropped below it landed under the back
+   arrow, reading as part of the navigation rather than as the page's menu. */
+@media (max-width: 768px) {
+  .page-header-row .page-header-actions.compact { width: auto; }
+}
+
+/* An action inside an empty state is a button, not another muted glyph.
+   `.empty-state svg` greys every icon in the block, which took the primary
+   button's icon with it and left it unreadable on a dark accent. */
+.empty-state .btn svg { color: inherit; }
+
+/* First thing on the page, so no leading gap: the day strip sat 16px below
+   the page's own 16px of padding. */
+.plan-tabs:first-child { margin-top: 0; }
+
+.options-menu-item:disabled {
+  opacity: 0.4;
+  cursor: default;
+  background: transparent;
+}
+
+/* A block holding more than one exercise, wherever it is read.
+   Drawn flat, a superset and three unrelated exercises were the same three
+   rows, and the one genuinely new idea in the feature was invisible. Purple
+   because --strength is already what this app paints strength work. */
+.plan-ex-grouped { border-color: color-mix(in srgb, var(--strength) 45%, var(--border)); }
+.plan-ex-grouped::before { background: var(--strength); opacity: 1; }
+.plan-ex-read.plan-ex-grouped { gap: 8px; }
+
+/* The editor's block header: the phrase picker, then the block's own menu. */
+.plan-block-head .al-dropdown { flex: 1; min-width: 0; }
+.plan-block-head .al-dropdown-trigger { font-size: 12px; padding: 4px 9px; color: var(--strength); }
+
+/* --- The runner --- */
+
+.plan-run-tools { display: flex; justify-content: flex-end; margin-bottom: 10px; }
+.plan-run-tools .btn { padding: 5px 11px; font-size: 12px; }
+
+/* Room for the floating controls to sit over, so the last exercise is not
+   permanently under them. */
+.plan-run-page { padding-bottom: 96px; }
+@media (min-width: 769px) {
+  .plan-run-page { padding-bottom: 24px; }
+}
+
+/* A set that is not next in line. Sets are ticked in order, so the rest are
+   shown as targets rather than offered as controls. */
+.plan-set:disabled { opacity: 0.4; cursor: default; }
+.plan-set:disabled:hover { border-color: var(--border); color: var(--text-3); }
+.plan-setrow.locked { opacity: 0.55; }
+.plan-setrow-tick:disabled { cursor: default; }
+
+/* The live dot: beside the title of a session being recorded, and on the nav
+   item that leads back to it. Same mark in both places on purpose. */
+.plan-live-dot,
+.nav-live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+  background: var(--danger);
+  flex: 0 0 auto;
+  animation: pulse-dot 1.6s ease-in-out infinite;
+}
+.nav-icon { position: relative; display: inline-flex; }
+.nav-live-dot {
+  position: absolute;
+  top: -2px;
+  right: -3px;
+  border: 2px solid var(--bg-2);
+  width: 10px;
+  height: 10px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .plan-live-dot, .nav-live-dot { animation: none; }
+}
+
+/* The phone's session controls. Finish is the accent and sits where the single
+   FAB always has; stop is above it, smaller, and wears the danger colour —
+   two identical circles beside each other is how the wrong one gets pressed. */
+.fab-stack {
+  position: fixed;
+  right: 24px;
+  bottom: calc(24px + var(--bottombar-h));
+  z-index: var(--z-fab);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.fab-stack .fab { position: static; bottom: auto; right: auto; }
+.fab-danger {
+  width: 44px;
+  height: 44px;
+  background: var(--danger);
+  color: #fff;
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--danger) 40%, transparent);
+}
+.fab-danger:hover { box-shadow: 0 6px 22px color-mix(in srgb, var(--danger) 45%, transparent); }
+@media (min-width: 769px) {
+  .fab-stack { display: none; }
+}
+
+/* Three, two, one. Deliberately enormous: it is read from arm's length with a
+   phone already propped against something. */
+.plan-countdown {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 32px 40px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) * 2);
+}
+.plan-countdown-n {
+  font-size: 76px;
+  line-height: 1;
+  font-weight: 700;
+  color: var(--primary);
+}
+.plan-countdown-hint { font-size: 13px; color: var(--text-3); }
+
+/* A history row that cannot be selected, because the session is still running
+   and the way to end one is to finish or stop it. */
+.plan-card.inert { opacity: 0.55; cursor: default; }
+.plan-card.inert:hover { border-color: var(--border); }

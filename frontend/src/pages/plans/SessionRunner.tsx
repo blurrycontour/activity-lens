@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Check, ChevronDown, Timer, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, Square, Timer, X } from 'lucide-react'
 import PageHeader from '../../components/PageHeader'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import { api } from '../../lib/api'
 import {
-  blockLabel, blockProgress, chosenExercises, doneSetsFor, durationLabel, durationShort,
-  effectivePicks, elapsedMin, exerciseComplete, sessionTally, sessionVolume, setsFor,
-  targetLabel, trimNum, volumeLabel,
+  blockComplete, blockLabel, blockProgress, chosenExercises, clockLabel, currentExercise,
+  doneSetsFor, durationShort, effectivePicks, elapsedSec, exerciseComplete, leadingDone,
+  sessionTally, sessionVolume, setTappable, setsFor, targetLabel, trimNum, volumeLabel,
   type BlockProgress, type PlanBlock, type PlanExercise, type PlanSession, type SessionProgress, type SetLog,
 } from '../../data/plans'
 import { cacheProgress, clearCachedProgress, readCachedProgress } from './sessionCache'
@@ -19,15 +19,25 @@ interface Props {
   onBack: () => void
 }
 
+/** A countdown in flight: what is resting, and when it is over. */
+interface Rest {
+  /** `ex:<id>` for the rest between sets, `break:<id>` for one between blocks. */
+  key: string
+  until: number
+  seconds: number
+}
+
+const exKey = (ex: PlanExercise) => `ex:${ex.id}`
+const breakKey = (block: PlanBlock) => `break:${block.id}`
+
 /**
  * Running a session: the whole day as a list of rows, sets as tappable
- * squares, one row expandable into the big view.
+ * squares, rows expandable into the big view.
  *
  * The list is the primary form because the question you ask most in a gym is
- * "what is left", and a list answers it without an interaction. The expanded
- * row is for the set you are actually in the middle of: numbers you can read
- * from the floor, the weight you really used, and the rest timer. One row is
- * open at a time — two would be a list again, with worse density.
+ * "what is left", and a list answers it without an interaction. An expanded row
+ * is for the set you are in the middle of: numbers you can read from the floor,
+ * the weight you really used, and the rest timer.
  */
 export default function SessionRunner({ session, onFinished, onDiscarded, onBack }: Props) {
   const [progress, setProgress] = useState<SessionProgress>(() => {
@@ -36,24 +46,44 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
     const cached = readCachedProgress(session.id)
     return cached ?? session.progress
   })
-  const [openBlock, setOpenBlock] = useState<string | null>(null)
+  // A set of ids rather than one id: "expand all" is a real request in a gym,
+  // where you want to read the whole day at once before you start.
+  const [openIds, setOpenIds] = useState<Set<string>>(new Set())
   const [confirmFinish, setConfirmFinish] = useState(false)
   const [confirmDiscard, setConfirmDiscard] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  // Which exercise is resting, and until when. One at a time: you are only
-  // ever between sets of one thing.
-  const [rest, setRest] = useState<{ exerciseId: string; until: number } | null>(null)
+  // One countdown at a time: you are only ever between sets of one thing, or
+  // between one block and the next.
+  const [rest, setRest] = useState<Rest | null>(null)
 
   const blocks = session.snapshot.blocks
   const tally = useMemo(() => sessionTally({ ...session, progress }), [session, progress])
   const pct = tally.total ? Math.round(tally.done / tally.total * 100) : 0
+  const allOpen = openIds.size === blocks.length && blocks.length > 0
+
+  // A clock in the header has to move. One interval for the page rather than
+  // one per timer, so a long day does not accumulate them.
+  const [, tick] = useState(0)
+  useEffect(() => {
+    const id = window.setInterval(() => tick(n => n + 1), 1000)
+    return () => window.clearInterval(id)
+  }, [])
 
   // The phone's ongoing notification, so a session is visible with the app
-  // closed. A no-op anywhere but the Android app.
+  // closed. Re-posted as progress moves: the shade should say how far in you
+  // are and what you are on, not just that something is running. A no-op
+  // anywhere but the Android app.
+  const heading = currentExercise(session, progress)
   useEffect(() => {
-    void showSessionNotice(session.id, session.dayName, session.planName, session.startedAt)
-  }, [session.id, session.dayName, session.planName, session.startedAt])
+    void showSessionNotice({
+      sessionId: session.id,
+      title: session.dayName,
+      body: heading ? `${pct}% · ${heading}` : `${pct}% · ${session.planName}`,
+      startedAt: session.startedAt,
+      percent: pct,
+    })
+  }, [session.id, session.dayName, session.planName, session.startedAt, heading, pct])
 
   // --- persistence -------------------------------------------------------
   //
@@ -98,32 +128,52 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
 
   // --- edits -------------------------------------------------------------
 
-  function patch(block: PlanBlock, fn: (p: BlockProgress) => BlockProgress) {
-    const current = blockProgress(progress, block.id)
-    update({ blocks: { ...progress.blocks, [block.id]: fn(current) } })
+  function startRest(key: string, seconds: number) {
+    if (seconds > 0) setRest({ key, until: Date.now() + seconds * 1000, seconds })
   }
 
   function patchSets(block: PlanBlock, ex: PlanExercise, index: number, change: Partial<SetLog>) {
-    patch(block, p => {
-      const sets = [...setsFor(p, ex.id)]
-      while (sets.length <= index) sets.push({ done: false, weightKg: 0 })
-      sets[index] = { ...sets[index], ...change }
-      return { ...p, sets: { ...p.sets, [ex.id]: sets } }
-    })
+    const current = blockProgress(progress, block.id)
+    const sets = [...setsFor(current, ex.id)]
+    while (sets.length <= index) sets.push({ done: false, weightKg: 0 })
+    sets[index] = { ...sets[index], ...change }
+    const next: BlockProgress = { ...current, sets: { ...current.sets, [ex.id]: sets } }
+    update({ blocks: { ...progress.blocks, [block.id]: next } })
+    return next
   }
 
+  /**
+   * Ticking a set, in order.
+   *
+   * Only the next undone set and the last done one respond, so progress is
+   * always a run from the start. Set 3 ticked before sets 1 and 2 recorded a
+   * session nobody performed, and made every timing derived from it — the gap
+   * between sets, the rest that starts on a tick — describe nothing.
+   */
   function toggleSet(block: PlanBlock, ex: PlanExercise, index: number) {
-    const wasDone = setsFor(blockProgress(progress, block.id), ex.id)[index]?.done
-    patchSets(block, ex, index, {
+    const sets = setsFor(blockProgress(progress, block.id), ex.id)
+    if (!setTappable(sets, index)) return
+    const wasDone = !!sets[index]?.done
+
+    const after = patchSets(block, ex, index, {
       done: !wasDone,
       // Stamped as it happens, so history can show what the session actually
       // looked like rather than only its start and end.
       at: !wasDone ? new Date().toISOString() : undefined,
     })
-    // Ticking a set is the moment the rest between sets begins — that is what
-    // the rest field on an exercise is for, and it did nothing until now.
-    if (!wasDone && ex.restSec > 0) {
-      setRest({ exerciseId: ex.id, until: Date.now() + ex.restSec * 1000 })
+    if (wasDone) {
+      setRest(null)
+      return
+    }
+
+    // Finishing a block starts the break before the next one — that is the
+    // moment it begins, and waiting for a tap meant the break was usually
+    // remembered halfway through it. Otherwise the rest between sets runs.
+    const isLast = blocks[blocks.length - 1]?.id === block.id
+    if (block.restSec > 0 && !isLast && blockComplete(block, after)) {
+      startRest(breakKey(block), block.restSec)
+    } else if (ex.restSec > 0) {
+      startRest(exKey(ex), ex.restSec)
     }
   }
 
@@ -136,18 +186,29 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
    */
   function togglePick(block: PlanBlock, index: number) {
     const required = Math.min(Math.max(block.required || 1, 1), block.options.length)
-    patch(block, p => {
-      const current = effectivePicks(block, p)
-      if (required <= 1) return { ...p, picks: [index] }
-      if (current.includes(index)) {
-        const next = current.filter(i => i !== index)
-        // Never below one: an empty block would have nothing to show.
-        return { ...p, picks: next.length ? next : current }
-      }
+    const p = blockProgress(progress, block.id)
+    const current = effectivePicks(block, p)
+    let picks: number[]
+    if (required <= 1) {
+      picks = [index]
+    } else if (current.includes(index)) {
+      const without = current.filter(i => i !== index)
+      // Never below one: an empty block would have nothing to show.
+      picks = without.length ? without : current
+    } else {
       // Drop the oldest to make room once the block is full, so tapping a
       // third option in a "2 of 3" does the obvious thing.
-      const next = current.length >= required ? [...current.slice(1), index] : [...current, index]
-      return { ...p, picks: next }
+      picks = current.length >= required ? [...current.slice(1), index] : [...current, index]
+    }
+    update({ blocks: { ...progress.blocks, [block.id]: { ...p, picks } } })
+  }
+
+  function toggleOpen(id: string) {
+    setOpenIds(cur => {
+      const next = new Set(cur)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
     })
   }
 
@@ -185,12 +246,18 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
   return (
     <>
       <PageHeader
+        /* The live dot in the title, not only on the list two screens away:
+           this page looks much like a plan being read, and "is this recording"
+           is the one thing it must answer without being asked. */
         title={session.dayName}
-        subtitle={session.planName}
+        titleAction={<span className="plan-live-dot" role="img" aria-label="Session in progress" />}
+        subtitle={`${session.planName} · recording`}
         onBack={onBack}
         actions={
-          <div className="plan-run-actions">
-            <button className="btn btn-ghost" onClick={() => setConfirmDiscard(true)}>Discard</button>
+          <div className="plan-run-actions desktop-only">
+            <button className="btn btn-ghost" onClick={() => setConfirmDiscard(true)}>
+              <Square size={14} /> Stop
+            </button>
             <button className="btn btn-primary" onClick={() => setConfirmFinish(true)}>
               <Check size={15} /> Finish
             </button>
@@ -198,7 +265,7 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
         }
       />
 
-      <div className="page-content">
+      <div className="page-content plan-run-page">
         {error && <div className="status-msg err" role="alert">{error}</div>}
 
         <div className="card plan-run-summary">
@@ -210,13 +277,26 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
             </div>
             <div className="stat-chip">
               <span className="label">Elapsed</span>
-              <span className="value">{durationLabel(elapsedMin(session.startedAt))}</span>
+              <span className="value plan-num">{clockLabel(elapsedSec(session.startedAt))}</span>
             </div>
-            <div className="stat-chip">
-              <span className="label">Volume</span>
+            {/* "Volume" is the strength-training term and the one the rest of
+                the app already uses, but it means nothing on sight — hence the
+                unit under it rather than a label people have to look up. */}
+            <div className="stat-chip" title="Total load moved: weight × reps, added up across every set you have ticked">
+              <span className="label">Volume lifted</span>
               <span className="value">{volumeLabel(sessionVolume(session, progress))}</span>
             </div>
           </div>
+        </div>
+
+        <div className="plan-run-tools">
+          <button
+            className="btn btn-ghost"
+            onClick={() => setOpenIds(allOpen ? new Set() : new Set(blocks.map(b => b.id)))}
+          >
+            {allOpen ? <ChevronsDownUp size={14} /> : <ChevronsUpDown size={14} />}
+            {allOpen ? 'Collapse all' : 'Expand all'}
+          </button>
         </div>
 
         <div className="plan-rows">
@@ -226,24 +306,53 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
                 block={block}
                 index={i}
                 progress={blockProgress(progress, block.id)}
-                open={openBlock === block.id}
+                open={openIds.has(block.id)}
                 rest={rest}
                 onRestDone={() => setRest(null)}
-                onStartRest={(ex, secs) => setRest({ exerciseId: ex.id, until: Date.now() + secs * 1000 })}
-                onOpen={() => setOpenBlock(openBlock === block.id ? null : block.id)}
+                onStartRest={(ex, secs) => startRest(exKey(ex), secs)}
+                onOpen={() => toggleOpen(block.id)}
                 onToggleSet={(ex, n) => toggleSet(block, ex, n)}
                 onSetChange={(ex, n, change) => patchSets(block, ex, n, change)}
                 onPick={n => togglePick(block, n)}
               />
-              {/* The planned break before the next exercise. */}
+              {/* The planned break before the next exercise. It starts itself
+                  the moment the block above is finished. */}
               {block.restSec > 0 && i < blocks.length - 1 && (
-                <div className="plan-break-run">
-                  <RestTimer seconds={block.restSec} label="Break" />
+                <div className="plan-break-line">
+                  <RestTimer
+                    seconds={block.restSec}
+                    label="Break"
+                    until={rest?.key === breakKey(block) ? rest.until : null}
+                    onDone={() => setRest(null)}
+                    onStart={() => startRest(breakKey(block), block.restSec)}
+                  />
                 </div>
               )}
             </div>
           ))}
         </div>
+      </div>
+
+      {/* The phone's controls, where the thumb is. Finish is the accent; stop
+          is the destructive one and wears the danger colour rather than sitting
+          next to it looking identical. */}
+      <div className="fab-stack">
+        <button
+          className="fab fab-danger"
+          onClick={() => setConfirmDiscard(true)}
+          title="Stop and discard"
+          aria-label="Stop and discard this session"
+        >
+          <Square size={19} />
+        </button>
+        <button
+          className="fab"
+          onClick={() => setConfirmFinish(true)}
+          title="Finish session"
+          aria-label="Finish session"
+        >
+          <Check size={22} />
+        </button>
       </div>
 
       {confirmFinish && (
@@ -262,7 +371,7 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
       )}
       {confirmDiscard && (
         <ConfirmDialog
-          title="Discard this session?"
+          title="Stop and discard this session?"
           message="Everything you have ticked will be deleted. The plan itself is not touched."
           confirmLabel="Discard"
           danger
@@ -298,7 +407,7 @@ interface RowProps {
   index: number
   progress: BlockProgress
   open: boolean
-  rest: { exerciseId: string; until: number } | null
+  rest: Rest | null
   onRestDone: () => void
   onStartRest: (ex: PlanExercise, seconds: number) => void
   onOpen: () => void
@@ -322,7 +431,7 @@ function BlockRow({ block, index, progress, open, rest, onRestDone, onStartRest,
   const label = blockLabel(block)
 
   return (
-    <div className={`plan-ex${complete ? ' done' : ''}${open ? ' open' : ''}`}>
+    <div className={`plan-ex${complete ? ' done' : ''}${open ? ' open' : ''}${block.options.length > 1 ? ' plan-ex-grouped' : ''}`}>
       <div className="plan-ex-top">
         <button
           className="plan-ex-name"
@@ -348,22 +457,34 @@ function BlockRow({ block, index, progress, open, rest, onRestDone, onStartRest,
         )}
       </div>
 
-      {!open && chosen.map(ex => (
-        <div className="plan-sets" key={ex.id}>
-          {chosen.length > 1 && <span className="plan-sets-for">{ex.name}</span>}
-          {Array.from({ length: ex.sets }, (_, n) => (
-            <button
-              key={n}
-              className="plan-set"
-              aria-pressed={!!setsFor(progress, ex.id)[n]?.done}
-              aria-label={`Set ${n + 1} of ${ex.name}`}
-              onClick={() => onToggleSet(ex, n)}
-            >
-              {n + 1}
-            </button>
-          ))}
-        </div>
-      ))}
+      {!open && chosen.map(ex => {
+        const sets = setsFor(progress, ex.id)
+        const next = leadingDone(sets)
+        return (
+          <div className="plan-sets" key={ex.id}>
+            {chosen.length > 1 && <span className="plan-sets-for">{ex.name}</span>}
+            {Array.from({ length: ex.sets }, (_, n) => (
+              <button
+                key={n}
+                className="plan-set"
+                aria-pressed={!!sets[n]?.done}
+                aria-label={`Set ${n + 1} of ${ex.name}`}
+                disabled={!setTappable(sets, n)}
+                title={setTappable(sets, n) ? undefined : `Do set ${next + 1} first`}
+                onClick={() => onToggleSet(ex, n)}
+              >
+                {n + 1}
+              </button>
+            ))}
+            {/* The rest between sets, on the collapsed row too. It only ever
+                showed inside the expanded view, which is the one place you are
+                not looking while you wait for it. */}
+            {rest?.key === exKey(ex) && (
+              <RestTimer seconds={ex.restSec} label="Rest" until={rest.until} onDone={onRestDone} />
+            )}
+          </div>
+        )
+      })}
 
       {open && (
         <div className="plan-ex-focus">
@@ -373,7 +494,7 @@ function BlockRow({ block, index, progress, open, rest, onRestDone, onStartRest,
               ex={ex}
               sets={setsFor(progress, ex.id)}
               heading={chosen.length > 1 ? ex.name : undefined}
-              rest={rest?.exerciseId === ex.id ? rest.until : null}
+              rest={rest?.key === exKey(ex) ? rest.until : null}
               onRestDone={onRestDone}
               onStartRest={secs => onStartRest(ex, secs)}
               onToggle={n => onToggleSet(ex, n)}
@@ -385,7 +506,7 @@ function BlockRow({ block, index, progress, open, rest, onRestDone, onStartRest,
 
       {block.options.length > 1 && (
         <div className="plan-alt">
-          <span className="field-label">{label}</span>
+          <span className="field-label plan-read-kind">{label}</span>
           {block.options.map((opt, n) => {
             const on = picked.has(n)
             const finished = exerciseComplete(opt, setsFor(progress, opt.id))
@@ -438,7 +559,7 @@ function ExerciseDetail({ ex, sets, heading, rest, onRestDone, onStartRest, onTo
           <span className="value">{ex.sets}</span>
         </div>
         <div className="stat-chip">
-          <span className="label">{timed ? 'Hold' : 'Reps'}</span>
+          <span className="label">{timed ? 'Duration' : 'Reps'}</span>
           <span className="value">{timed ? durationShort(ex.durationSec) : ex.reps || '—'}</span>
         </div>
         <div className="stat-chip">
@@ -454,12 +575,14 @@ function ExerciseDetail({ ex, sets, heading, rest, onRestDone, onStartRest, onTo
       <div className="plan-setrows">
         {Array.from({ length: ex.sets }, (_, n) => {
           const log = sets[n]
+          const tappable = setTappable(sets, n)
           return (
-            <div key={n} className={`plan-setrow${log?.done ? ' done' : ''}`}>
+            <div key={n} className={`plan-setrow${log?.done ? ' done' : ''}${tappable ? '' : ' locked'}`}>
               <button
                 className="plan-setrow-tick"
                 aria-pressed={!!log?.done}
                 aria-label={`Set ${n + 1}`}
+                disabled={!tappable}
                 onClick={() => onToggle(n)}
               >
                 <Check size={15} />
@@ -518,10 +641,10 @@ function ExerciseDetail({ ex, sets, heading, rest, onRestDone, onStartRest, onTo
 /**
  * A countdown.
  *
- * Between sets it is started for you when a set is ticked — that is the moment
- * the rest begins, and it is what the exercise's rest field is for. The break
- * between exercises is started by hand, because only you know when you have
- * actually moved on.
+ * Both kinds start themselves: the rest between sets when a set is ticked, the
+ * break between blocks when the block above it is finished. Tapping it is the
+ * override for when you got there another way — so it is drawn as the button it
+ * is, rather than the line of grey text it used to be.
  */
 function RestTimer({ seconds, label = 'Rest', until, onDone, onStart }: {
   seconds: number
@@ -531,35 +654,30 @@ function RestTimer({ seconds, label = 'Rest', until, onDone, onStart }: {
   onDone?: () => void
   onStart?: () => void
 }) {
-  const [ownUntil, setOwnUntil] = useState<number | null>(null)
-  const end = until ?? ownUntil
   const [, tick] = useState(0)
 
   useEffect(() => {
-    if (!end) return
+    if (!until) return
     const id = window.setInterval(() => tick(n => n + 1), 500)
     return () => window.clearInterval(id)
-  }, [end])
+  }, [until])
 
-  if (!end) {
+  if (!until) {
     return (
-      <button
-        className="plan-rest"
-        onClick={() => (onStart ? onStart() : setOwnUntil(Date.now() + seconds * 1000))}
-      >
-        <Timer size={14} /> {label} {formatRest(seconds)}
+      <button className="plan-rest" onClick={onStart} disabled={!onStart}>
+        <Timer size={14} /> Start {label.toLowerCase()} · {formatRest(seconds)}
       </button>
     )
   }
 
-  const left = Math.max(0, Math.round((end - Date.now()) / 1000))
+  const left = Math.max(0, Math.round((until - Date.now()) / 1000))
   return (
     <div className={`plan-rest running${left <= 0 ? ' up' : ''}`}>
       <Timer size={14} />
       {left > 0 ? formatRest(left) : `${label} over`}
       <button
         className="btn-icon"
-        onClick={() => { setOwnUntil(null); onDone?.() }}
+        onClick={() => onDone?.()}
         aria-label={`Stop the ${label.toLowerCase()} timer`}
       >
         <X size={14} />

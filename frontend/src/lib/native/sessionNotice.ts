@@ -18,23 +18,29 @@ import { isNative } from '../serverConfig'
  * notification and a service worker one would be a worse version of the same
  * idea.
  */
+export interface SessionNotice {
+  sessionId: string
+  /** The day being trained. */
+  title: string
+  /** How far in, and what is being done — the shade's one useful line. */
+  body: string
+  startedAt: string
+  /** Sets done as a percentage, drawn as a bar under the text. */
+  percent: number
+}
+
 export interface SessionNoticePlugin {
-  show(options: { sessionId: string; title: string; body: string; startedAt: string }): Promise<void>
+  show(options: SessionNotice): Promise<void>
   clear(): Promise<void>
 }
 
 const SessionNotice = registerPlugin<SessionNoticePlugin>('SessionNotice')
 
 /** Puts the ongoing notification up, or updates the one already showing. */
-export async function showSessionNotice(
-  sessionId: string,
-  dayName: string,
-  planName: string,
-  startedAt: string,
-): Promise<void> {
+export async function showSessionNotice(notice: SessionNotice): Promise<void> {
   if (!isNative()) return
   try {
-    await SessionNotice.show({ sessionId, title: dayName, body: planName, startedAt })
+    await SessionNotice.show(notice)
   } catch {
     // An older app build has no such plugin, and a denied notification
     // permission is the user's answer. Neither is a reason to interrupt a

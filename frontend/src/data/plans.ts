@@ -129,7 +129,7 @@ export function blockProgress(progress: SessionProgress, blockId: string): Block
  * anything has been chosen and the totals do not jump around.
  */
 export function effectivePicks(block: PlanBlock, p: BlockProgress = EMPTY_BLOCK_PROGRESS): number[] {
-  const required = Math.min(Math.max(block.required || 1, 1), block.options.length)
+  const required = blockRequired(block)
   const seen = new Set<number>()
   const out: number[] = []
   for (const i of p.picks) {
@@ -157,6 +157,25 @@ export function doneSetsFor(ex: PlanExercise, sets: SetLog[]): number {
   return sets.filter((s, i) => s.done && i < ex.sets).length
 }
 
+/**
+ * How many sets are done from the start, unbroken.
+ *
+ * Sets are ticked in order, so this is also the index of the next one. Ticking
+ * set 3 before set 1 recorded a session nobody performed and made every derived
+ * timing — the gap between sets, the rest that starts on a tick — meaningless.
+ */
+export function leadingDone(sets: SetLog[]): number {
+  let n = 0
+  while (sets[n]?.done) n++
+  return n
+}
+
+/** Whether a set may be tapped: the next one to do, or the last one done. */
+export function setTappable(sets: SetLog[], index: number): boolean {
+  const n = leadingDone(sets)
+  return index === n || index === n - 1
+}
+
 export function exerciseComplete(ex: PlanExercise, sets: SetLog[]): boolean {
   return doneSetsFor(ex, sets) >= ex.sets
 }
@@ -179,6 +198,22 @@ export function sessionTally(session: PlanSession): { done: number; total: numbe
     }
   }
   return { done, total }
+}
+
+/**
+ * What is being worked on right now: the first chosen exercise with sets left.
+ *
+ * Used by the phone's ongoing notification, which has one line to say where in
+ * the session you are.
+ */
+export function currentExercise(session: PlanSession, progress: SessionProgress): string {
+  for (const b of session.snapshot.blocks) {
+    const p = blockProgress(progress, b.id)
+    for (const ex of chosenExercises(b, p)) {
+      if (!exerciseComplete(ex, setsFor(p, ex.id))) return ex.name
+    }
+  }
+  return ''
 }
 
 /**
@@ -215,13 +250,28 @@ export function targetLabel(ex: PlanExercise): string {
   return ex.weightKg > 0 ? `${base} · ${trimNum(ex.weightKg)} kg` : base
 }
 
-/** What kind of block this is, in the words the editor and runner both use. */
+/**
+ * How a block reads, from how many of its exercises it asks for.
+ *
+ * One phrase, one function. The editor's picker and the read, run and history
+ * views all print this: they said "Choose one", "Superset · do all" and
+ * "Do 2 of 4" for what is a single count, so the same block described itself
+ * three different ways depending on which screen you were looking at.
+ */
+export function requiredPhrase(required: number, total: number): string {
+  if (total <= 1) return ''
+  if (required >= total) return `Superset · all ${total}`
+  return `Choose ${required} of ${total}`
+}
+
+/** The number of a block's options actually being done. */
+export function blockRequired(block: PlanBlock): number {
+  return Math.min(Math.max(block.required || 1, 1), Math.max(block.options.length, 1))
+}
+
+/** What kind of block this is, in the words every plans screen uses. */
 export function blockLabel(block: PlanBlock): string {
-  const required = Math.min(Math.max(block.required || 1, 1), block.options.length)
-  if (block.options.length <= 1) return ''
-  if (required <= 1) return 'Choose one'
-  if (required >= block.options.length) return 'Superset · do all'
-  return `Do ${required} of ${block.options.length}`
+  return requiredPhrase(blockRequired(block), block.options.length)
 }
 
 /** "45 s", "2:00" — a set duration at a glance. */
@@ -245,15 +295,36 @@ export function volumeLabel(kg: number): string {
   return `${Math.round(kg)} kg`
 }
 
-/** Minutes between two timestamps, for a session's elapsed time. */
-export function elapsedMin(from: string, to?: string): number {
+/** Seconds between two timestamps, or since `from` when still running. */
+export function elapsedSec(from: string, to?: string): number {
   const start = Date.parse(from)
   if (Number.isNaN(start)) return 0
   const end = to ? Date.parse(to) : Date.now()
-  return Math.max(0, Math.round((end - start) / 60000))
+  return Math.max(0, Math.round((end - start) / 1000))
 }
 
-/** "48 min", or "1 h 12" once an hour is up. */
+/** Minutes between two timestamps, for a session's elapsed time. */
+export function elapsedMin(from: string, to?: string): number {
+  return Math.round(elapsedSec(from, to) / 60)
+}
+
+/**
+ * A session's length as a clock: "12:40" under an hour, "1:05:30" over it.
+ *
+ * Minutes alone were wrong at both ends. A session two minutes old read "2 min"
+ * while you were watching the seconds, and one over an hour read "1 h 05",
+ * which is a spelling of a time nobody uses. A clock reads the same on the
+ * summary card as it does on the phone's own timer.
+ */
+export function clockLabel(sec: number): string {
+  const s = Math.max(0, Math.round(sec))
+  const mm = String(Math.floor(s / 60) % 60).padStart(2, '0')
+  const ss = String(s % 60).padStart(2, '0')
+  const h = Math.floor(s / 3600)
+  return h > 0 ? `${h}:${mm}:${ss}` : `${Math.floor(s / 60)}:${ss}`
+}
+
+/** "48 min", or "1 h 12" once an hour is up. Used where a rough length reads better. */
 export function durationLabel(min: number): string {
   if (min < 60) return `${min} min`
   return `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')}`

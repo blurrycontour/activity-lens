@@ -1,10 +1,38 @@
+import { useMemo } from 'react'
 import PageHeader from '../../components/PageHeader'
 import { Check, Timer } from 'lucide-react'
 import {
-  blockLabel, blockProgress, chosenExercises, doneSetsFor, durationLabel, durationShort,
-  elapsedMin, sessionWhen, setsFor, trimNum, volumeLabel,
+  blockLabel, blockProgress, chosenExercises, clockLabel, doneSetsFor, durationShort,
+  elapsedSec, sessionWhen, setsFor, trimNum, volumeLabel,
   type PlanExercise, type PlanSession, type SetLog,
 } from '../../data/plans'
+
+/** One set as it was recorded, with the moment before it to measure against. */
+interface DoneSet {
+  n: number
+  log?: SetLog
+  /** When the previous set ended — the one before it in this exercise, or the
+   *  last set of whatever came before. Set 1 had no gap at all before this. */
+  prevAt?: string
+}
+
+interface DoneExercise {
+  ex: PlanExercise
+  done: number
+  sets: DoneSet[]
+}
+
+interface DoneBlock {
+  id: string
+  label: string
+  exercises: DoneExercise[]
+  /** Options that were there but not taken. */
+  skipped: string[]
+  /** Seconds actually spent between this block's last set and the next's first. */
+  breakSec?: number
+  /** What the plan asked for, when it asked for anything. */
+  plannedBreakSec: number
+}
 
 /**
  * A session read back from history: what was actually done, set by set.
@@ -18,7 +46,8 @@ export default function FinishedSession({ session, onBack }: {
   session: PlanSession
   onBack: () => void
 }) {
-  const minutes = elapsedMin(session.startedAt, session.finishedAt)
+  const blocks = useMemo(() => readBack(session), [session])
+
   return (
     <>
       <PageHeader
@@ -35,10 +64,10 @@ export default function FinishedSession({ session, onBack }: {
             </div>
             <div className="stat-chip">
               <span className="label">Time</span>
-              <span className="value">{durationLabel(minutes)}</span>
+              <span className="value plan-num">{clockLabel(elapsedSec(session.startedAt, session.finishedAt))}</span>
             </div>
-            <div className="stat-chip">
-              <span className="label">Volume</span>
+            <div className="stat-chip" title="Total load moved: weight × reps, added up across every set">
+              <span className="label">Volume lifted</span>
               <span className="value">{volumeLabel(session.volumeKg)}</span>
             </div>
             <div className="stat-chip">
@@ -57,43 +86,45 @@ export default function FinishedSession({ session, onBack }: {
         <p className="field-label plan-snapshot-note">The plan as it was that day</p>
 
         <div className="plan-rows">
-          {session.snapshot.blocks.map(b => {
-            const p = blockProgress(session.progress, b.id)
-            const chosen = chosenExercises(b, p)
-            if (chosen.length === 0) return null
-            const label = blockLabel(b)
-            return (
-              <div key={b.id} className="plan-ex plan-ex-read">
-                {label && <span className="field-label plan-read-kind">{label}</span>}
-                {chosen.map(ex => {
-                  const sets = setsFor(p, ex.id)
-                  const done = doneSetsFor(ex, sets)
-                  return (
-                    <div key={ex.id} className="plan-done-ex">
-                      <div className="plan-ex-top">
-                        <span className="plan-ex-title">{ex.name}</span>
-                        <span className={`plan-ex-target plan-num${done >= ex.sets ? ' all-done' : ''}`}>
-                          {done} / {ex.sets} sets
-                        </span>
-                      </div>
-                      <div className="plan-done-sets">
-                        {Array.from({ length: ex.sets }, (_, i) => (
-                          <SetChip key={i} n={i + 1} ex={ex} set={sets[i]} previous={sets[i - 1]} />
-                        ))}
-                      </div>
+          {blocks.map(block => (
+            <div key={block.id}>
+              <div className={`plan-ex plan-ex-read${block.label ? ' plan-ex-grouped' : ''}`}>
+                {block.label && <span className="field-label plan-read-kind">{block.label}</span>}
+                {block.exercises.map(({ ex, done, sets }) => (
+                  <div key={ex.id} className="plan-done-ex">
+                    <div className="plan-ex-top">
+                      <span className="plan-ex-title">{ex.name}</span>
+                      <span className={`plan-ex-target plan-num${done >= ex.sets ? ' all-done' : ''}`}>
+                        {done} / {ex.sets} sets
+                      </span>
                     </div>
-                  )
-                })}
+                    <div className="plan-done-sets">
+                      {sets.map(s => <SetChip key={s.n} ex={ex} {...s} />)}
+                    </div>
+                  </div>
+                ))}
                 {/* What was not chosen is worth seeing too: it says the day
                     had an alternative and which way it went. */}
-                {b.options.length > chosen.length && (
-                  <span className="plan-read-rest">
-                    Instead of {b.options.filter(o => !chosen.includes(o)).map(o => o.name).join(', ')}
-                  </span>
+                {block.skipped.length > 0 && (
+                  <span className="plan-read-rest">Instead of {block.skipped.join(', ')}</span>
                 )}
               </div>
-            )
-          })}
+
+              {/* The break actually taken, measured between the last set here
+                  and the first of the next block — the plan's number beside it
+                  when the two disagree, which they usually do. */}
+              {(block.breakSec !== undefined || block.plannedBreakSec > 0) && (
+                <div className="plan-break-line">
+                  <span className="plan-break-chip">
+                    <Timer size={12} aria-hidden />
+                    {block.breakSec !== undefined
+                      ? `${durationShort(block.breakSec)} break`
+                      : `${durationShort(block.plannedBreakSec)} break planned`}
+                  </span>
+                </div>
+              )}
+            </div>
+          ))}
         </div>
 
         {session.notes && <p className="plan-session-notes">{session.notes}</p>}
@@ -103,46 +134,110 @@ export default function FinishedSession({ session, onBack }: {
 }
 
 /**
+ * The session flattened into what to draw, in the order it happened.
+ *
+ * Done in one pass because every timing on the page is a difference between two
+ * sets, and the pair being subtracted often straddles an exercise — the wait
+ * before the first set of an exercise is the wait after the last set of the one
+ * before it. Computed per-chip, the first set of every exercise had nothing to
+ * compare against and silently showed no time at all.
+ */
+function readBack(session: PlanSession): DoneBlock[] {
+  const out: DoneBlock[] = []
+  // The last set ticked anywhere so far, which is what the next gap measures
+  // from regardless of which exercise it belonged to.
+  let prevAt: string | undefined
+
+  for (const b of session.snapshot.blocks) {
+    const p = blockProgress(session.progress, b.id)
+    const chosen = chosenExercises(b, p)
+    if (chosen.length === 0) continue
+
+    const exercises: DoneExercise[] = chosen.map(ex => {
+      const logs = setsFor(p, ex.id)
+      const sets: DoneSet[] = Array.from({ length: ex.sets }, (_, i) => {
+        const log = logs[i]
+        const row = { n: i + 1, log, prevAt }
+        if (log?.done && log.at) prevAt = log.at
+        return row
+      })
+      return { ex, done: doneSetsFor(ex, logs), sets }
+    })
+
+    out.push({
+      id: b.id,
+      label: blockLabel(b),
+      exercises,
+      skipped: b.options.filter(o => !chosen.includes(o)).map(o => o.name),
+      plannedBreakSec: b.restSec,
+    })
+  }
+
+  // The break after each block is the gap between its last stamp and the next
+  // block's first — known only once both have been walked.
+  for (let i = 0; i < out.length - 1; i++) {
+    const from = lastStamp(out[i])
+    const to = firstStamp(out[i + 1])
+    const secs = gapSec(from, to)
+    if (secs !== undefined) out[i].breakSec = secs
+  }
+  // The final block has nothing after it, so a planned break there is noise.
+  if (out.length > 0) out[out.length - 1].plannedBreakSec = 0
+  return out
+}
+
+function lastStamp(b: DoneBlock): string | undefined {
+  let at: string | undefined
+  for (const e of b.exercises) for (const s of e.sets) if (s.log?.done && s.log.at) at = s.log.at
+  return at
+}
+
+function firstStamp(b: DoneBlock): string | undefined {
+  for (const e of b.exercises) for (const s of e.sets) if (s.log?.done && s.log.at) return s.log.at
+  return undefined
+}
+
+/**
  * One set as it happened: what was done, and how long after the one before.
  *
  * The gap is derived rather than stored — two timestamps already say it, and a
  * duration written beside them is a third number that can disagree.
  */
-function SetChip({ n, ex, set, previous }: {
-  n: number
-  ex: PlanExercise
-  set?: SetLog
-  previous?: SetLog
-}) {
-  if (!set?.done) {
-    return <span className="plan-done-set skipped">{n} · not done</span>
+function SetChip({ n, ex, log, prevAt }: DoneSet & { ex: PlanExercise }) {
+  if (!log?.done) {
+    // A number and a dash, not the words "not done": it sits in a row of chips
+    // that are all about what happened, and a sentence in each empty slot was
+    // most of the text on the page.
+    return <span className="plan-done-set skipped" title={`Set ${n} was not done`}>{n} · —</span>
   }
   const load = ex.kind === 'time'
-    ? durationShort(set.durationSec || ex.durationSec)
-    : (set.weightKg || ex.weightKg) > 0
-      ? `${trimNum(set.weightKg || ex.weightKg)} kg`
+    ? durationShort(log.durationSec || ex.durationSec)
+    : (log.weightKg || ex.weightKg) > 0
+      ? `${trimNum(log.weightKg || ex.weightKg)} kg`
       : 'body'
-  const reps = ex.kind === 'time' ? '' : ` × ${set.reps || ex.reps}`
+  const reps = ex.kind === 'time' ? '' : ` × ${log.reps || ex.reps}`
+  const gap = gapSec(prevAt, log.at)
 
   return (
     <span className="plan-done-set">
       <Check size={11} aria-hidden />
       <span className="plan-num">{load}{reps}</span>
-      {gap(previous?.at, set.at) && (
-        <span className="plan-done-gap plan-num">
-          <Timer size={10} aria-hidden /> {gap(previous?.at, set.at)}
+      {gap !== undefined && (
+        <span className="plan-done-gap plan-num" title={`${durationShort(gap)} after the previous set`}>
+          <Timer size={10} aria-hidden /> {durationShort(gap)}
         </span>
       )}
     </span>
   )
 }
 
-/** "1:20" between one set and the next, when both were timestamped. */
-function gap(from?: string, to?: string): string {
-  if (!from || !to) return ''
+/** Seconds between two stamps, or undefined when that is not a real number. */
+function gapSec(from?: string, to?: string): number | undefined {
+  if (!from || !to) return undefined
   const secs = Math.round((Date.parse(to) - Date.parse(from)) / 1000)
-  if (!Number.isFinite(secs) || secs <= 0 || secs > 3600) return ''
-  return durationShort(secs)
+  // An hour between two sets is a session someone walked away from, not a rest.
+  if (!Number.isFinite(secs) || secs <= 0 || secs > 3600) return undefined
+  return secs
 }
 
 function startTime(iso: string): string {

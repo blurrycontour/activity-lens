@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowDownAZ, ArrowUpAZ, ClipboardList, History, Loader2, Play, Plus, X,
 } from 'lucide-react'
@@ -18,6 +18,7 @@ import {
   durationLabel, elapsedMin, type PlanSession, type TrainingPlan,
 } from '../../data/plans'
 import { clearCachedProgress } from './sessionCache'
+import { useActiveSession } from '../../context/ActiveSessionContext'
 
 interface Props {
   /** From the URL: a plan id, or "session" with a session id in `detail`. */
@@ -39,7 +40,6 @@ type TabId = 'plans' | 'history'
  */
 export default function PlansPage({ section, detail, onOpen }: Props) {
   const [plans, setPlans] = useState<TrainingPlan[] | null>(null)
-  const [active, setActive] = useState<PlanSession | null>(null)
   const [open, setOpen] = useState<TrainingPlan | null>(null)
   const [session, setSession] = useState<PlanSession | null>(null)
   const [tab, setTab] = useState<TabId>('plans')
@@ -56,20 +56,27 @@ export default function PlansPage({ section, detail, onOpen }: Props) {
   // line on the list, so it is shown wherever the tap happened.
   const [conflict, setConflict] = useState(false)
   const [names, setNames] = useState<string[]>([])
+  // The three seconds between pressing start and the session opening. Refs
+  // rather than state because the countdown and the request race, and whichever
+  // finishes second is the one that has to act on the other's result.
+  const [counting, setCounting] = useState(false)
+  const created = useRef<PlanSession | null>(null)
+  const cancelled = useRef(false)
+  const countDone = useRef(false)
+
+  // Shared with the dashboard and the navigation's live dot, so finishing a
+  // session here takes the dot down everywhere at once.
+  const { active, refresh: refreshActive, set: setActive } = useActiveSession()
 
   const load = useCallback(async () => {
     try {
-      const [list, running] = await Promise.all([
-        api.listPlans(),
-        api.activePlanSession().catch(() => undefined),
-      ])
+      const [list] = await Promise.all([api.listPlans(), refreshActive()])
       setPlans(list)
-      setActive(running ?? null)
     } catch {
       setError('Could not load your plans.')
       setPlans([])
     }
-  }, [])
+  }, [refreshActive])
 
   useEffect(() => { void load() }, [load])
   // Pull to refresh, and the desktop refresh button.
@@ -138,20 +145,56 @@ export default function PlansPage({ section, detail, onOpen }: Props) {
     }
   }
 
+  /**
+   * Starting a day: three seconds on the screen, and the session created
+   * behind them.
+   *
+   * The countdown is for the person, not the request — it is the gap between
+   * pressing start and being ready to lift, and it gives a mistaken tap
+   * somewhere to be undone. The session is created while it runs, so the
+   * countdown costs nothing: by the time it reaches zero the server has
+   * usually answered, and cancelling deletes whatever it answered with.
+   */
   async function start(planId: string, dayId: string) {
     setStarting(null)
+    cancelled.current = false
+    countDone.current = false
+    created.current = null
+    setCounting(true)
     try {
       const s = await api.startPlanSession(planId, dayId)
-      // A fresh session starts with no local ticks; a stale cache from a
-      // discarded one would otherwise be read back into it.
-      clearCachedProgress()
+      if (cancelled.current) {
+        void api.deletePlanSession(s.id)
+        return
+      }
+      created.current = s
       setActive(s)
-      onOpen('session', s.id)
+      if (countDone.current) enterSession(s)
     } catch (e) {
+      setCounting(false)
       // 409 is the one worth handling: the answer is not an error message but
       // a way to the session already running.
       if (e instanceof Error && /already running/i.test(e.message)) setConflict(true)
       else setError('Could not start the session.')
+    }
+  }
+
+  function enterSession(s: PlanSession) {
+    // A fresh session starts with no local ticks; a stale cache from a
+    // discarded one would otherwise be read back into it.
+    clearCachedProgress()
+    setCounting(false)
+    onOpen('session', s.id)
+  }
+
+  function cancelStart() {
+    cancelled.current = true
+    setCounting(false)
+    const s = created.current
+    if (s) {
+      created.current = null
+      setActive(null)
+      void api.deletePlanSession(s.id)
     }
   }
 
@@ -193,6 +236,15 @@ export default function PlansPage({ section, detail, onOpen }: Props) {
       {starting && (
         <DayPicker plan={starting} onPick={id => start(starting.id, id)} onCancel={() => setStarting(null)} />
       )}
+      {counting && (
+        <Countdown
+          onDone={() => {
+            countDone.current = true
+            if (created.current) enterSession(created.current)
+          }}
+          onCancel={cancelStart}
+        />
+      )}
     </>
   )
 
@@ -203,7 +255,11 @@ export default function PlansPage({ section, detail, onOpen }: Props) {
         <SessionRunner
           session={session}
           onBack={() => onOpen(null)}
-          onFinished={s => { setActive(null); setSession(null); void load(); onOpen('session', s.id) }}
+          /* The finished session replaces the running one in place. Clearing it
+             and re-opening the same URL did nothing: the route is already
+             /plans/session/<id>, so nothing changed for the effect that reads
+             it to react to, and the page fell through to the list. */
+          onFinished={s => { setActive(null); setSession(s); void load() }}
           onDiscarded={() => { setActive(null); setSession(null); void load(); onOpen(null) }}
         />
         {overlays}
@@ -369,9 +425,13 @@ export default function PlansPage({ section, detail, onOpen }: Props) {
         )}
       </div>
 
-      <button className="fab" onClick={() => setNaming(true)} title="New plan" aria-label="New plan">
-        <Plus size={22} />
-      </button>
+      {/* Only over the plans, not over history: "new plan" is not the action
+          you are reaching for while reading what you already did. */}
+      {tab === 'plans' && (
+        <button className="fab" onClick={() => setNaming(true)} title="New plan" aria-label="New plan">
+          <Plus size={22} />
+        </button>
+      )}
 
       {naming && (
         <NameDialog
@@ -448,6 +508,9 @@ function DayPicker({ plan, onPick, onCancel }: {
             <X size={16} />
           </button>
         </div>
+        {/* The whole row is the button, so there is no play icon on it: an
+            icon inside a control that is already entirely tappable invites a
+            press on the icon specifically, which is the smallest target here. */}
         <div className="plan-list">
           {(plan.days ?? []).map(d => (
             <button
@@ -462,10 +525,44 @@ function DayPicker({ plan, onPick, onCancel }: {
                   {d.blocks.length} exercise{d.blocks.length === 1 ? '' : 's'}
                 </span>
               </div>
-              <Play size={16} aria-hidden />
             </button>
           ))}
         </div>
+      </div>
+    </Modal>
+  )
+}
+
+/**
+ * Three, two, one — then the session opens.
+ *
+ * A session starts the moment it is created, so the first thing recorded used
+ * to be however long it took to put the phone down. The count is also the only
+ * chance to undo a mistaken tap: after it, stopping a session means discarding
+ * it.
+ */
+function Countdown({ onDone, onCancel }: { onDone: () => void; onCancel: () => void }) {
+  const [n, setN] = useState(3)
+  const done = useRef(onDone)
+  done.current = onDone
+
+  useEffect(() => {
+    if (n <= 0) return
+    const id = window.setTimeout(() => setN(n - 1), 1000)
+    return () => window.clearTimeout(id)
+  }, [n])
+
+  // Separate from the tick above: calling out from inside a state updater
+  // runs it during this component's render, and what it does is open another
+  // page — which React rightly complains about.
+  useEffect(() => { if (n === 0) done.current() }, [n])
+
+  return (
+    <Modal onClose={onCancel} label="Starting your session">
+      <div className="plan-countdown">
+        <span className="plan-countdown-n plan-num" aria-live="assertive">{n || 'Go'}</span>
+        <p className="plan-countdown-hint">Starting your session</p>
+        <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>
       </div>
     </Modal>
   )
