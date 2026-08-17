@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Check, ChevronDown, ChevronUp, Plus, Timer, Trash2, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, MoreVertical, Plus, Timer, Trash2, X } from 'lucide-react'
 import PageHeader from '../../components/PageHeader'
 import ConfirmDialog from '../../components/ConfirmDialog'
+import Dropdown from '../../components/Dropdown'
+import MenuButton from '../../components/MenuButton'
 import ExerciseNameInput from './ExerciseNameInput'
 import { adoptIds, withoutDrafts } from './draftPlan'
 import { api } from '../../lib/api'
 import {
-  durationShort, newBlock, newDay, newExercise,
+  blockRequired, durationShort, newBlock, newDay, newExercise, requiredPhrase,
   type ExerciseKind, type PlanBlock, type PlanDay, type PlanExercise, type TrainingPlan,
 } from '../../data/plans'
 
@@ -354,76 +356,97 @@ function BlockEditor({
   onMove, onMoveOption, onPatch, onRequired, onRemove, onRemoveOption, onAddOption,
 }: BlockProps) {
   const group = block.options.length > 1
-  const required = Math.min(Math.max(block.required || 1, 1), block.options.length)
 
   return (
     <div className={group ? 'plan-group' : 'plan-edit-block'}>
-      <div className="plan-block-head">
-        {/* Order is two buttons rather than a drag: dragging inside a
-            vertically scrolling page fights the scroll on a touch screen, and
-            this is unambiguous with one thumb. */}
-        <div className="plan-move">
-          <button className="btn-icon" disabled={first} onClick={() => onMove(-1)} aria-label="Move up">
-            <ChevronUp size={15} />
-          </button>
-          <button className="btn-icon" disabled={last} onClick={() => onMove(1)} aria-label="Move down">
-            <ChevronDown size={15} />
-          </button>
+      {group && (
+        <div className="plan-block-head">
+          {/* One control saying the whole thing, rather than a number between
+              two words: "Do [2] of 3" needed three elements and a hint beside
+              them to explain itself, and read as arithmetic. The app's own
+              dropdown, so it looks like every other picker in the product. */}
+          <Dropdown
+            value={blockRequired(block)}
+            onChange={onRequired}
+            ariaLabel="How many of these exercises to do"
+            options={block.options.map((_, i) => ({
+              value: i + 1,
+              label: requiredPhrase(i + 1, block.options.length),
+            }))}
+          />
+          <RowMenu
+            label="Block options"
+            first={first}
+            last={last}
+            onMove={onMove}
+            onRemove={onRemove}
+            removeLabel="Remove block"
+          />
         </div>
-
-        {group && (
-          /* One select saying the whole thing, rather than a number between
-             two words: "Do [2] of 3" needed three elements and a hint beside
-             them to explain itself, and read as arithmetic. */
-          <select
-            className="input plan-required"
-            value={required}
-            aria-label="How many of these exercises to do"
-            onChange={e => onRequired(parseInt(e.target.value, 10) || 1)}
-          >
-            {block.options.map((_, i) => (
-              <option key={i} value={i + 1}>
-                {i === 0
-                  ? 'Choose one'
-                  : i + 1 === block.options.length
-                    ? `Superset · do all ${i + 1}`
-                    : `Do ${i + 1} of ${block.options.length}`}
-              </option>
-            ))}
-          </select>
-        )}
-
-        <button className="btn-icon plan-block-x" onClick={onRemove} aria-label="Remove this exercise">
-          <X size={15} />
-        </button>
-      </div>
+      )}
 
       {block.options.map((ex, oi) => (
         <ExerciseFields
           key={ex.id || oi}
           ex={ex}
           suggestions={suggestions}
-          showMove={group}
-          first={oi === 0}
-          last={oi === block.options.length - 1}
-          onMove={by => onMoveOption(oi, by)}
+          /* In a group the arrows reorder within the group and the block's own
+             menu moves the block. A lone exercise *is* the block, so its menu
+             moves the block — otherwise a plain exercise could not be moved
+             without first being turned into a group. */
+          first={group ? oi === 0 : first}
+          last={group ? oi === block.options.length - 1 : last}
+          onMove={by => (group ? onMoveOption(oi, by) : onMove(by))}
           onPatch={patch => onPatch(oi, patch)}
           onRemove={() => (group ? onRemoveOption(oi) : onRemove())}
         />
       ))}
 
+      {/* Not "an alternative" any more: a second exercise here may be a swap,
+          a superset partner or one of four to pick two from. What it has in
+          common is the block. */}
       <button className="plan-add-alt" onClick={onAddOption}>
-        <Plus size={13} /> {group ? 'Add an option' : 'Add an alternative'}
+        <Plus size={13} /> Add to this block
       </button>
     </div>
   )
 }
 
+/**
+ * The row's own menu: move it, or remove it.
+ *
+ * Two arrows and an X sitting permanently on every card was three controls per
+ * exercise competing with the fields that are the point of the screen, and on a
+ * phone they pushed the name into a stub. A menu is one target, and it can say
+ * "Move up" in words rather than leaving a greyed chevron to be decoded.
+ */
+function RowMenu({ label, first, last, onMove, onRemove, removeLabel }: {
+  label: string
+  first: boolean
+  last: boolean
+  onMove: (by: number) => void
+  onRemove: () => void
+  removeLabel: string
+}) {
+  return (
+    <MenuButton icon={<MoreVertical size={15} />} label={label}>
+      <button className="options-menu-item" disabled={first} onClick={() => onMove(-1)}>
+        <ArrowUp size={14} /> Move up
+      </button>
+      <button className="options-menu-item" disabled={last} onClick={() => onMove(1)}>
+        <ArrowDown size={14} /> Move down
+      </button>
+      <button className="options-menu-item danger" onClick={onRemove}>
+        <Trash2 size={14} /> {removeLabel}
+      </button>
+    </MenuButton>
+  )
+}
+
 /** The fields for one exercise, which depend on what it is measured in. */
-function ExerciseFields({ ex, suggestions, showMove, first, last, onMove, onPatch, onRemove }: {
+function ExerciseFields({ ex, suggestions, first, last, onMove, onPatch, onRemove }: {
   ex: PlanExercise
   suggestions: string[]
-  showMove: boolean
   first: boolean
   last: boolean
   onMove: (by: number) => void
@@ -433,44 +456,46 @@ function ExerciseFields({ ex, suggestions, showMove, first, last, onMove, onPatc
   const timed = ex.kind === 'time'
   return (
     <div className="plan-erow">
-      {showMove && (
-        <div className="plan-move plan-move-option">
-          <button className="btn-icon" disabled={first} onClick={() => onMove(-1)} aria-label="Move up">
-            <ChevronUp size={14} />
-          </button>
-          <button className="btn-icon" disabled={last} onClick={() => onMove(1)} aria-label="Move down">
-            <ChevronDown size={14} />
-          </button>
-        </div>
-      )}
+      {/* Every other field on this row is labelled; the one that says what the
+          exercise *is* was the only bare box on the screen. */}
+      <label className="plan-ename-field">
+        <span className="field-label">Exercise name</span>
+        <ExerciseNameInput
+          className="input plan-ename"
+          value={ex.name}
+          suggestions={suggestions}
+          onChange={v => onPatch({ name: v })}
+        />
+      </label>
 
-      <ExerciseNameInput
-        className="input plan-ename"
-        value={ex.name}
-        suggestions={suggestions}
-        onChange={v => onPatch({ name: v })}
-      />
-
-      <button className="btn-icon plan-erow-x" onClick={onRemove} aria-label={`Remove ${ex.name || 'this exercise'}`}>
-        <X size={15} />
-      </button>
+      <div className="plan-erow-menu">
+        <RowMenu
+          label={`Options for ${ex.name || 'this exercise'}`}
+          first={first}
+          last={last}
+          onMove={onMove}
+          onRemove={onRemove}
+          removeLabel="Remove"
+        />
+      </div>
 
       <div className="plan-efields">
-        <label>
+        <label className="plan-kind-field">
           <span className="field-label">Type</span>
           {/* What the exercise is measured in, which decides the rest of the
               row. Before this, a plank could only be written by typing "45 s"
               into a reps box beside a kilograms field it had no use for. */}
-          <select
-            className="input plan-kind"
+          <Dropdown
+            block
             value={ex.kind}
-            aria-label="How this exercise is measured"
-            onChange={e => onPatch({ kind: e.target.value as ExerciseKind })}
-          >
-            <option value="weight">Weight</option>
-            <option value="body">Bodyweight</option>
-            <option value="time">Time</option>
-          </select>
+            onChange={(k: ExerciseKind) => onPatch({ kind: k })}
+            ariaLabel="How this exercise is measured"
+            options={[
+              { value: 'weight', label: 'Weight' },
+              { value: 'body', label: 'Bodyweight' },
+              { value: 'time', label: 'Time' },
+            ]}
+          />
         </label>
 
         <label>
@@ -484,7 +509,7 @@ function ExerciseFields({ ex, suggestions, showMove, first, last, onMove, onPatc
 
         {timed ? (
           <label>
-            <span className="field-label">Hold</span>
+            <span className="field-label">Duration</span>
             <input
               className="input" type="number" inputMode="numeric" min="0" step="5"
               value={ex.durationSec || ''}

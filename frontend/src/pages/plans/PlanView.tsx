@@ -52,6 +52,10 @@ export default function PlanView({ plan, onBack, onEdit, onRename, onStart, onDe
         title={plan.name}
         subtitle={`${days.length} day${days.length === 1 ? '' : 's'}`}
         onBack={onBack}
+        /* Kept on the title's row: a lone icon button dropped below it sat
+           under the back arrow, reading as part of the navigation rather than
+           as the plan's own menu. */
+        compactActions
         /* One menu rather than three buttons: a rename, an edit and a delete
            beside a long plan name wrapped the header onto a third row on a
            phone, and only one of the four is worth a permanent button. */
@@ -115,7 +119,11 @@ export default function PlanView({ plan, onBack, onEdit, onRename, onStart, onDe
           <div className="plan-rows">
             {day.blocks.map((block, i) => (
               <div key={block.id}>
-                <div className="plan-ex plan-ex-read">
+                {/* A block holding more than one exercise is drawn as a block:
+                    a strength-coloured frame with the phrase that says what it
+                    asks for. Rendered flat, a superset and three unrelated
+                    exercises were the same three rows. */}
+                <div className={`plan-ex plan-ex-read${block.options.length > 1 ? ' plan-ex-grouped' : ''}`}>
                   <div className="plan-ex-top">
                     <span className="plan-ex-index">{i + 1}</span>
                     <div className="plan-read-body">
@@ -137,9 +145,14 @@ export default function PlanView({ plan, onBack, onEdit, onRename, onStart, onDe
                     </div>
                   </div>
                 </div>
+                {/* On the rule between the two cards, which is where the gap it
+                    describes actually is. Floating loose under the card it read
+                    as a property of that exercise. */}
                 {block.restSec > 0 && i < day.blocks.length - 1 && (
-                  <div className="plan-break-read plan-num">
-                    <Timer size={11} aria-hidden /> {durationShort(block.restSec)} break
+                  <div className="plan-break-line">
+                    <span className="plan-break-chip">
+                      <Timer size={12} aria-hidden /> {durationShort(block.restSec)} break
+                    </span>
                   </div>
                 )}
               </div>

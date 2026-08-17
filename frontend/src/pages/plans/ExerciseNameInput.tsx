@@ -4,10 +4,9 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react'
  * The exercise name field, with suggestions from names already in use.
  *
  * People write the same twenty exercise names over and over, and "Incline
- * dumbbell press" is a lot to retype on a phone. The list is gathered on the
- * client from the plan being edited plus the names this device has typed
- * before — no endpoint, no catalogue, and nothing to keep in step with a list
- * of exercises the app does not otherwise have an opinion about.
+ * dumbbell press" is a lot to retype on a phone. The caller supplies the list:
+ * the plan being edited first, then every name on the account, so a name typed
+ * on a phone turns up on a laptop.
  *
  * Free text either way: a suggestion is a shortcut, never a constraint.
  */
@@ -72,7 +71,7 @@ export default function ExerciseNameInput({ value, onChange, suggestions, classN
       <input
         className={className ?? 'input'}
         value={value}
-        placeholder="Exercise name"
+        placeholder="Bench press"
         aria-label="Exercise name"
         role="combobox"
         aria-expanded={open && matches.length > 0}

@@ -13,6 +13,15 @@ interface PageHeaderProps {
    * group aligned to the far right and drops onto its own line on a phone.
    */
   titleAction?: React.ReactNode
+  /**
+   * Keeps `actions` on the title's row on a phone instead of dropping it below.
+   *
+   * The default exists because a group of labelled buttons squeezes the title
+   * to a few hyphenated characters. A single icon button does not, and pushing
+   * one onto its own line left it sitting under the back arrow looking like it
+   * belonged to nothing.
+   */
+  compactActions?: boolean
 }
 
 /**
@@ -23,7 +32,7 @@ interface PageHeaderProps {
  * header as opening a workout, so going one level deep looks the same wherever
  * you do it.
  */
-export default function PageHeader({ title, subtitle, onBack, actions, titleAction }: PageHeaderProps) {
+export default function PageHeader({ title, subtitle, onBack, actions, titleAction, compactActions }: PageHeaderProps) {
   return (
     <div className="page-header page-header-row">
       {onBack && (
@@ -41,7 +50,9 @@ export default function PageHeader({ title, subtitle, onBack, actions, titleActi
       {/* Wrapped so the phone layout can drop it onto its own line. Filters
           sharing a row with the title left the subtitle a few characters wide
           and hyphenating, which is what a header is meant to prevent. */}
-      {actions && <div className="page-header-actions">{actions}</div>}
+      {actions && (
+        <div className={`page-header-actions${compactActions ? ' compact' : ''}`}>{actions}</div>
+      )}
     </div>
   )
 }
