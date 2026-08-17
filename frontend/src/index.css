@@ -6317,6 +6317,12 @@ body:has(.overlay) .fab { display: none; }
    min-width: auto, so without it the fields refuse to shrink and spill out of
    the card. */
 @container (max-width: 520px) {
+  /* The type is a word and the rest are two-digit numbers, so they cannot
+     share a line in a narrow column without the numbers being squeezed to
+     nothing. Type takes its own row; the numbers divide the one below. */
+  .plan-efields { flex-wrap: wrap; }
+  .plan-efields label:has(> .plan-kind) { flex: 1 0 100%; }
+  .plan-efields label:has(> .plan-kind) .input { width: 100%; }
   .plan-erow { flex-wrap: wrap; align-items: flex-start; }
   /* Basis 0, not auto: with auto the name is as wide as its text and fills
      the first line, pushing the remove button onto one of its own. */
@@ -6326,4 +6332,229 @@ body:has(.overlay) .fab { display: none; }
   .plan-efields { order: 2; flex: 1 0 100%; min-width: 0; }
   .plan-efields label { flex: 1; min-width: 0; }
   .plan-efields .input { width: auto; min-width: 0; }
+}
+
+/* A destructive action's button. Was an inline style on the confirm dialog
+   until a second one turned up on the history bar. */
+.btn-danger { background: var(--danger); color: #fff; border-color: var(--danger); }
+.btn-danger:hover { opacity: 0.9; transform: translateY(-1px); }
+.btn-danger:disabled { opacity: 0.45; transform: none; cursor: default; }
+
+/* ── Training plans: reading a plan ─────────────────────────────────── */
+
+/* The read view's rows: no controls, just what you are about to do. */
+.plan-ex-read { display: flex; flex-direction: column; gap: 6px; }
+.plan-read-body { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
+.plan-read-kind { color: var(--strength); }
+.plan-read-row { display: flex; align-items: baseline; gap: 12px; }
+.plan-read-name { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; flex: 1; min-width: 0; }
+.plan-read-target {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.plan-read-rest {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+/* The break between two exercises, drawn on the rule that separates them. */
+.plan-break-read {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-3);
+  padding: 5px 0;
+}
+
+/* ── Training plans: the editor ─────────────────────────────────────── */
+
+.plan-block-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.plan-move { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
+.plan-move .btn-icon { width: 26px; height: 26px; }
+.plan-move-option { margin-right: 2px; }
+.plan-block-x { margin-left: auto; }
+
+/* How many of a group's exercises to do, as one phrase. */
+.plan-required {
+  width: auto;
+  min-width: 0;
+  max-width: 220px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--strength);
+  border-color: color-mix(in srgb, var(--strength) 45%, transparent);
+  background: transparent;
+}
+/* Wide enough to read the word: "Weight" and "Bodyweight" truncated to "We"
+   and "Bo" tell you nothing. */
+.plan-kind { min-width: 104px; }
+
+/* The break chip, on the rule between two exercise cards. It reads as the gap
+   it describes rather than as another control stacked under the card. */
+.plan-break-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  margin: 10px 0;
+}
+.plan-break-line::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  border-top: 1px dashed var(--border);
+}
+.plan-break-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+.plan-break-chip.add { cursor: pointer; }
+.plan-break-chip.add:hover { color: var(--text-2); border-color: var(--border-strong); }
+.plan-break-chip .input {
+  width: 56px;
+  padding: 2px 6px;
+  font-size: 11.5px;
+  font-family: var(--font-mono);
+  text-align: center;
+}
+.plan-break-chip .btn-icon { width: 20px; height: 20px; }
+
+/* ── Training plans: the runner ─────────────────────────────────────── */
+
+/* A superset draws every exercise it holds, so the row's title is a list. */
+.plan-ex-titles { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.plan-ex-sub { font-size: 11.5px; color: var(--text-3); font-weight: 400; }
+.plan-sets-for {
+  font-size: 11px;
+  color: var(--text-3);
+  min-width: 84px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plan-focus-block { display: flex; flex-direction: column; gap: 12px; }
+.plan-focus-block + .plan-focus-block {
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.plan-focus-heading { font-size: 13px; font-weight: 650; letter-spacing: -0.01em; }
+
+/* A chip for an alternative that has work behind it. */
+.plan-swap.finished {
+  border-color: var(--success);
+  color: var(--text);
+}
+.plan-swap.finished.on {
+  background: color-mix(in srgb, var(--success) 18%, transparent);
+}
+.plan-swap-count { margin-left: 5px; font-size: 10.5px; color: var(--text-3); }
+.plan-swap { display: inline-flex; align-items: center; gap: 5px; }
+
+/* ── Training plans: history ────────────────────────────────────────── */
+
+.plan-history-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.plan-history-bar .btn { padding: 5px 11px; font-size: 12px; }
+.plan-card.picked { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, var(--bg-2)); }
+.plan-pick {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  display: grid;
+  place-items: center;
+  color: var(--primary);
+}
+
+/* A finished session, set by set. */
+.plan-done-ex { display: flex; flex-direction: column; gap: 7px; }
+.plan-done-ex + .plan-done-ex { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.plan-done-sets { display: flex; flex-wrap: wrap; gap: 6px; }
+.plan-done-set {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  background: var(--bg-3);
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+.plan-done-set svg { color: var(--success); }
+.plan-done-set.skipped {
+  background: transparent;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+}
+.plan-done-gap { display: inline-flex; align-items: center; gap: 3px; color: var(--text-3); font-size: 10.5px; }
+.plan-done-gap svg { color: var(--text-3); }
+.plan-ex-target.all-done { color: var(--success); }
+.plan-when { font-size: 14px !important; }
+
+/* ── Training plans: the list ───────────────────────────────────────── */
+
+/* The card is two controls: open the plan, or start it. A button inside a
+   button is not markup that exists, so the row is a div holding both. */
+.plan-card-row { padding: 0; }
+.plan-card-open {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  padding: 13px 0 13px 15px;
+  background: transparent;
+  border: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.plan-card-start {
+  flex: 0 0 auto;
+  margin-right: 10px;
+  color: var(--primary);
+}
+.plan-card-start:hover { background: var(--primary-dim); }
+.plan-card-start:disabled { color: var(--text-3); }
+
+@media (max-width: 768px) {
+  /* An actions row holding nothing but a desktop-only button still claimed a
+     full-width line under the subtitle, which read as a hole in the header.
+     Whether it has anything to show is a question about its children, which
+     is exactly what :has answers. */
+  .page-header-actions:not(:has(> :not(.desktop-only))) { display: none; }
+  .plan-history-bar { flex-wrap: wrap; }
+  .plan-block-head { flex-wrap: wrap; }
+  .plan-required { order: 3; flex: 1 0 100%; }
 }

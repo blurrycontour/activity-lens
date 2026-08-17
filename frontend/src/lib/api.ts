@@ -919,6 +919,14 @@ export const api = {
    */
   savePlanDays: (id: string, days: PlanDay[]) =>
     request<TrainingPlan>(`/api/plans/${id}/days`, { method: 'PUT', body: { days } }),
+  /**
+   * Every exercise name this account has written, most recently used first.
+   *
+   * Its own endpoint rather than a wider plans list: the suggestions are
+   * wanted on a screen that has not loaded the other plans, and the list page
+   * has no business downloading every exercise to draw a dozen rows.
+   */
+  exerciseNames: () => request<{ names: string[] }>('/api/plan-exercise-names'),
 
   // --- Plan sessions ---
   /** The session in progress, or undefined when nothing is running. */
@@ -937,6 +945,9 @@ export const api = {
   finishPlanSession: (id: string, progress: SessionProgress, notes = '') =>
     request<PlanSession>(`/api/plan-sessions/${id}/finish`, { method: 'POST', body: { progress, notes } }),
   deletePlanSession: (id: string) => request<unknown>(`/api/plan-sessions/${id}`, { method: 'DELETE' }),
+  /** Clears a batch of history rows in one request. */
+  deletePlanSessions: (ids: string[]) =>
+    request<{ deleted: number }>('/api/plan-sessions/delete', { method: 'POST', body: { ids } }),
 }
 
 /** Who, beyond the owner, can read a workout. Direct shares are separate. */

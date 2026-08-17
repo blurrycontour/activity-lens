@@ -4,11 +4,13 @@ import PageHeader from '../../components/PageHeader'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import { api } from '../../lib/api'
 import {
-  blockComplete, chosen, doneSets, durationLabel, elapsedMin, sessionTally,
+  blockLabel, blockProgress, chosenExercises, doneSetsFor, durationLabel, durationShort,
+  effectivePicks, elapsedMin, exerciseComplete, sessionTally, sessionVolume, setsFor,
   targetLabel, trimNum, volumeLabel,
-  type PlanBlock, type PlanSession, type SessionProgress,
+  type BlockProgress, type PlanBlock, type PlanExercise, type PlanSession, type SessionProgress, type SetLog,
 } from '../../data/plans'
 import { cacheProgress, clearCachedProgress, readCachedProgress } from './sessionCache'
+import { clearSessionNotice, showSessionNotice } from '../../lib/native/sessionNotice'
 
 interface Props {
   session: PlanSession
@@ -24,9 +26,8 @@ interface Props {
  * The list is the primary form because the question you ask most in a gym is
  * "what is left", and a list answers it without an interaction. The expanded
  * row is for the set you are actually in the middle of: numbers you can read
- * from the floor, the weight you really used, and somewhere for the rest timer
- * to live. One row is open at a time — two would be a list again, with worse
- * density.
+ * from the floor, the weight you really used, and the rest timer. One row is
+ * open at a time — two would be a list again, with worse density.
  */
 export default function SessionRunner({ session, onFinished, onDiscarded, onBack }: Props) {
   const [progress, setProgress] = useState<SessionProgress>(() => {
@@ -40,13 +41,19 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
   const [confirmDiscard, setConfirmDiscard] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  // Which exercise is resting, and until when. One at a time: you are only
+  // ever between sets of one thing.
+  const [rest, setRest] = useState<{ exerciseId: string; until: number } | null>(null)
 
   const blocks = session.snapshot.blocks
-  const tally = useMemo(
-    () => sessionTally({ ...session, progress }),
-    [session, progress],
-  )
+  const tally = useMemo(() => sessionTally({ ...session, progress }), [session, progress])
   const pct = tally.total ? Math.round(tally.done / tally.total * 100) : 0
+
+  // The phone's ongoing notification, so a session is visible with the app
+  // closed. A no-op anywhere but the Android app.
+  useEffect(() => {
+    void showSessionNotice(session.id, session.dayName, session.planName, session.startedAt)
+  }, [session.id, session.dayName, session.planName, session.startedAt])
 
   // --- persistence -------------------------------------------------------
   //
@@ -91,33 +98,57 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
 
   // --- edits -------------------------------------------------------------
 
-  function blockProgress(block: PlanBlock) {
-    return progress.blocks[block.id] ?? { pick: 0, sets: [] }
+  function patch(block: PlanBlock, fn: (p: BlockProgress) => BlockProgress) {
+    const current = blockProgress(progress, block.id)
+    update({ blocks: { ...progress.blocks, [block.id]: fn(current) } })
   }
 
-  function toggleSet(block: PlanBlock, index: number) {
-    const current = blockProgress(block)
-    const sets = [...current.sets]
-    while (sets.length <= index) sets.push({ done: false, weightKg: 0 })
-    sets[index] = { ...sets[index], done: !sets[index].done }
-    update({ blocks: { ...progress.blocks, [block.id]: { ...current, sets } } })
+  function patchSets(block: PlanBlock, ex: PlanExercise, index: number, change: Partial<SetLog>) {
+    patch(block, p => {
+      const sets = [...setsFor(p, ex.id)]
+      while (sets.length <= index) sets.push({ done: false, weightKg: 0 })
+      sets[index] = { ...sets[index], ...change }
+      return { ...p, sets: { ...p.sets, [ex.id]: sets } }
+    })
   }
 
-  function setWeight(block: PlanBlock, index: number, kg: number) {
-    const current = blockProgress(block)
-    const sets = [...current.sets]
-    while (sets.length <= index) sets.push({ done: false, weightKg: 0 })
-    sets[index] = { ...sets[index], weightKg: kg }
-    update({ blocks: { ...progress.blocks, [block.id]: { ...current, sets } } })
+  function toggleSet(block: PlanBlock, ex: PlanExercise, index: number) {
+    const wasDone = setsFor(blockProgress(progress, block.id), ex.id)[index]?.done
+    patchSets(block, ex, index, {
+      done: !wasDone,
+      // Stamped as it happens, so history can show what the session actually
+      // looked like rather than only its start and end.
+      at: !wasDone ? new Date().toISOString() : undefined,
+    })
+    // Ticking a set is the moment the rest between sets begins — that is what
+    // the rest field on an exercise is for, and it did nothing until now.
+    if (!wasDone && ex.restSec > 0) {
+      setRest({ exerciseId: ex.id, until: Date.now() + ex.restSec * 1000 })
+    }
   }
 
-  function pickOption(block: PlanBlock, index: number) {
-    const current = blockProgress(block)
-    if (current.pick === index) return
-    // Ticks are cleared with the swap: three sets of bench press are not three
-    // sets of push-ups, and carrying them over would silently credit work that
-    // was not done.
-    update({ blocks: { ...progress.blocks, [block.id]: { pick: index, sets: [] } } })
+  /**
+   * Choosing which of a block's options to do.
+   *
+   * A choose-one block swaps; a "2 of 3" or a superset toggles membership up
+   * to its limit. Nothing is ever cleared: the sets are kept per exercise, so
+   * changing your mind and changing it back costs nothing.
+   */
+  function togglePick(block: PlanBlock, index: number) {
+    const required = Math.min(Math.max(block.required || 1, 1), block.options.length)
+    patch(block, p => {
+      const current = effectivePicks(block, p)
+      if (required <= 1) return { ...p, picks: [index] }
+      if (current.includes(index)) {
+        const next = current.filter(i => i !== index)
+        // Never below one: an empty block would have nothing to show.
+        return { ...p, picks: next.length ? next : current }
+      }
+      // Drop the oldest to make room once the block is full, so tapping a
+      // third option in a "2 of 3" does the obvious thing.
+      const next = current.length >= required ? [...current.slice(1), index] : [...current, index]
+      return { ...p, picks: next }
+    })
   }
 
   // --- finishing ---------------------------------------------------------
@@ -128,6 +159,7 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
     try {
       const done = await api.finishPlanSession(session.id, progress)
       clearCachedProgress(session.id)
+      void clearSessionNotice()
       onFinished(done)
     } catch {
       setError('Could not finish the session. Your sets are saved — try again.')
@@ -141,6 +173,7 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
     try {
       await api.deletePlanSession(session.id)
       clearCachedProgress(session.id)
+      void clearSessionNotice()
       onDiscarded()
     } catch {
       setError('Could not discard the session.')
@@ -148,8 +181,6 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
       setConfirmDiscard(false)
     }
   }
-
-  const elapsed = elapsedMin(session.startedAt)
 
   return (
     <>
@@ -179,11 +210,11 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
             </div>
             <div className="stat-chip">
               <span className="label">Elapsed</span>
-              <span className="value">{durationLabel(elapsed)}</span>
+              <span className="value">{durationLabel(elapsedMin(session.startedAt))}</span>
             </div>
             <div className="stat-chip">
               <span className="label">Volume</span>
-              <span className="value">{volumeLabel(liveVolume(blocks, progress))}</span>
+              <span className="value">{volumeLabel(sessionVolume(session, progress))}</span>
             </div>
           </div>
         </div>
@@ -191,19 +222,20 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
         <div className="plan-rows">
           {blocks.map((block, i) => (
             <div key={block.id}>
-              <ExerciseRow
+              <BlockRow
                 block={block}
                 index={i}
-                progress={blockProgress(block)}
+                progress={blockProgress(progress, block.id)}
                 open={openBlock === block.id}
+                rest={rest}
+                onRestDone={() => setRest(null)}
+                onStartRest={(ex, secs) => setRest({ exerciseId: ex.id, until: Date.now() + secs * 1000 })}
                 onOpen={() => setOpenBlock(openBlock === block.id ? null : block.id)}
-                onToggleSet={n => toggleSet(block, n)}
-                onSetWeight={(n, kg) => setWeight(block, n, kg)}
-                onPick={n => pickOption(block, n)}
+                onToggleSet={(ex, n) => toggleSet(block, ex, n)}
+                onSetChange={(ex, n, change) => patchSets(block, ex, n, change)}
+                onPick={n => togglePick(block, n)}
               />
-              {/* The planned break before the next exercise. Tapping it starts
-                  the countdown — see RestTimer for why nothing starts one by
-                  itself. */}
+              {/* The planned break before the next exercise. */}
               {block.restSec > 0 && i < blocks.length - 1 && (
                 <div className="plan-break-run">
                   <RestTimer seconds={block.restSec} label="Break" />
@@ -243,24 +275,6 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
   )
 }
 
-/** Volume so far, for the running total at the top. */
-function liveVolume(blocks: PlanBlock[], progress: SessionProgress): number {
-  let total = 0
-  for (const b of blocks) {
-    const p = progress.blocks[b.id]
-    const ex = chosen(b, p)
-    if (!ex || !p) continue
-    const reps = parseInt(ex.reps, 10)
-    // Same rule as the server: a held position has no load to total.
-    if (!reps || /s|min/i.test(ex.reps)) continue
-    p.sets.forEach((s, i) => {
-      if (!s.done || i >= ex.sets) return
-      total += (s.weightKg || ex.weightKg) * reps
-    })
-  }
-  return total
-}
-
 function Ring({ pct }: { pct: number }) {
   const r = 26
   const c = 2 * Math.PI * r
@@ -282,19 +296,30 @@ function Ring({ pct }: { pct: number }) {
 interface RowProps {
   block: PlanBlock
   index: number
-  progress: { pick: number; sets: { done: boolean; weightKg: number }[] }
+  progress: BlockProgress
   open: boolean
+  rest: { exerciseId: string; until: number } | null
+  onRestDone: () => void
+  onStartRest: (ex: PlanExercise, seconds: number) => void
   onOpen: () => void
-  onToggleSet: (n: number) => void
-  onSetWeight: (n: number, kg: number) => void
-  onPick: (n: number) => void
+  onToggleSet: (ex: PlanExercise, index: number) => void
+  onSetChange: (ex: PlanExercise, index: number, change: Partial<SetLog>) => void
+  onPick: (index: number) => void
 }
 
-function ExerciseRow({ block, index, progress, open, onOpen, onToggleSet, onSetWeight, onPick }: RowProps) {
-  const ex = chosen(block, progress)
-  if (!ex) return null
-  const complete = blockComplete(block, progress)
-  const done = doneSets(block, progress)
+/**
+ * One block in the runner.
+ *
+ * A choose-one block draws the exercise it is set to; a superset draws each of
+ * its exercises in turn, because they are all being done and each needs its
+ * own sets.
+ */
+function BlockRow({ block, index, progress, open, rest, onRestDone, onStartRest, onOpen, onToggleSet, onSetChange, onPick }: RowProps) {
+  const chosen = chosenExercises(block, progress)
+  if (chosen.length === 0) return null
+  const complete = chosen.every(ex => exerciseComplete(ex, setsFor(progress, ex.id)))
+  const picked = new Set(effectivePicks(block, progress))
+  const label = blockLabel(block)
 
   return (
     <div className={`plan-ex${complete ? ' done' : ''}${open ? ' open' : ''}`}>
@@ -303,145 +328,240 @@ function ExerciseRow({ block, index, progress, open, onOpen, onToggleSet, onSetW
           className="plan-ex-name"
           onClick={onOpen}
           aria-expanded={open}
-          aria-label={`${ex.name}, ${done} of ${ex.sets} sets done`}
+          aria-label={`${chosen.map(e => e.name).join(', ')}, ${open ? 'collapse' : 'expand'}`}
         >
           <span className="plan-ex-index">{index + 1}</span>
-          <span className="plan-ex-title">{ex.name}</span>
+          <span className="plan-ex-titles">
+            {chosen.map(ex => (
+              <span key={ex.id} className="plan-ex-title">
+                {ex.name}
+                {chosen.length > 1 && (
+                  <span className="plan-ex-sub plan-num"> {targetLabel(ex)}</span>
+                )}
+              </span>
+            ))}
+          </span>
           <ChevronDown size={15} className="plan-ex-caret" />
         </button>
-        <div className="plan-ex-target plan-num">
-          {targetLabel(ex)}
-        </div>
+        {chosen.length === 1 && (
+          <div className="plan-ex-target plan-num">{targetLabel(chosen[0])}</div>
+        )}
       </div>
 
-      {/* Compact: the sets as squares. The row you are working on opens into
-          the big view below instead. */}
-      {!open && (
-        <div className="plan-sets">
+      {!open && chosen.map(ex => (
+        <div className="plan-sets" key={ex.id}>
+          {chosen.length > 1 && <span className="plan-sets-for">{ex.name}</span>}
           {Array.from({ length: ex.sets }, (_, n) => (
             <button
               key={n}
               className="plan-set"
-              aria-pressed={!!progress.sets[n]?.done}
+              aria-pressed={!!setsFor(progress, ex.id)[n]?.done}
               aria-label={`Set ${n + 1} of ${ex.name}`}
-              onClick={() => onToggleSet(n)}
+              onClick={() => onToggleSet(ex, n)}
             >
               {n + 1}
             </button>
           ))}
         </div>
-      )}
+      ))}
 
       {open && (
         <div className="plan-ex-focus">
-          <div className="plan-focus-targets">
-            <div className="stat-chip">
-              <span className="label">Sets</span>
-              <span className="value">{ex.sets}</span>
-            </div>
-            <div className="stat-chip">
-              <span className="label">Reps</span>
-              <span className="value">{ex.reps || '—'}</span>
-            </div>
-            <div className="stat-chip">
-              <span className="label">Target</span>
-              <span className="value">
-                {ex.weightKg > 0 ? trimNum(ex.weightKg) : '—'}
-                {ex.weightKg > 0 && <span className="unit"> kg</span>}
-              </span>
-            </div>
-          </div>
-
-          <div className="plan-setrows">
-            {Array.from({ length: ex.sets }, (_, n) => {
-              const log = progress.sets[n]
-              return (
-                <div key={n} className={`plan-setrow${log?.done ? ' done' : ''}`}>
-                  <button
-                    className="plan-setrow-tick"
-                    aria-pressed={!!log?.done}
-                    aria-label={`Set ${n + 1}`}
-                    onClick={() => onToggleSet(n)}
-                  >
-                    <Check size={15} />
-                  </button>
-                  <span className="plan-setrow-n">Set {n + 1}</span>
-                  <span className="plan-setrow-reps plan-num">{ex.reps}</span>
-                  {/* The actual weight, defaulting to the target. The last set
-                      is often lighter, and a plan that can only hold the plan
-                      turns a drop set into a lie. */}
-                  <label className="plan-setrow-kg">
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      className="input"
-                      step="0.5"
-                      min="0"
-                      value={log?.weightKg || ex.weightKg || ''}
-                      placeholder="—"
-                      aria-label={`Weight used for set ${n + 1}, kilograms`}
-                      onChange={e => onSetWeight(n, parseFloat(e.target.value) || 0)}
-                    />
-                    <span>kg</span>
-                  </label>
-                </div>
-              )
-            })}
-          </div>
-
-          {ex.restSec > 0 && <RestTimer seconds={ex.restSec} />}
-          {ex.note && <p className="plan-ex-note">{ex.note}</p>}
+          {chosen.map(ex => (
+            <ExerciseDetail
+              key={ex.id}
+              ex={ex}
+              sets={setsFor(progress, ex.id)}
+              heading={chosen.length > 1 ? ex.name : undefined}
+              rest={rest?.exerciseId === ex.id ? rest.until : null}
+              onRestDone={onRestDone}
+              onStartRest={secs => onStartRest(ex, secs)}
+              onToggle={n => onToggleSet(ex, n)}
+              onChange={(n, change) => onSetChange(ex, n, change)}
+            />
+          ))}
         </div>
       )}
 
       {block.options.length > 1 && (
         <div className="plan-alt">
-          <span className="field-label">Or</span>
-          {block.options.map((opt, n) => (
-            <button
-              key={opt.id}
-              className={`plan-swap${progress.pick === n ? ' on' : ''}`}
-              onClick={() => onPick(n)}
-              aria-pressed={progress.pick === n}
-            >
-              {opt.name}
-            </button>
-          ))}
+          <span className="field-label">{label}</span>
+          {block.options.map((opt, n) => {
+            const on = picked.has(n)
+            const finished = exerciseComplete(opt, setsFor(progress, opt.id))
+            const started = doneSetsFor(opt, setsFor(progress, opt.id)) > 0
+            return (
+              <button
+                key={opt.id}
+                className={`plan-swap${on ? ' on' : ''}${finished ? ' finished' : ''}`}
+                onClick={() => onPick(n)}
+                aria-pressed={on}
+                title={finished ? `${opt.name} — all sets done` : undefined}
+              >
+                {/* Done and part-done both matter here: a chip you can switch
+                    away from should say whether there is work behind it. */}
+                {finished && <Check size={12} aria-hidden />}
+                {opt.name}
+                {!finished && started && (
+                  <span className="plan-swap-count plan-num">
+                    {doneSetsFor(opt, setsFor(progress, opt.id))}/{opt.sets}
+                  </span>
+                )}
+              </button>
+            )
+          })}
         </div>
       )}
     </div>
   )
 }
 
+/** The expanded view of one exercise: big targets, per-set rows, rest. */
+function ExerciseDetail({ ex, sets, heading, rest, onRestDone, onStartRest, onToggle, onChange }: {
+  ex: PlanExercise
+  sets: SetLog[]
+  heading?: string
+  rest: number | null
+  onRestDone: () => void
+  onStartRest: (seconds: number) => void
+  onToggle: (index: number) => void
+  onChange: (index: number, change: Partial<SetLog>) => void
+}) {
+  const timed = ex.kind === 'time'
+  return (
+    <div className="plan-focus-block">
+      {heading && <div className="plan-focus-heading">{heading}</div>}
+
+      <div className="plan-focus-targets">
+        <div className="stat-chip">
+          <span className="label">Sets</span>
+          <span className="value">{ex.sets}</span>
+        </div>
+        <div className="stat-chip">
+          <span className="label">{timed ? 'Hold' : 'Reps'}</span>
+          <span className="value">{timed ? durationShort(ex.durationSec) : ex.reps || '—'}</span>
+        </div>
+        <div className="stat-chip">
+          <span className="label">{ex.kind === 'body' ? 'Added' : 'Target'}</span>
+          <span className="value">
+            {ex.kind === 'time' || ex.weightKg <= 0
+              ? (ex.kind === 'body' ? 'body' : '—')
+              : <>{trimNum(ex.weightKg)}<span className="unit"> kg</span></>}
+          </span>
+        </div>
+      </div>
+
+      <div className="plan-setrows">
+        {Array.from({ length: ex.sets }, (_, n) => {
+          const log = sets[n]
+          return (
+            <div key={n} className={`plan-setrow${log?.done ? ' done' : ''}`}>
+              <button
+                className="plan-setrow-tick"
+                aria-pressed={!!log?.done}
+                aria-label={`Set ${n + 1}`}
+                onClick={() => onToggle(n)}
+              >
+                <Check size={15} />
+              </button>
+              <span className="plan-setrow-n">Set {n + 1}</span>
+              {timed ? (
+                <label className="plan-setrow-kg">
+                  <input
+                    type="number" inputMode="numeric" className="input" min="0" step="5"
+                    value={log?.durationSec || ex.durationSec || ''}
+                    placeholder="—"
+                    aria-label={`Seconds held for set ${n + 1}`}
+                    onChange={e => onChange(n, { durationSec: parseInt(e.target.value, 10) || 0 })}
+                  />
+                  <span>s</span>
+                </label>
+              ) : (
+                <>
+                  <span className="plan-setrow-reps plan-num">{ex.reps}</span>
+                  {/* The actual weight, defaulting to the target. The last set
+                      is often lighter, and a plan that can only hold the plan
+                      turns a drop set into a lie. Bodyweight rows carry added
+                      load, which is how a weighted pull-up is recorded. */}
+                  <label className="plan-setrow-kg">
+                    <input
+                      type="number" inputMode="decimal" className="input" step="0.5" min="0"
+                      value={log?.weightKg || ex.weightKg || ''}
+                      placeholder={ex.kind === 'body' ? '+0' : '—'}
+                      aria-label={`Weight used for set ${n + 1}, kilograms`}
+                      onChange={e => onChange(n, { weightKg: parseFloat(e.target.value) || 0 })}
+                    />
+                    <span>kg</span>
+                  </label>
+                </>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      {ex.restSec > 0 && (
+        <RestTimer
+          seconds={ex.restSec}
+          label="Rest"
+          // Ticking a set starts this; see toggleSet.
+          until={rest}
+          onDone={onRestDone}
+          onStart={() => onStartRest(ex.restSec)}
+        />
+      )}
+      {ex.note && <p className="plan-ex-note">{ex.note}</p>}
+    </div>
+  )
+}
+
 /**
- * A rest countdown, started by hand.
+ * A countdown.
  *
- * Not started automatically on the last tick: people tick a set late, tick two
- * at once, or tick one they did five minutes ago, and a timer that starts
- * itself at those moments is wrong more often than right.
+ * Between sets it is started for you when a set is ticked — that is the moment
+ * the rest begins, and it is what the exercise's rest field is for. The break
+ * between exercises is started by hand, because only you know when you have
+ * actually moved on.
  */
-function RestTimer({ seconds, label = 'Rest' }: { seconds: number; label?: string }) {
-  const [left, setLeft] = useState<number | null>(null)
+function RestTimer({ seconds, label = 'Rest', until, onDone, onStart }: {
+  seconds: number
+  label?: string
+  /** Epoch milliseconds the rest ends at, or null when not running. */
+  until?: number | null
+  onDone?: () => void
+  onStart?: () => void
+}) {
+  const [ownUntil, setOwnUntil] = useState<number | null>(null)
+  const end = until ?? ownUntil
+  const [, tick] = useState(0)
 
   useEffect(() => {
-    if (left === null) return
-    if (left <= 0) return
-    const id = window.setTimeout(() => setLeft(left - 1), 1000)
-    return () => window.clearTimeout(id)
-  }, [left])
+    if (!end) return
+    const id = window.setInterval(() => tick(n => n + 1), 500)
+    return () => window.clearInterval(id)
+  }, [end])
 
-  if (left === null) {
+  if (!end) {
     return (
-      <button className="plan-rest" onClick={() => setLeft(seconds)}>
+      <button
+        className="plan-rest"
+        onClick={() => (onStart ? onStart() : setOwnUntil(Date.now() + seconds * 1000))}
+      >
         <Timer size={14} /> {label} {formatRest(seconds)}
       </button>
     )
   }
+
+  const left = Math.max(0, Math.round((end - Date.now()) / 1000))
   return (
     <div className={`plan-rest running${left <= 0 ? ' up' : ''}`}>
       <Timer size={14} />
       {left > 0 ? formatRest(left) : `${label} over`}
-      <button className="btn-icon" onClick={() => setLeft(null)} aria-label="Stop the rest timer">
+      <button
+        className="btn-icon"
+        onClick={() => { setOwnUntil(null); onDone?.() }}
+        aria-label={`Stop the ${label.toLowerCase()} timer`}
+      >
         <X size={14} />
       </button>
     </div>

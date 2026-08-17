@@ -1,48 +1,52 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Check, GripVertical, Pencil, Play, Plus, Timer, Trash2, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, Plus, Timer, Trash2, X } from 'lucide-react'
 import PageHeader from '../../components/PageHeader'
 import ConfirmDialog from '../../components/ConfirmDialog'
-import ExerciseNameInput, { recentExerciseNames, rememberExerciseNames } from './ExerciseNameInput'
-import { adoptIds, namesIn, withoutDrafts } from './draftPlan'
+import ExerciseNameInput from './ExerciseNameInput'
+import { adoptIds, withoutDrafts } from './draftPlan'
 import { api } from '../../lib/api'
 import {
-  newBlock, newDay, newExercise,
-  type PlanBlock, type PlanDay, type PlanExercise, type TrainingPlan,
+  durationShort, newBlock, newDay, newExercise,
+  type ExerciseKind, type PlanBlock, type PlanDay, type PlanExercise, type TrainingPlan,
 } from '../../data/plans'
 
 interface Props {
   plan: TrainingPlan
-  onBack: () => void
-  onStart: (dayId: string) => void
-  onDeleted: () => void
-  /** So the list behind can show the new name and day count. */
+  /** Leaves edit mode, back to reading the plan. */
+  onDone: () => void
+  /** So the list and the read view see the new structure. */
   onSaved: (p: TrainingPlan) => void
+  suggestions: string[]
 }
 
 type SaveState = 'clean' | 'saving' | 'saved' | 'failed'
 
+/** What is waiting on a yes: everything destructive goes through one of these. */
+type Pending =
+  | { kind: 'day'; index: number; name: string }
+  | { kind: 'block'; index: number; name: string }
+  | { kind: 'option'; block: number; option: number; name: string }
+
 /**
- * Building and editing a plan: days as tabs, exercises as rows, alternatives
- * as a bordered choose-one group.
+ * Editing a plan: days as tabs, exercises as rows, and a block that can be a
+ * choice, a superset or "two of these three".
  *
  * Everything autosaves. A plan editor with a Save button is a plan editor that
  * loses work — this is a screen people leave by locking their phone. The whole
  * day structure goes up on each save rather than a diff, because the server
  * writes it in one transaction; see the API comment.
  */
-export default function PlanEditor({ plan, onBack, onStart, onDeleted, onSaved }: Props) {
+export default function PlanEditor({ plan, onDone, onSaved, suggestions }: Props) {
   const [days, setDays] = useState<PlanDay[]>(plan.days ?? [])
   const [active, setActive] = useState(0)
-  const [name, setName] = useState(plan.name)
-  const [renaming, setRenaming] = useState(false)
   const [save, setSave] = useState<SaveState>('clean')
-  const [confirmDelete, setConfirmDelete] = useState(false)
-  const [busy, setBusy] = useState(false)
+  const [pending, setPending] = useState<Pending | null>(null)
 
   const day = days[active]
 
-  // Every name in this plan, plus whatever this device has typed before.
-  const suggestions = useMemo(() => {
+  // Names already in this plan lead the suggestions, since a plan tends to
+  // reuse its own vocabulary before anything else.
+  const names = useMemo(() => {
     const seen = new Set<string>()
     const out: string[] = []
     for (const d of days) {
@@ -55,32 +59,25 @@ export default function PlanEditor({ plan, onBack, onStart, onDeleted, onSaved }
         }
       }
     }
-    for (const n of recentExerciseNames()) {
+    for (const n of suggestions) {
       if (!seen.has(n.toLowerCase())) { seen.add(n.toLowerCase()); out.push(n) }
     }
     return out
-  }, [days])
+  }, [days, suggestions])
 
   // --- autosave ----------------------------------------------------------
   const timer = useRef<number | null>(null)
-  const pending = useRef<PlanDay[] | null>(null)
+  const queued = useRef<PlanDay[] | null>(null)
 
   const flush = useCallback(async () => {
-    const next = pending.current
+    const next = queued.current
     if (!next) return
-    pending.current = null
+    queued.current = null
     setSave('saving')
     try {
       const saved = await api.savePlanDays(plan.id, withoutDrafts(next))
-      // Ids only, never the whole tree.
-      //
-      // The server drops rows with no exercise name — a half-typed one is not
-      // a plan yet — so adopting its answer wholesale deleted the row the
-      // moment "Add exercise" was tapped, before there was anything to type
-      // into. Copying the ids across keeps what is on screen while still
-      // letting the next save update those rows instead of duplicating them.
-      if (!pending.current) setDays(cur => adoptIds(cur, saved.days ?? []))
-      rememberExerciseNames(namesIn(next))
+      // Ids only, never the whole tree — see draftPlan.ts.
+      if (!queued.current) setDays(cur => adoptIds(cur, saved.days ?? []))
       onSaved(saved)
       setSave('saved')
     } catch {
@@ -90,7 +87,7 @@ export default function PlanEditor({ plan, onBack, onStart, onDeleted, onSaved }
 
   const edit = useCallback((next: PlanDay[]) => {
     setDays(next)
-    pending.current = next
+    queued.current = next
     setSave('saving')
     if (timer.current) window.clearTimeout(timer.current)
     timer.current = window.setTimeout(flush, 900)
@@ -107,32 +104,31 @@ export default function PlanEditor({ plan, onBack, onStart, onDeleted, onSaved }
     }
   }, [flush])
 
-  async function renamePlan(next: string) {
-    const clean = next.trim() || plan.name
-    setName(clean)
-    setRenaming(false)
-    try {
-      onSaved(await api.patchPlan(plan.id, { name: clean }))
-    } catch {
-      setSave('failed')
-    }
-  }
-
-  // --- day edits ---------------------------------------------------------
+  // --- edits -------------------------------------------------------------
 
   function patchDay(fn: (d: PlanDay) => PlanDay) {
     edit(days.map((d, i) => (i === active ? fn(d) : d)))
   }
 
-  function patchBlock(blockIndex: number, fn: (b: PlanBlock) => PlanBlock) {
-    patchDay(d => ({ ...d, blocks: d.blocks.map((b, i) => (i === blockIndex ? fn(b) : b)) }))
+  function patchBlock(index: number, fn: (b: PlanBlock) => PlanBlock) {
+    patchDay(d => ({ ...d, blocks: d.blocks.map((b, i) => (i === index ? fn(b) : b)) }))
   }
 
-  function patchExercise(blockIndex: number, optionIndex: number, patch: Partial<PlanExercise>) {
-    patchBlock(blockIndex, b => ({
+  function patchExercise(block: number, option: number, patch: Partial<PlanExercise>) {
+    patchBlock(block, b => ({
       ...b,
-      options: b.options.map((o, i) => (i === optionIndex ? { ...o, ...patch } : o)),
+      options: b.options.map((o, i) => (i === option ? { ...o, ...patch } : o)),
     }))
+  }
+
+  /** Moves an item within a list, used for both blocks and their options. */
+  function reorder<T>(list: T[], from: number, by: number): T[] {
+    const to = from + by
+    if (to < 0 || to >= list.length) return list
+    const next = [...list]
+    const [moved] = next.splice(from, 1)
+    next.splice(to, 0, moved)
+    return next
   }
 
   function addDay() {
@@ -141,77 +137,37 @@ export default function PlanEditor({ plan, onBack, onStart, onDeleted, onSaved }
     setActive(next.length - 1)
   }
 
-  function removeDay() {
-    const next = days.filter((_, i) => i !== active)
-    edit(next)
-    setActive(Math.max(0, active - 1))
-  }
-
-  function move(blockIndex: number, by: number) {
-    const to = blockIndex + by
-    if (!day || to < 0 || to >= day.blocks.length) return
-    const blocks = [...day.blocks]
-    const [moved] = blocks.splice(blockIndex, 1)
-    blocks.splice(to, 0, moved)
-    patchDay(d => ({ ...d, blocks }))
-  }
-
-  async function deletePlan() {
-    setBusy(true)
-    try {
-      await api.deletePlan(plan.id)
-      onDeleted()
-    } catch {
-      setBusy(false)
-      setConfirmDelete(false)
+  function confirmRemoval() {
+    if (!pending) return
+    if (pending.kind === 'day') {
+      edit(days.filter((_, i) => i !== pending.index))
+      setActive(Math.max(0, active - 1))
+    } else if (pending.kind === 'block') {
+      patchDay(d => ({ ...d, blocks: d.blocks.filter((_, i) => i !== pending.index) }))
+    } else {
+      patchBlock(pending.block, b => {
+        const options = b.options.filter((_, i) => i !== pending.option)
+        // "Do 3 of these" cannot survive dropping to two options.
+        return { ...b, options, required: Math.min(b.required, options.length) || 1 }
+      })
     }
+    setPending(null)
   }
-
-  const startable = !!day && day.blocks.some(b => b.options.some(o => o.name.trim()))
 
   return (
     <>
       <PageHeader
-        title={name}
+        title={plan.name}
         subtitle={saveLabel(save)}
-        onBack={onBack}
-        /* The title is the plan name and is edited in place, so the page does
-           not carry a second field saying the same thing under a label. */
-        titleAction={
-          <button className="btn-icon" onClick={() => setRenaming(true)} aria-label="Rename this plan">
-            <Pencil size={14} />
-          </button>
-        }
+        onBack={onDone}
         actions={
-          <div className="plan-run-actions">
-            <button
-              className="btn btn-ghost"
-              onClick={() => setConfirmDelete(true)}
-              aria-label="Delete this plan"
-            >
-              <Trash2 size={15} />
-            </button>
-            <button
-              className="btn btn-primary"
-              disabled={!startable}
-              onClick={() => day && onStart(day.id)}
-              title={startable ? undefined : 'Add an exercise first'}
-            >
-              <Play size={15} /> <span className="plan-start-label">Start</span>
-            </button>
-          </div>
+          <button className="btn btn-primary" onClick={onDone}>
+            <Check size={15} /> Done
+          </button>
         }
       />
 
       <div className="page-content">
-        {renaming && (
-          <RenameDialog
-            initial={name}
-            onCancel={() => setRenaming(false)}
-            onSave={renamePlan}
-          />
-        )}
-
         <div className="plan-tabs" role="tablist" aria-label="Days">
           {days.map((d, i) => (
             <button
@@ -242,7 +198,11 @@ export default function PlanEditor({ plan, onBack, onStart, onDeleted, onSaved }
                 aria-label="Day name"
                 onChange={e => patchDay(d => ({ ...d, name: e.target.value }))}
               />
-              <button className="btn-icon" onClick={removeDay} aria-label={`Remove ${day.name}`}>
+              <button
+                className="btn-icon"
+                onClick={() => setPending({ kind: 'day', index: active, name: day.name })}
+                aria-label={`Remove ${day.name}`}
+              >
                 <Trash2 size={15} />
               </button>
             </div>
@@ -254,18 +214,21 @@ export default function PlanEditor({ plan, onBack, onStart, onDeleted, onSaved }
                     block={block}
                     first={bi === 0}
                     last={bi === day.blocks.length - 1}
-                    suggestions={suggestions}
-                    onMove={by => move(bi, by)}
+                    suggestions={names}
+                    onMove={by => patchDay(d => ({ ...d, blocks: reorder(d.blocks, bi, by) }))}
+                    onMoveOption={(oi, by) => patchBlock(bi, b => ({ ...b, options: reorder(b.options, oi, by) }))}
                     onPatch={(oi, patch) => patchExercise(bi, oi, patch)}
-                    onRemove={() => patchDay(d => ({ ...d, blocks: d.blocks.filter((_, i) => i !== bi) }))}
-                    onRemoveOption={oi => patchBlock(bi, b => ({
-                      ...b,
-                      options: b.options.filter((_, i) => i !== oi),
-                    }))}
+                    onRequired={n => patchBlock(bi, b => ({ ...b, required: n }))}
+                    onRemove={() => setPending({
+                      kind: 'block', index: bi,
+                      name: block.options.map(o => o.name).filter(Boolean).join(' / ') || 'this exercise',
+                    })}
+                    onRemoveOption={oi => setPending({
+                      kind: 'option', block: bi, option: oi,
+                      name: block.options[oi].name || 'this option',
+                    })}
                     onAddOption={() => patchBlock(bi, b => ({ ...b, options: [...b.options, newExercise()] }))}
                   />
-                  {/* The break before the next exercise, sitting between the
-                      two things it separates rather than inside either. */}
                   <BreakRow
                     seconds={block.restSec}
                     last={bi === day.blocks.length - 1}
@@ -285,15 +248,16 @@ export default function PlanEditor({ plan, onBack, onStart, onDeleted, onSaved }
         )}
       </div>
 
-      {confirmDelete && (
+      {pending && (
         <ConfirmDialog
-          title={`Delete ${plan.name}?`}
-          message="The plan and its days go. Sessions you have already run stay in your history, with the exercises as they were on the day."
-          confirmLabel="Delete"
+          title={pending.kind === 'day' ? `Remove ${pending.name}?` : `Remove ${pending.name}?`}
+          message={pending.kind === 'day'
+            ? 'The day and every exercise in it go. Sessions already run keep their own copy.'
+            : 'It is removed from this plan. Sessions already run keep their own copy.'}
+          confirmLabel="Remove"
           danger
-          busy={busy}
-          onConfirm={deletePlan}
-          onCancel={() => setConfirmDelete(false)}
+          onConfirm={confirmRemoval}
+          onCancel={() => setPending(null)}
         />
       )}
     </>
@@ -309,43 +273,12 @@ function saveLabel(s: SaveState): string {
   }
 }
 
-/** Renaming the plan, opened from the pencil beside the title. */
-function RenameDialog({ initial, onSave, onCancel }: {
-  initial: string
-  onSave: (name: string) => void
-  onCancel: () => void
-}) {
-  const [value, setValue] = useState(initial)
-  return (
-    <form
-      className="card plan-rename"
-      onSubmit={e => { e.preventDefault(); onSave(value) }}
-    >
-      <label className="field-label" htmlFor="plan-rename">Plan name</label>
-      <div className="plan-rename-row">
-        <input
-          id="plan-rename"
-          className="input"
-          value={value}
-          autoFocus
-          onChange={e => setValue(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); onCancel() } }}
-        />
-        <button type="submit" className="btn btn-primary"><Check size={15} /> Save</button>
-        <button type="button" className="btn btn-ghost" onClick={onCancel}>Cancel</button>
-      </div>
-    </form>
-  )
-}
-
 /**
  * The break between one exercise and the next.
  *
- * Separate from the rest between sets, which lives on the exercise: ninety
- * seconds between sets of the same lift and three minutes before moving to
- * another station are different waits, and one field could only be right about
- * one of them. Nothing is shown after the last exercise — there is no next one
- * to rest before.
+ * Presented as a chip on a rule between the two cards, because that is what it
+ * is: a gap in the day, not a property of either exercise. Adding one asks for
+ * a number of seconds and nothing else.
  */
 function BreakRow({ seconds, last, onChange }: {
   seconds: number
@@ -357,37 +290,39 @@ function BreakRow({ seconds, last, onChange }: {
 
   if (!seconds && !editing) {
     return (
-      <button className="plan-break-add" onClick={() => setEditing(true)}>
-        <Timer size={13} /> Add a break
-      </button>
+      <div className="plan-break-line">
+        <button className="plan-break-chip add" onClick={() => setEditing(true)}>
+          <Timer size={12} /> Add a break
+        </button>
+      </div>
     )
   }
   return (
-    <div className="plan-break">
-      <Timer size={13} aria-hidden />
-      <input
-        className="input"
-        type="number"
-        inputMode="numeric"
-        min="0"
-        step="15"
-        autoFocus={editing && !seconds}
-        value={seconds || ''}
-        placeholder="90"
-        aria-label="Break before the next exercise, in seconds"
-        onChange={e => onChange(Math.max(0, parseInt(e.target.value, 10) || 0))}
-        onBlur={() => setEditing(false)}
-      />
-      <span>seconds break</span>
-      {seconds > 0 && (
+    <div className="plan-break-line">
+      <div className="plan-break-chip">
+        <Timer size={12} aria-hidden />
+        <input
+          className="input"
+          type="number"
+          inputMode="numeric"
+          min="0"
+          step="15"
+          autoFocus={editing && !seconds}
+          value={seconds || ''}
+          placeholder="90"
+          aria-label="Break before the next exercise, in seconds"
+          onChange={e => onChange(Math.max(0, parseInt(e.target.value, 10) || 0))}
+          onBlur={() => setEditing(false)}
+        />
+        <span>s break</span>
         <button
           className="btn-icon"
           onClick={() => { onChange(0); setEditing(false) }}
           aria-label="Remove this break"
         >
-          <X size={13} />
+          <X size={12} />
         </button>
-      )}
+      </div>
     </div>
   )
 }
@@ -398,103 +333,204 @@ interface BlockProps {
   last: boolean
   suggestions: string[]
   onMove: (by: number) => void
-  onPatch: (optionIndex: number, patch: Partial<PlanExercise>) => void
+  onMoveOption: (option: number, by: number) => void
+  onPatch: (option: number, patch: Partial<PlanExercise>) => void
+  onRequired: (n: number) => void
   onRemove: () => void
-  onRemoveOption: (optionIndex: number) => void
+  onRemoveOption: (option: number) => void
   onAddOption: () => void
 }
 
 /**
  * One slot in the day.
  *
- * A single exercise is a plain row. Adding an alternative turns it into a
- * bordered "choose one" group in place — the only genuinely new concept in the
- * feature, so it is the one thing here given its own colour.
+ * A single exercise is a plain card. Adding a second turns it into a group,
+ * and the group says how many of its exercises to do: one is the alternative
+ * it used to be, all of them is a superset, and anything between is a choice
+ * with a count.
  */
-function BlockEditor({ block, first, last, suggestions, onMove, onPatch, onRemove, onRemoveOption, onAddOption }: BlockProps) {
+function BlockEditor({
+  block, first, last, suggestions,
+  onMove, onMoveOption, onPatch, onRequired, onRemove, onRemoveOption, onAddOption,
+}: BlockProps) {
   const group = block.options.length > 1
+  const required = Math.min(Math.max(block.required || 1, 1), block.options.length)
 
   return (
     <div className={group ? 'plan-group' : 'plan-edit-block'}>
-      {group && (
-        <div className="plan-group-head">
-          <span className="field-label">Choose one</span>
-          <button className="btn-icon" onClick={onRemove} aria-label="Remove this exercise">
-            <X size={14} />
+      <div className="plan-block-head">
+        {/* Order is two buttons rather than a drag: dragging inside a
+            vertically scrolling page fights the scroll on a touch screen, and
+            this is unambiguous with one thumb. */}
+        <div className="plan-move">
+          <button className="btn-icon" disabled={first} onClick={() => onMove(-1)} aria-label="Move up">
+            <ChevronUp size={15} />
+          </button>
+          <button className="btn-icon" disabled={last} onClick={() => onMove(1)} aria-label="Move down">
+            <ChevronDown size={15} />
           </button>
         </div>
-      )}
+
+        {group && (
+          /* One select saying the whole thing, rather than a number between
+             two words: "Do [2] of 3" needed three elements and a hint beside
+             them to explain itself, and read as arithmetic. */
+          <select
+            className="input plan-required"
+            value={required}
+            aria-label="How many of these exercises to do"
+            onChange={e => onRequired(parseInt(e.target.value, 10) || 1)}
+          >
+            {block.options.map((_, i) => (
+              <option key={i} value={i + 1}>
+                {i === 0
+                  ? 'Choose one'
+                  : i + 1 === block.options.length
+                    ? `Superset · do all ${i + 1}`
+                    : `Do ${i + 1} of ${block.options.length}`}
+              </option>
+            ))}
+          </select>
+        )}
+
+        <button className="btn-icon plan-block-x" onClick={onRemove} aria-label="Remove this exercise">
+          <X size={15} />
+        </button>
+      </div>
 
       {block.options.map((ex, oi) => (
-        <div className="plan-erow" key={ex.id || oi}>
-          {!group && (
-            <span className="plan-grip">
-              {/* Reorder is two buttons rather than a drag: dragging inside a
-                  vertically scrolling page on a touch screen fights the
-                  scroll, and this is unambiguous with one thumb. */}
-              <button className="btn-icon" disabled={first} onClick={() => onMove(-1)} aria-label="Move up">↑</button>
-              <button className="btn-icon" disabled={last} onClick={() => onMove(1)} aria-label="Move down">↓</button>
-              <GripVertical size={14} aria-hidden />
-            </span>
-          )}
-          <ExerciseNameInput
-            className="input plan-ename"
-            value={ex.name}
-            suggestions={suggestions}
-            onChange={v => onPatch(oi, { name: v })}
-          />
-          <div className="plan-efields">
-            <label>
-              <span className="field-label">Sets</span>
-              <input
-                className="input" type="number" inputMode="numeric" min="1" max="50"
-                value={ex.sets}
-                onChange={e => onPatch(oi, { sets: Math.max(1, parseInt(e.target.value, 10) || 1) })}
-              />
-            </label>
-            <label>
-              <span className="field-label">Reps</span>
-              {/* Text, not a number: "8-10" and "45 s" are both real answers. */}
-              <input
-                className="input" value={ex.reps} placeholder="8"
-                onChange={e => onPatch(oi, { reps: e.target.value })}
-              />
-            </label>
-            <label>
-              <span className="field-label">kg</span>
-              <input
-                className="input" type="number" inputMode="decimal" step="0.5" min="0"
-                value={ex.weightKg || ''}
-                placeholder="—"
-                onChange={e => onPatch(oi, { weightKg: parseFloat(e.target.value) || 0 })}
-              />
-            </label>
-            <label>
-              <span className="field-label">Rest</span>
-              {/* Between sets of this exercise, as opposed to the break
-                  between exercises below the card. */}
-              <input
-                className="input" type="number" inputMode="numeric" min="0" step="15"
-                value={ex.restSec || ''}
-                placeholder="—"
-                aria-label="Rest between sets, in seconds"
-                onChange={e => onPatch(oi, { restSec: Math.max(0, parseInt(e.target.value, 10) || 0) })}
-              />
-            </label>
-          </div>
-          <button
-            className="btn-icon plan-erow-x"
-            onClick={() => (group ? onRemoveOption(oi) : onRemove())}
-            aria-label={`Remove ${ex.name || 'this exercise'}`}
-          >
-            <X size={15} />
-          </button>
-        </div>
+        <ExerciseFields
+          key={ex.id || oi}
+          ex={ex}
+          suggestions={suggestions}
+          showMove={group}
+          first={oi === 0}
+          last={oi === block.options.length - 1}
+          onMove={by => onMoveOption(oi, by)}
+          onPatch={patch => onPatch(oi, patch)}
+          onRemove={() => (group ? onRemoveOption(oi) : onRemove())}
+        />
       ))}
 
       <button className="plan-add-alt" onClick={onAddOption}>
         <Plus size={13} /> {group ? 'Add an option' : 'Add an alternative'}
       </button>
+    </div>
+  )
+}
+
+/** The fields for one exercise, which depend on what it is measured in. */
+function ExerciseFields({ ex, suggestions, showMove, first, last, onMove, onPatch, onRemove }: {
+  ex: PlanExercise
+  suggestions: string[]
+  showMove: boolean
+  first: boolean
+  last: boolean
+  onMove: (by: number) => void
+  onPatch: (patch: Partial<PlanExercise>) => void
+  onRemove: () => void
+}) {
+  const timed = ex.kind === 'time'
+  return (
+    <div className="plan-erow">
+      {showMove && (
+        <div className="plan-move plan-move-option">
+          <button className="btn-icon" disabled={first} onClick={() => onMove(-1)} aria-label="Move up">
+            <ChevronUp size={14} />
+          </button>
+          <button className="btn-icon" disabled={last} onClick={() => onMove(1)} aria-label="Move down">
+            <ChevronDown size={14} />
+          </button>
+        </div>
+      )}
+
+      <ExerciseNameInput
+        className="input plan-ename"
+        value={ex.name}
+        suggestions={suggestions}
+        onChange={v => onPatch({ name: v })}
+      />
+
+      <button className="btn-icon plan-erow-x" onClick={onRemove} aria-label={`Remove ${ex.name || 'this exercise'}`}>
+        <X size={15} />
+      </button>
+
+      <div className="plan-efields">
+        <label>
+          <span className="field-label">Type</span>
+          {/* What the exercise is measured in, which decides the rest of the
+              row. Before this, a plank could only be written by typing "45 s"
+              into a reps box beside a kilograms field it had no use for. */}
+          <select
+            className="input plan-kind"
+            value={ex.kind}
+            aria-label="How this exercise is measured"
+            onChange={e => onPatch({ kind: e.target.value as ExerciseKind })}
+          >
+            <option value="weight">Weight</option>
+            <option value="body">Bodyweight</option>
+            <option value="time">Time</option>
+          </select>
+        </label>
+
+        <label>
+          <span className="field-label">Sets</span>
+          <input
+            className="input" type="number" inputMode="numeric" min="1" max="50"
+            value={ex.sets}
+            onChange={e => onPatch({ sets: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+          />
+        </label>
+
+        {timed ? (
+          <label>
+            <span className="field-label">Hold</span>
+            <input
+              className="input" type="number" inputMode="numeric" min="0" step="5"
+              value={ex.durationSec || ''}
+              placeholder="45"
+              aria-label="Seconds per set"
+              onChange={e => onPatch({ durationSec: Math.max(0, parseInt(e.target.value, 10) || 0) })}
+            />
+          </label>
+        ) : (
+          <label>
+            <span className="field-label">Reps</span>
+            {/* Text, not a number: "8-10" is a real answer. */}
+            <input
+              className="input" value={ex.reps} placeholder="8"
+              onChange={e => onPatch({ reps: e.target.value })}
+            />
+          </label>
+        )}
+
+        {!timed && (
+          <label>
+            <span className="field-label">{ex.kind === 'body' ? '+kg' : 'kg'}</span>
+            <input
+              className="input" type="number" inputMode="decimal" step="0.5" min="0"
+              value={ex.weightKg || ''}
+              placeholder={ex.kind === 'body' ? '0' : '—'}
+              aria-label={ex.kind === 'body' ? 'Added weight in kilograms' : 'Weight in kilograms'}
+              onChange={e => onPatch({ weightKg: parseFloat(e.target.value) || 0 })}
+            />
+          </label>
+        )}
+
+        <label>
+          <span className="field-label">Rest</span>
+          {/* Between sets of this exercise, as opposed to the break between
+              exercises on the rule below the card. Ticking a set starts it. */}
+          <input
+            className="input" type="number" inputMode="numeric" min="0" step="15"
+            value={ex.restSec || ''}
+            placeholder="—"
+            aria-label="Rest between sets, in seconds"
+            title={ex.restSec > 0 ? `${durationShort(ex.restSec)} between sets` : undefined}
+            onChange={e => onPatch({ restSec: Math.max(0, parseInt(e.target.value, 10) || 0) })}
+          />
+        </label>
+      </div>
     </div>
   )
 }
