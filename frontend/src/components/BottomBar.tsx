@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { MoreHorizontal, X } from 'lucide-react'
 import { BOTTOM_BAR_PAGES, MORE_PAGES, type Page } from '../lib/nav'
+import { useActiveSession } from '../context/ActiveSessionContext'
 import { PAGE_META } from './Sidebar'
 import useSheetDrag from '../lib/useSheetDrag'
 import Modal from './Modal'
@@ -22,6 +23,7 @@ interface BottomBarProps {
 export default function BottomBar({ currentPage, onNavigate }: BottomBarProps) {
   const [open, setOpen] = useState(false)
   const inMore = MORE_PAGES.includes(currentPage)
+  const { active } = useActiveSession()
   const bodyRef = useRef<HTMLDivElement>(null)
   const sheet = useSheetDrag(() => setOpen(false), bodyRef)
 
@@ -80,7 +82,19 @@ export default function BottomBar({ currentPage, onNavigate }: BottomBarProps) {
               className={`bottom-bar-item ${currentPage === page ? 'active' : ''}`}
               onClick={() => onNavigate(page)}
             >
-              {meta.icon(21)}
+              {/* The dot is positioned against the icon, so the icon needs to
+                  be what it is positioned against — loose in the button it
+                  found the bar itself and pinned itself to the far corner. */}
+              <span className="nav-icon">
+                {meta.icon(21)}
+                {/* A session left running is the one thing in this app that
+                    keeps going while you are elsewhere, so the way back to it
+                    is marked from every page. Not while you are on Plans: the
+                    page itself already carries a full resume card. */}
+                {page === 'plans' && active && currentPage !== 'plans' && (
+                  <span className="nav-live-dot" role="img" aria-label="Session in progress" />
+                )}
+              </span>
               <span>{meta.label}</span>
             </button>
           )

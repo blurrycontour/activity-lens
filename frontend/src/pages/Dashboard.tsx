@@ -14,7 +14,8 @@ import { useIsMobile } from '../lib/useIsMobile'
 import InfoTip from '../components/InfoTip'
 import Sparkline from '../components/Sparkline'
 import { api, type Equipment } from '../lib/api'
-import { durationLabel, elapsedMin, type PlanSession } from '../data/plans'
+import { durationLabel, elapsedMin } from '../data/plans'
+import { useActiveSession } from '../context/ActiveSessionContext'
 import { AXIS_TICK, GRID_PROPS, HOVER_FILL, recencyRamp } from '../lib/chartColors'
 import { useThemeTokens } from '../lib/useThemeTokens'
 import {
@@ -621,7 +622,9 @@ export default function Dashboard({ onSelect, onResumeSession }: {
   const [equipment, setEquipment] = useState<Equipment[]>([])
   // A training session left running, so the dashboard can offer the way back
   // into it. Undefined until asked; null once the answer is "none".
-  const [running, setRunning] = useState<PlanSession | null>(null)
+  // App-wide rather than fetched here: the nav shows the same thing, and two
+  // copies of "is a session running" could disagree after one was finished.
+  const { active: running } = useActiveSession()
 
   useEffect(() => {
     let active = true
@@ -632,12 +635,6 @@ export default function Dashboard({ onSelect, onResumeSession }: {
       })
       .catch(() => { /* goal tile simply stays hidden */ })
     api.listEquipment().then(e => { if (active) setEquipment(e) }).catch(() => {})
-    // 204 when nothing is running, which the client turns into undefined. A
-    // failure here leaves the tile hidden rather than showing an error for
-    // something the user did not ask about.
-    api.activePlanSession()
-      .then(s => { if (active) setRunning(s ?? null) })
-      .catch(() => {})
     return () => { active = false }
   }, [])
 

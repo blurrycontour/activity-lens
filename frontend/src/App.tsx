@@ -41,6 +41,7 @@ import { useAuth } from './context/AuthContext'
 import { useRefresh } from './context/RefreshContext'
 import { WorkoutsProvider } from './context/WorkoutsContext'
 import { PreferencesProvider } from './context/PreferencesContext'
+import { ActiveSessionProvider } from './context/ActiveSessionContext'
 import {
   adjacentPage, navHighlight, parseLocation, pathForPage,
   type AdminSection, type Page, type SettingsSection,
@@ -651,6 +652,7 @@ export default function App() {
     // rather than fetched again by each page that wants it.
     <PreferencesProvider>
     <WorkoutsProvider>
+    <ActiveSessionProvider>
       <div className={layoutClass}>
       <TopBar
         onToggleSidebar={toggleSidebar}
@@ -808,6 +810,7 @@ export default function App() {
         />
       )}
       </div>
+    </ActiveSessionProvider>
     </WorkoutsProvider>
     </PreferencesProvider>
   )
