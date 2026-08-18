@@ -149,7 +149,7 @@ func (r *SQLiteRepository) loadDays(ctx context.Context, planID string) ([]Day, 
 	}
 
 	blockRows, err := r.db.QueryContext(ctx,
-		`SELECT b.id, b.day_id, b.rest_sec, b.required FROM plan_blocks b
+		`SELECT b.id, b.day_id, b.rest_sec, b.required, b.section FROM plan_blocks b
 		   JOIN plan_days d ON d.id = b.day_id
 		  WHERE d.plan_id = ? ORDER BY b.position, b.id`, planID)
 	if err != nil {
@@ -161,9 +161,9 @@ func (r *SQLiteRepository) loadDays(ctx context.Context, planID string) ([]Day, 
 	type at struct{ day, block int }
 	byBlock := map[string]at{}
 	for blockRows.Next() {
-		var id, dayID string
+		var id, dayID, section string
 		var restSec, required int
-		if err := blockRows.Scan(&id, &dayID, &restSec, &required); err != nil {
+		if err := blockRows.Scan(&id, &dayID, &restSec, &required, &section); err != nil {
 			return nil, fmt.Errorf("scan block: %w", err)
 		}
 		di, ok := byDay[dayID]
@@ -172,7 +172,7 @@ func (r *SQLiteRepository) loadDays(ctx context.Context, planID string) ([]Day, 
 		}
 		byBlock[id] = at{di, len(days[di].Blocks)}
 		days[di].Blocks = append(days[di].Blocks,
-			Block{ID: id, Options: []Exercise{}, RestSec: restSec, Required: required})
+			Block{ID: id, Options: []Exercise{}, RestSec: restSec, Required: required, Section: Section(section)})
 	}
 	if err := blockRows.Err(); err != nil {
 		return nil, err
@@ -304,8 +304,9 @@ func (r *SQLiteRepository) ReplaceDays(ctx context.Context, userID int64, planID
 		}
 		for bi, b := range d.Blocks {
 			if _, err := tx.ExecContext(ctx,
-				`INSERT INTO plan_blocks (id, day_id, position, rest_sec, required) VALUES (?,?,?,?,?)`,
-				b.ID, d.ID, bi, b.RestSec, b.Required); err != nil {
+				`INSERT INTO plan_blocks (id, day_id, position, rest_sec, required, section)
+				 VALUES (?,?,?,?,?,?)`,
+				b.ID, d.ID, bi, b.RestSec, b.Required, string(b.Section)); err != nil {
 				return fmt.Errorf("insert block: %w", err)
 			}
 			for ei, e := range b.Options {

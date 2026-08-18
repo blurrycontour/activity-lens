@@ -732,3 +732,91 @@ func TestExerciseNamesComeFromThePlansThemselves(t *testing.T) {
 		t.Errorf("ExerciseNames() for a stranger = %v, %v", empty, err)
 	}
 }
+
+// A section is a block that is not working sets. It survives a save, and its
+// exercises are time work whatever the client asked for — a warm-up written in
+// reps at a load is not a warm-up.
+func TestSectionsSurviveASaveAndAreTimed(t *testing.T) {
+	s, _ := newTestService(t)
+	ctx := context.Background()
+	plan, err := s.CreatePlan(ctx, 1, PlanInput{Name: "Legs"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	saved, err := s.ReplaceDays(ctx, 1, plan.ID, []Day{{
+		Name: "Squat day",
+		Blocks: []Block{
+			{Section: SectionWarmup, Options: []Exercise{
+				{Name: "Bike", Kind: KindWeight, Sets: 1, Reps: "10", WeightKg: 40, DurationSec: 300},
+			}},
+			{Options: []Exercise{{Name: "Back squat", Kind: KindWeight, Sets: 5, Reps: "5", WeightKg: 100}}},
+			{Section: Section("nonsense"), Options: []Exercise{{Name: "Hamstring", Sets: 1, DurationSec: 60}}},
+		},
+	}})
+	if err != nil {
+		t.Fatalf("ReplaceDays() error = %v", err)
+	}
+
+	blocks := saved.Days[0].Blocks
+	if len(blocks) != 3 {
+		t.Fatalf("blocks = %d, want 3", len(blocks))
+	}
+	if blocks[0].Section != SectionWarmup {
+		t.Errorf("section = %q, want warmup", blocks[0].Section)
+	}
+	if blocks[0].Options[0].Kind != KindTime {
+		t.Errorf("a warm-up exercise is %q, want time", blocks[0].Options[0].Kind)
+	}
+	if blocks[1].Section != SectionNone || blocks[1].Options[0].Kind != KindWeight {
+		t.Errorf("an ordinary block was changed: %+v", blocks[1])
+	}
+	// An unknown section degrades to an ordinary block rather than failing the
+	// save, so a newer client cannot write something this build cannot render.
+	if blocks[2].Section != SectionNone {
+		t.Errorf("unknown section = %q, want it cleared", blocks[2].Section)
+	}
+
+	// And it is still there after a round trip through SQLite.
+	again, err := s.GetPlan(ctx, 1, plan.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Days[0].Blocks[0].Section != SectionWarmup {
+		t.Errorf("section did not survive reload: %q", again.Days[0].Blocks[0].Section)
+	}
+}
+
+// The runner writes a set's start before its finish. Both have to come back,
+// or a session picked up after the app was killed forgets which set was under
+// way.
+func TestSetStartTimeRoundTrips(t *testing.T) {
+	s, _ := newTestService(t)
+	ctx := context.Background()
+	plan := samplePlan(t, s, 1)
+	sess, err := s.StartSession(ctx, 1, plan.ID, plan.Days[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exID := sess.Snapshot.Blocks[0].Options[0].ID
+
+	if _, err := s.SaveProgress(ctx, 1, sess.ID, Progress{Blocks: map[string]BlockProgress{
+		sess.Snapshot.Blocks[0].ID: {Sets: map[string][]SetLog{
+			exID: {{StartedAt: "2026-08-18T09:00:00Z"}},
+		}},
+	}}); err != nil {
+		t.Fatalf("SaveProgress() error = %v", err)
+	}
+
+	back, err := s.GetSession(ctx, 1, sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := back.Progress.Blocks[sess.Snapshot.Blocks[0].ID].Sets[exID]
+	if len(got) != 1 || got[0].StartedAt != "2026-08-18T09:00:00Z" {
+		t.Errorf("startedAt = %+v, want it preserved", got)
+	}
+	if got[0].Done {
+		t.Error("a started set came back done")
+	}
+}

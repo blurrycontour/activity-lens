@@ -114,6 +114,9 @@ var planBlockRequiredSchema string
 //go:embed migrations/0034_plan_exercise_kind.sql
 var planExerciseKindSchema string
 
+//go:embed migrations/0035_plan_block_section.sql
+var planBlockSectionSchema string
+
 // maxOpenConns is how many connections the pool will open.
 //
 // It was 1, which made every request in the process queue behind every other
@@ -222,6 +225,7 @@ func MigrateApp(ctx context.Context, db *sql.DB) error {
 		{"plan block rest", planBlockRestSchema},
 		{"plan block required", planBlockRequiredSchema},
 		{"plan exercise kind", planExerciseKindSchema},
+		{"plan block section", planBlockSectionSchema},
 	} {
 		if err := applyAlters(ctx, db, m.schema); err != nil {
 			return fmt.Errorf("apply %s schema: %w", m.name, err)

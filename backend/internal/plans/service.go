@@ -141,7 +141,19 @@ func normalizeDays(days []Day) ([]Day, error) {
 			if len(b.Options) > MaxOptionsPerBlock {
 				return nil, fmt.Errorf("%w: at most %d alternatives per exercise", ErrInvalid, MaxOptionsPerBlock)
 			}
-			block := Block{ID: idOr(b.ID, "pb"), Options: []Exercise{}, RestSec: min(max(b.RestSec, 0), 3600)}
+			section := b.Section
+			if !ValidSection(section) {
+				// Cleared rather than rejected: a newer client writing a
+				// section this build has never heard of should degrade to an
+				// ordinary block, not fail the whole save.
+				section = SectionNone
+			}
+			block := Block{
+				ID:      idOr(b.ID, "pb"),
+				Options: []Exercise{},
+				RestSec: min(max(b.RestSec, 0), 3600),
+				Section: section,
+			}
 			for _, e := range b.Options {
 				exName := strings.TrimSpace(e.Name)
 				if exName == "" {
@@ -157,6 +169,12 @@ func normalizeDays(days []Day) ([]Day, error) {
 				kind := e.Kind
 				if !ValidKind(kind) {
 					kind = KindWeight
+				}
+				// A section is time work — a warm-up measured in reps at a
+				// load is not a warm-up. Forced here as well as in the editor
+				// so the rule holds whatever wrote the plan.
+				if section != SectionNone {
+					kind = KindTime
 				}
 				block.Options = append(block.Options, Exercise{
 					ID:          idOr(e.ID, "pe"),

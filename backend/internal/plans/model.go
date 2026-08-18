@@ -69,6 +69,33 @@ type Block struct {
 	// changing station are two different numbers, and one field could only
 	// ever be right about one of them. Zero means no break is planned.
 	RestSec int `json:"restSec"`
+	// Section marks a block as something other than working sets — a warm-up,
+	// a cool-down, stretching. Empty is an ordinary block.
+	//
+	// On the block rather than the day: a warm-up is five minutes at the top
+	// of a day that also has working sets, and stretching turns up at both
+	// ends. Unknown values are cleared on the way in rather than rejected, so
+	// a newer client cannot write something an older one renders as a blank.
+	Section Section `json:"section,omitempty"`
+}
+
+// Section is what a block is, when it is not working sets.
+type Section string
+
+const (
+	// SectionNone is an ordinary block of exercises.
+	SectionNone Section = ""
+	// SectionWarmup is the work done before the working sets.
+	SectionWarmup Section = "warmup"
+	// SectionCooldown is the work done after them.
+	SectionCooldown Section = "cooldown"
+	// SectionStretch is mobility work, which happens at either end.
+	SectionStretch Section = "stretch"
+)
+
+// ValidSection reports whether s is one this package knows.
+func ValidSection(s Section) bool {
+	return s == SectionNone || s == SectionWarmup || s == SectionCooldown || s == SectionStretch
 }
 
 // Kind is what an exercise is measured in.
@@ -221,6 +248,13 @@ type SetLog struct {
 	At string `json:"at,omitempty"`
 	// DurationSec is how long the set was held, for a timed exercise.
 	DurationSec int `json:"durationSec,omitempty"`
+	// StartedAt is when the set was begun, RFC 3339, set by the first tap.
+	//
+	// A set has three states in the runner — waiting, under way, done — and
+	// this is what tells the first two apart across a reload. It also gives
+	// history the length of the set itself rather than only the gap between
+	// one set being finished and the next.
+	StartedAt string `json:"startedAt,omitempty"`
 }
 
 // EffectivePicks is which options are being done in this block.
