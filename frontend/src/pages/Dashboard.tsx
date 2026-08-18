@@ -16,6 +16,7 @@ import Sparkline from '../components/Sparkline'
 import { api, type Equipment } from '../lib/api'
 import { clockLabel, elapsedSec } from '../data/plans'
 import { useActiveSession } from '../context/ActiveSessionContext'
+import useTicker from '../lib/useTicker'
 import { AXIS_TICK, GRID_PROPS, HOVER_FILL, recencyRamp } from '../lib/chartColors'
 import { useThemeTokens } from '../lib/useThemeTokens'
 import {
@@ -625,6 +626,9 @@ export default function Dashboard({ onSelect, onResumeSession }: {
   // App-wide rather than fetched here: the nav shows the same thing, and two
   // copies of "is a session running" could disagree after one was finished.
   const { active: running } = useActiveSession()
+  // The resume card shows a clock; without this it only moved when something
+  // else on the page happened to re-render.
+  useTicker(1000, !!running)
 
   useEffect(() => {
     let active = true

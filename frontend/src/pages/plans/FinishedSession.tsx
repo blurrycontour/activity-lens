@@ -1,11 +1,11 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import PageHeader from '../../components/PageHeader'
 import Confetti from '../../components/Confetti'
 import { Check, Timer } from 'lucide-react'
 import {
   blockLabel, blockProgress, chosenExercises, clockLabel, doneSetsFor, durationShort,
-  elapsedSec, sessionWhen, setsFor, trimNum,
-  type PlanExercise, type PlanSession, type SetLog,
+  elapsedSec, sectionLabel, sessionWhen, setsFor, trimNum,
+  type BlockSection, type PlanExercise, type PlanSession, type SetLog,
 } from '../../data/plans'
 
 /** One set as it was recorded, with the moment before it to measure against. */
@@ -26,6 +26,8 @@ interface DoneExercise {
 interface DoneBlock {
   id: string
   label: string
+  /** Empty for working sets; a warm-up and its kin are drawn differently. */
+  section: BlockSection
   exercises: DoneExercise[]
   /** Options that were there but not taken. */
   skipped: string[]
@@ -88,8 +90,8 @@ export default function FinishedSession({ session, onBack }: {
 
         <div className="plan-rows">
           {blocks.map(block => (
-            <div key={block.id}>
-              <div className={`plan-ex plan-ex-read${block.label ? ' plan-ex-grouped' : ''}`}>
+            <Fragment key={block.id}>
+              <div className={`plan-ex plan-ex-read${block.section ? ' plan-ex-section' : block.label ? ' plan-ex-grouped' : ''}`}>
                 {block.label && <span className="field-label plan-read-kind">{block.label}</span>}
                 {block.exercises.map(({ ex, done, sets }) => (
                   <div key={ex.id} className="plan-done-ex">
@@ -124,7 +126,7 @@ export default function FinishedSession({ session, onBack }: {
                   </span>
                 </div>
               )}
-            </div>
+            </Fragment>
           ))}
         </div>
 
@@ -195,7 +197,8 @@ function readBack(session: PlanSession): DoneBlock[] {
 
     out.push({
       id: b.id,
-      label: blockLabel(b),
+      label: b.section ? sectionLabel(b.section) : blockLabel(b),
+      section: b.section,
       exercises,
       skipped: b.options.filter(o => !chosen.includes(o)).map(o => o.name),
       plannedBreakSec: b.restSec,

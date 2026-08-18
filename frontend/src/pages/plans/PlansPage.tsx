@@ -20,6 +20,8 @@ import {
 import { clearCachedProgress } from './sessionCache'
 import { useActiveSession } from '../../context/ActiveSessionContext'
 import { useLongPress } from '../../lib/useLongPress'
+import { useSelection } from '../../lib/useSelection'
+import useTicker from '../../lib/useTicker'
 
 interface Props {
   /** From the URL: a plan id, or "session" with a session id in `detail`. */
@@ -51,10 +53,6 @@ export default function PlansPage({ section, detail, onOpen }: Props) {
   const [editing, setEditing] = useState(false)
   const [query, setQuery] = useState('')
   const [az, setAz] = useState(true)
-  // Selecting plans to delete, the same gesture and the same row of controls
-  // history uses. Null means not selecting at all, which is different from
-  // selecting nothing.
-  const [picked, setPicked] = useState<Set<string> | null>(null)
   const [confirmBulk, setConfirmBulk] = useState(false)
   const [bulkBusy, setBulkBusy] = useState(false)
   // Which plan is waiting for a day to be picked, from the list's start button.
@@ -63,17 +61,22 @@ export default function PlansPage({ section, detail, onOpen }: Props) {
   // line on the list, so it is shown wherever the tap happened.
   const [conflict, setConflict] = useState(false)
   const [names, setNames] = useState<string[]>([])
-  // The three seconds between pressing start and the session opening. Refs
-  // rather than state because the countdown and the request race, and whichever
-  // finishes second is the one that has to act on the other's result.
+  // The three seconds between pressing start and the session existing. The
+  // request is held here until the count reaches zero.
   const [counting, setCounting] = useState(false)
-  const created = useRef<PlanSession | null>(null)
+  const pending = useRef<{ planId: string; dayId: string } | null>(null)
   const cancelled = useRef(false)
-  const countDone = useRef(false)
+
+  // Selecting plans to delete: the same gesture, the same toolbar and the same
+  // back-to-cancel behaviour as workouts and history.
+  const sel = useSelection<string>()
 
   // Shared with the dashboard and the navigation's live dot, so finishing a
   // session here takes the dot down everywhere at once.
   const { active, refresh: refreshActive, set: setActive } = useActiveSession()
+  // The banner shows a clock, so something has to make it move. Only while
+  // there is a session to show one for.
+  useTicker(1000, !!active)
 
   const load = useCallback(async () => {
     try {
@@ -153,36 +156,53 @@ export default function PlansPage({ section, detail, onOpen }: Props) {
   }
 
   /**
-   * Starting a day: three seconds on the screen, and the session created
-   * behind them.
+   * Starting a day: three seconds on the screen, then the session.
    *
-   * The countdown is for the person, not the request — it is the gap between
-   * pressing start and being ready to lift, and it gives a mistaken tap
-   * somewhere to be undone. The session is created while it runs, so the
-   * countdown costs nothing: by the time it reaches zero the server has
-   * usually answered, and cancelling deletes whatever it answered with.
+   * The session is created *after* the count, not during it. A session's clock
+   * starts the moment the server writes it, so creating it up front meant the
+   * first three seconds of every session were the countdown — the elapsed time
+   * was already running while the screen still said 3.
+   *
+   * The conflict is checked before the count for the same reason in reverse:
+   * we already know whether something is running, so counting down and then
+   * refusing was three seconds spent on an answer we had at the first tap.
    */
-  async function start(planId: string, dayId: string) {
+  function start(planId: string, dayId: string) {
     setStarting(null)
+    if (active) {
+      setConflict(true)
+      return
+    }
     cancelled.current = false
-    countDone.current = false
-    created.current = null
+    pending.current = { planId, dayId }
     setCounting(true)
+  }
+
+  /** The count reached zero: create it now, and go. */
+  async function beginSession() {
+    const req = pending.current
+    pending.current = null
+    if (!req || cancelled.current) return
     try {
-      const s = await api.startPlanSession(planId, dayId)
+      const s = await api.startPlanSession(req.planId, req.dayId)
       if (cancelled.current) {
+        // Cancelled between the request and its answer — the session exists
+        // for a moment and must not be left behind.
         void api.deletePlanSession(s.id)
         return
       }
-      created.current = s
       setActive(s)
-      if (countDone.current) enterSession(s)
+      enterSession(s)
     } catch (e) {
       setCounting(false)
-      // 409 is the one worth handling: the answer is not an error message but
-      // a way to the session already running.
-      if (e instanceof Error && /already running/i.test(e.message)) setConflict(true)
-      else setError('Could not start the session.')
+      // Still handled, because the check above only knows what this tab knows:
+      // another device may have started one a second ago.
+      if (e instanceof Error && /already running/i.test(e.message)) {
+        void refreshActive()
+        setConflict(true)
+      } else {
+        setError('Could not start the session.')
+      }
     }
   }
 
@@ -196,13 +216,8 @@ export default function PlansPage({ section, detail, onOpen }: Props) {
 
   function cancelStart() {
     cancelled.current = true
+    pending.current = null
     setCounting(false)
-    const s = created.current
-    if (s) {
-      created.current = null
-      setActive(null)
-      void api.deletePlanSession(s.id)
-    }
   }
 
   /** Straight into the day when there is only one; ask when there are several. */
@@ -221,8 +236,6 @@ export default function PlansPage({ section, detail, onOpen }: Props) {
       .catch(() => setError('Could not open that plan.'))
   }
 
-  const selecting = picked !== null
-
   /**
    * Deleting the selected plans.
    *
@@ -231,13 +244,12 @@ export default function PlansPage({ section, detail, onOpen }: Props) {
    * list is a second place for the ownership check to be written.
    */
   async function deletePicked() {
-    if (!picked) return
     setBulkBusy(true)
-    const ids = [...picked]
+    const ids = sel.ids
     try {
       await Promise.all(ids.map(id => api.deletePlan(id)))
-      setPlans(cur => cur?.filter(p => !picked.has(p.id)) ?? cur)
-      setPicked(null)
+      setPlans(cur => cur?.filter(p => !ids.includes(p.id)) ?? cur)
+      sel.stop()
       setConfirmBulk(false)
     } catch {
       setError('Could not delete all of those plans.')
@@ -253,7 +265,7 @@ export default function PlansPage({ section, detail, onOpen }: Props) {
     return [...matched].sort((a, b) => a.name.localeCompare(b.name) * (az ? 1 : -1))
   }, [plans, query, az])
 
-  const allPicked = shown.length > 0 && shown.every(p => picked?.has(p.id))
+  const allPicked = shown.length > 0 && shown.every(p => sel.selected?.has(p.id))
 
   // The dialogs that can be open over any surface below.
   const overlays = (
@@ -271,15 +283,7 @@ export default function PlansPage({ section, detail, onOpen }: Props) {
       {starting && (
         <DayPicker plan={starting} onPick={id => start(starting.id, id)} onCancel={() => setStarting(null)} />
       )}
-      {counting && (
-        <Countdown
-          onDone={() => {
-            countDone.current = true
-            if (created.current) enterSession(created.current)
-          }}
-          onCancel={cancelStart}
-        />
-      )}
+      {counting && <Countdown onDone={beginSession} onCancel={cancelStart} />}
     </>
   )
 
@@ -401,11 +405,10 @@ export default function PlansPage({ section, detail, onOpen }: Props) {
           </div>
         ) : (
           <>
-            {/* Search earns its place once there are more than a handful, and
-                costs a row of chrome before that — but the row is also where
-                the selection controls live, so a short list that has been put
-                into selection still needs it. */}
-            {(plans.length > 4 || selecting) && (
+            {/* Always, not once there are five: the row carries the selection
+                controls as well as the search, and a list you cannot select
+                from is a list with no way to delete anything. */}
+            {(
               <ListTools
                 query={query}
                 onQuery={setQuery}
@@ -421,13 +424,15 @@ export default function PlansPage({ section, detail, onOpen }: Props) {
                     {az ? 'A–Z' : 'Z–A'}
                   </button>
                 }
-                selecting={selecting}
-                count={picked?.size ?? 0}
+                noun="plans"
+                selecting={sel.selecting}
+                count={sel.count}
+                total={shown.length}
                 allSelected={allPicked}
-                onSelect={() => setPicked(new Set())}
-                onToggleAll={() => setPicked(allPicked ? new Set() : new Set(shown.map(p => p.id)))}
+                onSelect={() => sel.start()}
+                onToggleAll={() => sel.setSelected(allPicked ? new Set() : new Set(shown.map(p => p.id)))}
                 onDelete={() => setConfirmBulk(true)}
-                onCancel={() => setPicked(null)}
+                onCancel={() => sel.stop()}
               />
             )}
 
@@ -441,17 +446,12 @@ export default function PlansPage({ section, detail, onOpen }: Props) {
                   <PlanRow
                     key={p.id}
                     plan={p}
-                    selecting={selecting}
-                    picked={picked?.has(p.id) ?? false}
+                    selecting={sel.selecting}
+                    picked={sel.selected?.has(p.id) ?? false}
                     onOpen={() => onOpen(p.id)}
                     onStart={() => startFromList(p)}
-                    onToggle={() => setPicked(cur => {
-                      const next = new Set(cur ?? [])
-                      if (next.has(p.id)) next.delete(p.id)
-                      else next.add(p.id)
-                      return next
-                    })}
-                    onLongPress={() => setPicked(new Set([p.id]))}
+                    onToggle={() => sel.toggle(p.id)}
+                    onLongPress={() => sel.start(p.id)}
                   />
                 ))}
               </div>
@@ -463,15 +463,15 @@ export default function PlansPage({ section, detail, onOpen }: Props) {
       {/* Only over the plans, and only when not picking things to delete:
           "new plan" is not the action you are reaching for while reading what
           you already did, nor while choosing what to throw away. */}
-      {tab === 'plans' && !selecting && (
+      {tab === 'plans' && !sel.selecting && (
         <button className="fab" onClick={() => setNaming(true)} title="New plan" aria-label="New plan">
           <Plus size={22} />
         </button>
       )}
 
-      {confirmBulk && picked && (
+      {confirmBulk && (
         <ConfirmDialog
-          title={`Delete ${picked.size} plan${picked.size === 1 ? '' : 's'}?`}
+          title={`Delete ${sel.count} plan${sel.count === 1 ? '' : 's'}?`}
           message="The plans and their days go. Sessions you have already run stay in your history, with the exercises as they were on the day."
           confirmLabel="Delete"
           danger

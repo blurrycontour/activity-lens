@@ -36,6 +36,25 @@ export interface PlanExercise {
 }
 
 /**
+ * What a block is, when it is not working sets.
+ *
+ * On the block rather than the day: a warm-up is five minutes at the top of a
+ * day that also has working sets, and stretching turns up at both ends.
+ */
+export type BlockSection = '' | 'warmup' | 'cooldown' | 'stretch'
+
+/** The label and colour role each section wears, in one place. */
+export const SECTIONS: { id: Exclude<BlockSection, ''>; label: string }[] = [
+  { id: 'warmup', label: 'Warm-up' },
+  { id: 'cooldown', label: 'Cool-down' },
+  { id: 'stretch', label: 'Stretching' },
+]
+
+export function sectionLabel(s: BlockSection): string {
+  return SECTIONS.find(x => x.id === s)?.label ?? ''
+}
+
+/**
  * One slot in a day, holding one or more exercises.
  *
  * `required` is the whole of a block's behaviour: 1 is choose-one, the number
@@ -50,6 +69,8 @@ export interface PlanBlock {
    * PlanExercise.restSec, the wait between sets of the same exercise.
    */
   restSec: number
+  /** Empty for an ordinary block of exercises. Sections are always timed. */
+  section: BlockSection
 }
 
 export interface PlanDay {
@@ -81,6 +102,14 @@ export interface SetLog {
   at?: string
   /** How long it was actually held, for a timed exercise. */
   durationSec?: number
+  /**
+   * When the set was begun, RFC 3339 — written by the first tap.
+   *
+   * A set has three states in the runner: waiting, under way, done. This is
+   * what tells the first two apart, and what survives a reload so a session
+   * picked up again knows which set was in the middle of being performed.
+   */
+  startedAt?: string
 }
 
 export interface BlockProgress {
@@ -179,10 +208,46 @@ export function leadingDone(sets: SetLog[]): number {
   return n
 }
 
-/** Whether a set may be tapped: the next one to do, or the last one done. */
+/**
+ * What state a set is in.
+ *
+ * Three, not two. A set is a thing you are in the middle of for a minute or so,
+ * and a single tick could only say whether it had happened — which left the
+ * timer for a plank with nothing to start from, and the card with no way to
+ * show what you were actually doing right now.
+ */
+export type SetState = 'idle' | 'running' | 'done'
+
+export function setState(sets: SetLog[], index: number): SetState {
+  const s = sets[index]
+  if (s?.done) return 'done'
+  return s?.startedAt ? 'running' : 'idle'
+}
+
+/**
+ * Whether a set may be tapped.
+ *
+ * Only the one at the front of the queue — start it, then finish it — and the
+ * last one finished, so a mis-tap can be taken back. Sets stay a run from the
+ * start, which is what every timing derived from them assumes.
+ */
 export function setTappable(sets: SetLog[], index: number): boolean {
   const n = leadingDone(sets)
   return index === n || index === n - 1
+}
+
+/**
+ * The block being worked on: the first one not finished.
+ *
+ * Drives the one card that wears the accent while a session runs. Reading it
+ * from progress rather than storing it means it cannot fall out of step with
+ * what has actually been ticked.
+ */
+export function currentBlockId(session: PlanSession, progress: SessionProgress): string {
+  for (const b of session.snapshot.blocks) {
+    if (!blockComplete(b, blockProgress(progress, b.id))) return b.id
+  }
+  return ''
 }
 
 export function exerciseComplete(ex: PlanExercise, sets: SetLog[]): boolean {
@@ -322,8 +387,12 @@ export function newExercise(): PlanExercise {
   return { id: '', name: '', kind: 'weight', sets: 3, reps: '10', durationSec: 0, weightKg: 0, restSec: 0, note: '' }
 }
 
-export function newBlock(): PlanBlock {
-  return { id: '', options: [newExercise()], required: 1, restSec: 0 }
+export function newBlock(section: BlockSection = ''): PlanBlock {
+  const ex = newExercise()
+  // A section is time work by definition, and the server enforces the same
+  // rule — a warm-up written in reps at a load is not a warm-up.
+  if (section) return { id: '', options: [{ ...ex, kind: 'time', sets: 1, durationSec: 300 }], required: 1, restSec: 0, section }
+  return { id: '', options: [ex], required: 1, restSec: 0, section: '' }
 }
 
 export function newDay(name: string): PlanDay {

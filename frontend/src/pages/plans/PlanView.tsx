@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { MoreVertical, Pencil, Play, Timer, Trash2 } from 'lucide-react'
 import PageHeader from '../../components/PageHeader'
 import MenuButton from '../../components/MenuButton'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import { api } from '../../lib/api'
 import {
-  blockLabel, durationShort, targetLabel, type PlanDay, type TrainingPlan,
+  blockLabel, durationShort, sectionLabel, targetLabel, type PlanDay, type TrainingPlan,
 } from '../../data/plans'
 
 interface Props {
@@ -118,17 +118,19 @@ export default function PlanView({ plan, onBack, onEdit, onRename, onStart, onDe
         ) : (
           <div className="plan-rows">
             {day.blocks.map((block, i) => (
-              <div key={block.id}>
+              <Fragment key={block.id}>
                 {/* A block holding more than one exercise is drawn as a block:
                     a strength-coloured frame with the phrase that says what it
                     asks for. Rendered flat, a superset and three unrelated
                     exercises were the same three rows. */}
-                <div className={`plan-ex plan-ex-read${block.options.length > 1 ? ' plan-ex-grouped' : ''}`}>
+                <div className={`plan-ex plan-ex-read${block.section ? ' plan-ex-section' : block.options.length > 1 ? ' plan-ex-grouped' : ''}`}>
                   <div className="plan-ex-top">
                     <span className="plan-ex-index">{i + 1}</span>
                     <div className="plan-read-body">
-                      {block.options.length > 1 && (
-                        <span className="field-label plan-read-kind">{blockLabel(block)}</span>
+                      {(block.section || block.options.length > 1) && (
+                        <span className="field-label plan-read-kind">
+                          {block.section ? sectionLabel(block.section) : blockLabel(block)}
+                        </span>
                       )}
                       {block.options.map(ex => (
                         <div className="plan-read-row" key={ex.id}>
@@ -155,7 +157,7 @@ export default function PlanView({ plan, onBack, onEdit, onRename, onStart, onDe
                     </span>
                   </div>
                 )}
-              </div>
+              </Fragment>
             ))}
           </div>
         )}

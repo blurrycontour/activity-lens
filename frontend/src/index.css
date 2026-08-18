@@ -5935,19 +5935,24 @@ body:has(.overlay) .fab { display: none; }
   border-radius: calc(var(--radius) * 1.5);
   padding: 12px 14px;
 }
-/* The rail the Workouts row uses, in the sport's own colour, turning green
-   when the block is finished — state in form as well as in the count. */
-.plan-ex::before {
+/* The rail marks the block being worked on, and nothing else.
+   
+   It used to sit on every card, in every view, which made a plan being read a
+   wall of purple stripes and left the runner with no way to say which exercise
+   you were actually on. One card wearing it is worth more than all of them. */
+.plan-ex.current::before {
   content: '';
   position: absolute;
   left: 0;
   top: 0;
   bottom: 0;
   width: 3px;
-  background: var(--strength);
-  opacity: 0.5;
+  background: var(--primary);
 }
-.plan-ex.done::before { background: var(--success); opacity: 1; }
+.plan-ex.current {
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--border));
+  background: color-mix(in srgb, var(--primary) 5%, var(--bg-2));
+}
 .plan-ex.done .plan-ex-title { color: var(--text-3); text-decoration: line-through; }
 /* Not on a grouped block, whose purple frame says something the open state
    does not — the rotated caret already marks open. */
@@ -5998,8 +6003,31 @@ body:has(.overlay) .fab { display: none; }
   display: grid;
   place-items: center;
 }
-.plan-set:hover { border-color: var(--border-strong); color: var(--text); }
-.plan-set[aria-pressed='true'] {
+.plan-set:hover:not(:disabled) { border-color: var(--border-strong); color: var(--text); }
+/* Under way: the one thing on a page of static squares that is happening now,
+   so the border travels. Read from a metre away with a barbell in the way. */
+.plan-set.running {
+  border-style: dashed;
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--primary-dim);
+  animation: set-march 0.9s linear infinite;
+}
+@keyframes set-march {
+  to { background-position: 12px 0; }
+}
+.plan-set.running {
+  background-image: repeating-linear-gradient(
+    45deg,
+    color-mix(in srgb, var(--primary) 16%, transparent) 0 3px,
+    transparent 3px 6px
+  );
+  background-size: 12px 12px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .plan-set.running { animation: none; }
+}
+.plan-set.done {
   background: var(--success);
   border-color: var(--success);
   color: var(--bg);
@@ -6025,6 +6053,7 @@ body:has(.overlay) .fab { display: none; }
   border-radius: var(--radius);
 }
 .plan-setrow.done { border-color: var(--success); }
+.plan-setrow.running { border-color: var(--primary); border-style: dashed; }
 .plan-setrow-tick {
   width: 30px;
   height: 30px;
@@ -6697,8 +6726,98 @@ body:has(.overlay) .fab { display: none; }
 /* Selecting replaces search rather than appearing under it: two rows of chrome
    above a list is most of a phone screen, and search is not something you want
    while picking things to delete. */
-.plan-select-count { font-size: 12px; color: var(--text-2); }
-.plan-select-bar { align-items: center; }
 /* Both labels reserve the same width, so toggling the sort does not resize the
    button and shove the search field beside it. */
 .plan-sort { justify-content: center; min-width: 104px; }
+
+/* ── Training plans: sections, timers, fullscreen ───────────────────── */
+
+/* A warm-up, cool-down or stretch. Visibly not working sets: dashed rather
+   than solid, in the "hike" amber so it reads as the easy end of the day
+   without competing with the strength purple a superset wears. */
+.plan-ex-section,
+.plan-section {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--hike) 55%, var(--border));
+  background: color-mix(in srgb, var(--hike) 7%, transparent);
+}
+.plan-ex-section .plan-read-kind,
+.plan-section .plan-block-head .al-dropdown-trigger { color: var(--hike); }
+.plan-add-section:hover { border-color: var(--hike); }
+
+/* An exercise inside a block: its own name, then its own row of squares.
+   The name used to sit to the left of the squares, which left a superset's
+   rows starting in different places and the timer nowhere to go but the next
+   line. */
+.plan-ex-line { display: flex; flex-direction: column; gap: 6px; margin-top: 9px; }
+.plan-ex-line .plan-read-row { align-items: baseline; }
+.plan-ex-line .plan-sets { margin-top: 0; align-items: center; }
+
+.plan-add-row-group { display: flex; flex-direction: column; gap: 8px; }
+
+/* --- The timer's row, above the player --- */
+
+.plan-timer-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--warning) 8%, var(--bg-2));
+}
+.plan-timer-bar .btn { padding: 5px 11px; font-size: 12px; }
+.plan-timer-now {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--warning);
+}
+.plan-timer-now.up { color: var(--success); }
+.plan-timer-what {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+}
+
+/* Working or waiting, at a glance. */
+.plan-player-state {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--bg-3);
+  color: var(--text-2);
+}
+.plan-player-state.resting { color: var(--warning); }
+
+/* --- Fullscreen --- */
+
+/* The session with the app taken away from around it. Everything that goes is
+   rendered outside the runner — the top bar, the sidebar, the tab bar — which
+   is why this is a class on the body rather than a prop threaded through. */
+body.session-full .topbar,
+body.session-full .sidebar,
+body.session-full .bottom-bar { display: none !important; }
+body.session-full { --topbar-h: 0px; --bottombar-h: 0px; }
+body.session-full .plan-player { bottom: 0; padding-bottom: var(--safe-bottom); }
+
+/* --- The selection toolbar, shared by workouts, plans and history --- */
+
+.selection-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+.selection-count { font-size: 13px; font-weight: 600; }
+.selection-all { margin-left: auto; }
+.selection-delete { color: var(--danger); }
+.selection-delete:disabled { opacity: 0.45; }

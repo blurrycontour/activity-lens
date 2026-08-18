@@ -8,8 +8,8 @@ import ExerciseNameInput from './ExerciseNameInput'
 import { adoptIds, withoutDrafts } from './draftPlan'
 import { api } from '../../lib/api'
 import {
-  blockRequired, durationShort, newBlock, newDay, newExercise, requiredPhrase,
-  type ExerciseKind, type PlanBlock, type PlanDay, type PlanExercise, type TrainingPlan,
+  SECTIONS, blockRequired, durationShort, newBlock, newDay, newExercise, requiredPhrase,
+  type BlockSection, type ExerciseKind, type PlanBlock, type PlanDay, type PlanExercise, type TrainingPlan,
 } from '../../data/plans'
 
 interface Props {
@@ -225,6 +225,7 @@ export default function PlanEditor({ plan, onDone, onSaved, suggestions }: Props
                     onMoveOption={(oi, by) => patchBlock(bi, b => ({ ...b, options: reorder(b.options, oi, by) }))}
                     onPatch={(oi, patch) => patchExercise(bi, oi, patch)}
                     onRequired={n => patchBlock(bi, b => ({ ...b, required: n }))}
+                    onSection={sec => patchBlock(bi, b => ({ ...b, section: sec }))}
                     onRemove={() => setPending({
                       kind: 'block', index: bi,
                       name: block.options.map(o => o.name).filter(Boolean).join(' / ') || 'this exercise',
@@ -233,7 +234,12 @@ export default function PlanEditor({ plan, onDone, onSaved, suggestions }: Props
                       kind: 'option', block: bi, option: oi,
                       name: block.options[oi].name || 'this option',
                     })}
-                    onAddOption={() => patchBlock(bi, b => ({ ...b, options: [...b.options, newExercise()] }))}
+                    onAddOption={() => patchBlock(bi, b => ({
+                      ...b,
+                      options: [...b.options, b.section
+                        ? { ...newExercise(), kind: 'time' as const, sets: 1, durationSec: 300 }
+                        : newExercise()],
+                    }))}
                   />
                   <BreakRow
                     seconds={block.restSec}
@@ -243,12 +249,24 @@ export default function PlanEditor({ plan, onDone, onSaved, suggestions }: Props
                 </div>
               ))}
 
-              <button
-                className="plan-add-row"
-                onClick={() => patchDay(d => ({ ...d, blocks: [...d.blocks, newBlock()] }))}
-              >
-                <Plus size={15} /> Add exercise
-              </button>
+              <div className="plan-add-row-group">
+                <button
+                  className="plan-add-row"
+                  onClick={() => patchDay(d => ({ ...d, blocks: [...d.blocks, newBlock()] }))}
+                >
+                  <Plus size={15} /> Add exercise
+                </button>
+                {/* A warm-up is not an exercise with different numbers in it —
+                    it is a few minutes at one end of the day. Added as its own
+                    thing so it arrives already timed and already looking
+                    different from the working sets. */}
+                <button
+                  className="plan-add-row plan-add-section"
+                  onClick={() => patchDay(d => ({ ...d, blocks: [...d.blocks, newBlock('warmup')] }))}
+                >
+                  <Plus size={15} /> Add warm-up or stretch
+                </button>
+              </div>
             </div>
           </>
         )}
@@ -291,6 +309,10 @@ function BreakRow({ seconds, last, onChange }: {
   last: boolean
   onChange: (s: number) => void
 }) {
+  // Whether the chip is a field at all, as opposed to the "add" button. Held
+  // separately from the value: backspacing a 90 down to nothing used to take
+  // the whole control away mid-edit, because an empty field and no break at
+  // all were the same state.
   const [editing, setEditing] = useState(false)
   if (last) return null
 
@@ -317,7 +339,10 @@ function BreakRow({ seconds, last, onChange }: {
           value={seconds || ''}
           placeholder="90"
           aria-label="Break before the next exercise, in seconds"
+          onFocus={() => setEditing(true)}
           onChange={e => onChange(Math.max(0, parseInt(e.target.value, 10) || 0))}
+          // Leaving an empty field is what removes the break — that is a
+          // decision, where a keystroke on the way to another number is not.
           onBlur={() => setEditing(false)}
         />
         <span>s break</span>
@@ -342,6 +367,7 @@ interface BlockProps {
   onMoveOption: (option: number, by: number) => void
   onPatch: (option: number, patch: Partial<PlanExercise>) => void
   onRequired: (n: number) => void
+  onSection: (s: BlockSection) => void
   onRemove: () => void
   onRemoveOption: (option: number) => void
   onAddOption: () => void
@@ -357,19 +383,27 @@ interface BlockProps {
  */
 function BlockEditor({
   block, first, last, suggestions,
-  onMove, onMoveOption, onPatch, onRequired, onRemove, onRemoveOption, onAddOption,
+  onMove, onMoveOption, onPatch, onRequired, onSection, onRemove, onRemoveOption, onAddOption,
 }: BlockProps) {
   const group = block.options.length > 1
 
   return (
-    <div className={group ? 'plan-group' : 'plan-edit-block'}>
-      {group && (
+    <div className={block.section ? 'plan-group plan-section' : group ? 'plan-group' : 'plan-edit-block'}>
+      {(group || block.section) && (
         <div className="plan-block-head">
+          {block.section && (
+            <Dropdown
+              value={block.section}
+              onChange={(v: BlockSection) => onSection(v)}
+              ariaLabel="What this section is"
+              options={SECTIONS.map(x => ({ value: x.id, label: x.label }))}
+            />
+          )}
           {/* One control saying the whole thing, rather than a number between
               two words: "Do [2] of 3" needed three elements and a hint beside
               them to explain itself, and read as arithmetic. The app's own
               dropdown, so it looks like every other picker in the product. */}
-          <Dropdown
+          {group && <Dropdown
             value={blockRequired(block)}
             onChange={onRequired}
             ariaLabel="How many of these exercises to do"
@@ -377,7 +411,7 @@ function BlockEditor({
               value: i + 1,
               label: requiredPhrase(i + 1, block.options.length),
             }))}
-          />
+          />}
           <RowMenu
             label="Block options"
             first={first}
@@ -403,6 +437,10 @@ function BlockEditor({
           onMove={by => (group ? onMoveOption(oi, by) : onMove(by))}
           onPatch={patch => onPatch(oi, patch)}
           onRemove={() => (group ? onRemoveOption(oi) : onRemove())}
+          /* A section is time work, so the Type picker is not a choice it
+             has: hidden rather than shown-and-locked, which would be a
+             control that exists to be disabled. */
+          timedOnly={!!block.section}
         />
       ))}
 
@@ -448,16 +486,18 @@ function RowMenu({ label, first, last, onMove, onRemove, removeLabel }: {
 }
 
 /** The fields for one exercise, which depend on what it is measured in. */
-function ExerciseFields({ ex, suggestions, first, last, onMove, onPatch, onRemove }: {
+function ExerciseFields({ ex, suggestions, first, last, timedOnly, onMove, onPatch, onRemove }: {
   ex: PlanExercise
   suggestions: string[]
   first: boolean
   last: boolean
+  /** Inside a section, where everything is measured in seconds. */
+  timedOnly?: boolean
   onMove: (by: number) => void
   onPatch: (patch: Partial<PlanExercise>) => void
   onRemove: () => void
 }) {
-  const timed = ex.kind === 'time'
+  const timed = timedOnly || ex.kind === 'time'
   return (
     <div className="plan-erow">
       {/* Every other field on this row is labelled; the one that says what the
@@ -484,7 +524,7 @@ function ExerciseFields({ ex, suggestions, first, last, onMove, onPatch, onRemov
       </div>
 
       <div className="plan-efields">
-        <label className="plan-kind-field">
+        {!timedOnly && <label className="plan-kind-field">
           <span className="field-label">Type</span>
           {/* What the exercise is measured in, which decides the rest of the
               row. Before this, a plank could only be written by typing "45 s"
@@ -500,7 +540,7 @@ function ExerciseFields({ ex, suggestions, first, last, onMove, onPatch, onRemov
               { value: 'time', label: 'Time' },
             ]}
           />
-        </label>
+        </label>}
 
         <label>
           <span className="field-label">Sets</span>

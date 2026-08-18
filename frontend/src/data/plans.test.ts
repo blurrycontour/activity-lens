@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  blockLabel, clockLabel, leadingDone, requiredPhrase, setTappable,
-  type PlanBlock, type PlanExercise, type SetLog,
+  blockLabel, clockLabel, currentBlockId, leadingDone, requiredPhrase, setState, setTappable,
+  type PlanBlock, type PlanExercise, type PlanSession, type SetLog,
 } from './plans'
 
 function ex(name: string): PlanExercise {
@@ -9,7 +9,7 @@ function ex(name: string): PlanExercise {
 }
 
 function block(required: number, ...names: string[]): PlanBlock {
-  return { id: 'b', required, restSec: 0, options: names.map(ex) }
+  return { id: 'b', required, restSec: 0, section: '', options: names.map(ex) }
 }
 
 function sets(...done: boolean[]): SetLog[] {
@@ -78,5 +78,65 @@ describe('clockLabel', () => {
 
   it('does not go backwards on a clock that is slightly out', () => {
     expect(clockLabel(-5)).toBe('0:00')
+  })
+})
+
+describe('setState', () => {
+  // Two taps, three states. A single tick could only say whether a set had
+  // happened, which left a plank's timer nothing to start from.
+  it('reads the three states a set can be in', () => {
+    const logs: SetLog[] = [
+      { done: true, weightKg: 0, startedAt: 'x', at: 'y' },
+      { done: false, weightKg: 0, startedAt: 'x' },
+      { done: false, weightKg: 0 },
+    ]
+    expect(setState(logs, 0)).toBe('done')
+    expect(setState(logs, 1)).toBe('running')
+    expect(setState(logs, 2)).toBe('idle')
+    expect(setState(logs, 9)).toBe('idle')
+  })
+
+  it('treats a done set as done even if it was never started', () => {
+    // Sessions recorded before sets had a start still read correctly.
+    expect(setState([{ done: true, weightKg: 0 }], 0)).toBe('done')
+  })
+
+  it('keeps a set under way out of the done count', () => {
+    const logs: SetLog[] = [{ done: true, weightKg: 0 }, { done: false, weightKg: 0, startedAt: 'x' }]
+    expect(leadingDone(logs)).toBe(1)
+    // The one under way is still the head of the queue, so it stays tappable.
+    expect(setTappable(logs, 1)).toBe(true)
+  })
+})
+
+describe('currentBlockId', () => {
+  function session(blocks: PlanBlock[]): PlanSession {
+    return {
+      id: 's', planName: 'P', dayName: 'D',
+      snapshot: { id: 'd', name: 'D', blocks },
+      progress: { blocks: {} },
+      startedAt: '2026-01-01T00:00:00Z',
+      doneSets: 0, totalSets: 0, volumeKg: 0, notes: '',
+    }
+  }
+
+  it('is the first block with work left in it', () => {
+    const a: PlanBlock = { id: 'a', required: 1, restSec: 0, section: '', options: [ex('Squat')] }
+    const b: PlanBlock = { id: 'b', required: 1, restSec: 0, section: '', options: [ex('Bench')] }
+    const s = session([a, b])
+    expect(currentBlockId(s, { blocks: {} })).toBe('a')
+
+    const done = { blocks: { a: { picks: [], sets: { Squat: [
+      { done: true, weightKg: 0 }, { done: true, weightKg: 0 }, { done: true, weightKg: 0 },
+    ] } } } }
+    expect(currentBlockId(s, done)).toBe('b')
+  })
+
+  it('is nothing once the whole day is finished', () => {
+    const a: PlanBlock = { id: 'a', required: 1, restSec: 0, section: '', options: [ex('Squat')] }
+    const done = { blocks: { a: { picks: [], sets: { Squat: [
+      { done: true, weightKg: 0 }, { done: true, weightKg: 0 }, { done: true, weightKg: 0 },
+    ] } } } }
+    expect(currentBlockId(session([a]), done)).toBe('')
   })
 })
