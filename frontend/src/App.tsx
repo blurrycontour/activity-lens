@@ -733,6 +733,8 @@ export default function App() {
           <Discover
             onOpenUser={id => openSection('users', String(id))}
             onSelectWorkout={selectWorkout}
+            onSelectPlan={p => openSection('plans', p.id)}
+            onSelectSession={s => openSection('plans', 'session', s.id)}
           />
         ) : page === 'users' ? (
           // section carries the user id; see ID_SECTION_PAGES in nav.ts.
@@ -756,6 +758,7 @@ export default function App() {
               section={section}
               detail={detail}
               onOpen={(sec, det) => openSection('plans', sec, det ?? null)}
+              onOpenUser={id => openSection('users', String(id))}
             />
           </Suspense>
         ) : page === 'settings' ? (

@@ -1,9 +1,12 @@
 import { Fragment, useState } from 'react'
-import { MoreVertical, Pencil, Play, Timer, Trash2 } from 'lucide-react'
+import { ClipboardList, Copy, MoreVertical, Pencil, Play, Share2, Timer, Trash2 } from 'lucide-react'
 import PageHeader from '../../components/PageHeader'
 import MenuButton from '../../components/MenuButton'
 import ConfirmDialog from '../../components/ConfirmDialog'
-import { api } from '../../lib/api'
+import ShareDialog from '../../components/ShareDialog'
+import ShareBadge from '../../components/ShareBadge'
+import UserAvatar, { userLabel } from '../../components/UserAvatar'
+import { api, ApiError } from '../../lib/api'
 import {
   blockLabel, durationShort, isBareSection, sectionLabel, trimNum,
   type PlanDay, type TrainingPlan,
@@ -16,6 +19,11 @@ interface Props {
   onRename: () => void
   onStart: (dayId: string) => void
   onDeleted: () => void
+  /** Called once a clone exists, with the new plan — the caller decides
+   *  where that lands (its own id, in the viewer's own library). */
+  onCloned: (plan: TrainingPlan) => void
+  /** Opens the plan's author, when it is not you. */
+  onOpenUser?: (id: number) => void
 }
 
 /**
@@ -27,14 +35,24 @@ interface Props {
  * came for (what am I doing today, and start it) buried among controls for
  * changing it. Editing is now a mode you ask for.
  */
-export default function PlanView({ plan, onBack, onEdit, onRename, onStart, onDeleted }: Props) {
+export default function PlanView({ plan, onBack, onEdit, onRename, onStart, onDeleted, onCloned, onOpenUser }: Props) {
   const [active, setActive] = useState(0)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [sharing, setSharing] = useState(false)
+  const [cloning, setCloning] = useState(false)
+  const [cloneError, setCloneError] = useState('')
+
+  // Absent (your own plan, fetched before sharing existed anywhere) reads as
+  // true — every call site before this feature only ever saw its own plans.
+  const isOwner = plan.isOwner !== false
 
   const days = plan.days ?? []
   const day: PlanDay | undefined = days[active]
-  const startable = !!day && day.blocks.length > 0
+  // Starting requires owning the plan server-side (StartSession looks it up
+  // by owner), so a shared or public plan offers Clone instead — there is
+  // nothing "Start" could do here but fail.
+  const startable = isOwner && !!day && day.blocks.length > 0
 
   async function deletePlan() {
     setBusy(true)
@@ -44,6 +62,17 @@ export default function PlanView({ plan, onBack, onEdit, onRename, onStart, onDe
     } catch {
       setBusy(false)
       setConfirmDelete(false)
+    }
+  }
+
+  async function clonePlan() {
+    setCloning(true)
+    setCloneError('')
+    try {
+      onCloned(await api.clonePlan(plan.id))
+    } catch (e) {
+      setCloneError(e instanceof ApiError ? e.message : 'Could not clone this plan.')
+      setCloning(false)
     }
   }
 
@@ -62,30 +91,55 @@ export default function PlanView({ plan, onBack, onEdit, onRename, onStart, onDe
            phone, and only one of the four is worth a permanent button. */
         actions={
           <div className="plan-run-actions">
-            <button
-              className="btn btn-primary desktop-only"
-              disabled={!startable}
-              onClick={() => day && onStart(day.id)}
-              title={startable ? undefined : 'Add an exercise first'}
-            >
-              <Play size={15} /> Start
-            </button>
+            {isOwner ? (
+              <button
+                className="btn btn-primary desktop-only"
+                disabled={!startable}
+                onClick={() => day && onStart(day.id)}
+                title={startable ? undefined : 'Add an exercise first'}
+              >
+                <Play size={15} /> Start
+              </button>
+            ) : (
+              <button className="btn btn-primary desktop-only" disabled={cloning} onClick={() => void clonePlan()}>
+                <Copy size={15} /> Clone
+              </button>
+            )}
             <MenuButton icon={<MoreVertical size={16} />} label="Plan options">
-              <button className="options-menu-item" onClick={onEdit}>
-                <Pencil size={14} /> Edit plan
-              </button>
-              <button className="options-menu-item" onClick={onRename}>
-                <Pencil size={14} /> Rename
-              </button>
-              <button className="options-menu-item danger" onClick={() => setConfirmDelete(true)}>
-                <Trash2 size={14} /> Delete plan
-              </button>
+              {isOwner ? (
+                <>
+                  <button className="options-menu-item" onClick={onEdit}>
+                    <Pencil size={14} /> Edit plan
+                  </button>
+                  <button className="options-menu-item" onClick={onRename}>
+                    <Pencil size={14} /> Rename
+                  </button>
+                  <button className="options-menu-item" onClick={() => setSharing(true)}>
+                    <Share2 size={14} /> Share
+                  </button>
+                  <button className="options-menu-item danger" onClick={() => setConfirmDelete(true)}>
+                    <Trash2 size={14} /> Delete plan
+                  </button>
+                </>
+              ) : (
+                <button className="options-menu-item" disabled={cloning} onClick={() => void clonePlan()}>
+                  <Copy size={14} /> Clone into your plans
+                </button>
+              )}
             </MenuButton>
           </div>
         }
       />
 
       <div className="page-content">
+        {!isOwner && plan.owner && (
+          <button type="button" className="owner-byline owner-byline-link plan-owner-byline" onClick={() => onOpenUser?.(plan.owner!.id)} disabled={!onOpenUser}>
+            <UserAvatar user={plan.owner} size={20} />
+            <span>By {userLabel(plan.owner)}</span>
+          </button>
+        )}
+        {isOwner && <ShareBadge workout={plan} />}
+        {cloneError && <div className="status-msg err" role="alert">{cloneError}</div>}
         {days.length > 1 && (
           <div className="plan-tabs" role="tablist" aria-label="Days">
             {days.map((d, i) => (
@@ -187,8 +241,11 @@ export default function PlanView({ plan, onBack, onEdit, onRename, onStart, onDe
         )}
       </div>
 
-      {/* The phone's start control, where the thumb is. */}
-      {startable && (
+      {/* The phone's start control, where the thumb is. Clone takes its
+          place on a plan that is not yours — starting is not an option
+          there, but copying it into your own library is the equivalent
+          one-tap action. */}
+      {startable ? (
         <button
           className="fab"
           onClick={() => day && onStart(day.id)}
@@ -196,6 +253,16 @@ export default function PlanView({ plan, onBack, onEdit, onRename, onStart, onDe
           aria-label={`Start ${day?.name ?? ''}`}
         >
           <Play size={22} />
+        </button>
+      ) : !isOwner && (
+        <button
+          className="fab"
+          disabled={cloning}
+          onClick={() => void clonePlan()}
+          title="Clone into your plans"
+          aria-label="Clone into your plans"
+        >
+          <Copy size={20} />
         </button>
       )}
 
@@ -208,6 +275,20 @@ export default function PlanView({ plan, onBack, onEdit, onRename, onStart, onDe
           busy={busy}
           onConfirm={deletePlan}
           onCancel={() => setConfirmDelete(false)}
+        />
+      )}
+
+      {sharing && (
+        <ShareDialog
+          kind="plan"
+          id={plan.id}
+          noun="plan"
+          subject={{
+            icon: <ClipboardList size={16} />,
+            name: plan.name,
+            meta: `${days.length} day${days.length === 1 ? '' : 's'}`,
+          }}
+          onClose={() => setSharing(false)}
         />
       )}
     </>

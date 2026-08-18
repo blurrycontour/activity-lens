@@ -1,7 +1,11 @@
 import { Fragment, useMemo, useState } from 'react'
 import PageHeader from '../../components/PageHeader'
 import Confetti from '../../components/Confetti'
-import { Check, Timer } from 'lucide-react'
+import MenuButton from '../../components/MenuButton'
+import ShareDialog from '../../components/ShareDialog'
+import ShareBadge from '../../components/ShareBadge'
+import UserAvatar, { userLabel } from '../../components/UserAvatar'
+import { Check, MoreVertical, Share2, Timer } from 'lucide-react'
 import {
   blockLabel, blockProgress, chosenExercises, clockLabel, doneSetsFor, durationShort,
   elapsedSec, sectionLabel, sessionWhen, setsFor, trimNum,
@@ -45,14 +49,20 @@ interface DoneBlock {
  * when each set happened. A row that only said "12 of 14 sets" would be a
  * summary of something nobody can look at.
  */
-export default function FinishedSession({ session, onBack }: {
+export default function FinishedSession({ session, onBack, onOpenUser }: {
   session: PlanSession
   onBack: () => void
+  /** Opens the session's author, when it is not you. */
+  onOpenUser?: (id: number) => void
 }) {
   const blocks = useMemo(() => readBack(session), [session])
+  const isOwner = session.isOwner !== false
+  const [sharing, setSharing] = useState(false)
   // Read once, on mount: claiming it during render would fire twice under
   // StrictMode and the second render would decide it had already been shown.
-  const [celebrate, setCelebrate] = useState(() => claimCelebration(session))
+  // Only for your own session — confetti on a result you did not produce
+  // would be celebrating the wrong person.
+  const [celebrate, setCelebrate] = useState(() => isOwner && claimCelebration(session))
 
   return (
     <>
@@ -61,8 +71,23 @@ export default function FinishedSession({ session, onBack }: {
         title={session.dayName}
         subtitle={`${session.planName} · ${sessionWhen(session.startedAt)}`}
         onBack={onBack}
+        compactActions
+        actions={isOwner ? (
+          <MenuButton icon={<MoreVertical size={16} />} label="Session options">
+            <button className="options-menu-item" onClick={() => setSharing(true)}>
+              <Share2 size={14} /> Share
+            </button>
+          </MenuButton>
+        ) : undefined}
       />
       <div className="page-content">
+        {!isOwner && session.owner && (
+          <button type="button" className="owner-byline owner-byline-link plan-owner-byline" onClick={() => onOpenUser?.(session.owner!.id)} disabled={!onOpenUser}>
+            <UserAvatar user={session.owner} size={20} />
+            <span>By {userLabel(session.owner)}</span>
+          </button>
+        )}
+        {isOwner && <ShareBadge workout={session} />}
         <div className="card plan-run-summary">
           <div className="plan-run-figures">
             <div className="stat-chip">
@@ -132,6 +157,20 @@ export default function FinishedSession({ session, onBack }: {
 
         {session.notes && <p className="plan-session-notes">{session.notes}</p>}
       </div>
+
+      {sharing && (
+        <ShareDialog
+          kind="session"
+          id={session.id}
+          noun="session"
+          subject={{
+            icon: <Check size={16} />,
+            name: session.dayName,
+            meta: `${session.planName} · ${sessionWhen(session.startedAt)}`,
+          }}
+          onClose={() => setSharing(false)}
+        />
+      )}
     </>
   )
 }

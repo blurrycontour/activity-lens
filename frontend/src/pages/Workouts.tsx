@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
-import { ALL_WORKOUT_TYPES, type WorkoutType, type Workout } from '../data/workouts'
+import { ALL_WORKOUT_TYPES, fmtDist, fmtDuration, TYPE_COLOR, type WorkoutType, type Workout } from '../data/workouts'
 import TypeIcon from '../components/TypeIcon'
 import ShareBadge from '../components/ShareBadge'
 import { useWorkouts } from '../context/WorkoutsContext'
@@ -578,7 +578,19 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
 
       {sharing && (
         <ShareDialog
-          workout={sharing}
+          kind="workout"
+          id={sharing.id}
+          noun="workout"
+          subject={{
+            icon: <TypeIcon type={sharing.type} />,
+            name: sharing.name,
+            meta: [
+              new Date(sharing.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }),
+              sharing.distance > 0 ? fmtDist(sharing.distance) : null,
+              sharing.duration > 0 ? fmtDuration(sharing.duration) : null,
+            ].filter(Boolean).join(' · '),
+            accent: TYPE_COLOR[sharing.type],
+          }}
           onClose={() => setSharing(null)}
           // The badges are driven by the library array, which WorkoutsContext
           // owns and the dashboard also reads — so re-fetch rather than patch

@@ -1,26 +1,40 @@
+import type { ReactNode } from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import { Globe, Lock, X, Loader2 } from 'lucide-react'
-import { api, ApiError, type UserRef, type WorkoutShares } from '../lib/api'
-import { fmtDist, fmtDuration, TYPE_COLOR, type Workout } from '../data/workouts'
-import TypeIcon from './TypeIcon'
+import { api, ApiError, type ShareKind, type UserRef, type WorkoutShares } from '../lib/api'
 import UserAvatar, { userLabel } from './UserAvatar'
 import Modal from './Modal'
 import SearchInput from './SearchInput'
 import Skeleton from './Skeleton'
 
+/** What the dialog names at the top, so there is no doubt what is about to
+ *  become visible to other people. Built by each caller from its own shape —
+ *  a workout, a plan, a session — since that's the one part not generic. */
+interface ShareSubject {
+  icon: ReactNode
+  name: string
+  meta: string
+  /** A CSS colour for the icon's ring, matching the subject's own accent. */
+  accent?: string
+}
+
 interface ShareDialogProps {
-  /** The workout being shared. Identified prominently so there is no doubt
-   *  which one is about to become visible to other people. */
-  workout: Workout
+  kind: ShareKind
+  id: string
+  /** "workout" / "plan" / "session" — used only in the title and closing note. */
+  noun: string
+  subject: ShareSubject
   onClose: () => void
   /** Called with the new state after every change, so lists can re-badge. */
   onChange?: (state: WorkoutShares) => void
 }
 
 /**
- * Manages one workout's sharing: a public toggle and a list of people it is
+ * Manages one item's sharing: a public toggle and a list of people it is
  * shared with directly. The two are deliberately independent — see the copy
- * under the toggle.
+ * under the toggle. Shared by workouts, plans and finished sessions — the
+ * mechanics (a visibility flag, a share table, a directory picker) are
+ * identical for all three, and only the subject header differs.
  */
 /**
  * The dialog's shape while its two requests are in flight.
@@ -59,8 +73,7 @@ function LoadingShape() {
   )
 }
 
-export default function ShareDialog({ workout, onClose, onChange }: ShareDialogProps) {
-  const workoutId = workout.id
+export default function ShareDialog({ kind, id, noun, subject, onClose, onChange }: ShareDialogProps) {
   const [state, setState] = useState<WorkoutShares | null>(null)
   const [directory, setDirectory] = useState<UserRef[]>([])
   const [search, setSearch] = useState('')
@@ -69,7 +82,7 @@ export default function ShareDialog({ workout, onClose, onChange }: ShareDialogP
 
   useEffect(() => {
     let cancelled = false
-    Promise.all([api.getShares(workoutId), api.listUserDirectory()])
+    Promise.all([api.getShares(kind, id), api.listUserDirectory()])
       .then(([shares, dir]) => {
         if (cancelled) return
         setState(shares)
@@ -79,7 +92,7 @@ export default function ShareDialog({ workout, onClose, onChange }: ShareDialogP
         if (!cancelled) setError(e instanceof ApiError ? e.message : 'Could not load sharing settings')
       })
     return () => { cancelled = true }
-  }, [workoutId])
+  }, [kind, id])
 
   /** Runs a mutation, adopting whatever sharing state the server reports back. */
   async function mutate(run: () => Promise<WorkoutShares | unknown>, refetch = false) {
@@ -87,7 +100,7 @@ export default function ShareDialog({ workout, onClose, onChange }: ShareDialogP
     setError(null)
     try {
       const result = await run()
-      const next = refetch ? await api.getShares(workoutId) : result as WorkoutShares
+      const next = refetch ? await api.getShares(kind, id) : result as WorkoutShares
       setState(next)
       onChange?.(next)
     } catch (e: unknown) {
@@ -109,25 +122,21 @@ export default function ShareDialog({ workout, onClose, onChange }: ShareDialogP
   const isPublic = state?.visibility === 'public'
 
   return (
-    <Modal onClose={onClose} label="Share workout">
+    <Modal onClose={onClose} label={`Share ${noun}`}>
         <div className="modal-box" style={{ maxWidth: 480 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700, flex: 1 }}>Share workout</h3>
+            <h3 style={{ fontSize: 16, fontWeight: 700, flex: 1 }}>Share {noun}</h3>
             <button className="btn-icon" onClick={onClose} aria-label="Close"><X size={16} /></button>
           </div>
 
-          {/* Naming the workout plainly matters here: this dialog is the one
+          {/* Naming the subject plainly matters here: this dialog is the one
               place where getting the wrong one wrong exposes it to other
               people. */}
-          <div className="share-subject" style={{ '--row-accent': TYPE_COLOR[workout.type] } as React.CSSProperties}>
-            <span className="share-subject-icon"><TypeIcon type={workout.type} /></span>
+          <div className="share-subject" style={{ '--row-accent': subject.accent ?? 'var(--primary)' } as React.CSSProperties}>
+            <span className="share-subject-icon">{subject.icon}</span>
             <span style={{ minWidth: 0, flex: 1 }}>
-              <span className="share-subject-name">{workout.name}</span>
-              <span className="share-subject-meta">
-                {new Date(workout.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                {workout.distance > 0 && <> · {fmtDist(workout.distance)}</>}
-                {workout.duration > 0 && <> · {fmtDuration(workout.duration)}</>}
-              </span>
+              <span className="share-subject-name">{subject.name}</span>
+              <span className="share-subject-meta">{subject.meta}</span>
             </span>
           </div>
 
@@ -158,7 +167,7 @@ export default function ShareDialog({ workout, onClose, onChange }: ShareDialogP
                       type="checkbox"
                       checked={isPublic}
                       disabled={busy}
-                      onChange={e => void mutate(() => api.setVisibility(workoutId, e.target.checked ? 'public' : 'private'))}
+                      onChange={e => void mutate(() => api.setVisibility(kind, id, e.target.checked ? 'public' : 'private'))}
                     />
                     <span className="switch-track" />
                   </label>
@@ -178,7 +187,7 @@ export default function ShareDialog({ workout, onClose, onChange }: ShareDialogP
                       style={{ marginLeft: 'auto', fontSize: 11, padding: '3px 8px' }}
                       disabled={busy}
                       onClick={() => void mutate(
-                        () => Promise.all(state.sharedWith.map(u => api.removeShare(workoutId, u.id))),
+                        () => Promise.all(state.sharedWith.map(u => api.removeShare(kind, id, u.id))),
                         true,
                       )}
                     >
@@ -194,7 +203,7 @@ export default function ShareDialog({ workout, onClose, onChange }: ShareDialogP
                         <UserAvatar user={u} size={20} />
                         {userLabel(u)}
                         <button
-                          onClick={() => void mutate(() => api.removeShare(workoutId, u.id), true)}
+                          onClick={() => void mutate(() => api.removeShare(kind, id, u.id), true)}
                           disabled={busy}
                           aria-label={`Stop sharing with ${userLabel(u)}`}
                         >
@@ -225,7 +234,7 @@ export default function ShareDialog({ workout, onClose, onChange }: ShareDialogP
                       key={u.id}
                       className="share-person"
                       disabled={busy}
-                      onClick={() => void mutate(() => api.addShare(workoutId, u.id))}
+                      onClick={() => void mutate(() => api.addShare(kind, id, u.id))}
                     >
                       <UserAvatar user={u} size={26} />
                       <span style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
@@ -241,7 +250,7 @@ export default function ShareDialog({ workout, onClose, onChange }: ShareDialogP
               {/* The two mechanisms are independent by design, and that is not
                   obvious from the controls alone — so it is stated outright. */}
               <p style={{ fontSize: 11, color: 'var(--text-3)', lineHeight: 1.5, marginTop: 14 }}>
-                Making a workout private again does not remove the people listed above — revoke them individually if you want to.
+                Making a {noun} private again does not remove the people listed above — revoke them individually if you want to.
               </p>
             </>
           )}

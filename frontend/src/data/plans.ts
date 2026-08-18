@@ -104,6 +104,22 @@ export interface TrainingPlan {
   createdAt: string
   updatedAt: string
   lastSessionAt?: string
+  /** Who, beyond you, can see this plan. Empty/absent means private. */
+  visibility?: 'private' | 'public'
+  /** How many people it's been shared with directly — the owner's own count. */
+  sharedWithCount?: number
+  /**
+   * The plan's author, present only when it is not you — a plan fetched from
+   * Discover or opened by its id when someone else's. Absent on your own.
+   */
+  owner?: { id: number; username: string; displayName: string; avatarPath: string }
+  /**
+   * Whether the single-plan fetch found you own it. Present only on that
+   * response (never on a list row), same convention as Workout.isOwner —
+   * undefined there means "assume yours", which every call site before
+   * sharing existed already does correctly.
+   */
+  isOwner?: boolean
 }
 
 /** One set as performed. */
@@ -162,6 +178,11 @@ export interface PlanSession {
   volumeKg: number
   notes: string
   workoutId?: string
+  /** See TrainingPlan — same three fields, same meaning, a session's own. */
+  visibility?: 'private' | 'public'
+  sharedWithCount?: number
+  owner?: { id: number; username: string; displayName: string; avatarPath: string }
+  isOwner?: boolean
 }
 
 export const EMPTY_BLOCK_PROGRESS: BlockProgress = { picks: [], sets: {} }

@@ -856,13 +856,24 @@ export const api = {
   // readable without an account.
   feedPublic: () => request<import('../data/workouts').Workout[]>('/api/feed/public'),
   feedShared: () => request<import('../data/workouts').Workout[]>('/api/feed/shared'),
-  getShares: (id: string) => request<WorkoutShares>(`/api/workouts/${id}/shares`),
-  setVisibility: (id: string, visibility: Visibility) =>
-    request<WorkoutShares>(`/api/workouts/${id}/visibility`, { method: 'PUT', body: { visibility } }),
-  addShare: (id: string, userId: number) =>
-    request<WorkoutShares>(`/api/workouts/${id}/shares`, { method: 'POST', body: { userId } }),
-  removeShare: (id: string, userId: number) =>
-    request<unknown>(`/api/workouts/${id}/shares/${userId}`, { method: 'DELETE' }),
+  feedPlansPublic: () => request<TrainingPlan[]>('/api/feed/plans/public'),
+  feedPlansShared: () => request<TrainingPlan[]>('/api/feed/plans/shared'),
+  feedSessionsPublic: () => request<PlanSession[]>('/api/feed/sessions/public'),
+  feedSessionsShared: () => request<PlanSession[]>('/api/feed/sessions/shared'),
+  clonePlan: (id: string) => request<TrainingPlan>(`/api/plans/${id}/clone`, { method: 'POST' }),
+  /**
+   * Sharing state and its four mutations, parameterized by what is being
+   * shared. A workout, a plan and a finished session each have their own
+   * `{id}/shares` and `{id}/visibility` routes on the server — same shape,
+   * different URL prefix — so one function per verb here, not three.
+   */
+  getShares: (kind: ShareKind, id: string) => request<WorkoutShares>(`${shareBase(kind, id)}/shares`),
+  setVisibility: (kind: ShareKind, id: string, visibility: Visibility) =>
+    request<WorkoutShares>(`${shareBase(kind, id)}/visibility`, { method: 'PUT', body: { visibility } }),
+  addShare: (kind: ShareKind, id: string, userId: number) =>
+    request<WorkoutShares>(`${shareBase(kind, id)}/shares`, { method: 'POST', body: { userId } }),
+  removeShare: (kind: ShareKind, id: string, userId: number) =>
+    request<unknown>(`${shareBase(kind, id)}/shares/${userId}`, { method: 'DELETE' }),
   /**
    * Everyone on this instance.
    *
@@ -950,8 +961,16 @@ export const api = {
     request<{ deleted: number }>('/api/plan-sessions/delete', { method: 'POST', body: { ids } }),
 }
 
-/** Who, beyond the owner, can read a workout. Direct shares are separate. */
+/** Who, beyond the owner, can read a workout, plan or session. Direct shares are separate. */
 export type Visibility = 'private' | 'public'
+
+/** What is being shared — picks the URL prefix the four sharing calls use. */
+export type ShareKind = 'workout' | 'plan' | 'session'
+
+function shareBase(kind: ShareKind, id: string): string {
+  const prefix = kind === 'workout' ? '/api/workouts' : kind === 'plan' ? '/api/plans' : '/api/plan-sessions'
+  return `${prefix}/${id}`
+}
 
 /** A user as shown in the share picker and as a workout's author. */
 export interface UserRef {

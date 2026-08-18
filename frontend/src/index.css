@@ -4136,6 +4136,14 @@ body:has(.overlay) .fab { display: none; }
 .owner-byline { flex-wrap: wrap; gap: 6px 8px; }
 .owner-byline-more { font-size: 12px; color: var(--text-3); white-space: nowrap; }
 
+/* A shared/public plan or session's author, read at the top of the page
+   rather than tucked under a card — there is only one row on this page and
+   it deserves to be seen without scrolling to a footer. */
+.plan-owner-byline {
+  font-size: 13px;
+  margin-bottom: 14px;
+}
+
 /* Search and sort above the directory. */
 .discover-tools {
   display: flex;
@@ -4143,6 +4151,40 @@ body:has(.overlay) .fab { display: none; }
   align-items: center;
   flex-wrap: wrap;
   margin: 14px 0 16px;
+}
+
+/* The Shared/Public feeds' type filter: four chips, not a dropdown — there is
+   nothing else to narrow a mix of workouts, plans and sessions by, so the
+   whole filter fits in one row without a sheet to hold it. */
+.discover-type-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+.discover-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  color: var(--text-2);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.discover-chip:hover { border-color: var(--border-strong); color: var(--text); }
+.discover-chip.active { border-color: var(--primary); background: var(--primary-dim); color: var(--primary); }
+.discover-chip-count { font-size: 11px; opacity: 0.75; }
+
+/* A plan or session row in Discover's mixed feed — the icon marks which of
+   the three it is, since the same .plan-card language is shared with rows
+   that carry no icon of their own elsewhere. */
+.discover-item-icon {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--bg-3);
+  color: var(--text-2);
 }
 
 /* The edit dialog scrolls: with the advanced section open it is taller than a

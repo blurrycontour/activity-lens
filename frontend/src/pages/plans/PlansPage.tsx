@@ -21,6 +21,7 @@ import { clearCachedProgress } from './sessionCache'
 import { useActiveSession } from '../../context/ActiveSessionContext'
 import { useLongPress } from '../../lib/useLongPress'
 import { useSelection } from '../../lib/useSelection'
+import { planHaystack } from '../../lib/discoverSearch'
 import useTicker from '../../lib/useTicker'
 
 interface Props {
@@ -28,6 +29,8 @@ interface Props {
   section: string | null
   detail: string | null
   onOpen: (section: string | null, detail?: string | null) => void
+  /** Opens the author of a plan or session that is not yours. */
+  onOpenUser?: (id: number) => void
 }
 
 type TabId = 'plans' | 'history'
@@ -41,7 +44,7 @@ type TabId = 'plans' | 'history'
  * because the running session has to be reachable from anywhere, which means
  * one component owning "what is open".
  */
-export default function PlansPage({ section, detail, onOpen }: Props) {
+export default function PlansPage({ section, detail, onOpen, onOpenUser }: Props) {
   const [plans, setPlans] = useState<TrainingPlan[] | null>(null)
   const [open, setOpen] = useState<TrainingPlan | null>(null)
   const [session, setSession] = useState<PlanSession | null>(null)
@@ -306,7 +309,7 @@ export default function PlansPage({ section, detail, onOpen }: Props) {
     )
   }
   if (session) {
-    return <FinishedSession session={session} onBack={() => onOpen(null)} />
+    return <FinishedSession session={session} onBack={() => onOpen(null)} onOpenUser={onOpenUser} />
   }
 
   // --- one plan, read or edited -------------------------------------------
@@ -331,6 +334,10 @@ export default function PlansPage({ section, detail, onOpen }: Props) {
             onRename={() => setRenaming(true)}
             onStart={dayId => start(open.id, dayId)}
             onDeleted={() => { void load(); onOpen(null) }}
+            // A clone belongs in the viewer's own library — refresh it, and
+            // land on the new plan rather than the one just viewed.
+            onCloned={cloned => { void load(); onOpen(cloned.id) }}
+            onOpenUser={onOpenUser}
           />
         )}
         {renaming && (
@@ -673,24 +680,6 @@ function Countdown({ onDone, onCancel }: { onDone: () => void; onCancel: () => v
       </div>
     </Modal>
   )
-}
-
-/**
- * Everything about a plan worth typing to find it, lowercased once.
- *
- * A name is not the only thing you remember about a plan — "the one I last
- * did on a Tuesday" or "the four-day one" are just as real a search. Rather
- * than a name-only filter, every date the plan carries is spelled out in
- * words (weekday, month, day, year) so any of those is a match too.
- */
-function planHaystack(p: TrainingPlan): string {
-  const dates = [p.createdAt, p.updatedAt, p.lastSessionAt].filter((s): s is string => !!s)
-  const words = dates.flatMap(iso => {
-    const d = new Date(iso)
-    if (Number.isNaN(d.getTime())) return []
-    return [d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })]
-  })
-  return [p.name, `${p.dayCount} day${p.dayCount === 1 ? '' : 's'}`, ...words].join(' ').toLowerCase()
 }
 
 /** "today", "yesterday", or a date — the resolution people actually want. */

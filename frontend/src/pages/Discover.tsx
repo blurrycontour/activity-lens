@@ -2,11 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ArrowDownAZ, ArrowUpAZ, Globe, Inbox, Users as UsersIcon } from 'lucide-react'
 import { api, type DirectoryUser } from '../lib/api'
 import type { Workout } from '../data/workouts'
+import type { PlanSession, TrainingPlan } from '../data/plans'
 import { useRefreshHandler } from '../context/RefreshContext'
 import PageHeader from '../components/PageHeader'
 import TabStrip from '../components/TabStrip'
 import UserAvatar, { userLabel } from '../components/UserAvatar'
-import WorkoutFilterList from '../components/WorkoutFilterList'
+import DiscoverFeedList from '../components/DiscoverFeedList'
 import { useSessionState } from '../lib/useSessionState'
 import SearchInput from '../components/SearchInput'
 
@@ -18,25 +19,36 @@ const TABS = [
   { id: 'public' as Tab, label: 'Public', icon: <Globe size={14} /> },
 ]
 
+/** The three feeds one tab (shared or public) is made of. */
+interface FeedSet {
+  workouts: Workout[]
+  plans: TrainingPlan[]
+  sessions: PlanSession[]
+}
+
 /**
- * Other people on this instance, and their workouts.
+ * Other people on this instance, and what they have made visible: workouts,
+ * plans and finished sessions in one feed, newest first.
  *
  * Everything here belongs to somebody else, which is the whole point of the
- * page — and the reason the two feeds moved here out of the library. Workouts
- * is your own training log; having it also be the place you read other people's
- * made "how far did I run last month" and "what did Alice post" the same screen
- * with a tab between them, and the header count, the import button and bulk
- * selection all had to be qualified by which tab you were on.
+ * page — and the reason the feeds moved here out of Workouts and Plans.
+ * Workouts is your own training log; having it also be the place you read
+ * other people's made "how far did I run last month" and "what did Alice
+ * post" the same screen with a tab between them. Plans and sessions joined
+ * the same two feeds rather than getting their own tabs, for the same
+ * reason: "what has been shared with me" is one question, not three.
  *
- * People comes first because it is the only one of the three that is a list of
- * *people*; the feeds are ways into the same profiles by recency instead.
+ * People comes first because it is the only one of the three that is a list
+ * of *people*; the feeds are ways into the same profiles by recency instead.
  */
-export default function Discover({ onOpenUser, onSelectWorkout }: {
+export default function Discover({ onOpenUser, onSelectWorkout, onSelectPlan, onSelectSession }: {
   onOpenUser: (id: number) => void
   onSelectWorkout: (w: Workout) => void
+  onSelectPlan: (p: TrainingPlan) => void
+  onSelectSession: (s: PlanSession) => void
 }) {
-  // Per session, so opening a workout from a feed and coming back lands on the
-  // feed rather than on the directory.
+  // Per session, so opening something from a feed and coming back lands on
+  // the feed rather than on the directory.
   const [{ tab }, setTabState] = useSessionState<{ tab: Tab }>('discover.tab', { tab: 'people' })
   const setTab = useCallback((t: Tab) => setTabState({ tab: t }), [setTabState])
 
@@ -51,7 +63,7 @@ export default function Discover({ onOpenUser, onSelectWorkout }: {
   const [az, setAz] = useState(true)
   // undefined until fetched, which is what tells the list to say "loading"
   // rather than "nothing here".
-  const [feeds, setFeeds] = useState<Partial<Record<'shared' | 'public', Workout[]>>>({})
+  const [feeds, setFeeds] = useState<Partial<Record<'shared' | 'public', FeedSet>>>({})
   const [feedError, setFeedError] = useState<string | null>(null)
 
   const loadPeople = useCallback(async () => {
@@ -69,10 +81,12 @@ export default function Discover({ onOpenUser, onSelectWorkout }: {
   const loadFeed = useCallback(async (s: 'shared' | 'public') => {
     setFeedError(null)
     try {
-      const rows = s === 'public' ? await api.feedPublic() : await api.feedShared()
-      setFeeds(f => ({ ...f, [s]: rows }))
+      const [workouts, plans, sessions] = await Promise.all(s === 'public'
+        ? [api.feedPublic(), api.feedPlansPublic(), api.feedSessionsPublic()]
+        : [api.feedShared(), api.feedPlansShared(), api.feedSessionsShared()])
+      setFeeds(f => ({ ...f, [s]: { workouts, plans, sessions } }))
     } catch {
-      setFeedError('Could not load these workouts.')
+      setFeedError('Could not load what has been shared here.')
     }
   }, [])
 
@@ -113,7 +127,7 @@ export default function Discover({ onOpenUser, onSelectWorkout }: {
         title="Discover"
         subtitle={tab === 'people'
           ? `${users.length} ${users.length === 1 ? 'person' : 'people'} on this server`
-          : tab === 'shared' ? 'Workouts other people have sent you' : 'Open to everyone signed in here'}
+          : tab === 'shared' ? 'Sent directly to you' : 'Open to everyone signed in here'}
       />
       <div className="page-content">
         <TabStrip items={TABS} value={tab} onChange={setTab} ariaLabel="What to discover" fill />
@@ -175,19 +189,21 @@ export default function Discover({ onOpenUser, onSelectWorkout }: {
             )}
           </>
         ) : (
-          <WorkoutFilterList
+          <DiscoverFeedList
             // Keyed so switching tabs starts the other feed's list at the top
             // with its own search, rather than inheriting this one's.
             key={tab}
-            rows={feeds[tab]}
-            scope={tab}
+            workouts={feeds[tab]?.workouts}
+            plans={feeds[tab]?.plans}
+            sessions={feeds[tab]?.sessions}
             storageKey={`discover.${tab}`}
             error={feedError}
             emptyMessage={tab === 'shared'
-              ? 'Nobody has shared a workout with you yet.'
-              : 'No public workouts on this instance yet.'}
-            onSelect={onSelectWorkout}
-            byline="owner"
+              ? 'Nobody has shared anything with you yet.'
+              : 'Nothing public on this instance yet.'}
+            onSelectWorkout={onSelectWorkout}
+            onSelectPlan={onSelectPlan}
+            onSelectSession={onSelectSession}
             onOpenUser={onOpenUser}
           />
         )}

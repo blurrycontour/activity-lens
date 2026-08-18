@@ -9,6 +9,7 @@ import { api } from '../../lib/api'
 import {
   clockLabel, elapsedSec, sessionWhen, type PlanSession,
 } from '../../data/plans'
+import { sessionHaystack } from '../../lib/discoverSearch'
 
 /**
  * Every session run, newest first.
@@ -206,24 +207,4 @@ function SessionRow({ session: s, selecting, picked, canSelect, onOpen, onToggle
       </div>
     </button>
   )
-}
-
-/**
- * Everything about a session worth typing to find it, lowercased once.
- *
- * A day and plan name are not how most sessions get remembered — "the one on
- * Sunday" or "12 of 15" is just as real a search. The date is spelled out in
- * words (weekday, month, day, year) alongside the clock time, and the set
- * tally is included both as a fraction and as words, so either form matches.
- */
-function sessionHaystack(s: PlanSession): string {
-  const d = new Date(s.startedAt)
-  const dated = Number.isNaN(d.getTime()) ? [] : [
-    d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }),
-    d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
-  ]
-  return [
-    s.dayName, s.planName, ...dated,
-    `${s.doneSets}/${s.totalSets}`, `${s.doneSets} of ${s.totalSets} sets`,
-  ].join(' ').toLowerCase()
 }
