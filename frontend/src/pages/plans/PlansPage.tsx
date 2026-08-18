@@ -27,6 +27,7 @@ import {
   applyItemFilters, asPlanItem, NO_NARROWING, type ItemNarrowing,
 } from '../../lib/itemFilters'
 import useTicker from '../../lib/useTicker'
+import { haptic } from '../../lib/haptics'
 
 interface Props {
   /** From the URL: a plan id, or "session" with a session id in `detail`. */
@@ -201,6 +202,9 @@ export default function PlansPage({ section, detail, onOpen, onOpenUser }: Props
         return
       }
       setActive(s)
+      // The countdown ends and the session is real: a buzz says so without
+      // asking you to look, which is the point of the three seconds.
+      haptic('start')
       enterSession(s)
     } catch (e) {
       setCounting(false)

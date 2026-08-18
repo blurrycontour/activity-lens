@@ -17,6 +17,7 @@ import {
 } from '../../data/plans'
 import { cacheProgress, clearCachedProgress, readCachedProgress } from './sessionCache'
 import { clearSessionNotice, showSessionNotice } from '../../lib/native/sessionNotice'
+import { haptic, LONG_TIMER_SEC } from '../../lib/haptics'
 
 interface Props {
   session: PlanSession
@@ -236,6 +237,15 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
     const isLast = blocks[blocks.length - 1]?.id === block.id
     const blockDone = blockComplete(block, after)
     const exDone = exerciseComplete(ex, setsFor(after, ex.id))
+
+    /* Felt rather than seen: during a set the phone is on the floor and your
+       hands are busy, so "did that register?" is the one question the screen
+       cannot answer. Three weights for three sizes of event — a set, the
+       exercise it belonged to, and the session as a whole. */
+    const whole = sessionTally({ ...session, progress: latest.current })
+    if (whole.done >= whole.total) haptic('complete')
+    else if (exDone) haptic('exercise')
+    else haptic('set')
     if (block.restSec > 0 && !isLast && blockDone) {
       setRunning({ kind: 'break', blockId: block.id, exerciseId: '', endsAt: Date.now() + block.restSec * 1000, totalSec: block.restSec })
     } else if (exDone && ex.breakSec > 0 && !blockDone) {
@@ -287,6 +297,29 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
         finishSet(block, ex, index)
     }
   }
+
+  /**
+   * A long rest running out, buzzed exactly once.
+   *
+   * Edge-triggered on the timer's identity rather than on `left` reaching
+   * zero: the tick keeps firing while the clock sits at 0:00 waiting to be
+   * dismissed, so a plain `left <= 0` would vibrate twice a second until it
+   * was. The ref holds which timer has already been announced.
+   *
+   * Only rests, and only long ones — a set's own clock ends with you standing
+   * over it, and see LONG_TIMER_SEC for why thirty seconds is not worth a
+   * buzz you are already watching for.
+   */
+  const buzzed = useRef<string | null>(null)
+  useEffect(() => {
+    if (!running || running.kind === 'set') return
+    if (running.totalSec < LONG_TIMER_SEC) return
+    const id = `${running.blockId}:${running.exerciseId}:${running.endsAt}`
+    if (buzzed.current === id) return
+    if (Date.now() < running.endsAt) return
+    buzzed.current = id
+    haptic('timer')
+  })
 
   /**
    * A timed set whose clock has run out finishes itself.
@@ -358,6 +391,7 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
       const done = await api.finishPlanSession(session.id, progress)
       clearCachedProgress(session.id)
       void clearSessionNotice()
+      haptic('finish')
       onFinished(done)
     } catch {
       setError('Could not finish the session. Your sets are saved — try again.')
@@ -372,6 +406,7 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
       await api.deletePlanSession(session.id)
       clearCachedProgress(session.id)
       void clearSessionNotice()
+      haptic('discard')
       onDiscarded()
     } catch {
       setError('Could not discard the session.')
