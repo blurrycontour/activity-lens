@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/blurrycontour/activity-lens/backend/internal/workout"
 )
 
 // ErrNotFound is returned when a plan or session does not exist, or is not
@@ -46,6 +48,30 @@ type Repository interface {
 	// DeleteAllForUser removes every plan and session a user owns, for
 	// account deletion.
 	DeleteAllForUser(ctx context.Context, userID int64) error
+
+	// --- Sharing (sharing_store.go) ---
+
+	GetViewablePlan(ctx context.Context, viewerID int64, id string) (*Plan, error)
+	ListPublicPlans(ctx context.Context, viewerID int64) ([]Plan, error)
+	ListSharedPlansWithMe(ctx context.Context, viewerID int64) ([]Plan, error)
+	SetPlanVisibility(ctx context.Context, ownerID int64, id string, v workout.Visibility) error
+	PlanShareRecipients(ctx context.Context, ownerID int64, planID string) ([]int64, error)
+	PlanShareCounts(ctx context.Context, ownerID int64) (map[string]int, error)
+	AddPlanShare(ctx context.Context, ownerID int64, planID string, targetID int64) error
+	RemovePlanShare(ctx context.Context, ownerID int64, planID string, targetID int64) error
+
+	GetViewableSession(ctx context.Context, viewerID int64, id string) (*Session, error)
+	ListPublicSessions(ctx context.Context, viewerID int64) ([]Session, error)
+	ListSharedSessionsWithMe(ctx context.Context, viewerID int64) ([]Session, error)
+	SetSessionVisibility(ctx context.Context, ownerID int64, id string, v workout.Visibility) error
+	SessionShareRecipients(ctx context.Context, ownerID int64, sessionID string) ([]int64, error)
+	AddSessionShare(ctx context.Context, ownerID int64, sessionID string, targetID int64) error
+	RemoveSessionShare(ctx context.Context, ownerID int64, sessionID string, targetID int64) error
+
+	// DeleteSharesForUser removes every share (both tables) naming userID as
+	// the recipient, for account deletion — the mirror of DeleteAllForUser,
+	// which only removes what they own.
+	DeleteSharesForUser(ctx context.Context, userID int64) error
 }
 
 // SQLiteRepository implements Repository on top of *sql.DB (SQLite dialect).
@@ -83,18 +109,20 @@ func (r *SQLiteRepository) CreatePlan(ctx context.Context, p *Plan) error {
 // planCols carries the two aggregates the list page shows beside each plan.
 // Both are correlated subqueries over small indexed tables, which keeps the
 // list a single round trip instead of one query per plan.
-const planCols = `p.id, p.user_id, p.name, p.notes, p.archived, p.created_at, p.updated_at,
+const planCols = `p.id, p.user_id, p.name, p.notes, p.archived, p.visibility, p.created_at, p.updated_at,
 	(SELECT COUNT(*) FROM plan_days d WHERE d.plan_id = p.id) AS day_count,
 	(SELECT COALESCE(MAX(s.started_at), '') FROM plan_sessions s WHERE s.plan_id = p.id) AS last_session_at`
 
 func scanPlan(row interface{ Scan(...any) error }) (*Plan, error) {
 	var p Plan
 	var archived int
-	if err := row.Scan(&p.ID, &p.UserID, &p.Name, &p.Notes, &archived,
+	var visibility string
+	if err := row.Scan(&p.ID, &p.UserID, &p.Name, &p.Notes, &archived, &visibility,
 		&p.CreatedAt, &p.UpdatedAt, &p.DayCount, &p.LastSessionAt); err != nil {
 		return nil, err
 	}
 	p.Archived = archived != 0
+	p.Visibility = workout.Visibility(visibility)
 	return &p, nil
 }
 
@@ -335,16 +363,17 @@ func (r *SQLiteRepository) ReplaceDays(ctx context.Context, userID int64, planID
 
 const sessionCols = `id, user_id, COALESCE(plan_id, ''), plan_name, day_name, started_at,
 	COALESCE(finished_at, ''), snapshot, progress, done_sets, total_sets, volume_kg,
-	notes, COALESCE(workout_id, '')`
+	notes, COALESCE(workout_id, ''), visibility`
 
 func scanSession(row interface{ Scan(...any) error }) (*Session, error) {
 	var s Session
-	var snapshot, progress string
+	var snapshot, progress, visibility string
 	if err := row.Scan(&s.ID, &s.UserID, &s.PlanID, &s.PlanName, &s.DayName, &s.StartedAt,
 		&s.FinishedAt, &snapshot, &progress, &s.DoneSets, &s.TotalSets, &s.VolumeKg,
-		&s.Notes, &s.WorkoutID); err != nil {
+		&s.Notes, &s.WorkoutID, &visibility); err != nil {
 		return nil, err
 	}
+	s.Visibility = workout.Visibility(visibility)
 	// A snapshot that will not parse is a bug on the way in, not a reason to
 	// fail the read: the session's own totals are columns and still render.
 	_ = json.Unmarshal([]byte(snapshot), &s.Snapshot)

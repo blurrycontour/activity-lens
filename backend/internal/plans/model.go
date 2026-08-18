@@ -14,6 +14,8 @@ package plans
 import (
 	"encoding/json"
 	"strings"
+
+	"github.com/blurrycontour/activity-lens/backend/internal/workout"
 )
 
 // Plan is a training routine owned by a user.
@@ -32,6 +34,24 @@ type Plan struct {
 	UpdatedAt string `json:"updatedAt"`
 	// LastSessionAt is when a day of this plan was last run, if ever.
 	LastSessionAt string `json:"lastSessionAt,omitempty"`
+	// Visibility, SharedWithCount and Owner mirror workout.Workout's sharing
+	// fields exactly — reused from that package rather than redefined, since
+	// they carry no behaviour of their own. Visibility is cleared for
+	// non-owners by Redact, same reasoning as the workout it's copied from.
+	Visibility      workout.Visibility `json:"visibility,omitempty"`
+	SharedWithCount int                `json:"sharedWithCount,omitempty"`
+	// Owner identifies the author, populated by the API layer only when the
+	// viewer is not it — a plan's own owner has no need to be told who they are.
+	Owner *workout.OwnerRef `json:"owner,omitempty"`
+}
+
+// Redact clears the fields that belong to the owner alone, for a plan handed
+// to someone who is not it. The exercises, sets and weights stay — a plan's
+// whole content is the point of sharing it — but the private note beside it
+// and the raw visibility flag (which explains nothing a viewer needs) go.
+func (p *Plan) Redact() {
+	p.Notes = ""
+	p.Visibility = ""
 }
 
 // Day is one training day within a plan: "Chest & Triceps".
@@ -184,6 +204,23 @@ type Session struct {
 	// WorkoutID is set when finishing created a manual workout, which is a
 	// per-user preference.
 	WorkoutID string `json:"workoutId,omitempty"`
+	// Visibility, SharedWithCount and Owner: see Plan. A session can only ever
+	// be shared once FinishedAt is set — see Service.SetSessionVisibility —
+	// so an in-progress session's zero value here is also its only valid one.
+	Visibility      workout.Visibility `json:"visibility,omitempty"`
+	SharedWithCount int                `json:"sharedWithCount,omitempty"`
+	Owner           *workout.OwnerRef  `json:"owner,omitempty"`
+}
+
+// Redact clears what belongs to the owner alone. Unlike a workout or a plan,
+// the numbers stay — weights, reps, durations and set timing are the point of
+// sharing a finished session. WorkoutID goes too: the manual workout it made
+// is the owner's own record, separately gated by workout sharing, and a
+// dangling id to something the viewer likely can't open is not worth keeping.
+func (s *Session) Redact() {
+	s.Notes = ""
+	s.Visibility = ""
+	s.WorkoutID = ""
 }
 
 // Progress is what the runner has recorded so far, keyed by block id.

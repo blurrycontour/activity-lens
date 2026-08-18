@@ -291,6 +291,21 @@ func (s *Server) apiRoutes() http.Handler {
 	mux.Handle("DELETE /api/plan-sessions/{id}", s.authedCSRF(s.withPlans(s.handleDeletePlanSession)))
 	mux.Handle("POST /api/plan-sessions/delete", s.authedCSRF(s.withPlans(s.handleDeletePlanSessions)))
 
+	// --- Plan & session sharing (authenticated) --- see plan_sharing.go.
+	mux.Handle("GET /api/plans/{id}/shares", s.authed(s.withPlans(s.handleListPlanShares)))
+	mux.Handle("POST /api/plans/{id}/shares", s.authedCSRF(s.withPlans(s.handleAddPlanShare)))
+	mux.Handle("DELETE /api/plans/{id}/shares/{userId}", s.authedCSRF(s.withPlans(s.handleRemovePlanShare)))
+	mux.Handle("PUT /api/plans/{id}/visibility", s.authedCSRF(s.withPlans(s.handleSetPlanVisibility)))
+	mux.Handle("POST /api/plans/{id}/clone", s.authedCSRF(s.withPlans(s.handleClonePlan)))
+	mux.Handle("GET /api/plan-sessions/{id}/shares", s.authed(s.withPlans(s.handleListSessionShares)))
+	mux.Handle("POST /api/plan-sessions/{id}/shares", s.authedCSRF(s.withPlans(s.handleAddSessionShare)))
+	mux.Handle("DELETE /api/plan-sessions/{id}/shares/{userId}", s.authedCSRF(s.withPlans(s.handleRemoveSessionShare)))
+	mux.Handle("PUT /api/plan-sessions/{id}/visibility", s.authedCSRF(s.withPlans(s.handleSetSessionVisibility)))
+	mux.Handle("GET /api/feed/plans/public", s.authed(s.withPlans(s.handleFeedPlansPublic)))
+	mux.Handle("GET /api/feed/plans/shared", s.authed(s.withPlans(s.handleFeedPlansShared)))
+	mux.Handle("GET /api/feed/sessions/public", s.authed(s.withPlans(s.handleFeedSessionsPublic)))
+	mux.Handle("GET /api/feed/sessions/shared", s.authed(s.withPlans(s.handleFeedSessionsShared)))
+
 	mux.Handle("POST /api/equipment/{id}/workouts", s.authedCSRF(s.handleLinkWorkouts))
 	mux.Handle("DELETE /api/equipment/{id}/workouts/{workoutId}", s.authedCSRF(s.handleUnlinkWorkout))
 

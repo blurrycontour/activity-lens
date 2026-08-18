@@ -17,6 +17,10 @@ type Kind string
 const (
 	// KindWorkoutShared: someone shared a workout directly with you.
 	KindWorkoutShared Kind = "workout_shared"
+	// KindPlanShared: someone shared a training plan directly with you.
+	KindPlanShared Kind = "plan_shared"
+	// KindSessionShared: someone shared a finished training session with you.
+	KindSessionShared Kind = "session_shared"
 	// KindGearWorn: a piece of equipment reached its replace-at distance.
 	KindGearWorn Kind = "gear_worn"
 	// KindGoalMet: a training goal was completed for its period.
@@ -71,7 +75,7 @@ const (
 )
 
 // AllKinds is every kind, in the order Settings lists them.
-var AllKinds = []Kind{KindBroadcast, KindAppUpdate, KindWorkoutShared, KindWorkoutSocial, KindPing, KindGearWorn, KindGoalMet, KindGoalAtRisk, KindGoalNoneSet, KindWorkoutImported, KindFeedback}
+var AllKinds = []Kind{KindBroadcast, KindAppUpdate, KindWorkoutShared, KindPlanShared, KindSessionShared, KindWorkoutSocial, KindPing, KindGearWorn, KindGoalMet, KindGoalAtRisk, KindGoalNoneSet, KindWorkoutImported, KindFeedback}
 
 // ValidKind reports whether k is a known kind.
 func ValidKind(k Kind) bool {

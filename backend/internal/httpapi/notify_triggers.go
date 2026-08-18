@@ -10,6 +10,7 @@ import (
 
 	"github.com/blurrycontour/activity-lens/backend/internal/equipment"
 	"github.com/blurrycontour/activity-lens/backend/internal/notify"
+	"github.com/blurrycontour/activity-lens/backend/internal/plans"
 	"github.com/blurrycontour/activity-lens/backend/internal/settings"
 	"github.com/blurrycontour/activity-lens/backend/internal/workout"
 
@@ -38,6 +39,46 @@ func (s *Server) notifyWorkoutShared(r *http.Request, sender auth.User, targetID
 		// No dedupe key: each share is a distinct event, and re-sharing after
 		// a revoke should notify again.
 	})
+}
+
+// notifyPlanShared tells the recipient that someone shared a training plan.
+func (s *Server) notifyPlanShared(r *http.Request, sender auth.User, targetID int64, p *plans.Plan) {
+	from := sender.DisplayName
+	if from == "" {
+		from = sender.Username
+	}
+	days := len(p.Days)
+	s.notify.Notify(r.Context(), notify.Event{
+		UserID: targetID,
+		Kind:   notify.KindPlanShared,
+		Title:  fmt.Sprintf("%s shared a plan with you", from),
+		Body:   fmt.Sprintf("%s · %d day%s", p.Name, days, plural(days)),
+		Link:   "/plans/" + p.ID,
+		Icon:   effectiveAvatar(sender),
+	})
+}
+
+// notifySessionShared tells the recipient that someone shared a finished session.
+func (s *Server) notifySessionShared(r *http.Request, sender auth.User, targetID int64, sess *plans.Session) {
+	from := sender.DisplayName
+	if from == "" {
+		from = sender.Username
+	}
+	s.notify.Notify(r.Context(), notify.Event{
+		UserID: targetID,
+		Kind:   notify.KindSessionShared,
+		Title:  fmt.Sprintf("%s shared a session with you", from),
+		Body:   fmt.Sprintf("%s · %d/%d sets", sess.DayName, sess.DoneSets, sess.TotalSets),
+		Link:   "/plans/session/" + sess.ID,
+		Icon:   effectiveAvatar(sender),
+	})
+}
+
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }
 
 // notifySocial tells the people following a workout that someone said

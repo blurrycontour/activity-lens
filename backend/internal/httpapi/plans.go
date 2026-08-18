@@ -38,14 +38,33 @@ func (s *Server) handleListPlans(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, list)
 }
 
+// planResponse flattens IsOwner onto the plan's own JSON, the same envelope
+// handleGetWorkout uses — one flat object, not a shape the client has to
+// unwrap. GetViewablePlan already redacted p when the viewer is not its owner.
+type planResponse struct {
+	*plans.Plan
+	IsOwner bool `json:"isOwner"`
+}
+
 func (s *Server) handleGetPlan(w http.ResponseWriter, r *http.Request) {
 	user := httpmw.UserFrom(r)
-	p, err := s.plans.GetPlan(r.Context(), user.ID, r.PathValue("id"))
+	p, isOwner, err := s.plans.GetViewablePlan(r.Context(), user.ID, r.PathValue("id"))
 	if err != nil {
 		s.writePlanError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, p)
+	if isOwner {
+		// Only the owner needs to know who else can see it; the recipients
+		// rather than a bare count so a future badge can name them without a
+		// second round trip.
+		ids, serr := s.plans.PlanShareRecipients(r.Context(), user.ID, p.ID)
+		if serr == nil {
+			p.SharedWithCount = len(ids)
+		}
+	} else if ref, rerr := s.ownerRef(r, p.UserID); rerr == nil {
+		p.Owner = ref
+	}
+	writeJSON(w, http.StatusOK, planResponse{Plan: p, IsOwner: isOwner})
 }
 
 func (s *Server) handleCreatePlan(w http.ResponseWriter, r *http.Request) {
@@ -190,14 +209,28 @@ func (s *Server) handleListPlanSessions(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, list)
 }
 
+// sessionResponse mirrors planResponse; see its comment.
+type sessionResponse struct {
+	*plans.Session
+	IsOwner bool `json:"isOwner"`
+}
+
 func (s *Server) handleGetPlanSession(w http.ResponseWriter, r *http.Request) {
 	user := httpmw.UserFrom(r)
-	sess, err := s.plans.GetSession(r.Context(), user.ID, r.PathValue("id"))
+	sess, isOwner, err := s.plans.GetViewableSession(r.Context(), user.ID, r.PathValue("id"))
 	if err != nil {
 		s.writePlanError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, sess)
+	if isOwner {
+		ids, serr := s.plans.SessionShareRecipients(r.Context(), user.ID, sess.ID)
+		if serr == nil {
+			sess.SharedWithCount = len(ids)
+		}
+	} else if ref, rerr := s.ownerRef(r, sess.UserID); rerr == nil {
+		sess.Owner = ref
+	}
+	writeJSON(w, http.StatusOK, sessionResponse{Session: sess, IsOwner: isOwner})
 }
 
 func (s *Server) handleSavePlanProgress(w http.ResponseWriter, r *http.Request) {

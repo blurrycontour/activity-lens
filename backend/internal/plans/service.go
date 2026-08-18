@@ -358,7 +358,12 @@ func (s *Service) ExerciseNames(ctx context.Context, userID int64) ([]string, er
 
 // PurgeUser removes every plan and session a user owns, for account deletion.
 func (s *Service) PurgeUser(ctx context.Context, userID int64) error {
-	return s.repo.DeleteAllForUser(ctx, userID)
+	if err := s.repo.DeleteAllForUser(ctx, userID); err != nil {
+		return err
+	}
+	// Shares naming this user as a recipient, on plans and sessions owned by
+	// someone else — DeleteAllForUser only removed what they own themselves.
+	return s.repo.DeleteSharesForUser(ctx, userID)
 }
 
 // --- helpers -------------------------------------------------------------

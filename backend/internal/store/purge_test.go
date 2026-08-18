@@ -22,20 +22,22 @@ func TestEveryUserScopedTableHasAnOwnerForPurging(t *testing.T) {
 	// Adding a table here without wiring the purge is the mistake this guards
 	// against, so update purgeUserData first and this map second.
 	purgedBy := map[string]string{
-		"workouts":           "workout.Service.PurgeUserWorkouts",
-		"workout_shares":     "workout.Service.PurgeUserShares (recipient rows; owner rows cascade from workouts)",
-		"equipment":          "equipment.Service.PurgeUser",
-		"notifications":      "notify.Service.PurgeUser",
-		"feedback":           "feedback.Service.PurgeUser",
-		"push_subscriptions": "notify.Service.PurgeUser",
-		"user_prefs":         "settings.Store.PurgeUser",
-		"user_last_login":    "settings.Store.PurgeUser",
-		"workout_media":      "workout.Service.PurgeUserPhotos",
-		"workout_comments":   "workout.Service.PurgeUserComments (rows on own workouts cascade from workouts)",
-		"workout_reactions":  "workout.Service.PurgeUserReactions (rows on own workouts cascade from workouts)",
-		"session_clients":    "sessions.Store.PurgeUser",
-		"training_plans":     "plans.Service.PurgeUser (days, blocks and exercises cascade from the plan)",
-		"plan_sessions":      "plans.Service.PurgeUser",
+		"workouts":            "workout.Service.PurgeUserWorkouts",
+		"workout_shares":      "workout.Service.PurgeUserShares (recipient rows; owner rows cascade from workouts)",
+		"equipment":           "equipment.Service.PurgeUser",
+		"notifications":       "notify.Service.PurgeUser",
+		"feedback":            "feedback.Service.PurgeUser",
+		"push_subscriptions":  "notify.Service.PurgeUser",
+		"user_prefs":          "settings.Store.PurgeUser",
+		"user_last_login":     "settings.Store.PurgeUser",
+		"workout_media":       "workout.Service.PurgeUserPhotos",
+		"workout_comments":    "workout.Service.PurgeUserComments (rows on own workouts cascade from workouts)",
+		"workout_reactions":   "workout.Service.PurgeUserReactions (rows on own workouts cascade from workouts)",
+		"session_clients":     "sessions.Store.PurgeUser",
+		"training_plans":      "plans.Service.PurgeUser (days, blocks and exercises cascade from the plan)",
+		"plan_sessions":       "plans.Service.PurgeUser",
+		"plan_shares":         "plans.Service.PurgeUser (recipient rows; owner rows cascade from training_plans)",
+		"plan_session_shares": "plans.Service.PurgeUser (recipient rows; owner rows cascade from plan_sessions)",
 	}
 
 	db := openTemp(t)
