@@ -730,12 +730,35 @@ export default function App() {
         ) : page === 'consistency' ? (
           <Consistency />
         ) : page === 'discover' ? (
-          <Discover
-            onOpenUser={id => openSection('users', String(id))}
-            onSelectWorkout={selectWorkout}
-            onSelectPlan={p => openSection('plans', p.id)}
-            onSelectSession={s => openSection('plans', 'session', s.id)}
-          />
+          // A plan or session found here opens *under* Discover — see
+          // DISCOVER_SECTIONS in nav.ts for why it does not go to /plans.
+          section === 'plan' || section === 'session' ? (
+            <Suspense fallback={<div className="page-content page-loading">Loading…</div>}>
+              <PlansPage
+                // PlansPage takes a plan id as its section, or the literal
+                // "session" with the id in detail. /discover/plan/{id} carries
+                // the id one segment further out, so it is shifted back here.
+                section={section === 'session' ? 'session' : detail}
+                detail={section === 'session' ? detail : null}
+                onOpen={(sec, det) => {
+                  // Back out of the item, to the feed it was found in.
+                  if (!sec) return openSection('discover', null)
+                  // A session stays under Discover; a bare id is a clone, which
+                  // is yours now and belongs in your own library.
+                  if (sec === 'session') return openSection('discover', 'session', det ?? null)
+                  return openSection('plans', sec)
+                }}
+                onOpenUser={id => openSection('users', String(id))}
+              />
+            </Suspense>
+          ) : (
+            <Discover
+              onOpenUser={id => openSection('users', String(id))}
+              onSelectWorkout={selectWorkout}
+              onSelectPlan={p => openSection('discover', 'plan', p.id)}
+              onSelectSession={s => openSection('discover', 'session', s.id)}
+            />
+          )
         ) : page === 'users' ? (
           // section carries the user id; see ID_SECTION_PAGES in nav.ts.
           <UserProfile

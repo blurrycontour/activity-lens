@@ -2,10 +2,12 @@ import { Fragment, useMemo, useState } from 'react'
 import PageHeader from '../../components/PageHeader'
 import Confetti from '../../components/Confetti'
 import MenuButton from '../../components/MenuButton'
+import ConfirmDialog from '../../components/ConfirmDialog'
 import ShareDialog from '../../components/ShareDialog'
 import ShareBadge from '../../components/ShareBadge'
 import UserAvatar, { userLabel } from '../../components/UserAvatar'
-import { Check, MoreVertical, Share2, Timer } from 'lucide-react'
+import { Check, MoreVertical, Share2, Timer, Trash2 } from 'lucide-react'
+import { api } from '../../lib/api'
 import {
   blockLabel, blockProgress, chosenExercises, clockLabel, doneSetsFor, durationShort,
   elapsedSec, sectionLabel, sessionWhen, setsFor, trimNum,
@@ -49,20 +51,35 @@ interface DoneBlock {
  * when each set happened. A row that only said "12 of 14 sets" would be a
  * summary of something nobody can look at.
  */
-export default function FinishedSession({ session, onBack, onOpenUser }: {
+export default function FinishedSession({ session, onBack, onOpenUser, onDeleted }: {
   session: PlanSession
   onBack: () => void
   /** Opens the session's author, when it is not you. */
   onOpenUser?: (id: number) => void
+  /** Called once the session is gone, so the caller can leave this page. */
+  onDeleted?: () => void
 }) {
   const blocks = useMemo(() => readBack(session), [session])
   const isOwner = session.isOwner !== false
   const [sharing, setSharing] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [busy, setBusy] = useState(false)
   // Read once, on mount: claiming it during render would fire twice under
   // StrictMode and the second render would decide it had already been shown.
   // Only for your own session — confetti on a result you did not produce
   // would be celebrating the wrong person.
   const [celebrate, setCelebrate] = useState(() => isOwner && claimCelebration(session))
+
+  async function remove() {
+    setBusy(true)
+    try {
+      await api.deletePlanSession(session.id)
+      ;(onDeleted ?? onBack)()
+    } catch {
+      setBusy(false)
+      setConfirmDelete(false)
+    }
+  }
 
   return (
     <>
@@ -76,6 +93,9 @@ export default function FinishedSession({ session, onBack, onOpenUser }: {
           <MenuButton icon={<MoreVertical size={16} />} label="Session options">
             <button className="options-menu-item" onClick={() => setSharing(true)}>
               <Share2 size={14} /> Share
+            </button>
+            <button className="options-menu-item danger" onClick={() => setConfirmDelete(true)}>
+              <Trash2 size={14} /> Delete session
             </button>
           </MenuButton>
         ) : undefined}
@@ -157,6 +177,21 @@ export default function FinishedSession({ session, onBack, onOpenUser }: {
 
         {session.notes && <p className="plan-session-notes">{session.notes}</p>}
       </div>
+
+      {confirmDelete && (
+        <ConfirmDialog
+          title={`Delete ${session.dayName}?`}
+          /* Same wording as History's bulk delete, singular — it is the same
+             act from a different page, and two descriptions of one thing is
+             how they drift apart. */
+          message="Its record goes for good, including the sets and weights. The plan it came from is not touched."
+          confirmLabel="Delete"
+          danger
+          busy={busy}
+          onConfirm={remove}
+          onCancel={() => setConfirmDelete(false)}
+        />
+      )}
 
       {sharing && (
         <ShareDialog

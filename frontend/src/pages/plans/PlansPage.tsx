@@ -309,7 +309,16 @@ export default function PlansPage({ section, detail, onOpen, onOpenUser }: Props
     )
   }
   if (session) {
-    return <FinishedSession session={session} onBack={() => onOpen(null)} onOpenUser={onOpenUser} />
+    return (
+      <FinishedSession
+        session={session}
+        onBack={() => onOpen(null)}
+        onOpenUser={onOpenUser}
+        // Back to the list, and reload it — the row that was just deleted is
+        // still in the History tab's cache until something refetches.
+        onDeleted={() => { setSession(null); void load(); onOpen(null) }}
+      />
+    )
   }
 
   // --- one plan, read or edited -------------------------------------------

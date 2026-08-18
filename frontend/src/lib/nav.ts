@@ -75,10 +75,27 @@ export type SettingsSection = typeof SETTINGS_SECTIONS[number]
 export const ADMIN_SECTIONS = ['users', 'feedback', 'email', 'sso', 'storage', 'social'] as const
 export type AdminSection = typeof ADMIN_SECTIONS[number]
 
+/**
+ * A plan or a session belonging to somebody else, at `/discover/plan/{id}`
+ * and `/discover/session/{id}`.
+ *
+ * Under Discover rather than under Plans, because that is where it was found
+ * and that is what the nav should say while it is open. Routing someone
+ * else's plan to `/plans/{id}` lit up the Plans tab — which is your own
+ * library, the one place the thing on screen is certainly not — and pressing
+ * that tab then went somewhere you were apparently already at.
+ *
+ * The page rendered is still PlansPage: the item is the same item, only the
+ * route it hangs off differs. A clone, being yours, moves to `/plans/{id}`.
+ */
+export const DISCOVER_SECTIONS = ['plan', 'session'] as const
+export type DiscoverSection = typeof DISCOVER_SECTIONS[number]
+
 /** The section ids valid under a given hub page. */
 function sectionsFor(page: Page): readonly string[] {
   if (page === 'settings') return SETTINGS_SECTIONS
   if (page === 'admin') return ADMIN_SECTIONS
+  if (page === 'discover') return DISCOVER_SECTIONS
   return []
 }
 

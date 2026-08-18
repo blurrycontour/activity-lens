@@ -89,46 +89,42 @@ export default function PlanView({ plan, onBack, onEdit, onRename, onStart, onDe
         /* One menu rather than three buttons: a rename, an edit and a delete
            beside a long plan name wrapped the header onto a third row on a
            phone, and only one of the four is worth a permanent button. */
-        actions={
+        /* Someone else's plan has exactly one thing you can do to it, so it
+           gets one button and no menu. A kebab holding a single item is a
+           menu that exists to be opened once and then agreed with. */
+        actions={isOwner ? (
           <div className="plan-run-actions">
-            {isOwner ? (
-              <button
-                className="btn btn-primary desktop-only"
-                disabled={!startable}
-                onClick={() => day && onStart(day.id)}
-                title={startable ? undefined : 'Add an exercise first'}
-              >
-                <Play size={15} /> Start
-              </button>
-            ) : (
-              <button className="btn btn-primary desktop-only" disabled={cloning} onClick={() => void clonePlan()}>
-                <Copy size={15} /> Clone
-              </button>
-            )}
+            <button
+              className="btn btn-primary desktop-only"
+              disabled={!startable}
+              onClick={() => day && onStart(day.id)}
+              title={startable ? undefined : 'Add an exercise first'}
+            >
+              <Play size={15} /> Start
+            </button>
             <MenuButton icon={<MoreVertical size={16} />} label="Plan options">
-              {isOwner ? (
-                <>
-                  <button className="options-menu-item" onClick={onEdit}>
-                    <Pencil size={14} /> Edit plan
-                  </button>
-                  <button className="options-menu-item" onClick={onRename}>
-                    <Pencil size={14} /> Rename
-                  </button>
-                  <button className="options-menu-item" onClick={() => setSharing(true)}>
-                    <Share2 size={14} /> Share
-                  </button>
-                  <button className="options-menu-item danger" onClick={() => setConfirmDelete(true)}>
-                    <Trash2 size={14} /> Delete plan
-                  </button>
-                </>
-              ) : (
-                <button className="options-menu-item" disabled={cloning} onClick={() => void clonePlan()}>
-                  <Copy size={14} /> Clone into your plans
-                </button>
-              )}
+              <button className="options-menu-item" onClick={onEdit}>
+                <Pencil size={14} /> Edit plan
+              </button>
+              <button className="options-menu-item" onClick={onRename}>
+                <Pencil size={14} /> Rename
+              </button>
+              <button className="options-menu-item" onClick={() => setSharing(true)}>
+                <Share2 size={14} /> Share
+              </button>
+              <button className="options-menu-item danger" onClick={() => setConfirmDelete(true)}>
+                <Trash2 size={14} /> Delete plan
+              </button>
             </MenuButton>
           </div>
-        }
+        ) : (
+          /* Not desktop-only, and no FAB below: with the menu gone this is the
+             only way to act on the plan, so it has to be on screen at every
+             width rather than duplicated into a floating button. */
+          <button className="btn btn-primary" disabled={cloning} onClick={() => void clonePlan()}>
+            <Copy size={15} /> {cloning ? 'Cloning…' : 'Clone'}
+          </button>
+        )}
       />
 
       <div className="page-content">
@@ -241,11 +237,10 @@ export default function PlanView({ plan, onBack, onEdit, onRename, onStart, onDe
         )}
       </div>
 
-      {/* The phone's start control, where the thumb is. Clone takes its
-          place on a plan that is not yours — starting is not an option
-          there, but copying it into your own library is the equivalent
-          one-tap action. */}
-      {startable ? (
+      {/* The phone's start control, where the thumb is. Only for your own
+          plan: someone else's carries its single Clone button in the header
+          instead, so a FAB here would be the same action twice. */}
+      {startable && (
         <button
           className="fab"
           onClick={() => day && onStart(day.id)}
@@ -253,16 +248,6 @@ export default function PlanView({ plan, onBack, onEdit, onRename, onStart, onDe
           aria-label={`Start ${day?.name ?? ''}`}
         >
           <Play size={22} />
-        </button>
-      ) : !isOwner && (
-        <button
-          className="fab"
-          disabled={cloning}
-          onClick={() => void clonePlan()}
-          title="Clone into your plans"
-          aria-label="Clone into your plans"
-        >
-          <Copy size={20} />
         </button>
       )}
 

@@ -53,7 +53,7 @@ func (s *Server) notifyPlanShared(r *http.Request, sender auth.User, targetID in
 		Kind:   notify.KindPlanShared,
 		Title:  fmt.Sprintf("%s shared a plan with you", from),
 		Body:   fmt.Sprintf("%s · %d day%s", p.Name, days, plural(days)),
-		Link:   "/plans/" + p.ID,
+		Link:   "/discover/plan/" + p.ID,
 		Icon:   effectiveAvatar(sender),
 	})
 }
@@ -69,7 +69,7 @@ func (s *Server) notifySessionShared(r *http.Request, sender auth.User, targetID
 		Kind:   notify.KindSessionShared,
 		Title:  fmt.Sprintf("%s shared a session with you", from),
 		Body:   fmt.Sprintf("%s · %d/%d sets", sess.DayName, sess.DoneSets, sess.TotalSets),
-		Link:   "/plans/session/" + sess.ID,
+		Link:   "/discover/session/" + sess.ID,
 		Icon:   effectiveAvatar(sender),
 	})
 }

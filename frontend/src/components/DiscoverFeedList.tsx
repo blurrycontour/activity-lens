@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { ClipboardList, Ghost, History, LoaderCircle } from 'lucide-react'
+import { ClipboardList, Clock, Ghost, History, LoaderCircle } from 'lucide-react'
 import type { Workout } from '../data/workouts'
 import { clockLabel, elapsedSec, sessionWhen, type PlanSession, type TrainingPlan } from '../data/plans'
 import { planHaystack, sessionHaystack, workoutHaystack } from '../lib/discoverSearch'
@@ -158,45 +158,121 @@ export default function DiscoverFeedList({
 }
 
 /**
- * A plan's row in the mixed feed — the same card language Plans' own list
- * uses (.plan-card), so it reads as one list rather than a second style.
+ * One row in the mixed feed, for a plan or a session.
  *
- * A div, not a button: the owner byline inside it is its own clickable
- * control (opening a person rather than the card), and a button cannot
- * legally contain another one. WorkoutCard's own list row uses the same
- * plain-div-with-onClick shape for the same reason.
+ * Built on WorkoutCard's `.workout-row` classes rather than on `.plan-card`,
+ * because in this list the three kinds sit *directly beneath each other* and
+ * anything they do not share reads as an inconsistency rather than as a
+ * distinction. On `.plan-card` they had no accent bar, a flat grey circle
+ * where a workout has a colour-filled tile, no badge naming what they were,
+ * and the owner squeezed inline beside the figures instead of in the ruled
+ * footer every workout puts it in.
+ *
+ * What legitimately differs stays different: the accent colour, the icon, the
+ * badge, and the one headline figure on the right.
+ *
+ * A div, not a button: the owner byline inside is its own clickable control
+ * (it opens a person, not the row), and a button cannot legally contain
+ * another one. `.workout-row` is a div with an onClick for the same reason.
  */
-function PlanFeedCard({ plan, onOpen, onOpenUser }: { plan: TrainingPlan; onOpen: () => void; onOpenUser?: (id: number) => void }) {
+function FeedRow({ accent, icon, badge, name, date, stats, figure, unit, owner, onOpen, onOpenUser }: {
+  accent: string
+  icon: React.ReactNode
+  badge: string
+  name: string
+  date: string
+  stats: React.ReactNode
+  figure: string
+  unit: string
+  owner?: { id: number; username: string; displayName: string; avatarPath: string }
+  onOpen: () => void
+  onOpenUser?: (id: number) => void
+}) {
   return (
-    <div className="card plan-card discover-item" onClick={onOpen}>
-      <span className="discover-item-icon" aria-hidden><ClipboardList size={16} /></span>
-      <div className="plan-card-main">
-        <strong className="plan-card-name">{plan.name}</strong>
-        <span className="plan-card-meta plan-num">
-          {plan.dayCount} day{plan.dayCount === 1 ? '' : 's'}
-        </span>
+    <div
+      className="workout-row"
+      onClick={onOpen}
+      style={{ '--row-accent': accent } as React.CSSProperties}
+    >
+      <div className="workout-row-icon" aria-hidden>{icon}</div>
+
+      <div className="workout-row-body">
+        <div className="workout-row-title">
+          <span className="workout-row-name">{name}</span>
+          <span className={`badge tag-${badge.toLowerCase()}`}>{badge}</span>
+        </div>
+        <div className="workout-row-meta">
+          <span className="workout-row-date">{date}</span>
+          <div className="workout-row-stats">{stats}</div>
+        </div>
+        {owner && (
+          <div className="workout-row-footer">
+            <Byline people={[owner]} kind="owner" onOpenUser={onOpenUser} />
+          </div>
+        )}
       </div>
-      {plan.owner && <Byline people={[plan.owner]} kind="owner" onOpenUser={onOpenUser} />}
+
+      <div className="workout-row-aside">
+        <div className="workout-row-pace">
+          <b>{figure}</b>
+          <small>{unit}</small>
+        </div>
+      </div>
     </div>
   )
 }
 
-/** A finished session's row in the mixed feed, mirroring History's own card. */
+function PlanFeedCard({ plan, onOpen, onOpenUser }: { plan: TrainingPlan; onOpen: () => void; onOpenUser?: (id: number) => void }) {
+  return (
+    <FeedRow
+      accent="var(--plan)"
+      icon={<ClipboardList size={20} color="var(--plan)" />}
+      badge="Plan"
+      name={plan.name}
+      date={shortDate(plan.updatedAt)}
+      stats={plan.lastSessionAt
+        ? <div className="workout-row-stat"><History size={11} color="var(--text-3)" /><span>run {shortDate(plan.lastSessionAt)}</span></div>
+        : <div className="workout-row-stat"><span>never run</span></div>}
+      figure={String(plan.dayCount)}
+      unit={plan.dayCount === 1 ? 'day' : 'days'}
+      owner={plan.owner}
+      onOpen={onOpen}
+      onOpenUser={onOpenUser}
+    />
+  )
+}
+
 function SessionFeedCard({ session: s, onOpen, onOpenUser }: { session: PlanSession; onOpen: () => void; onOpenUser?: (id: number) => void }) {
   return (
-    <div className="card plan-card discover-item" onClick={onOpen}>
-      <span className="discover-item-icon" aria-hidden><History size={16} /></span>
-      <div className="plan-card-main">
-        <strong className="plan-card-name">{s.dayName}</strong>
-        <span className="plan-card-meta plan-num">
-          {sessionWhen(s.startedAt)} · {s.planName}
-        </span>
-      </div>
-      <div className="plan-card-figures plan-num">
-        <span>{s.doneSets}/{s.totalSets} sets</span>
-        <span>{clockLabel(elapsedSec(s.startedAt, s.finishedAt))}</span>
-      </div>
-      {s.owner && <Byline people={[s.owner]} kind="owner" onOpenUser={onOpenUser} />}
-    </div>
+    <FeedRow
+      accent="var(--session)"
+      icon={<History size={20} color="var(--session)" />}
+      badge="Session"
+      name={s.dayName}
+      date={sessionWhen(s.startedAt)}
+      stats={
+        <>
+          <div className="workout-row-stat">
+            <ClipboardList size={11} color="var(--text-3)" /><span>{s.planName}</span>
+          </div>
+          <div className="workout-row-stat">
+            <Clock size={11} color="var(--text-3)" />
+            <span>{clockLabel(elapsedSec(s.startedAt, s.finishedAt))}</span>
+          </div>
+        </>
+      }
+      figure={`${s.doneSets}/${s.totalSets}`}
+      unit="sets"
+      owner={s.owner}
+      onOpen={onOpen}
+      onOpenUser={onOpenUser}
+    />
   )
+}
+
+/** The same "Jul 26, 2026" a workout row shows, so the dates line up. */
+function shortDate(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }

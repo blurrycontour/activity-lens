@@ -53,6 +53,14 @@
   /* Deliberately the one grey in the sport palette: Other is not a sport, it is
      the absence of one. A workout that reads as unclassified is doing its job. */
   --other: #94a3b8;
+  /* Training plans and the sessions run against them. Their own two colours
+     rather than a borrowed sport one: a plan and a session appear in the same
+     mixed list as workouts, and reusing --strength would have said "this is a
+     strength workout" about a row that is neither strength nor a workout.
+     Kept apart from each other too — a plan is the intent, a session is the
+     record, and the feed shows both at once. */
+  --plan: #6366f1;
+  --session: #f43f5e;
   /* Status colours. Separate from the activity-type palette above even where
      the hex matches (--hike is also amber): those track a sport, these track
      an outcome, and they are free to diverge. Never the accent — the accent is
@@ -1184,6 +1192,11 @@ body {
    the five above — those predate --other existing, and a sixth literal would be
    a second copy of a colour that already has a name. */
 .tag-other    { background: color-mix(in srgb, var(--other) 14%, transparent); color: var(--other); }
+/* A plan and a session share the row shape workouts use, so they need the
+   badge that names them too — without it the only thing distinguishing the
+   three kinds in a mixed feed is an icon. */
+.tag-plan     { background: color-mix(in srgb, var(--plan) 14%, transparent); color: var(--plan); }
+.tag-session  { background: color-mix(in srgb, var(--session) 14%, transparent); color: var(--session); }
 
 .stat-chip { display: flex; flex-direction: column; gap: 2px; }
 .stat-chip .label { font-size: 11px; color: var(--text-3); font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.06em; }
@@ -4173,19 +4186,6 @@ body:has(.overlay) .fab { display: none; }
 .discover-chip.active { border-color: var(--primary); background: var(--primary-dim); color: var(--primary); }
 .discover-chip-count { font-size: 11px; opacity: 0.75; }
 
-/* A plan or session row in Discover's mixed feed — the icon marks which of
-   the three it is, since the same .plan-card language is shared with rows
-   that carry no icon of their own elsewhere. */
-.discover-item-icon {
-  flex: 0 0 auto;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: var(--bg-3);
-  color: var(--text-2);
-}
 
 /* The edit dialog scrolls: with the advanced section open it is taller than a
    laptop screen, and the Save button was what fell off the bottom. Head and
