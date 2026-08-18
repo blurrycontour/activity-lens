@@ -5786,10 +5786,11 @@ body:has(.overlay) .fab { display: none; }
    the row rhythm and accent rail the Workouts list already uses, so the page
    reads as part of the app rather than a feature bolted to the side.
 
-   Purple is not decoration here. --strength is what this app already paints
-   strength workouts, so the choose-one group — the one genuinely new concept —
-   inherits a meaning instead of inventing one. It is deliberately not the
-   accent: the accent is the user's choice and carries none. */
+   Colour is the accent, not a hue of this feature's own. A wall of purple
+   cards read as a decorated list rather than a plan, and it fought whatever
+   accent the user had chosen — so exercises wear --primary and a section
+   (warm-up, cool-down, stretch) wears --hike, which is the one other colour
+   in the palette that reads as "the easy part". */
 
 /* Numbers, wherever they line up or get compared. */
 .plan-num {
@@ -5946,12 +5947,16 @@ body:has(.overlay) .fab { display: none; }
   left: 0;
   top: 0;
   bottom: 0;
-  width: 3px;
+  width: 5px;
   background: var(--primary);
 }
+/* Found from across the room, which is the actual viewing distance: a phone
+   propped against a water bottle two metres away. A hairline border and a 5%
+   tint were invisible at that range. */
 .plan-ex.current {
-  border-color: color-mix(in srgb, var(--primary) 40%, var(--border));
-  background: color-mix(in srgb, var(--primary) 5%, var(--bg-2));
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 11%, var(--bg-2));
+  box-shadow: 0 0 0 1px var(--primary), 0 6px 22px var(--primary-glow);
 }
 .plan-ex.done .plan-ex-title { color: var(--text-3); text-decoration: line-through; }
 /* Not on a grouped block, whose purple frame says something the open state
@@ -5994,11 +5999,14 @@ body:has(.overlay) .fab { display: none; }
   width: 36px;
   height: 36px;
   border-radius: var(--radius);
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-3);
+  /* Two-pixel, on --border-strong rather than --border: an unticked box on a
+     dark background was a hairline in a colour barely off the card, which is
+     no target at all. These are the thing you aim at. */
+  border: 2px solid var(--border-strong);
+  background: var(--bg-3);
+  color: var(--text-2);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 14px;
   cursor: pointer;
   display: grid;
   place-items: center;
@@ -6123,10 +6131,10 @@ body:has(.overlay) .fab { display: none; }
   color: var(--text-2);
   cursor: pointer;
 }
-.plan-swap:hover { border-color: var(--strength); color: var(--text); }
+.plan-swap:hover { border-color: var(--primary); color: var(--text); }
 .plan-swap.on {
-  background: color-mix(in srgb, var(--strength) 15%, transparent);
-  border-color: var(--strength);
+  background: var(--primary-dim);
+  border-color: var(--primary);
   color: var(--text);
 }
 
@@ -6205,19 +6213,18 @@ body:has(.overlay) .fab { display: none; }
    "Bo" tell you nothing. */
 .plan-kind-field { min-width: 118px; }
 
-/* The choose-one group: the only new idea in the feature, so the only thing
-   here wearing the strength colour. */
+/* The choose-one group. */
 .plan-group {
   display: flex;
   flex-direction: column;
   gap: 7px;
   padding: 10px;
-  border: 1px solid var(--strength);
+  border: 1px solid color-mix(in srgb, var(--primary) 45%, var(--border));
   border-radius: calc(var(--radius) * 1.5);
-  background: color-mix(in srgb, var(--strength) 10%, transparent);
+  background: color-mix(in srgb, var(--primary) 5%, transparent);
 }
 .plan-group-head { display: flex; align-items: center; gap: 8px; }
-.plan-group-head .field-label { color: var(--strength); }
+.plan-group-head .field-label { color: var(--primary); }
 .plan-group-head .btn-icon { margin-left: auto; }
 
 .plan-add-row,
@@ -6236,7 +6243,7 @@ body:has(.overlay) .fab { display: none; }
   cursor: pointer;
 }
 .plan-add-row:hover,
-.plan-add-alt:hover { color: var(--text); border-color: var(--strength); }
+.plan-add-alt:hover { color: var(--text); border-color: var(--primary); }
 .plan-add-alt { align-self: flex-start; border-style: dashed; padding: 6px 10px; font-size: 12px; }
 
 /* The three number fields leave the name a stub in a narrow column, and "Be"
@@ -6355,7 +6362,7 @@ body:has(.overlay) .fab { display: none; }
 /* The read view's rows: no controls, just what you are about to do. */
 .plan-ex-read { display: flex; flex-direction: column; gap: 6px; }
 .plan-read-body { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
-.plan-read-kind { color: var(--strength); }
+.plan-read-kind { color: var(--primary); }
 .plan-read-row { display: flex; align-items: baseline; gap: 12px; }
 .plan-read-name { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; flex: 1; min-width: 0; }
 .plan-read-target {
@@ -6564,17 +6571,14 @@ body:has(.overlay) .fab { display: none; }
   background: transparent;
 }
 
-/* A block holding more than one exercise, wherever it is read.
-   Drawn flat, a superset and three unrelated exercises were the same three
-   rows, and the one genuinely new idea in the feature was invisible. Purple
-   because --strength is already what this app paints strength work. */
-.plan-ex-grouped { border-color: color-mix(in srgb, var(--strength) 45%, var(--border)); }
-.plan-ex-grouped::before { background: var(--strength); opacity: 1; }
+/* A block holding more than one exercise, wherever it is read. Drawn flat, a
+   superset and three unrelated exercises were the same three rows. */
+.plan-ex-grouped { border-color: color-mix(in srgb, var(--primary) 40%, var(--border)); }
 .plan-ex-read.plan-ex-grouped { gap: 8px; }
 
 /* The editor's block header: the phrase picker, then the block's own menu. */
 .plan-block-head .al-dropdown { flex: 1; min-width: 0; }
-.plan-block-head .al-dropdown-trigger { font-size: 12px; padding: 4px 9px; color: var(--strength); }
+.plan-block-head .al-dropdown-trigger { font-size: 12px; padding: 4px 9px; color: var(--primary); }
 
 /* --- The runner --- */
 
@@ -6734,7 +6738,7 @@ body:has(.overlay) .fab { display: none; }
 
 /* A warm-up, cool-down or stretch. Visibly not working sets: dashed rather
    than solid, in the "hike" amber so it reads as the easy end of the day
-   without competing with the strength purple a superset wears. */
+   without competing with the accent a block of working sets wears. */
 .plan-ex-section,
 .plan-section {
   border-style: dashed;
@@ -6821,3 +6825,86 @@ body.session-full .plan-player { bottom: 0; padding-bottom: var(--safe-bottom); 
 .selection-all { margin-left: auto; }
 .selection-delete { color: var(--danger); }
 .selection-delete:disabled { opacity: 0.45; }
+
+/* ── Training plans: read at arm's length ───────────────────────────── */
+
+/* The session page is read from further away than any other screen in the app
+   — a phone propped against something, mid-set, with a barbell in the way. So
+   its type is a step up from the list it grew out of. */
+.plan-run-page .plan-ex-title,
+.plan-run-page .plan-read-name { font-size: 16px; font-weight: 650; }
+.plan-run-page .plan-read-target { font-size: 13.5px; }
+.plan-run-page .plan-read-kind { font-size: 11.5px; }
+.plan-run-page .plan-set { width: 44px; height: 44px; font-size: 15px; }
+.plan-run-page .plan-setrow-n { font-size: 14px; }
+.plan-run-page .plan-swap { font-size: 12.5px; padding: 6px 12px; }
+
+/* "Now" — the badge on the block being worked on. */
+.plan-now {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--bg);
+  background: var(--primary);
+  border-radius: 99px;
+  padding: 2px 8px;
+  flex: 0 0 auto;
+}
+
+/* The reading view's figures, in the shape the expanded runner uses — that
+   view reads well precisely because each number says what it is. */
+.plan-read-ex { display: flex; flex-direction: column; gap: 7px; }
+.plan-read-ex + .plan-read-ex {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.plan-read-stats { display: flex; gap: 22px; flex-wrap: wrap; }
+.plan-read-ex .plan-read-name { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; }
+
+/* A section that is only a length of time. */
+.plan-section-duration { display: flex; flex-direction: column; gap: 3px; }
+.plan-section-duration .input { width: 100%; }
+
+/* --- The timer bar's controls --- */
+
+/* Big targets either side of the clock: this is tapped mid-set, one-handed,
+   without looking properly. A 28px button in a row of text is not that. */
+.plan-nudge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  min-width: 56px;
+  height: 40px;
+  justify-content: center;
+  padding: 0 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-2);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  cursor: pointer;
+}
+.plan-nudge:hover { border-color: var(--warning); color: var(--warning); }
+.plan-nudge:active { transform: scale(0.96); }
+.plan-nudge.skip { min-width: 44px; }
+
+/* The one red button that ends a session, and the dialog that asks how. */
+.plan-player-end { flex: 0 0 auto; }
+.plan-end-box {
+  max-width: 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  text-align: center;
+}
+.plan-end-title { font-size: 17px; font-weight: 700; }
+.plan-end-sub { font-size: 13px; color: var(--text-3); margin-bottom: 6px; }
+.plan-end-choice { justify-content: center; width: 100%; padding: 11px 14px; font-size: 14px; }
+
+/* Fullscreen leaves the phone's own status bar in place, so the title has to
+   clear it — the safe inset is the only thing that knows how tall it is. */
+body.session-full .page-header { padding-top: calc(16px + var(--safe-top)); }

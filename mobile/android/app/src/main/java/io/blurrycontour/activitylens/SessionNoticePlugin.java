@@ -54,6 +54,7 @@ public class SessionNoticePlugin extends Plugin {
         String body = call.getString("body", "");
         String startedAt = call.getString("startedAt", "");
         int percent = call.getInt("percent", 0);
+        String subText = call.getString("subText", "");
 
         Context context = getContext();
         createChannel(context);
@@ -76,6 +77,10 @@ public class SessionNoticePlugin extends Plugin {
             .setColor(ContextCompat.getColor(context, R.color.app_accent))
             .setContentTitle(title)
             .setContentText(body)
+            // The plan's name, beside the app's own in the header line. It is
+            // context rather than content, and putting it in the body cost a
+            // line that the exercise you are on needs.
+            .setSubText(subText)
             // A workout is not a message: this is what puts it with the media
             // and timer notifications rather than among the social ones.
             .setCategory(NotificationCompat.CATEGORY_WORKOUT)

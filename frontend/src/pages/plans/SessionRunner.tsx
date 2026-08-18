@@ -1,15 +1,17 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, Coffee, Dumbbell, Maximize2,
-  Minimize2, Plus, SkipForward, Square, Timer,
+  Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, Coffee, Maximize2,
+  Minimize2, Minus, Plus, SkipForward, Square, Timer, Trash2,
 } from 'lucide-react'
 import PageHeader from '../../components/PageHeader'
 import ConfirmDialog from '../../components/ConfirmDialog'
+import Modal from '../../components/Modal'
 import { api } from '../../lib/api'
 import {
   blockComplete, blockLabel, blockProgress, chosenExercises, clockLabel, currentBlockId,
   currentExercise, doneSetsFor, durationShort, effectivePicks, elapsedSec, exerciseComplete,
-  leadingDone, sectionLabel, sessionTally, setState, setTappable, setsFor, targetLabel, trimNum,
+  isBareSection, leadingDone, sectionExercise, sectionLabel, sessionTally, setState, setTappable, setsFor,
+  targetLabel, trimNum,
   type BlockProgress, type PlanBlock, type PlanExercise, type PlanSession, type SessionProgress,
   type SetLog, type SetState,
 } from '../../data/plans'
@@ -41,8 +43,8 @@ interface Running {
   endsAt: number
 }
 
-/** Seconds the nudge button adds. Named because it is also the label. */
-const NUDGE_SEC = 15
+/** Seconds the nudge buttons move a timer by. Named because it is also the label. */
+const NUDGE_SEC = 10
 
 /**
  * Running a session: the whole day as a list of rows, sets as tappable
@@ -69,6 +71,8 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
   const [error, setError] = useState('')
   const [running, setRunning] = useState<Running | null>(null)
   const [full, setFull] = useState(false)
+  // The one red button asks which kind of ending you meant.
+  const [ending, setEnding] = useState(false)
 
   const blocks = session.snapshot.blocks
   const tally = useMemo(() => sessionTally({ ...session, progress }), [session, progress])
@@ -122,20 +126,33 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
     setFull(true)
   }
 
+  const left = running ? Math.max(0, Math.round((running.endsAt - Date.now()) / 1000)) : 0
+  const resting = running?.kind === 'rest' || running?.kind === 'break'
+
   // The phone's ongoing notification, so a session is visible with the app
   // closed. Re-posted as progress moves: the shade should say how far in you
   // are and what you are on, not just that something is running. A no-op
   // anywhere but the Android app.
   const heading = currentExercise(session, progress)
+  // Glyphs rather than a bare percentage: the shade shows two lines at a
+  // glance, and "🏋 Lat pulldown · 6/15" is read without being parsed, where
+  // "40% · Lat pulldown" repeated what the progress bar underneath already
+  // said. The percentage stays, as the bar.
+  const notice = resting
+    ? `☕ Resting · ${tally.done}/${tally.total} sets`
+    : heading
+      ? `🏋 ${heading} · ${tally.done}/${tally.total} sets`
+      : `✅ ${tally.done}/${tally.total} sets done`
   useEffect(() => {
     void showSessionNotice({
       sessionId: session.id,
       title: session.dayName,
-      body: heading ? `${pct}% · ${heading}` : `${pct}% · ${session.planName}`,
+      body: notice,
+      subText: session.planName,
       startedAt: session.startedAt,
       percent: pct,
     })
-  }, [session.id, session.dayName, session.planName, session.startedAt, heading, pct])
+  }, [session.id, session.dayName, session.planName, session.startedAt, notice, pct])
 
   // --- persistence -------------------------------------------------------
   //
@@ -264,7 +281,7 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
     if (running?.kind !== 'set' || running.setIndex === undefined) return
     if (Date.now() < running.endsAt) return
     const block = blocks.find(b => b.id === running.blockId)
-    const ex = block?.options.find(o => o.id === running.exerciseId)
+    const ex = block && exerciseIn(block, running.exerciseId)
     if (block && ex) finishSet(block, ex, running.setIndex)
   })
 
@@ -305,15 +322,17 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
 
   // --- the current timer's controls --------------------------------------
 
-  function nudge() {
-    setRunning(r => (r ? { ...r, endsAt: r.endsAt + NUDGE_SEC * 1000 } : r))
+  function nudge(by: number) {
+    // Never below now: taking ten seconds off a five-second timer means it is
+    // over, not that it owes you five.
+    setRunning(r => (r ? { ...r, endsAt: Math.max(Date.now(), r.endsAt + by * 1000) } : r))
   }
 
   /** Skip means "this is over now" — which, for a set under way, is done. */
   function skip() {
     if (running?.kind === 'set' && running.setIndex !== undefined) {
       const block = blocks.find(b => b.id === running.blockId)
-      const ex = block?.options.find(o => o.id === running.exerciseId)
+      const ex = block && exerciseIn(block, running.exerciseId)
       if (block && ex) { finishSet(block, ex, running.setIndex); return }
     }
     setRunning(null)
@@ -350,9 +369,6 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
     }
   }
 
-  const left = running ? Math.max(0, Math.round((running.endsAt - Date.now()) / 1000)) : 0
-  const resting = running?.kind === 'rest' || running?.kind === 'break'
-
   return (
     <>
       <PageHeader
@@ -368,18 +384,11 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
           <div className="plan-run-actions">
             <button
               className="btn-icon"
-              onClick={toggleFull}
-              title={full ? 'Leave fullscreen' : 'Fullscreen'}
-              aria-label={full ? 'Leave fullscreen' : 'Fullscreen'}
-              aria-pressed={full}
+              onClick={() => setOpenIds(allOpen ? new Set() : new Set(blocks.map(b => b.id)))}
+              title={allOpen ? 'Collapse every exercise' : 'Expand every exercise'}
+              aria-label={allOpen ? 'Collapse every exercise' : 'Expand every exercise'}
             >
-              {full ? <Minimize2 size={17} /> : <Maximize2 size={17} />}
-            </button>
-            <button className="btn btn-ghost desktop-only" onClick={() => setConfirmDiscard(true)}>
-              <Square size={14} /> Stop
-            </button>
-            <button className="btn btn-primary desktop-only" onClick={() => setConfirmFinish(true)}>
-              <Check size={15} /> Finish
+              {allOpen ? <ChevronsDownUp size={18} /> : <ChevronsUpDown size={18} />}
             </button>
           </div>
         }
@@ -393,7 +402,6 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
             <Fragment key={block.id}>
               <BlockRow
                 block={block}
-                index={i}
                 progress={blockProgress(progress, block.id)}
                 open={openIds.has(block.id)}
                 current={block.id === currentId}
@@ -441,16 +449,21 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
             life explaining that it does nothing. */}
         {running && (
           <div className="plan-timer-bar">
+            {/* Either side of the clock, and big: this is tapped mid-set with
+                one hand, and a 28px button in a row of text is not. */}
+            <button className="plan-nudge" onClick={() => nudge(-NUDGE_SEC)} aria-label={`Take ${NUDGE_SEC} seconds off`}>
+              <Minus size={15} /> {NUDGE_SEC}s
+            </button>
             <span className={`plan-timer-now${left <= 0 ? ' up' : ''}`}>
-              {resting ? <Coffee size={14} aria-hidden /> : <Timer size={14} aria-hidden />}
+              {resting ? <Coffee size={15} aria-hidden /> : <Timer size={15} aria-hidden />}
               <span className="plan-num">{left > 0 ? clockLabel(left) : 'over'}</span>
               <span className="plan-timer-what">{timerNoun(running)}</span>
             </span>
-            <button className="btn btn-ghost" onClick={nudge}>
-              <Plus size={14} /> {NUDGE_SEC}s
+            <button className="plan-nudge" onClick={() => nudge(NUDGE_SEC)} aria-label={`Add ${NUDGE_SEC} seconds`}>
+              <Plus size={15} /> {NUDGE_SEC}s
             </button>
-            <button className="btn btn-ghost" onClick={skip}>
-              <SkipForward size={14} /> Skip
+            <button className="plan-nudge skip" onClick={skip} aria-label="Skip this timer">
+              <SkipForward size={15} />
             </button>
           </div>
         )}
@@ -459,11 +472,6 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
           <span className="plan-player-fill" style={{ width: `${pct}%` }} />
         </div>
         <div className="plan-player-row">
-          {/* What is happening, at a glance: a cup while you are waiting, a
-              dumbbell while you are working. */}
-          <span className={`plan-player-state${resting ? ' resting' : ''}`} title={resting ? 'Resting' : 'Working'}>
-            {resting ? <Coffee size={18} /> : <Dumbbell size={18} />}
-          </span>
           <div className="plan-player-figures">
             <span className="plan-player-pct plan-num">{pct}%</span>
             <span className="plan-player-meta plan-num">
@@ -472,28 +480,32 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
           </div>
           <button
             className="btn-icon"
-            onClick={() => setOpenIds(allOpen ? new Set() : new Set(blocks.map(b => b.id)))}
-            title={allOpen ? 'Collapse every exercise' : 'Expand every exercise'}
-            aria-label={allOpen ? 'Collapse every exercise' : 'Expand every exercise'}
+            onClick={toggleFull}
+            title={full ? 'Leave fullscreen' : 'Fullscreen'}
+            aria-label={full ? 'Leave fullscreen' : 'Fullscreen'}
+            aria-pressed={full}
           >
-            {allOpen ? <ChevronsDownUp size={18} /> : <ChevronsUpDown size={18} />}
+            {full ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
           </button>
-          <button
-            className="btn-icon plan-player-stop"
-            onClick={() => setConfirmDiscard(true)}
-            title="Stop and discard"
-            aria-label="Stop and discard this session"
-          >
-            {/* Filled: an outlined square beside a tick reads as an empty
-                checkbox rather than as stop. */}
-            <Square size={15} fill="currentColor" />
-          </button>
-          <button className="btn btn-primary plan-player-finish" onClick={() => setConfirmFinish(true)}>
-            <Check size={16} /> Finish
+          {/* One button, not two. Finish and Stop side by side were the same
+              size and a tap apart, and one of them throws the session away —
+              so the choice is made in a dialog where it can be read. */}
+          <button className="btn btn-danger plan-player-end" onClick={() => setEnding(true)}>
+            <Square size={14} fill="currentColor" /> End
           </button>
         </div>
       </div>
 
+      {ending && (
+        <EndSessionDialog
+          done={tally.done}
+          total={tally.total}
+          busy={busy}
+          onFinish={() => { setEnding(false); setConfirmFinish(true) }}
+          onDiscard={() => { setEnding(false); setConfirmDiscard(true) }}
+          onCancel={() => setEnding(false)}
+        />
+      )}
       {confirmFinish && (
         <ConfirmDialog
           title="Finish this session?"
@@ -521,6 +533,45 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
       )}
     </>
   )
+}
+
+/**
+ * What "end" meant.
+ *
+ * Finishing and discarding are opposite outcomes that used to sit side by side
+ * as two same-sized buttons on the player, a thumb-width apart, with only the
+ * words between them and the loss of a whole session. Asking is cheap; getting
+ * it wrong is not.
+ */
+function EndSessionDialog({ done, total, busy, onFinish, onDiscard, onCancel }: {
+  done: number
+  total: number
+  busy: boolean
+  onFinish: () => void
+  onDiscard: () => void
+  onCancel: () => void
+}) {
+  return (
+    <Modal onClose={onCancel} label="End this session">
+      <div className="modal-box plan-end-box">
+        <h3 className="plan-end-title">End this session?</h3>
+        <p className="plan-end-sub plan-num">{done} of {total} sets done</p>
+        <button className="btn btn-primary plan-end-choice" disabled={busy} onClick={onFinish}>
+          <Check size={16} /> Finish and keep it
+        </button>
+        <button className="btn btn-danger plan-end-choice" disabled={busy} onClick={onDiscard}>
+          <Trash2 size={16} /> Discard the session
+        </button>
+        <button className="btn btn-ghost plan-end-choice" onClick={onCancel}>Keep going</button>
+      </div>
+    </Modal>
+  )
+}
+
+/** An exercise by id, including the one a bare section stands in for. */
+function exerciseIn(block: PlanBlock, id: string): PlanExercise | undefined {
+  if (isBareSection(block)) return block.id === id ? sectionExercise(block) : undefined
+  return block.options.find(o => o.id === id)
 }
 
 function timerNoun(r: Running): string {
@@ -553,7 +604,6 @@ function BreakLine({ seconds, active, left, onStart }: {
 
 interface RowProps {
   block: PlanBlock
-  index: number
   progress: BlockProgress
   open: boolean
   /** The block being worked on: the first one not finished. */
@@ -577,13 +627,16 @@ interface RowProps {
  * the squares, which left a superset's rows starting in different places and
  * the timer nowhere to go but the next line.
  */
-function BlockRow({ block, index, progress, open, current, running, left, onOpen, onTapSet, onSetChange, onPick, onStartRest }: RowProps) {
+function BlockRow({ block, progress, open, current, running, left, onOpen, onTapSet, onSetChange, onPick, onStartRest }: RowProps) {
   const chosen = chosenExercises(block, progress)
   if (chosen.length === 0) return null
   const complete = chosen.every(ex => exerciseComplete(ex, setsFor(progress, ex.id)))
   const picked = new Set(effectivePicks(block, progress))
   const label = block.section ? sectionLabel(block.section) : blockLabel(block)
-  const grouped = block.options.length > 1
+  // A bare section is one timed thing wearing an exercise's clothes: it has no
+  // options to choose between and no second name to print.
+  const bare = isBareSection(block)
+  const grouped = !bare && block.options.length > 1
 
   return (
     <div className={[
@@ -597,10 +650,12 @@ function BlockRow({ block, index, progress, open, current, running, left, onOpen
           Making the whole title a toggle read as a link to somewhere, and left
           nothing on the row to say it could be opened at all. */}
       <div className="plan-ex-head">
-        <span className="plan-ex-index">{index + 1}</span>
+        {/* No number. A day is read top to bottom and the cards are already in
+            order, so a column of ordinals was ink spent restating that. */}
         {label
           ? <span className="field-label plan-read-kind">{label}</span>
           : <span className="plan-ex-title">{chosen[0].name}</span>}
+        {current && !complete && <span className="plan-now">Now</span>}
         <button
           className="btn-icon plan-ex-toggle"
           onClick={onOpen}
@@ -617,10 +672,17 @@ function BlockRow({ block, index, progress, open, current, running, left, onOpen
         const timer = running && running.exerciseId === ex.id ? running : null
         return (
           <div className="plan-ex-line" key={ex.id}>
-            <div className="plan-read-row">
-              {(label || chosen.length > 1) && <span className="plan-read-name">{ex.name}</span>}
-              <span className="plan-read-target plan-num">{targetLabel(ex)}</span>
-            </div>
+            {!bare && (
+              <div className="plan-read-row">
+                {(label || chosen.length > 1) && <span className="plan-read-name">{ex.name}</span>}
+                <span className="plan-read-target plan-num">{targetLabel(ex)}</span>
+              </div>
+            )}
+            {bare && (
+              <div className="plan-read-row">
+                <span className="plan-read-name">{durationShort(ex.durationSec)}</span>
+              </div>
+            )}
             <div className="plan-sets">
               {Array.from({ length: ex.sets }, (_, n) => (
                 <SetSquare
@@ -654,7 +716,7 @@ function BlockRow({ block, index, progress, open, current, running, left, onOpen
               key={ex.id}
               ex={ex}
               sets={setsFor(progress, ex.id)}
-              heading={chosen.length > 1 || !!label ? ex.name : undefined}
+              heading={!bare && (chosen.length > 1 || !!label) ? ex.name : undefined}
               running={running && running.exerciseId === ex.id ? running : null}
               left={left}
               onStartRest={() => onStartRest(ex)}

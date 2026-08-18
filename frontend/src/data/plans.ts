@@ -32,6 +32,14 @@ export interface PlanExercise {
   weightKg: number
   /** Rest between sets of this exercise. */
   restSec: number
+  /**
+   * The pause after this exercise before the next one *in the same block* —
+   * the minute between the movements of a superset. The third of three
+   * distinct waits, and neither of the others could be it: `restSec` is
+   * between sets of this exercise, and `PlanBlock.restSec` is after the whole
+   * block.
+   */
+  breakSec: number
   note: string
 }
 
@@ -71,6 +79,12 @@ export interface PlanBlock {
   restSec: number
   /** Empty for an ordinary block of exercises. Sections are always timed. */
   section: BlockSection
+  /**
+   * Lets a section stand on its own with no exercises in it — "warm up for ten
+   * minutes". Zero means its exercises say how long it takes, which is every
+   * ordinary block.
+   */
+  durationSec: number
 }
 
 export interface PlanDay {
@@ -181,8 +195,42 @@ export function effectivePicks(block: PlanBlock, p: BlockProgress = EMPTY_BLOCK_
   return out
 }
 
+/**
+ * A section with no exercises: just a length of time.
+ *
+ * The one block shape that is real while empty, so every list that walks
+ * blocks has to know about it rather than skipping anything without options.
+ */
+export function isBareSection(block: PlanBlock): boolean {
+  return !!block.section && block.options.length === 0 && block.durationSec > 0
+}
+
+/**
+ * The one thing a bare section is, expressed as an exercise.
+ *
+ * "Warm up for ten minutes" behaves exactly like a single timed set of ten
+ * minutes, so it is given the shape of one rather than a parallel code path
+ * through the runner, the tally and the completion check. Its id is the
+ * block's, since there is no exercise row to take an id from.
+ */
+export function sectionExercise(block: PlanBlock): PlanExercise {
+  return {
+    id: block.id,
+    name: sectionLabel(block.section),
+    kind: 'time',
+    sets: 1,
+    reps: '',
+    durationSec: block.durationSec,
+    weightKg: 0,
+    restSec: 0,
+    breakSec: 0,
+    note: '',
+  }
+}
+
 /** The exercises currently being done in this block. */
 export function chosenExercises(block: PlanBlock, p?: BlockProgress): PlanExercise[] {
+  if (isBareSection(block)) return [sectionExercise(block)]
   return effectivePicks(block, p).map(i => block.options[i]).filter(Boolean)
 }
 
@@ -384,15 +432,14 @@ export function sessionWhen(iso: string): string {
 export function newExercise(): PlanExercise {
   // No id: the server issues one on save and hands it back. Inventing one
   // here would mean two sources of ids that have to agree on a format.
-  return { id: '', name: '', kind: 'weight', sets: 3, reps: '10', durationSec: 0, weightKg: 0, restSec: 0, note: '' }
+  return { id: '', name: '', kind: 'weight', sets: 3, reps: '10', durationSec: 0, weightKg: 0, restSec: 0, breakSec: 0, note: '' }
 }
 
 export function newBlock(section: BlockSection = ''): PlanBlock {
-  const ex = newExercise()
-  // A section is time work by definition, and the server enforces the same
-  // rule — a warm-up written in reps at a load is not a warm-up.
-  if (section) return { id: '', options: [{ ...ex, kind: 'time', sets: 1, durationSec: 300 }], required: 1, restSec: 0, section }
-  return { id: '', options: [ex], required: 1, restSec: 0, section: '' }
+  // A section starts as a bare duration — "warm up for five minutes" — because
+  // that is what most of them are. Exercises can be added if it needs them.
+  if (section) return { id: '', options: [], required: 1, restSec: 0, section, durationSec: 300 }
+  return { id: '', options: [newExercise()], required: 1, restSec: 0, section: '', durationSec: 0 }
 }
 
 export function newDay(name: string): PlanDay {

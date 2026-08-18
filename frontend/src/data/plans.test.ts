@@ -5,11 +5,11 @@ import {
 } from './plans'
 
 function ex(name: string): PlanExercise {
-  return { id: name, name, kind: 'weight', sets: 3, reps: '10', durationSec: 0, weightKg: 0, restSec: 0, note: '' }
+  return { id: name, name, kind: 'weight', sets: 3, reps: '10', durationSec: 0, weightKg: 0, restSec: 0, breakSec: 0, note: '' }
 }
 
 function block(required: number, ...names: string[]): PlanBlock {
-  return { id: 'b', required, restSec: 0, section: '', options: names.map(ex) }
+  return { id: 'b', required, restSec: 0, section: '', durationSec: 0, options: names.map(ex) }
 }
 
 function sets(...done: boolean[]): SetLog[] {
@@ -121,8 +121,8 @@ describe('currentBlockId', () => {
   }
 
   it('is the first block with work left in it', () => {
-    const a: PlanBlock = { id: 'a', required: 1, restSec: 0, section: '', options: [ex('Squat')] }
-    const b: PlanBlock = { id: 'b', required: 1, restSec: 0, section: '', options: [ex('Bench')] }
+    const a: PlanBlock = { id: 'a', required: 1, restSec: 0, section: '', durationSec: 0, options: [ex('Squat')] }
+    const b: PlanBlock = { id: 'b', required: 1, restSec: 0, section: '', durationSec: 0, options: [ex('Bench')] }
     const s = session([a, b])
     expect(currentBlockId(s, { blocks: {} })).toBe('a')
 
@@ -133,7 +133,7 @@ describe('currentBlockId', () => {
   })
 
   it('is nothing once the whole day is finished', () => {
-    const a: PlanBlock = { id: 'a', required: 1, restSec: 0, section: '', options: [ex('Squat')] }
+    const a: PlanBlock = { id: 'a', required: 1, restSec: 0, section: '', durationSec: 0, options: [ex('Squat')] }
     const done = { blocks: { a: { picks: [], sets: { Squat: [
       { done: true, weightKg: 0 }, { done: true, weightKg: 0 }, { done: true, weightKg: 0 },
     ] } } } }

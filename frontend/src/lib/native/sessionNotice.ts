@@ -24,6 +24,8 @@ export interface SessionNotice {
   title: string
   /** How far in, and what is being done — the shade's one useful line. */
   body: string
+  /** The plan's name, shown small beside the app's. */
+  subText: string
   startedAt: string
   /** Sets done as a percentage, drawn as a bar under the text. */
   percent: number

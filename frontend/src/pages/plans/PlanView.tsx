@@ -5,7 +5,8 @@ import MenuButton from '../../components/MenuButton'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import { api } from '../../lib/api'
 import {
-  blockLabel, durationShort, sectionLabel, targetLabel, type PlanDay, type TrainingPlan,
+  blockLabel, durationShort, isBareSection, sectionLabel, trimNum,
+  type PlanDay, type TrainingPlan,
 } from '../../data/plans'
 
 interface Props {
@@ -124,29 +125,52 @@ export default function PlanView({ plan, onBack, onEdit, onRename, onStart, onDe
                     asks for. Rendered flat, a superset and three unrelated
                     exercises were the same three rows. */}
                 <div className={`plan-ex plan-ex-read${block.section ? ' plan-ex-section' : block.options.length > 1 ? ' plan-ex-grouped' : ''}`}>
-                  <div className="plan-ex-top">
-                    <span className="plan-ex-index">{i + 1}</span>
-                    <div className="plan-read-body">
-                      {(block.section || block.options.length > 1) && (
-                        <span className="field-label plan-read-kind">
-                          {block.section ? sectionLabel(block.section) : blockLabel(block)}
-                        </span>
-                      )}
-                      {block.options.map(ex => (
-                        <div className="plan-read-row" key={ex.id}>
-                          <span className="plan-read-name">{ex.name}</span>
-                          <span className="plan-read-target plan-num">{targetLabel(ex)}</span>
-                        </div>
-                      ))}
-                      {block.options.some(o => o.restSec > 0) && (
-                        <span className="plan-read-rest plan-num">
-                          <Timer size={11} aria-hidden />
-                          {durationShort(block.options[0].restSec)} between sets
-                        </span>
-                      )}
+                  {(block.section || block.options.length > 1) && (
+                    <span className="field-label plan-read-kind">
+                      {block.section ? sectionLabel(block.section) : blockLabel(block)}
+                    </span>
+                  )}
+                  {/* A section with nothing in it is a length of time. */}
+                  {isBareSection(block) && (
+                    <div className="plan-read-ex">
+                      <span className="plan-read-name">{durationShort(block.durationSec)}</span>
                     </div>
-                  </div>
+                  )}
+                  {block.options.map((ex, oi) => (
+                    <Fragment key={ex.id}>
+                      {/* The name on its own line, the numbers under it with
+                          labels — the same shape the expanded runner uses, and
+                          the reason that view reads so much better than a row
+                          of bare figures did. */}
+                      <div className="plan-read-ex">
+                        <span className="plan-read-name">{ex.name}</span>
+                        <div className="plan-read-stats">
+                          <Stat label="Sets" value={String(ex.sets)} />
+                          {ex.kind === 'time'
+                            ? <Stat label="Duration" value={durationShort(ex.durationSec)} />
+                            : <Stat label="Reps" value={ex.reps || '—'} />}
+                          {ex.kind !== 'time' && (
+                            <Stat
+                              label={ex.kind === 'body' ? 'Added' : 'Weight'}
+                              value={ex.weightKg > 0 ? `${trimNum(ex.weightKg)} kg` : ex.kind === 'body' ? 'body' : '—'}
+                            />
+                          )}
+                          {ex.restSec > 0 && <Stat label="Rest" value={durationShort(ex.restSec)} />}
+                        </div>
+                      </div>
+                      {/* The wait between one movement of a superset and the
+                          next, on the rule that separates them. */}
+                      {ex.breakSec > 0 && oi < block.options.length - 1 && (
+                        <div className="plan-break-line">
+                          <span className="plan-break-chip">
+                            <Timer size={12} aria-hidden /> {durationShort(ex.breakSec)} in between
+                          </span>
+                        </div>
+                      )}
+                    </Fragment>
+                  ))}
                 </div>
+
                 {/* On the rule between the two cards, which is where the gap it
                     describes actually is. Floating loose under the card it read
                     as a property of that exercise. */}
@@ -187,5 +211,15 @@ export default function PlanView({ plan, onBack, onEdit, onRename, onStart, onDe
         />
       )}
     </>
+  )
+}
+
+/** One labelled figure, the same shape the runner's expanded view uses. */
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="stat-chip">
+      <span className="label">{label}</span>
+      <span className="value plan-num">{value}</span>
+    </div>
   )
 }
