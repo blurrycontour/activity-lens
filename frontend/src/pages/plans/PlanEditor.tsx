@@ -162,6 +162,10 @@ export default function PlanEditor({ plan, onDone, onSaved, suggestions }: Props
         title={plan.name}
         subtitle={saveLabel(save)}
         onBack={onDone}
+        /* Where the read view's options menu is, rather than wrapped onto a
+           line of its own below the subtitle — leaving edit mode is the same
+           kind of action as entering it, and it belongs in the same place. */
+        compactActions
         actions={
           <button className="btn btn-primary" onClick={onDone}>
             <Check size={15} /> Done
@@ -500,10 +504,16 @@ function ExerciseFields({ ex, suggestions, first, last, onMove, onPatch, onRemov
 
         <label>
           <span className="field-label">Sets</span>
+          {/* Empty while you retype it. Clamping to 1 on every keystroke meant
+              the field could not be cleared at all: deleting the 3 in "30" put
+              a 3 straight back, so the only way to reach 5 was to select the
+              text first. The floor is applied when you leave instead. */}
           <input
             className="input" type="number" inputMode="numeric" min="1" max="50"
-            value={ex.sets}
-            onChange={e => onPatch({ sets: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+            value={ex.sets || ''}
+            placeholder="3"
+            onChange={e => onPatch({ sets: Math.min(50, Math.max(0, parseInt(e.target.value, 10) || 0)) })}
+            onBlur={() => { if (ex.sets < 1) onPatch({ sets: 1 }) }}
           />
         </label>
 

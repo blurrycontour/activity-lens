@@ -1,9 +1,10 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import PageHeader from '../../components/PageHeader'
+import Confetti from '../../components/Confetti'
 import { Check, Timer } from 'lucide-react'
 import {
   blockLabel, blockProgress, chosenExercises, clockLabel, doneSetsFor, durationShort,
-  elapsedSec, sessionWhen, setsFor, trimNum, volumeLabel,
+  elapsedSec, sessionWhen, setsFor, trimNum,
   type PlanExercise, type PlanSession, type SetLog,
 } from '../../data/plans'
 
@@ -47,9 +48,13 @@ export default function FinishedSession({ session, onBack }: {
   onBack: () => void
 }) {
   const blocks = useMemo(() => readBack(session), [session])
+  // Read once, on mount: claiming it during render would fire twice under
+  // StrictMode and the second render would decide it had already been shown.
+  const [celebrate, setCelebrate] = useState(() => claimCelebration(session))
 
   return (
     <>
+      {celebrate && <Confetti onDone={() => setCelebrate(false)} />}
       <PageHeader
         title={session.dayName}
         subtitle={`${session.planName} · ${sessionWhen(session.startedAt)}`}
@@ -65,10 +70,6 @@ export default function FinishedSession({ session, onBack }: {
             <div className="stat-chip">
               <span className="label">Time</span>
               <span className="value plan-num">{clockLabel(elapsedSec(session.startedAt, session.finishedAt))}</span>
-            </div>
-            <div className="stat-chip" title="Total load moved: weight × reps, added up across every set">
-              <span className="label">Volume lifted</span>
-              <span className="value">{volumeLabel(session.volumeKg)}</span>
             </div>
             <div className="stat-chip">
               <span className="label">Started</span>
@@ -131,6 +132,34 @@ export default function FinishedSession({ session, onBack }: {
       </div>
     </>
   )
+}
+
+const CELEBRATED_KEY = 'al_plan_celebrated'
+/** How many session ids to remember. Enough that revisiting last month's
+ *  clean sweep does not throw confetti at you again. */
+const CELEBRATED_MAX = 50
+
+/**
+ * Whether to throw confetti for this session, and never again for it.
+ *
+ * Every set done is worth marking; the same page opened a second time is not.
+ * The claim and the check are one call on purpose — split, the caller decides
+ * to celebrate and then forgets to record it, which is how "only the first
+ * time" quietly becomes "every time".
+ */
+function claimCelebration(session: PlanSession): boolean {
+  if (!session.finishedAt || session.totalSets === 0) return false
+  if (session.doneSets < session.totalSets) return false
+  try {
+    const seen: string[] = JSON.parse(localStorage.getItem(CELEBRATED_KEY) ?? '[]')
+    if (seen.includes(session.id)) return false
+    localStorage.setItem(CELEBRATED_KEY, JSON.stringify([session.id, ...seen].slice(0, CELEBRATED_MAX)))
+    return true
+  } catch {
+    // A full or unavailable store must not mean confetti on every visit, so
+    // the failure is read as "already celebrated".
+    return false
+  }
 }
 
 /**

@@ -1,17 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, CheckCheck, History, Loader2, Trash2, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { ArrowDown, ArrowUp, CheckCheck, History, Loader2 } from 'lucide-react'
 import { useRefreshHandler } from '../../context/RefreshContext'
 import ConfirmDialog from '../../components/ConfirmDialog'
-import SearchInput from '../../components/SearchInput'
+import ListTools from './ListTools'
+import { useLongPress } from '../../lib/useLongPress'
 import { api } from '../../lib/api'
 import {
-  clockLabel, elapsedSec, sessionWhen, volumeLabel, type PlanSession,
+  clockLabel, elapsedSec, sessionWhen, type PlanSession,
 } from '../../data/plans'
-
-/** How long a press has to last on a phone before it means "select". */
-const LONG_PRESS_MS = 500
-/** How far a finger may drift during that press and still count as holding. */
-const MOVE_SLOP = 10
 
 /**
  * Every session run, newest first.
@@ -108,53 +104,29 @@ export default function SessionHistory({ onOpen }: { onOpen: (id: string) => voi
 
   return (
     <>
-      <div className="discover-tools">
-        <SearchInput
-          value={query}
-          onChange={setQuery}
-          placeholder="Search sessions…"
-          label="Search sessions"
-          minWidth={160}
-        />
-        <button
-          className="btn btn-ghost"
-          onClick={() => setNewestFirst(v => !v)}
-          aria-label={newestFirst ? 'Newest first; switch to oldest first' : 'Oldest first; switch to newest first'}
-        >
-          {newestFirst ? <ArrowDown size={15} /> : <ArrowUp size={15} />}
-          {newestFirst ? 'Newest' : 'Oldest'}
-        </button>
-        {/* On a desktop there is room for it always. On a phone the row is
-            already a search field and a sort, and selecting is reached by
-            holding a session — which is where a phone user looks for it. */}
-        {!selecting && (
-          <button className="btn btn-ghost desktop-only" onClick={() => setSelected(new Set())}>
-            <CheckCheck size={14} /> Select
-          </button>
-        )}
-      </div>
-
-      {selecting && (
-        <div className="plan-history-bar">
-          <span className="plan-num">{chosen.length} selected</span>
+      <ListTools
+        query={query}
+        onQuery={setQuery}
+        placeholder="Search sessions…"
+        label="Search sessions"
+        sort={
           <button
-            className="btn btn-ghost"
-            onClick={() => setSelected(allSelected ? new Set() : new Set(selectable.map(s => s.id)))}
+            className="btn btn-ghost plan-sort"
+            onClick={() => setNewestFirst(v => !v)}
+            aria-label={newestFirst ? 'Newest first; switch to oldest first' : 'Oldest first; switch to newest first'}
           >
-            <CheckCheck size={14} /> {allSelected ? 'Select none' : 'Select all'}
+            {newestFirst ? <ArrowDown size={15} /> : <ArrowUp size={15} />}
+            {newestFirst ? 'Newest' : 'Oldest'}
           </button>
-          <button
-            className="btn btn-danger"
-            disabled={chosen.length === 0}
-            onClick={() => setConfirming(true)}
-          >
-            <Trash2 size={14} /> Delete
-          </button>
-          <button className="btn-icon" onClick={() => setSelected(null)} aria-label="Leave selection">
-            <X size={16} />
-          </button>
-        </div>
-      )}
+        }
+        selecting={selecting}
+        count={chosen.length}
+        allSelected={allSelected}
+        onSelect={() => setSelected(new Set())}
+        onToggleAll={() => setSelected(allSelected ? new Set() : new Set(selectable.map(s => s.id)))}
+        onDelete={() => setConfirming(true)}
+        onCancel={() => setSelected(null)}
+      />
 
       {shown.length === 0 ? (
         <div className="empty-state"><p>No session matches “{query}”.</p></div>
@@ -193,9 +165,7 @@ export default function SessionHistory({ onOpen }: { onOpen: (id: string) => voi
 /**
  * One session in the list.
  *
- * Holding it enters selection, which is the phone gesture for this everywhere
- * else on the platform. The timer is cancelled by any movement, so a press that
- * turns into a scroll — the usual way a list is touched — never selects.
+ * Holding it enters selection; tapping opens it, or picks it while selecting.
  */
 function SessionRow({ session: s, selecting, picked, canSelect, onOpen, onToggle, onLongPress }: {
   session: PlanSession
@@ -206,42 +176,9 @@ function SessionRow({ session: s, selecting, picked, canSelect, onOpen, onToggle
   onToggle: () => void
   onLongPress: () => void
 }) {
-  const timer = useRef<number | null>(null)
-  const held = useRef(false)
-  const from = useRef<{ x: number; y: number } | null>(null)
-
-  const cancel = useCallback(() => {
-    if (timer.current) window.clearTimeout(timer.current)
-    timer.current = null
-    from.current = null
-  }, [])
-
-  useEffect(() => cancel, [cancel])
-
-  function onPointerDown(e: React.PointerEvent) {
-    if (selecting || !canSelect) return
-    held.current = false
-    from.current = { x: e.clientX, y: e.clientY }
-    timer.current = window.setTimeout(() => {
-      held.current = true
-      onLongPress()
-    }, LONG_PRESS_MS)
-  }
-
-  /**
-   * Movement cancels the press — but only real movement.
-   *
-   * A finger resting on a screen reports a pixel of drift constantly, so
-   * cancelling on any pointermove meant the long press essentially never
-   * fired. The threshold is what separates holding still from starting to
-   * scroll, which is how this list is usually touched.
-   */
-  function onPointerMove(e: React.PointerEvent) {
-    const start = from.current
-    if (!start) return
-    if (Math.abs(e.clientX - start.x) > MOVE_SLOP || Math.abs(e.clientY - start.y) > MOVE_SLOP) cancel()
-  }
-
+  // Hooks cannot be skipped, so the guard is inside the callback rather than
+  // around the hook: holding a row does nothing once selection is already open.
+  const press = useLongPress(() => { if (!selecting && canSelect) onLongPress() })
   const finished = !!s.finishedAt
   const inert = selecting && !canSelect
 
@@ -249,15 +186,10 @@ function SessionRow({ session: s, selecting, picked, canSelect, onOpen, onToggle
     <button
       className={`card plan-card${picked ? ' picked' : ''}${inert ? ' inert' : ''}`}
       onClick={() => {
-        // The press that opened selection must not also open the session.
-        if (held.current) { held.current = false; return }
+        if (press.consumedClick()) return
         if (selecting) { if (canSelect) onToggle() } else onOpen()
       }}
-      onPointerDown={onPointerDown}
-      onPointerUp={cancel}
-      onPointerMove={onPointerMove}
-      onPointerCancel={cancel}
-      onContextMenu={e => e.preventDefault()}
+      {...press.handlers}
       aria-pressed={selecting && canSelect ? picked : undefined}
       title={inert ? 'Finish or stop this session before deleting it' : undefined}
     >
@@ -278,7 +210,6 @@ function SessionRow({ session: s, selecting, picked, canSelect, onOpen, onToggle
       </div>
       <div className="plan-card-figures plan-num">
         <span>{s.doneSets}/{s.totalSets} sets</span>
-        <span>{volumeLabel(s.volumeKg)}</span>
         <span>{clockLabel(elapsedSec(s.startedAt, s.finishedAt))}</span>
       </div>
     </button>

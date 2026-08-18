@@ -14,7 +14,7 @@ import { useIsMobile } from '../lib/useIsMobile'
 import InfoTip from '../components/InfoTip'
 import Sparkline from '../components/Sparkline'
 import { api, type Equipment } from '../lib/api'
-import { durationLabel, elapsedMin } from '../data/plans'
+import { clockLabel, elapsedSec } from '../data/plans'
 import { useActiveSession } from '../context/ActiveSessionContext'
 import { AXIS_TICK, GRID_PROPS, HOVER_FILL, recencyRamp } from '../lib/chartColors'
 import { useThemeTokens } from '../lib/useThemeTokens'
@@ -782,7 +782,7 @@ export default function Dashboard({ onSelect, onResumeSession }: {
               <span className="field-label">Session in progress</span>
               <strong>{running.dayName}</strong>
               <span className="plan-resume-meta plan-num">
-                {running.planName} · {durationLabel(elapsedMin(running.startedAt))} so far
+                {running.planName} · {clockLabel(elapsedSec(running.startedAt))}
               </span>
             </div>
             <span className="btn btn-primary plan-resume-cta"><Play size={14} /> Resume</span>

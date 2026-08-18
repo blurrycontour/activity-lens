@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowDownAZ, ArrowUpAZ, ClipboardList, History, Loader2, Play, Plus, X,
+  ArrowDownAZ, ArrowUpAZ, CheckCheck, ClipboardList, History, Loader2, Play, Plus, X,
 } from 'lucide-react'
 import PageHeader from '../../components/PageHeader'
 import TabStrip from '../../components/TabStrip'
 import Modal from '../../components/Modal'
-import SearchInput from '../../components/SearchInput'
+import ListTools from './ListTools'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import { useRefreshHandler } from '../../context/RefreshContext'
 import PlanView from './PlanView'
@@ -15,10 +15,11 @@ import SessionHistory from './SessionHistory'
 import FinishedSession from './FinishedSession'
 import { api } from '../../lib/api'
 import {
-  durationLabel, elapsedMin, type PlanSession, type TrainingPlan,
+  clockLabel, durationLabel, elapsedMin, elapsedSec, type PlanSession, type TrainingPlan,
 } from '../../data/plans'
 import { clearCachedProgress } from './sessionCache'
 import { useActiveSession } from '../../context/ActiveSessionContext'
+import { useLongPress } from '../../lib/useLongPress'
 
 interface Props {
   /** From the URL: a plan id, or "session" with a session id in `detail`. */
@@ -50,6 +51,12 @@ export default function PlansPage({ section, detail, onOpen }: Props) {
   const [editing, setEditing] = useState(false)
   const [query, setQuery] = useState('')
   const [az, setAz] = useState(true)
+  // Selecting plans to delete, the same gesture and the same row of controls
+  // history uses. Null means not selecting at all, which is different from
+  // selecting nothing.
+  const [picked, setPicked] = useState<Set<string> | null>(null)
+  const [confirmBulk, setConfirmBulk] = useState(false)
+  const [bulkBusy, setBulkBusy] = useState(false)
   // Which plan is waiting for a day to be picked, from the list's start button.
   const [starting, setStarting] = useState<TrainingPlan | null>(null)
   // A start refused because one is already running. Held here rather than as a
@@ -214,11 +221,39 @@ export default function PlansPage({ section, detail, onOpen }: Props) {
       .catch(() => setError('Could not open that plan.'))
   }
 
+  const selecting = picked !== null
+
+  /**
+   * Deleting the selected plans.
+   *
+   * One request each rather than a bulk endpoint: plans are counted in
+   * handfuls, not in years of history, and a second endpoint that deletes a
+   * list is a second place for the ownership check to be written.
+   */
+  async function deletePicked() {
+    if (!picked) return
+    setBulkBusy(true)
+    const ids = [...picked]
+    try {
+      await Promise.all(ids.map(id => api.deletePlan(id)))
+      setPlans(cur => cur?.filter(p => !picked.has(p.id)) ?? cur)
+      setPicked(null)
+      setConfirmBulk(false)
+    } catch {
+      setError('Could not delete all of those plans.')
+      void load()
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase()
     const matched = q ? (plans ?? []).filter(p => p.name.toLowerCase().includes(q)) : (plans ?? [])
     return [...matched].sort((a, b) => a.name.localeCompare(b.name) * (az ? 1 : -1))
   }, [plans, query, az])
+
+  const allPicked = shown.length > 0 && shown.every(p => picked?.has(p.id))
 
   // The dialogs that can be open over any surface below.
   const overlays = (
@@ -332,7 +367,7 @@ export default function PlansPage({ section, detail, onOpen }: Props) {
               <span className="field-label">Session in progress</span>
               <strong>{active.dayName}</strong>
               <span className="plan-resume-meta plan-num">
-                {active.planName} · {durationLabel(elapsedMin(active.startedAt))} so far
+                {active.planName} · {clockLabel(elapsedSec(active.startedAt))}
               </span>
             </div>
             <span className="btn btn-primary plan-resume-cta"><Play size={14} /> Resume</span>
@@ -367,25 +402,33 @@ export default function PlansPage({ section, detail, onOpen }: Props) {
         ) : (
           <>
             {/* Search earns its place once there are more than a handful, and
-                costs a row of chrome before that. */}
-            {plans.length > 4 && (
-              <div className="discover-tools">
-                <SearchInput
-                  value={query}
-                  onChange={setQuery}
-                  placeholder="Search plans…"
-                  label="Search plans"
-                  minWidth={160}
-                />
-                <button
-                  className="btn btn-ghost"
-                  onClick={() => setAz(v => !v)}
-                  aria-label={az ? 'Sorted A to Z; switch to Z to A' : 'Sorted Z to A; switch to A to Z'}
-                >
-                  {az ? <ArrowDownAZ size={15} /> : <ArrowUpAZ size={15} />}
-                  {az ? 'A–Z' : 'Z–A'}
-                </button>
-              </div>
+                costs a row of chrome before that — but the row is also where
+                the selection controls live, so a short list that has been put
+                into selection still needs it. */}
+            {(plans.length > 4 || selecting) && (
+              <ListTools
+                query={query}
+                onQuery={setQuery}
+                placeholder="Search plans…"
+                label="Search plans"
+                sort={
+                  <button
+                    className="btn btn-ghost plan-sort"
+                    onClick={() => setAz(v => !v)}
+                    aria-label={az ? 'Sorted A to Z; switch to Z to A' : 'Sorted Z to A; switch to A to Z'}
+                  >
+                    {az ? <ArrowDownAZ size={15} /> : <ArrowUpAZ size={15} />}
+                    {az ? 'A–Z' : 'Z–A'}
+                  </button>
+                }
+                selecting={selecting}
+                count={picked?.size ?? 0}
+                allSelected={allPicked}
+                onSelect={() => setPicked(new Set())}
+                onToggleAll={() => setPicked(allPicked ? new Set() : new Set(shown.map(p => p.id)))}
+                onDelete={() => setConfirmBulk(true)}
+                onCancel={() => setPicked(null)}
+              />
             )}
 
             {shown.length === 0 ? (
@@ -395,29 +438,21 @@ export default function PlansPage({ section, detail, onOpen }: Props) {
             ) : (
               <div className="plan-list">
                 {shown.map(p => (
-                  <div key={p.id} className="card plan-card plan-card-row">
-                    <button className="plan-card-open" onClick={() => onOpen(p.id)}>
-                      <div className="plan-card-main">
-                        <strong className="plan-card-name">{p.name}</strong>
-                        <span className="plan-card-meta plan-num">
-                          {p.dayCount} day{p.dayCount === 1 ? '' : 's'}
-                          {p.lastSessionAt && ` · last run ${relativeDay(p.lastSessionAt)}`}
-                        </span>
-                      </div>
-                      {p.archived && <span className="plan-badge">Archived</span>}
-                    </button>
-                    {/* Straight into training, without opening the plan first:
-                        the common case is the same day you did last week. */}
-                    <button
-                      className="btn-icon plan-card-start"
-                      onClick={() => startFromList(p)}
-                      title={`Start ${p.name}`}
-                      aria-label={`Start ${p.name}`}
-                      disabled={p.dayCount === 0}
-                    >
-                      <Play size={16} />
-                    </button>
-                  </div>
+                  <PlanRow
+                    key={p.id}
+                    plan={p}
+                    selecting={selecting}
+                    picked={picked?.has(p.id) ?? false}
+                    onOpen={() => onOpen(p.id)}
+                    onStart={() => startFromList(p)}
+                    onToggle={() => setPicked(cur => {
+                      const next = new Set(cur ?? [])
+                      if (next.has(p.id)) next.delete(p.id)
+                      else next.add(p.id)
+                      return next
+                    })}
+                    onLongPress={() => setPicked(new Set([p.id]))}
+                  />
                 ))}
               </div>
             )}
@@ -425,12 +460,25 @@ export default function PlansPage({ section, detail, onOpen }: Props) {
         )}
       </div>
 
-      {/* Only over the plans, not over history: "new plan" is not the action
-          you are reaching for while reading what you already did. */}
-      {tab === 'plans' && (
+      {/* Only over the plans, and only when not picking things to delete:
+          "new plan" is not the action you are reaching for while reading what
+          you already did, nor while choosing what to throw away. */}
+      {tab === 'plans' && !selecting && (
         <button className="fab" onClick={() => setNaming(true)} title="New plan" aria-label="New plan">
           <Plus size={22} />
         </button>
+      )}
+
+      {confirmBulk && picked && (
+        <ConfirmDialog
+          title={`Delete ${picked.size} plan${picked.size === 1 ? '' : 's'}?`}
+          message="The plans and their days go. Sessions you have already run stay in your history, with the exercises as they were on the day."
+          confirmLabel="Delete"
+          danger
+          busy={bulkBusy}
+          onConfirm={deletePicked}
+          onCancel={() => setConfirmBulk(false)}
+        />
       )}
 
       {naming && (
@@ -446,6 +494,65 @@ export default function PlansPage({ section, detail, onOpen }: Props) {
       )}
       {overlays}
     </>
+  )
+}
+
+/**
+ * One plan in the list: open it, start it, or — held — select it.
+ *
+ * The card is two controls, so it is a div holding both: a button inside a
+ * button is not markup that exists. While selecting it becomes one control,
+ * because starting a session is not something to offer in the middle of
+ * choosing what to delete.
+ */
+function PlanRow({ plan, selecting, picked, onOpen, onStart, onToggle, onLongPress }: {
+  plan: TrainingPlan
+  selecting: boolean
+  picked: boolean
+  onOpen: () => void
+  onStart: () => void
+  onToggle: () => void
+  onLongPress: () => void
+}) {
+  const press = useLongPress(() => { if (!selecting) onLongPress() })
+  return (
+    <div className={`card plan-card plan-card-row${picked ? ' picked' : ''}`}>
+      <button
+        className="plan-card-open"
+        onClick={() => {
+          if (press.consumedClick()) return
+          if (selecting) onToggle()
+          else onOpen()
+        }}
+        {...press.handlers}
+        aria-pressed={selecting ? picked : undefined}
+      >
+        {selecting && (
+          <span className="plan-pick" aria-hidden>{picked && <CheckCheck size={14} />}</span>
+        )}
+        <div className="plan-card-main">
+          <strong className="plan-card-name">{plan.name}</strong>
+          <span className="plan-card-meta plan-num">
+            {plan.dayCount} day{plan.dayCount === 1 ? '' : 's'}
+            {plan.lastSessionAt && ` · last run ${relativeDay(plan.lastSessionAt)}`}
+          </span>
+        </div>
+        {plan.archived && <span className="plan-badge">Archived</span>}
+      </button>
+      {/* Straight into training, without opening the plan first: the common
+          case is the same day you did last week. */}
+      {!selecting && (
+        <button
+          className="btn-icon plan-card-start"
+          onClick={onStart}
+          title={`Start ${plan.name}`}
+          aria-label={`Start ${plan.name}`}
+          disabled={plan.dayCount === 0}
+        >
+          <Play size={16} />
+        </button>
+      )}
+    </div>
   )
 }
 

@@ -95,7 +95,7 @@ export default function BottomBar({ currentPage, onNavigate }: BottomBarProps) {
                   <span className="nav-live-dot" role="img" aria-label="Session in progress" />
                 )}
               </span>
-              <span>{meta.label}</span>
+              <span className="bottom-bar-label">{meta.label}</span>
             </button>
           )
         })}
@@ -108,7 +108,7 @@ export default function BottomBar({ currentPage, onNavigate }: BottomBarProps) {
           <MoreHorizontal size={21} />
           {/* Named for where you are when you are behind it, so the bar still
               answers "which page is this" from four tabs. */}
-          <span>{inMore ? PAGE_META[currentPage]?.label ?? 'More' : 'More'}</span>
+          <span className="bottom-bar-label">{inMore ? PAGE_META[currentPage]?.label ?? 'More' : 'More'}</span>
         </button>
       </nav>
     </>

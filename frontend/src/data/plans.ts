@@ -107,6 +107,15 @@ export interface PlanSession {
   finishedAt?: string
   doneSets: number
   totalSets: number
+  /**
+   * Load moved, in kilograms, as the server records it.
+   *
+   * Not shown anywhere. Volume is a number that only means something once you
+   * already know what it means, and it was sitting on three screens next to
+   * figures — sets, time — that speak for themselves. Kept on the wire because
+   * dropping the column buys nothing and it is the sort of thing a training
+   * app is asked for again.
+   */
   volumeKg: number
   notes: string
   workoutId?: string
@@ -216,32 +225,6 @@ export function currentExercise(session: PlanSession, progress: SessionProgress)
   return ''
 }
 
-/**
- * The load moved by one set. Mirrors Exercise.setVolume on the server, which
- * is the authority — this is for the running total while a session is open.
- */
-export function setVolume(ex: PlanExercise, set: SetLog): number {
-  if (ex.kind === 'time') return 0
-  const kg = set.weightKg || ex.weightKg
-  if (!kg) return 0
-  const reps = parseInt(set.reps || ex.reps, 10)
-  return Number.isFinite(reps) && reps > 0 ? kg * reps : 0
-}
-
-/** Volume across a whole session, for the live figure in the runner. */
-export function sessionVolume(session: PlanSession, progress: SessionProgress): number {
-  let total = 0
-  for (const b of session.snapshot.blocks) {
-    const p = blockProgress(progress, b.id)
-    for (const ex of chosenExercises(b, p)) {
-      setsFor(p, ex.id).forEach((s, i) => {
-        if (s.done && i < ex.sets) total += setVolume(ex, s)
-      })
-    }
-  }
-  return total
-}
-
 /** "4 × 8 · 60 kg", "3 × 8 · body", "3 × 45 s" — whatever the kind calls for. */
 export function targetLabel(ex: PlanExercise): string {
   if (ex.kind === 'time') return `${ex.sets} × ${durationShort(ex.durationSec)}`
@@ -286,13 +269,6 @@ export function durationShort(sec: number): string {
 /** Weights are often halves; 60 should not render as "60.0". */
 export function trimNum(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(1)
-}
-
-/** "1.2 t" once a session's volume outgrows a readable number of kilograms. */
-export function volumeLabel(kg: number): string {
-  if (kg <= 0) return '—'
-  if (kg >= 1000) return `${(kg / 1000).toFixed(1)} t`
-  return `${Math.round(kg)} kg`
 }
 
 /** Seconds between two timestamps, or since `from` when still running. */

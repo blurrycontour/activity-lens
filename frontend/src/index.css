@@ -4768,8 +4768,10 @@ body:has(.overlay) .fab { display: none; }
   }
   .bottom-bar-item.active { color: var(--primary); }
   /* Five slots share the width, and "Consistency" is the longest label — clip
-     rather than wrap so every item keeps the same height. */
-  .bottom-bar-item span {
+     rather than wrap so every item keeps the same height. Scoped to the label:
+     applied to every span in the item it also clipped the icon, and with it the
+     live dot that deliberately overhangs the icon's corner. */
+  .bottom-bar-label {
     font-size: 10px;
     font-weight: 500;
     max-width: 100%;
@@ -4779,7 +4781,7 @@ body:has(.overlay) .fab { display: none; }
   }
   .bottom-bar-item { padding: 8px 2px; min-width: 0; }
 
-  .fab { bottom: calc(80px + 8px); }
+  .fab { bottom: calc(64px + var(--safe-bottom) + 18px); }
 }
 
 @media (min-width: 769px) {
@@ -5947,7 +5949,9 @@ body:has(.overlay) .fab { display: none; }
 }
 .plan-ex.done::before { background: var(--success); opacity: 1; }
 .plan-ex.done .plan-ex-title { color: var(--text-3); text-decoration: line-through; }
-.plan-ex.open { border-color: var(--border-strong); }
+/* Not on a grouped block, whose purple frame says something the open state
+   does not — the rotated caret already marks open. */
+.plan-ex.open:not(.plan-ex-grouped) { border-color: var(--border-strong); }
 
 .plan-ex-top { display: flex; align-items: flex-start; gap: 10px; }
 .plan-ex-name {
@@ -6545,9 +6549,6 @@ body:has(.overlay) .fab { display: none; }
 
 /* --- The runner --- */
 
-.plan-run-tools { display: flex; justify-content: flex-end; margin-bottom: 10px; }
-.plan-run-tools .btn { padding: 5px 11px; font-size: 12px; }
-
 /* Room for the floating controls to sit over, so the last exercise is not
    permanently under them. */
 .plan-run-page { padding-bottom: 96px; }
@@ -6586,32 +6587,6 @@ body:has(.overlay) .fab { display: none; }
   .plan-live-dot, .nav-live-dot { animation: none; }
 }
 
-/* The phone's session controls. Finish is the accent and sits where the single
-   FAB always has; stop is above it, smaller, and wears the danger colour —
-   two identical circles beside each other is how the wrong one gets pressed. */
-.fab-stack {
-  position: fixed;
-  right: 24px;
-  bottom: calc(24px + var(--bottombar-h));
-  z-index: var(--z-fab);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-}
-.fab-stack .fab { position: static; bottom: auto; right: auto; }
-.fab-danger {
-  width: 44px;
-  height: 44px;
-  background: var(--danger);
-  color: #fff;
-  box-shadow: 0 4px 16px color-mix(in srgb, var(--danger) 40%, transparent);
-}
-.fab-danger:hover { box-shadow: 0 6px 22px color-mix(in srgb, var(--danger) 45%, transparent); }
-@media (min-width: 769px) {
-  .fab-stack { display: none; }
-}
-
 /* Three, two, one. Deliberately enormous: it is read from arm's length with a
    phone already propped against something. */
 .plan-countdown {
@@ -6636,3 +6611,94 @@ body:has(.overlay) .fab { display: none; }
    and the way to end one is to finish or stop it. */
 .plan-card.inert { opacity: 0.55; cursor: default; }
 .plan-card.inert:hover { border-color: var(--border); }
+
+/* ── Training plans: the session bar ────────────────────────────────
+   A session is something running in the background that you dip in and out of,
+   which is the shape a phone already has a control for: the music player's
+   bar. Pinned above the navigation, it keeps the figures and the two decisions
+   — stop, finish — in one place instead of a card that scrolls away at the top
+   and a pair of circles floating over the exercise underneath them. */
+
+.plan-player {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: var(--bottombar-h);
+  z-index: var(--z-chrome);
+  background: var(--bg-2);
+  border-top: 1px solid var(--border);
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
+}
+/* Above the bar on a desktop there is no navigation to sit on, so the safe
+   inset is the bar's own. */
+@media (min-width: 769px) {
+  .plan-player { padding-bottom: var(--safe-bottom); }
+}
+
+/* The progress bar is the top edge of the player, not a widget inside it —
+   the same trick a player uses, and it costs no height. */
+.plan-player-bar {
+  height: 3px;
+  background: var(--bg-3);
+  overflow: hidden;
+}
+.plan-player-fill {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+  transition: width 0.3s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .plan-player-fill { transition: none; }
+}
+
+.plan-player-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+}
+.plan-player-figures { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.plan-player-pct { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
+.plan-player-meta {
+  font-size: 11.5px;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plan-player-stop { color: var(--danger); }
+.plan-player-stop:hover { background: var(--danger-dim); color: var(--danger); }
+.plan-player-finish { flex: 0 0 auto; }
+
+/* The page has to clear the bar, or its last exercise sits behind it. */
+.plan-run-page { padding-bottom: 92px; }
+
+/* --- A block's top row --- */
+
+/* What the block is, and the control that opens it. Making the whole title a
+   toggle read as a link to somewhere else and left nothing on the row saying
+   it could be opened at all. */
+.plan-ex-head { display: flex; align-items: center; gap: 9px; }
+.plan-ex-head .plan-ex-title { flex: 1; min-width: 0; }
+.plan-ex-head .plan-read-kind { flex: 1; min-width: 0; }
+.plan-ex-toggle { flex: 0 0 auto; margin-left: auto; }
+.plan-ex-names { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.plan-ex.open .plan-ex-caret { transform: rotate(180deg); }
+
+/* A timer appears mid-set. At the near end of the row it would shove the set
+   squares sideways under a thumb already on its way to one. */
+.plan-rest.right { margin-left: auto; align-self: flex-end; }
+.plan-sets { align-items: center; }
+
+/* --- The list tools --- */
+
+/* Selecting replaces search rather than appearing under it: two rows of chrome
+   above a list is most of a phone screen, and search is not something you want
+   while picking things to delete. */
+.plan-select-count { font-size: 12px; color: var(--text-2); }
+.plan-select-bar { align-items: center; }
+/* Both labels reserve the same width, so toggling the sort does not resize the
+   button and shove the search field beside it. */
+.plan-sort { justify-content: center; min-width: 104px; }
