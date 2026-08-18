@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { adoptIds, isDraft, namesIn, withoutDrafts } from './draftPlan'
-import type { PlanDay, PlanExercise } from '../../data/plans'
+import type { PlanBlock, PlanDay, PlanExercise } from '../../data/plans'
 
 function ex(name: string, id = ''): PlanExercise {
-  return { id, name, kind: 'weight', sets: 3, reps: '10', durationSec: 0, weightKg: 0, restSec: 0, note: '' }
+  return { id, name, kind: 'weight', sets: 3, reps: '10', durationSec: 0, weightKg: 0, restSec: 0, breakSec: 0, note: '' }
 }
 
 describe('withoutDrafts', () => {
@@ -12,8 +12,8 @@ describe('withoutDrafts', () => {
       id: 'pd_1',
       name: 'Chest',
       blocks: [
-        { id: 'pb_1', required: 1, restSec: 0, section: '', options: [ex('Bench press', 'pe_1')] },
-        { id: '', required: 1, restSec: 0, section: '', options: [ex('')] },
+        { id: 'pb_1', required: 1, restSec: 0, section: '', durationSec: 0, options: [ex('Bench press', 'pe_1')] },
+        { id: '', required: 1, restSec: 0, section: '', durationSec: 0, options: [ex('')] },
       ],
     }]
     expect(withoutDrafts(days)[0].blocks).toHaveLength(1)
@@ -23,7 +23,7 @@ describe('withoutDrafts', () => {
     const days: PlanDay[] = [{
       id: 'pd_1',
       name: 'Chest',
-      blocks: [{ id: 'pb_1', required: 1, restSec: 0, section: '', options: [ex('Bench press', 'pe_1'), ex('  ')] }],
+      blocks: [{ id: 'pb_1', required: 1, restSec: 0, section: '', durationSec: 0, options: [ex('Bench press', 'pe_1'), ex('  ')] }],
     }]
     const out = withoutDrafts(days)
     expect(out[0].blocks).toHaveLength(1)
@@ -34,7 +34,7 @@ describe('withoutDrafts', () => {
     const days: PlanDay[] = [{
       id: 'pd_1',
       name: 'Chest',
-      blocks: [{ id: 'pb_1', required: 1, restSec: 180, section: '', options: [ex('Bench press', 'pe_1')] }],
+      blocks: [{ id: 'pb_1', required: 1, restSec: 180, section: '', durationSec: 0, options: [ex('Bench press', 'pe_1')] }],
     }]
     expect(withoutDrafts(days)[0].blocks[0].restSec).toBe(180)
   })
@@ -49,14 +49,14 @@ describe('adoptIds', () => {
       id: '',
       name: 'Chest',
       blocks: [
-        { id: '', required: 1, restSec: 0, section: '', options: [ex('Bench press')] },
-        { id: '', required: 1, restSec: 0, section: '', options: [ex('')] },
+        { id: '', required: 1, restSec: 0, section: '', durationSec: 0, options: [ex('Bench press')] },
+        { id: '', required: 1, restSec: 0, section: '', durationSec: 0, options: [ex('')] },
       ],
     }]
     const saved: PlanDay[] = [{
       id: 'pd_1',
       name: 'Chest',
-      blocks: [{ id: 'pb_1', required: 1, restSec: 0, section: '', options: [ex('Bench press', 'pe_1')] }],
+      blocks: [{ id: 'pb_1', required: 1, restSec: 0, section: '', durationSec: 0, options: [ex('Bench press', 'pe_1')] }],
     }]
 
     const out = adoptIds(local, saved)
@@ -68,12 +68,12 @@ describe('adoptIds', () => {
     const local: PlanDay[] = [{
       id: '',
       name: 'Chest',
-      blocks: [{ id: '', required: 1, restSec: 0, section: '', options: [ex('Bench press'), ex('Push-ups')] }],
+      blocks: [{ id: '', required: 1, restSec: 0, section: '', durationSec: 0, options: [ex('Bench press'), ex('Push-ups')] }],
     }]
     const saved: PlanDay[] = [{
       id: 'pd_1',
       name: 'Chest',
-      blocks: [{ id: 'pb_1', required: 1, restSec: 0, section: '', options: [ex('Bench press', 'pe_1'), ex('Push-ups', 'pe_2')] }],
+      blocks: [{ id: 'pb_1', required: 1, restSec: 0, section: '', durationSec: 0, options: [ex('Bench press', 'pe_1'), ex('Push-ups', 'pe_2')] }],
     }]
 
     const out = adoptIds(local, saved)
@@ -87,17 +87,17 @@ describe('adoptIds', () => {
       id: '',
       name: 'Chest',
       blocks: [
-        { id: '', required: 1, restSec: 0, section: '', options: [ex('Bench press')] },
-        { id: '', required: 1, restSec: 0, section: '', options: [ex('')] },
-        { id: '', required: 1, restSec: 0, section: '', options: [ex('Cable fly')] },
+        { id: '', required: 1, restSec: 0, section: '', durationSec: 0, options: [ex('Bench press')] },
+        { id: '', required: 1, restSec: 0, section: '', durationSec: 0, options: [ex('')] },
+        { id: '', required: 1, restSec: 0, section: '', durationSec: 0, options: [ex('Cable fly')] },
       ],
     }]
     const saved: PlanDay[] = [{
       id: 'pd_1',
       name: 'Chest',
       blocks: [
-        { id: 'pb_1', required: 1, restSec: 0, section: '', options: [ex('Bench press', 'pe_1')] },
-        { id: 'pb_2', required: 1, restSec: 0, section: '', options: [ex('Cable fly', 'pe_2')] },
+        { id: 'pb_1', required: 1, restSec: 0, section: '', durationSec: 0, options: [ex('Bench press', 'pe_1')] },
+        { id: 'pb_2', required: 1, restSec: 0, section: '', durationSec: 0, options: [ex('Cable fly', 'pe_2')] },
       ],
     }]
 
@@ -113,12 +113,12 @@ describe('adoptIds', () => {
     const local: PlanDay[] = [{
       id: 'pd_1',
       name: 'Chest',
-      blocks: [{ id: 'pb_1', required: 1, restSec: 0, section: '', options: [{ ...ex('Bench press throw', 'pe_1'), sets: 5 }] }],
+      blocks: [{ id: 'pb_1', required: 1, restSec: 0, section: '', durationSec: 0, options: [{ ...ex('Bench press throw', 'pe_1'), sets: 5 }] }],
     }]
     const saved: PlanDay[] = [{
       id: 'pd_1',
       name: 'Chest',
-      blocks: [{ id: 'pb_1', required: 1, restSec: 0, section: '', options: [ex('Bench press', 'pe_1')] }],
+      blocks: [{ id: 'pb_1', required: 1, restSec: 0, section: '', durationSec: 0, options: [ex('Bench press', 'pe_1')] }],
     }]
 
     const out = adoptIds(local, saved)
@@ -127,23 +127,55 @@ describe('adoptIds', () => {
   })
 
   it('leaves the tree alone when the server answered with nothing', () => {
-    const local: PlanDay[] = [{ id: '', name: 'Chest', blocks: [{ id: '', required: 1, restSec: 0, section: '', options: [ex('Row')] }] }]
+    const local: PlanDay[] = [{ id: '', name: 'Chest', blocks: [{ id: '', required: 1, restSec: 0, section: '', durationSec: 0, options: [ex('Row')] }] }]
     expect(adoptIds(local, [])).toEqual(local)
   })
 })
 
 describe('isDraft and namesIn', () => {
   it('treats whitespace as no name', () => {
-    expect(isDraft({ id: '', required: 1, restSec: 0, section: '', options: [ex('   ')] })).toBe(true)
-    expect(isDraft({ id: '', required: 1, restSec: 0, section: '', options: [ex('Row')] })).toBe(false)
+    expect(isDraft({ id: '', required: 1, restSec: 0, section: '', durationSec: 0, options: [ex('   ')] })).toBe(true)
+    expect(isDraft({ id: '', required: 1, restSec: 0, section: '', durationSec: 0, options: [ex('Row')] })).toBe(false)
   })
 
   it('collects every name for the suggestion list', () => {
     const days: PlanDay[] = [{
       id: 'pd_1',
       name: 'Chest',
-      blocks: [{ id: 'pb_1', required: 1, restSec: 0, section: '', options: [ex('Bench press'), ex('Push-ups')] }],
+      blocks: [{ id: 'pb_1', required: 1, restSec: 0, section: '', durationSec: 0, options: [ex('Bench press'), ex('Push-ups')] }],
     }]
     expect(namesIn(days)).toEqual(['Bench press', 'Push-ups'])
+  })
+})
+
+describe('sections that are only a duration', () => {
+  // The regression this guards: opening the editor on a plan with a warm-up
+  // saved it back without one, because a block with no named exercise looked
+  // like a row someone had just created and not typed into yet.
+  const warmup: PlanBlock = { id: 'pb_w', required: 1, restSec: 0, section: 'warmup', durationSec: 600, options: [] }
+
+  it('is not a draft, even with no exercises in it', () => {
+    expect(isDraft(warmup)).toBe(false)
+  })
+
+  it('survives the trip to the server', () => {
+    const days: PlanDay[] = [{
+      id: 'pd_1',
+      name: 'Chest',
+      blocks: [warmup, { id: 'pb_1', required: 1, restSec: 0, section: '', durationSec: 0, options: [ex('Bench press', 'pe_1')] }],
+    }]
+    expect(withoutDrafts(days)[0].blocks).toHaveLength(2)
+    expect(withoutDrafts(days)[0].blocks[0].durationSec).toBe(600)
+  })
+
+  it('still drops a section with neither exercises nor a duration', () => {
+    const empty: PlanBlock = { id: '', required: 1, restSec: 0, section: 'stretch', durationSec: 0, options: [] }
+    expect(isDraft(empty)).toBe(true)
+  })
+
+  it('takes its id back like any other block', () => {
+    const local: PlanDay[] = [{ id: '', name: 'Chest', blocks: [{ ...warmup, id: '' }] }]
+    const saved: PlanDay[] = [{ id: 'pd_1', name: 'Chest', blocks: [warmup] }]
+    expect(adoptIds(local, saved)[0].blocks[0].id).toBe('pb_w')
   })
 })

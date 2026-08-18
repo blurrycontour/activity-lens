@@ -1,4 +1,4 @@
-import type { PlanBlock, PlanDay } from '../../data/plans'
+import { isBareSection, type PlanBlock, type PlanDay } from '../../data/plans'
 
 /**
  * Reconciling what is on screen with what the server accepted.
@@ -14,8 +14,15 @@ import type { PlanBlock, PlanDay } from '../../data/plans'
  * only the ids back.
  */
 
-/** A block with nothing named in it — on screen, but not yet a plan. */
+/**
+ * A block with nothing named in it — on screen, but not yet a plan.
+ *
+ * A section carrying only a duration is the exception: "warm up for ten
+ * minutes" has no exercises and is not supposed to. Without this, opening the
+ * editor on a plan that had one deleted it on the first autosave.
+ */
 export function isDraft(b: PlanBlock): boolean {
+  if (isBareSection(b)) return false
   return !b.options.some(o => o.name.trim())
 }
 

@@ -1,14 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, Check, MoreVertical, Plus, Timer, Trash2, X } from 'lucide-react'
 import PageHeader from '../../components/PageHeader'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import Dropdown from '../../components/Dropdown'
+import NumberField from '../../components/NumberField'
 import MenuButton from '../../components/MenuButton'
 import ExerciseNameInput from './ExerciseNameInput'
 import { adoptIds, withoutDrafts } from './draftPlan'
 import { api } from '../../lib/api'
 import {
-  SECTIONS, blockRequired, durationShort, newBlock, newDay, newExercise, requiredPhrase,
+  SECTIONS, blockRequired, newBlock, newDay, newExercise, requiredPhrase,
   type BlockSection, type ExerciseKind, type PlanBlock, type PlanDay, type PlanExercise, type TrainingPlan,
 } from '../../data/plans'
 
@@ -226,6 +227,7 @@ export default function PlanEditor({ plan, onDone, onSaved, suggestions }: Props
                     onPatch={(oi, patch) => patchExercise(bi, oi, patch)}
                     onRequired={n => patchBlock(bi, b => ({ ...b, required: n }))}
                     onSection={sec => patchBlock(bi, b => ({ ...b, section: sec }))}
+                    onDuration={secs => patchBlock(bi, b => ({ ...b, durationSec: secs }))}
                     onRemove={() => setPending({
                       kind: 'block', index: bi,
                       name: block.options.map(o => o.name).filter(Boolean).join(' / ') || 'this exercise',
@@ -304,9 +306,11 @@ function saveLabel(s: SaveState): string {
  * is: a gap in the day, not a property of either exercise. Adding one asks for
  * a number of seconds and nothing else.
  */
-function BreakRow({ seconds, last, onChange }: {
+function BreakRow({ seconds, last, label = 'break', onChange }: {
   seconds: number
   last: boolean
+  /** What this gap is between: "break" after a block, "in between" inside one. */
+  label?: string
   onChange: (s: number) => void
 }) {
   // Whether the chip is a field at all, as opposed to the "add" button. Held
@@ -320,7 +324,7 @@ function BreakRow({ seconds, last, onChange }: {
     return (
       <div className="plan-break-line">
         <button className="plan-break-chip add" onClick={() => setEditing(true)}>
-          <Timer size={12} /> Add a break
+          <Timer size={12} /> Add a break {label === 'break' ? '' : label}
         </button>
       </div>
     )
@@ -329,23 +333,16 @@ function BreakRow({ seconds, last, onChange }: {
     <div className="plan-break-line">
       <div className="plan-break-chip">
         <Timer size={12} aria-hidden />
-        <input
-          className="input"
-          type="number"
-          inputMode="numeric"
-          min="0"
-          step="15"
-          autoFocus={editing && !seconds}
-          value={seconds || ''}
+        <NumberField
+          value={seconds}
+          onChange={onChange}
+          min={0}
+          max={3600}
+          step={15}
           placeholder="90"
-          aria-label="Break before the next exercise, in seconds"
-          onFocus={() => setEditing(true)}
-          onChange={e => onChange(Math.max(0, parseInt(e.target.value, 10) || 0))}
-          // Leaving an empty field is what removes the break — that is a
-          // decision, where a keystroke on the way to another number is not.
-          onBlur={() => setEditing(false)}
+          ariaLabel={`Break ${label}, in seconds`}
         />
-        <span>s break</span>
+        <span>s {label}</span>
         <button
           className="btn-icon"
           onClick={() => { onChange(0); setEditing(false) }}
@@ -368,6 +365,7 @@ interface BlockProps {
   onPatch: (option: number, patch: Partial<PlanExercise>) => void
   onRequired: (n: number) => void
   onSection: (s: BlockSection) => void
+  onDuration: (secs: number) => void
   onRemove: () => void
   onRemoveOption: (option: number) => void
   onAddOption: () => void
@@ -383,7 +381,7 @@ interface BlockProps {
  */
 function BlockEditor({
   block, first, last, suggestions,
-  onMove, onMoveOption, onPatch, onRequired, onSection, onRemove, onRemoveOption, onAddOption,
+  onMove, onMoveOption, onPatch, onRequired, onSection, onDuration, onRemove, onRemoveOption, onAddOption,
 }: BlockProps) {
   const group = block.options.length > 1
 
@@ -423,25 +421,57 @@ function BlockEditor({
         </div>
       )}
 
+      {/* A section with nothing in it is a length of time — "warm up for ten
+          minutes" — which is what most warm-ups actually are. Exercises can
+          still be added underneath if it needs them. */}
+      {block.section && block.options.length === 0 && (
+        <label className="plan-section-duration">
+          <span className="field-label">Duration (seconds)</span>
+          <NumberField
+            className="input"
+            value={block.durationSec}
+            onChange={secs => onDuration(secs)}
+            min={0}
+            max={24 * 3600}
+            step={30}
+            placeholder="300"
+            ariaLabel="How long this section takes, in seconds"
+          />
+        </label>
+      )}
+
       {block.options.map((ex, oi) => (
-        <ExerciseFields
-          key={ex.id || oi}
-          ex={ex}
-          suggestions={suggestions}
-          /* In a group the arrows reorder within the group and the block's own
-             menu moves the block. A lone exercise *is* the block, so its menu
-             moves the block — otherwise a plain exercise could not be moved
-             without first being turned into a group. */
-          first={group ? oi === 0 : first}
-          last={group ? oi === block.options.length - 1 : last}
-          onMove={by => (group ? onMoveOption(oi, by) : onMove(by))}
-          onPatch={patch => onPatch(oi, patch)}
-          onRemove={() => (group ? onRemoveOption(oi) : onRemove())}
-          /* A section is time work, so the Type picker is not a choice it
-             has: hidden rather than shown-and-locked, which would be a
-             control that exists to be disabled. */
-          timedOnly={!!block.section}
-        />
+        <Fragment key={ex.id || oi}>
+          <ExerciseFields
+            ex={ex}
+            suggestions={suggestions}
+            /* In a group the arrows reorder within the group and the block's
+               own menu moves the block. A lone exercise *is* the block, so its
+               menu moves the block — otherwise a plain exercise could not be
+               moved without first being turned into a group. */
+            first={group ? oi === 0 : first}
+            last={group ? oi === block.options.length - 1 : last}
+            onMove={by => (group ? onMoveOption(oi, by) : onMove(by))}
+            onPatch={patch => onPatch(oi, patch)}
+            onRemove={() => (group ? onRemoveOption(oi) : onRemove())}
+            /* A section is time work, so the Type picker is not a choice it
+               has: hidden rather than shown-and-locked, which would be a
+               control that exists to be disabled. */
+            timedOnly={!!block.section}
+          />
+          {/* The wait between one movement of a superset and the next. The
+              third distinct pause in a plan, and the other two could not be
+              it: one is between sets of this exercise, the other is after the
+              whole block. */}
+          {oi < block.options.length - 1 && (
+            <BreakRow
+              seconds={ex.breakSec}
+              last={false}
+              label="in between"
+              onChange={secs => onPatch(oi, { breakSec: secs })}
+            />
+          )}
+        </Fragment>
       ))}
 
       {/* Not "an alternative" any more: a second exercise here may be a swap,
@@ -542,30 +572,22 @@ function ExerciseFields({ ex, suggestions, first, last, timedOnly, onMove, onPat
           />
         </label>}
 
+        {/* Every numeric field on this row goes through one component, so
+            they all clear, clamp and settle the same way. They did not: each
+            had grown its own answer to "what happens when you empty it". */}
         <label>
           <span className="field-label">Sets</span>
-          {/* Empty while you retype it. Clamping to 1 on every keystroke meant
-              the field could not be cleared at all: deleting the 3 in "30" put
-              a 3 straight back, so the only way to reach 5 was to select the
-              text first. The floor is applied when you leave instead. */}
-          <input
-            className="input" type="number" inputMode="numeric" min="1" max="50"
-            value={ex.sets || ''}
-            placeholder="3"
-            onChange={e => onPatch({ sets: Math.min(50, Math.max(0, parseInt(e.target.value, 10) || 0)) })}
-            onBlur={() => { if (ex.sets < 1) onPatch({ sets: 1 }) }}
-          />
+          <NumberField value={ex.sets} onChange={n => onPatch({ sets: n })} min={1} max={50} placeholder="3" />
         </label>
 
         {timed ? (
           <label>
             <span className="field-label">Duration</span>
-            <input
-              className="input" type="number" inputMode="numeric" min="0" step="5"
-              value={ex.durationSec || ''}
-              placeholder="45"
-              aria-label="Seconds per set"
-              onChange={e => onPatch({ durationSec: Math.max(0, parseInt(e.target.value, 10) || 0) })}
+            <NumberField
+              value={ex.durationSec}
+              onChange={n => onPatch({ durationSec: n })}
+              min={0} max={24 * 3600} step={5} placeholder="45"
+              ariaLabel="Seconds per set"
             />
           </label>
         ) : (
@@ -582,12 +604,11 @@ function ExerciseFields({ ex, suggestions, first, last, timedOnly, onMove, onPat
         {!timed && (
           <label>
             <span className="field-label">{ex.kind === 'body' ? '+kg' : 'kg'}</span>
-            <input
-              className="input" type="number" inputMode="decimal" step="0.5" min="0"
-              value={ex.weightKg || ''}
-              placeholder={ex.kind === 'body' ? '0' : '—'}
-              aria-label={ex.kind === 'body' ? 'Added weight in kilograms' : 'Weight in kilograms'}
-              onChange={e => onPatch({ weightKg: parseFloat(e.target.value) || 0 })}
+            <NumberField
+              value={ex.weightKg}
+              onChange={n => onPatch({ weightKg: n })}
+              min={0} decimal placeholder={ex.kind === 'body' ? '0' : '—'}
+              ariaLabel={ex.kind === 'body' ? 'Added weight in kilograms' : 'Weight in kilograms'}
             />
           </label>
         )}
@@ -596,13 +617,11 @@ function ExerciseFields({ ex, suggestions, first, last, timedOnly, onMove, onPat
           <span className="field-label">Rest</span>
           {/* Between sets of this exercise, as opposed to the break between
               exercises on the rule below the card. Ticking a set starts it. */}
-          <input
-            className="input" type="number" inputMode="numeric" min="0" step="15"
-            value={ex.restSec || ''}
-            placeholder="—"
-            aria-label="Rest between sets, in seconds"
-            title={ex.restSec > 0 ? `${durationShort(ex.restSec)} between sets` : undefined}
-            onChange={e => onPatch({ restSec: Math.max(0, parseInt(e.target.value, 10) || 0) })}
+          <NumberField
+            value={ex.restSec}
+            onChange={n => onPatch({ restSec: n })}
+            min={0} max={3600} step={15} placeholder="—"
+            ariaLabel="Rest between sets, in seconds"
           />
         </label>
       </div>
