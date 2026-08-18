@@ -9,7 +9,7 @@ import { AXIS_TICK, GRID_PROPS, HOVER_FILL, recencyRamp } from '../lib/chartColo
 import { useThemeTokens } from '../lib/useThemeTokens'
 import { recentWeekStarts, weekdayMatrix } from '../lib/insights'
 import ChartCard, { EmptyPlot } from '../components/ChartCard'
-import TrainingVolumeChart from '../components/TrainingVolumeChart'
+import TrainingSessionsChart from '../components/TrainingSessionsChart'
 import InfoTip from '../components/InfoTip'
 import { useChartSpace } from '../components/ChartAxis'
 import {
@@ -388,7 +388,7 @@ export default function Consistency() {
 
         {/* Strength work, which leaves no GPS trace and so appears in none of
             the charts above. */}
-        <TrainingVolumeChart rangeDays={rangeDays} />
+        <TrainingSessionsChart rangeDays={rangeDays} />
         </>)}
 
         {tab === 'compare' && (<>

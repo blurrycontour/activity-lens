@@ -4,10 +4,10 @@ import ChartCard, { EmptyPlot } from './ChartCard'
 import { denseXAxis, useChartSpace } from './ChartAxis'
 import { AXIS_TICK, GRID_PROPS, HOVER_FILL } from '../lib/chartColors'
 import { api } from '../lib/api'
-import { volumeLabel, type PlanSession } from '../data/plans'
+import { type PlanSession } from '../data/plans'
 
 /**
- * Training sessions per week, and the load lifted in them.
+ * Training sessions per week, and the sets done in them.
  *
  * Sits on the Consistency page beside the activity calendar because it answers
  * the same question for the half of training that leaves no GPS trace. Gym work
@@ -18,7 +18,7 @@ import { volumeLabel, type PlanSession } from '../data/plans'
  * Weeks rather than days: strength training is programmed by the week, and a
  * daily bar chart of three sessions is mostly gaps.
  */
-export default function TrainingVolumeChart({ rangeDays }: { rangeDays: number }) {
+export default function TrainingSessionsChart({ rangeDays }: { rangeDays: number }) {
   const [sessions, setSessions] = useState<PlanSession[] | null>(null)
   const space = useChartSpace()
 
@@ -35,7 +35,7 @@ export default function TrainingVolumeChart({ rangeDays }: { rangeDays: number }
   const data = useMemo(() => {
     if (!sessions) return []
     const cutoff = rangeDays > 0 ? Date.now() - rangeDays * 86400000 : 0
-    const byWeek = new Map<string, { label: string; sessions: number; volume: number; sets: number }>()
+    const byWeek = new Map<string, { label: string; sessions: number; sets: number }>()
 
     for (const s of sessions) {
       if (!s.finishedAt) continue
@@ -48,23 +48,20 @@ export default function TrainingVolumeChart({ rangeDays }: { rangeDays: number }
       const key = monday.toISOString().slice(0, 10)
       const row = byWeek.get(key) ?? {
         label: monday.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
-        sessions: 0, volume: 0, sets: 0,
+        sessions: 0, sets: 0,
       }
       row.sessions += 1
-      row.volume += s.volumeKg
       row.sets += s.doneSets
       byWeek.set(key, row)
     }
     return [...byWeek.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, v]) => v)
   }, [sessions, rangeDays])
 
-  const anyVolume = data.some(d => d.volume > 0)
-
   return (
     <ChartCard
       title="Training Sessions"
-      description="Sessions run from your plans each week, and the load lifted in them."
-      info="Counts finished sessions by the week they started, Monday to Sunday. The bar height is total volume — sets × reps × kilograms — which is the usual way to compare one week of lifting against another. Bodyweight and held exercises add sets but no volume, so a week of those shows a short bar and a full session count."
+      description="Sessions run from your plans each week, and the sets done in them."
+      info="Counts finished sessions by the week they started, Monday to Sunday. The bar height is sets ticked, which counts a bodyweight or held exercise the same as a loaded one — a week of pull-ups and planks is a week of training."
       style={{ marginTop: 16 }}
     >
       {data.length === 0 ? (
@@ -77,7 +74,7 @@ export default function TrainingVolumeChart({ rangeDays }: { rangeDays: number }
             <YAxis
               tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto"
               label={{
-                value: anyVolume ? 'Volume (kg)' : 'Sets',
+                value: 'Sets',
                 angle: -90, position: 'insideLeft',
                 style: { ...AXIS_TICK, textAnchor: 'middle' },
               }}
@@ -91,15 +88,11 @@ export default function TrainingVolumeChart({ rangeDays }: { rangeDays: number }
                   <div className="custom-tooltip">
                     <div style={{ fontWeight: 600, marginBottom: 2 }}>Week of {label}</div>
                     <div>{d.sessions} session{d.sessions === 1 ? '' : 's'} · {d.sets} sets</div>
-                    {d.volume > 0 && <div>{volumeLabel(d.volume)} lifted</div>}
                   </div>
                 )
               }}
             />
-            {/* Volume where there is any, session count otherwise — a chart of
-                zeroes for someone who only does bodyweight work would be worse
-                than one that quietly measures what they do have. */}
-            <Bar dataKey={anyVolume ? 'volume' : 'sessions'} radius={[4, 4, 0, 0]} maxBarSize={44} isAnimationActive={false}>
+            <Bar dataKey="sets" radius={[4, 4, 0, 0]} maxBarSize={44} isAnimationActive={false}>
               {data.map((_, i) => (
                 <Cell key={i} fill="var(--strength)" opacity={0.85} />
               ))}
