@@ -5936,29 +5936,28 @@ body:has(.overlay) .fab { display: none; }
   border-radius: calc(var(--radius) * 1.5);
   padding: 12px 14px;
 }
-/* The rail marks the block being worked on, and nothing else.
-   
-   It used to sit on every card, in every view, which made a plan being read a
-   wall of purple stripes and left the runner with no way to say which exercise
-   you were actually on. One card wearing it is worth more than all of them. */
-.plan-ex.current::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 5px;
-  background: var(--primary);
-}
 /* Found from across the room, which is the actual viewing distance: a phone
    propped against a water bottle two metres away. A hairline border and a 5%
-   tint were invisible at that range. */
+   tint were invisible at that range — so the whole border thickens, evenly on
+   every side, rather than a rail down the left that only reads up close. */
 .plan-ex.current {
+  border-width: 2px;
+  padding: 11px 13px;
   border-color: var(--primary);
   background: color-mix(in srgb, var(--primary) 11%, var(--bg-2));
   box-shadow: 0 0 0 1px var(--primary), 0 6px 22px var(--primary-glow);
 }
+/* A warm-up, cool-down or stretch carries its own colour everywhere else, so
+   the card that is current within a section keeps that colour rather than
+   switching to the exercise accent. */
+.plan-ex.plan-ex-section.current {
+  border-color: var(--hike);
+  box-shadow: 0 0 0 1px var(--hike), 0 6px 22px color-mix(in srgb, var(--hike) 30%, transparent);
+}
 .plan-ex.done .plan-ex-title { color: var(--text-3); text-decoration: line-through; }
+/* Once it is behind you, it should read as behind you: the room for the eye is
+   what is current and what is still ahead. */
+.plan-ex.done { opacity: 0.6; }
 /* Not on a grouped block, whose purple frame says something the open state
    does not — the rotated caret already marks open. */
 .plan-ex.open:not(.plan-ex-grouped) { border-color: var(--border-strong); }
@@ -6583,10 +6582,15 @@ body:has(.overlay) .fab { display: none; }
 /* --- The runner --- */
 
 /* Room for the floating controls to sit over, so the last exercise is not
-   permanently under them. */
+   permanently under them. The timer bar adds its own height on top of the
+   player when something is counting, so its own padding accounts for both —
+   a static number sized for the player alone left the open row's controls
+   sitting behind the timer the moment one started. */
 .plan-run-page { padding-bottom: 96px; }
+.plan-run-page.has-timer { padding-bottom: 168px; }
 @media (min-width: 769px) {
   .plan-run-page { padding-bottom: 24px; }
+  .plan-run-page.has-timer { padding-bottom: 96px; }
 }
 
 /* A set that is not next in line. Sets are ticked in order, so the rest are
@@ -6670,9 +6674,11 @@ body:has(.overlay) .fab { display: none; }
 }
 
 /* The progress bar is the top edge of the player, not a widget inside it —
-   the same trick a player uses, and it costs no height. */
+   the same trick a player uses. Thick enough to read as a real bar rather
+   than a hairline, since it is the one figure on this screen you can read
+   without focusing on it. */
 .plan-player-bar {
-  height: 3px;
+  height: 5px;
   background: var(--bg-3);
   overflow: hidden;
 }
@@ -6692,11 +6698,18 @@ body:has(.overlay) .fab { display: none; }
   gap: 10px;
   padding: 10px 16px;
 }
-.plan-player-figures { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.plan-player-pct { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
+/* The percentage is the one figure worth seeing at a glance, so it is the
+   biggest thing on the bar; the elapsed clock sits beside it in its own
+   column, legible without being the headline; sets ticked stays small
+   underneath it, the detail you check rather than glance at. */
+.plan-player-figures { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; }
+.plan-player-pct { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; line-height: 1; }
+.plan-player-pct .unit { font-size: 14px; font-weight: 600; margin-left: 1px; }
+.plan-player-col { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.plan-player-time { font-size: 15px; font-weight: 650; color: var(--text); line-height: 1.2; }
 .plan-player-meta {
-  font-size: 11.5px;
-  color: var(--text-2);
+  font-size: 11px;
+  color: var(--text-3);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -6704,9 +6717,8 @@ body:has(.overlay) .fab { display: none; }
 .plan-player-stop { color: var(--danger); }
 .plan-player-stop:hover { background: var(--danger-dim); color: var(--danger); }
 .plan-player-finish { flex: 0 0 auto; }
-
-/* The page has to clear the bar, or its last exercise sits behind it. */
-.plan-run-page { padding-bottom: 92px; }
+.plan-player-end { flex: 0 0 auto; color: var(--danger); }
+.plan-player-end:hover { background: var(--danger-dim); color: var(--danger); }
 
 /* --- A block's top row --- */
 
@@ -6761,6 +6773,23 @@ body:has(.overlay) .fab { display: none; }
 
 /* --- The timer's row, above the player --- */
 
+/* This timer's own bar — how much of *it* is left, not how much of the
+   session is done, which is what the player's bar underneath already says. */
+.plan-timer-progress {
+  height: 3px;
+  background: var(--bg-3);
+  overflow: hidden;
+}
+.plan-timer-progress span {
+  display: block;
+  height: 100%;
+  background: var(--warning);
+  transition: width 1s linear;
+}
+@media (prefers-reduced-motion: reduce) {
+  .plan-timer-progress span { transition: none; }
+}
+
 .plan-timer-bar {
   display: flex;
   align-items: center;
@@ -6775,32 +6804,30 @@ body:has(.overlay) .fab { display: none; }
   min-width: 0;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 7px;
   font-size: 15px;
   font-weight: 600;
   color: var(--warning);
 }
 .plan-timer-now.up { color: var(--success); }
+/* The clock is the point of this row, so it is the biggest thing on it. */
+.plan-timer-digits { font-size: 20px; font-weight: 700; line-height: 1; }
 .plan-timer-what {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
   font-family: var(--font-mono);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-3);
+  /* Baseline-aligned beside a 20px number, "rest" or "break" sat visibly
+     higher than the digits without this — different font sizes on one line
+     do not share a baseline by default. */
+  align-self: center;
+  transform: translateY(1px);
 }
-
-/* Working or waiting, at a glance. */
-.plan-player-state {
-  flex: 0 0 auto;
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: var(--bg-3);
-  color: var(--text-2);
-}
-.plan-player-state.resting { color: var(--warning); }
 
 /* --- Fullscreen --- */
 
@@ -6832,10 +6859,10 @@ body.session-full .plan-player { bottom: 0; padding-bottom: var(--safe-bottom); 
    — a phone propped against something, mid-set, with a barbell in the way. So
    its type is a step up from the list it grew out of. */
 .plan-run-page .plan-ex-title,
-.plan-run-page .plan-read-name { font-size: 16px; font-weight: 650; }
+.plan-run-page .plan-read-name { font-size: 18px; font-weight: 650; }
 .plan-run-page .plan-read-target { font-size: 13.5px; }
 .plan-run-page .plan-read-kind { font-size: 11.5px; }
-.plan-run-page .plan-set { width: 44px; height: 44px; font-size: 15px; }
+.plan-run-page .plan-set { width: 38px; height: 38px; font-size: 14px; }
 .plan-run-page .plan-setrow-n { font-size: 14px; }
 .plan-run-page .plan-swap { font-size: 12.5px; padding: 6px 12px; }
 
@@ -6890,10 +6917,12 @@ body.session-full .plan-player { bottom: 0; padding-bottom: var(--safe-bottom); 
 }
 .plan-nudge:hover { border-color: var(--warning); color: var(--warning); }
 .plan-nudge:active { transform: scale(0.96); }
-.plan-nudge.skip { min-width: 44px; }
+/* The two on each side sit together as one group, rather than spread across
+   the row, so the pair to reach for — usually the small one — is a short
+   thumb travel from the other rather than a full row width. */
+.plan-nudge-group { display: flex; gap: 4px; }
 
-/* The one red button that ends a session, and the dialog that asks how. */
-.plan-player-end { flex: 0 0 auto; }
+/* The dialog that asks how a session ends. */
 .plan-end-box {
   max-width: 340px;
   display: flex;

@@ -261,7 +261,7 @@ export default function PlansPage({ section, detail, onOpen }: Props) {
 
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase()
-    const matched = q ? (plans ?? []).filter(p => p.name.toLowerCase().includes(q)) : (plans ?? [])
+    const matched = q ? (plans ?? []).filter(p => planHaystack(p).includes(q)) : (plans ?? [])
     return [...matched].sort((a, b) => a.name.localeCompare(b.name) * (az ? 1 : -1))
   }, [plans, query, az])
 
@@ -673,6 +673,24 @@ function Countdown({ onDone, onCancel }: { onDone: () => void; onCancel: () => v
       </div>
     </Modal>
   )
+}
+
+/**
+ * Everything about a plan worth typing to find it, lowercased once.
+ *
+ * A name is not the only thing you remember about a plan — "the one I last
+ * did on a Tuesday" or "the four-day one" are just as real a search. Rather
+ * than a name-only filter, every date the plan carries is spelled out in
+ * words (weekday, month, day, year) so any of those is a match too.
+ */
+function planHaystack(p: TrainingPlan): string {
+  const dates = [p.createdAt, p.updatedAt, p.lastSessionAt].filter((s): s is string => !!s)
+  const words = dates.flatMap(iso => {
+    const d = new Date(iso)
+    if (Number.isNaN(d.getTime())) return []
+    return [d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })]
+  })
+  return [p.name, `${p.dayCount} day${p.dayCount === 1 ? '' : 's'}`, ...words].join(' ').toLowerCase()
 }
 
 /** "today", "yesterday", or a date — the resolution people actually want. */

@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, Coffee, Maximize2,
-  Minimize2, Minus, Plus, SkipForward, Square, Timer, Trash2,
+  Minimize2, Minus, Plus, Square, Timer, Trash2,
 } from 'lucide-react'
 import PageHeader from '../../components/PageHeader'
 import ConfirmDialog from '../../components/ConfirmDialog'
@@ -34,17 +34,24 @@ interface Props {
  * which of three they meant.
  */
 interface Running {
-  kind: 'set' | 'rest' | 'break'
+  /** 'gap' is the wait between two exercises of the same block — a superset's
+   *  own breather, distinct from 'break' (after the whole block) and 'rest'
+   *  (between sets of one exercise). */
+  kind: 'set' | 'rest' | 'break' | 'gap'
   /** Where it belongs, so the right row can draw it. */
   blockId: string
   exerciseId: string
   /** Only for a set timer: which set finishes when this runs out. */
   setIndex?: number
   endsAt: number
+  /** The duration it started with, so the bar can show how much is left of it
+   *  even after a nudge has moved the end. */
+  totalSec: number
 }
 
-/** Seconds the nudge buttons move a timer by. Named because it is also the label. */
+/** Seconds the small nudge buttons move a timer by; the big ones move 30. */
 const NUDGE_SEC = 10
+const NUDGE_BIG_SEC = 30
 
 /**
  * Running a session: the whole day as a list of rows, sets as tappable
@@ -78,7 +85,10 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
   const tally = useMemo(() => sessionTally({ ...session, progress }), [session, progress])
   const pct = tally.total ? Math.round(tally.done / tally.total * 100) : 0
   const allOpen = openIds.size === blocks.length && blocks.length > 0
-  const currentId = currentBlockId(session, progress)
+  // The block being worked on stays highlighted through the break after it —
+  // otherwise the moment the last set is ticked, the highlight jumped ahead to
+  // whatever comes next while the break you are still standing in went dark.
+  const currentId = running?.kind === 'break' ? running.blockId : currentBlockId(session, progress)
 
   // A clock in the bar has to move. One interval for the page rather than one
   // per timer, so a long day does not accumulate them.
@@ -127,7 +137,8 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
   }
 
   const left = running ? Math.max(0, Math.round((running.endsAt - Date.now()) / 1000)) : 0
-  const resting = running?.kind === 'rest' || running?.kind === 'break'
+  const resting = running?.kind === 'rest' || running?.kind === 'break' || running?.kind === 'gap'
+  const timerPct = running ? Math.max(0, Math.min(100, Math.round(left / running.totalSec * 100))) : 0
 
   // The phone's ongoing notification, so a session is visible with the app
   // closed. Re-posted as progress moves: the shade should say how far in you
@@ -218,12 +229,19 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
 
     // Finishing a block starts the break before the next one — that is the
     // moment it begins, and waiting for a tap meant the break was usually
-    // remembered halfway through it. Otherwise the rest between sets runs.
+    // remembered halfway through it. Short of that: an exercise finishing
+    // inside a block that still has others left (a superset) starts its own
+    // breakSec gap before the next one; short of that, the rest between sets
+    // of this same exercise runs.
     const isLast = blocks[blocks.length - 1]?.id === block.id
-    if (block.restSec > 0 && !isLast && blockComplete(block, after)) {
-      setRunning({ kind: 'break', blockId: block.id, exerciseId: '', endsAt: Date.now() + block.restSec * 1000 })
-    } else if (ex.restSec > 0) {
-      setRunning({ kind: 'rest', blockId: block.id, exerciseId: ex.id, endsAt: Date.now() + ex.restSec * 1000 })
+    const blockDone = blockComplete(block, after)
+    const exDone = exerciseComplete(ex, setsFor(after, ex.id))
+    if (block.restSec > 0 && !isLast && blockDone) {
+      setRunning({ kind: 'break', blockId: block.id, exerciseId: '', endsAt: Date.now() + block.restSec * 1000, totalSec: block.restSec })
+    } else if (exDone && ex.breakSec > 0 && !blockDone) {
+      setRunning({ kind: 'gap', blockId: block.id, exerciseId: ex.id, endsAt: Date.now() + ex.breakSec * 1000, totalSec: ex.breakSec })
+    } else if (!exDone && ex.restSec > 0) {
+      setRunning({ kind: 'rest', blockId: block.id, exerciseId: ex.id, endsAt: Date.now() + ex.restSec * 1000, totalSec: ex.restSec })
     } else {
       setRunning(null)
     }
@@ -259,7 +277,7 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
         if (ex.kind === 'time' && ex.durationSec > 0) {
           setRunning({
             kind: 'set', blockId: block.id, exerciseId: ex.id, setIndex: index,
-            endsAt: Date.now() + ex.durationSec * 1000,
+            endsAt: Date.now() + ex.durationSec * 1000, totalSec: ex.durationSec,
           })
         } else {
           setRunning(null)
@@ -324,18 +342,11 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
 
   function nudge(by: number) {
     // Never below now: taking ten seconds off a five-second timer means it is
-    // over, not that it owes you five.
-    setRunning(r => (r ? { ...r, endsAt: Math.max(Date.now(), r.endsAt + by * 1000) } : r))
-  }
-
-  /** Skip means "this is over now" — which, for a set under way, is done. */
-  function skip() {
-    if (running?.kind === 'set' && running.setIndex !== undefined) {
-      const block = blocks.find(b => b.id === running.blockId)
-      const ex = block && exerciseIn(block, running.exerciseId)
-      if (block && ex) { finishSet(block, ex, running.setIndex); return }
-    }
-    setRunning(null)
+    // over, not that it owes you five. The total moves with it, so the bar
+    // still reads as "how much of this timer is left" after a nudge.
+    setRunning(r => (r
+      ? { ...r, endsAt: Math.max(Date.now(), r.endsAt + by * 1000), totalSec: Math.max(1, r.totalSec + by) }
+      : r))
   }
 
   // --- finishing ---------------------------------------------------------
@@ -394,7 +405,7 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
         }
       />
 
-      <div className="page-content plan-run-page">
+      <div className={`page-content plan-run-page${running ? ' has-timer' : ''}`}>
         {error && <div className="status-msg err" role="alert">{error}</div>}
 
         <div className="plan-rows">
@@ -413,7 +424,7 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
                 onPick={n => togglePick(block, n)}
                 onStartRest={ex => setRunning({
                   kind: 'rest', blockId: block.id, exerciseId: ex.id,
-                  endsAt: Date.now() + ex.restSec * 1000,
+                  endsAt: Date.now() + ex.restSec * 1000, totalSec: ex.restSec,
                 })}
               />
               {/* The planned break before the next exercise, which starts
@@ -427,7 +438,7 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
                   left={left}
                   onStart={() => setRunning({
                     kind: 'break', blockId: block.id, exerciseId: '',
-                    endsAt: Date.now() + block.restSec * 1000,
+                    endsAt: Date.now() + block.restSec * 1000, totalSec: block.restSec,
                   })}
                 />
               )}
@@ -445,27 +456,41 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
       */}
       <div className="plan-player" role="group" aria-label="Session controls">
         {/* The timer's own row, above the transport. Only while something is
-            counting: a Skip button with nothing to skip spends most of its
-            life explaining that it does nothing. */}
+            counting. It carries its own progress bar — how much of *this*
+            timer is left is a different question from how much of the
+            session is done, and the player's bar below already answers that
+            one. */}
         {running && (
-          <div className="plan-timer-bar">
-            {/* Either side of the clock, and big: this is tapped mid-set with
-                one hand, and a 28px button in a row of text is not. */}
-            <button className="plan-nudge" onClick={() => nudge(-NUDGE_SEC)} aria-label={`Take ${NUDGE_SEC} seconds off`}>
-              <Minus size={15} /> {NUDGE_SEC}s
-            </button>
-            <span className={`plan-timer-now${left <= 0 ? ' up' : ''}`}>
-              {resting ? <Coffee size={15} aria-hidden /> : <Timer size={15} aria-hidden />}
-              <span className="plan-num">{left > 0 ? clockLabel(left) : 'over'}</span>
-              <span className="plan-timer-what">{timerNoun(running)}</span>
-            </span>
-            <button className="plan-nudge" onClick={() => nudge(NUDGE_SEC)} aria-label={`Add ${NUDGE_SEC} seconds`}>
-              <Plus size={15} /> {NUDGE_SEC}s
-            </button>
-            <button className="plan-nudge skip" onClick={skip} aria-label="Skip this timer">
-              <SkipForward size={15} />
-            </button>
-          </div>
+          <>
+            <div className="plan-timer-progress" aria-hidden>
+              <span style={{ width: `${timerPct}%` }} />
+            </div>
+            <div className="plan-timer-bar">
+              {/* Two either side of the clock, big: this is tapped mid-set
+                  with one hand, without looking properly. */}
+              <div className="plan-nudge-group">
+                <button className="plan-nudge" onClick={() => nudge(-NUDGE_BIG_SEC)} aria-label={`Take ${NUDGE_BIG_SEC} seconds off`}>
+                  <Minus size={13} /> {NUDGE_BIG_SEC}s
+                </button>
+                <button className="plan-nudge" onClick={() => nudge(-NUDGE_SEC)} aria-label={`Take ${NUDGE_SEC} seconds off`}>
+                  <Minus size={13} /> {NUDGE_SEC}s
+                </button>
+              </div>
+              <span className={`plan-timer-now${left <= 0 ? ' up' : ''}`}>
+                {resting ? <Coffee size={15} aria-hidden /> : <Timer size={15} aria-hidden />}
+                <span className="plan-timer-digits plan-num">{left > 0 ? clockLabel(left) : 'over'}</span>
+                <span className="plan-timer-what">{timerNoun(running)}</span>
+              </span>
+              <div className="plan-nudge-group">
+                <button className="plan-nudge" onClick={() => nudge(NUDGE_SEC)} aria-label={`Add ${NUDGE_SEC} seconds`}>
+                  <Plus size={13} /> {NUDGE_SEC}s
+                </button>
+                <button className="plan-nudge" onClick={() => nudge(NUDGE_BIG_SEC)} aria-label={`Add ${NUDGE_BIG_SEC} seconds`}>
+                  <Plus size={13} /> {NUDGE_BIG_SEC}s
+                </button>
+              </div>
+            </div>
+          </>
         )}
 
         <div className="plan-player-bar" aria-hidden>
@@ -473,10 +498,11 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
         </div>
         <div className="plan-player-row">
           <div className="plan-player-figures">
-            <span className="plan-player-pct plan-num">{pct}%</span>
-            <span className="plan-player-meta plan-num">
-              {tally.done}/{tally.total} sets · {clockLabel(elapsedSec(session.startedAt))}
-            </span>
+            <span className="plan-player-pct plan-num">{pct}<span className="unit">%</span></span>
+            <div className="plan-player-col">
+              <span className="plan-player-time plan-num">{clockLabel(elapsedSec(session.startedAt))}</span>
+              <span className="plan-player-meta plan-num">{tally.done}/{tally.total} sets</span>
+            </div>
           </div>
           <button
             className="btn-icon"
@@ -487,11 +513,17 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
           >
             {full ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
           </button>
-          {/* One button, not two. Finish and Stop side by side were the same
-              size and a tap apart, and one of them throws the session away —
-              so the choice is made in a dialog where it can be read. */}
-          <button className="btn btn-danger plan-player-end" onClick={() => setEnding(true)}>
-            <Square size={14} fill="currentColor" /> End
+          {/* One button, not two, and just the icon: Finish and Stop side by
+              side used to be the same size and a tap apart, and one of them
+              throws the session away — so the choice is made in a dialog
+              where it can be read, and the entry point stays out of the way. */}
+          <button
+            className="btn-icon plan-player-end"
+            onClick={() => setEnding(true)}
+            title="End session"
+            aria-label="End session"
+          >
+            <Square size={16} fill="currentColor" />
           </button>
         </div>
       </div>
@@ -576,6 +608,7 @@ function exerciseIn(block: PlanBlock, id: string): PlanExercise | undefined {
 
 function timerNoun(r: Running): string {
   if (r.kind === 'break') return 'break'
+  if (r.kind === 'gap') return 'next up'
   return r.kind === 'rest' ? 'rest' : 'set'
 }
 
