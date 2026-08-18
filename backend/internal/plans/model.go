@@ -77,6 +77,11 @@ type Block struct {
 	// ends. Unknown values are cleared on the way in rather than rejected, so
 	// a newer client cannot write something an older one renders as a blank.
 	Section Section `json:"section,omitempty"`
+	// DurationSec lets a section stand on its own with no exercises in it —
+	// "warm up for ten minutes". Zero means the block's exercises say how long
+	// it takes, which is every ordinary block. Only meaningful with a Section:
+	// a block of working sets with no exercises is nothing at all.
+	DurationSec int `json:"durationSec,omitempty"`
 }
 
 // Section is what a block is, when it is not working sets.
@@ -132,7 +137,13 @@ type Exercise struct {
 	// WeightKg is the load for KindWeight, and the *added* load for KindBody.
 	WeightKg float64 `json:"weightKg"`
 	RestSec  int     `json:"restSec"`
-	Note     string  `json:"note"`
+	// BreakSec is the pause after this exercise before the next one *in the
+	// same block* — the minute between the movements of a superset. The third
+	// of three distinct waits, and neither of the others could be it:
+	// RestSec is between sets of this exercise, and Block.RestSec is after the
+	// whole block.
+	BreakSec int    `json:"breakSec"`
+	Note     string `json:"note"`
 }
 
 // PlanInput carries the fields a caller may set when creating a plan.
@@ -313,6 +324,15 @@ func (p BlockProgress) SetsFor(optionID string, isFirstPick bool) []SetLog {
 func (s *Session) Stats() (done, total int, volume float64) {
 	for _, b := range s.Snapshot.Blocks {
 		if len(b.Options) == 0 {
+			// A section that is only a duration — "warm up for ten minutes" —
+			// counts as the one thing it is, so the client's tally and this
+			// one agree about what the day contains.
+			if b.Section != SectionNone && b.DurationSec > 0 {
+				total++
+				if sets := s.Progress.Blocks[b.ID].Sets[b.ID]; len(sets) > 0 && sets[0].Done {
+					done++
+				}
+			}
 			continue
 		}
 		p := s.Progress.Blocks[b.ID]

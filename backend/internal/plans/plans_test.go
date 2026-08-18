@@ -820,3 +820,52 @@ func TestSetStartTimeRoundTrips(t *testing.T) {
 		t.Error("a started set came back done")
 	}
 }
+
+// "Warm up for ten minutes" is a whole block on its own. Only a section may be
+// empty like that — an ordinary block with no exercises is nothing at all, and
+// is still dropped.
+func TestASectionCanBeJustADuration(t *testing.T) {
+	s, _ := newTestService(t)
+	ctx := context.Background()
+	plan, err := s.CreatePlan(ctx, 1, PlanInput{Name: "Legs"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	saved, err := s.ReplaceDays(ctx, 1, plan.ID, []Day{{
+		Name: "Squat day",
+		Blocks: []Block{
+			{Section: SectionWarmup, DurationSec: 600},
+			{Options: []Exercise{{Name: "Back squat", Sets: 5, Reps: "5", WeightKg: 100, BreakSec: 90}}},
+			// An ordinary block with nothing in it, and a section with neither
+			// exercises nor a duration: both go.
+			{DurationSec: 600},
+			{Section: SectionStretch},
+		},
+	}})
+	if err != nil {
+		t.Fatalf("ReplaceDays() error = %v", err)
+	}
+
+	blocks := saved.Days[0].Blocks
+	if len(blocks) != 2 {
+		t.Fatalf("blocks = %d, want the two real ones", len(blocks))
+	}
+	if blocks[0].DurationSec != 600 || len(blocks[0].Options) != 0 {
+		t.Errorf("the warm-up did not survive as a bare duration: %+v", blocks[0])
+	}
+	if blocks[1].Options[0].BreakSec != 90 {
+		t.Errorf("break between exercises = %d, want 90", blocks[1].Options[0].BreakSec)
+	}
+
+	again, err := s.GetPlan(ctx, 1, plan.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Days[0].Blocks[0].DurationSec != 600 {
+		t.Errorf("duration did not survive reload: %+v", again.Days[0].Blocks[0])
+	}
+	if again.Days[0].Blocks[1].Options[0].BreakSec != 90 {
+		t.Errorf("break did not survive reload: %+v", again.Days[0].Blocks[1].Options[0])
+	}
+}

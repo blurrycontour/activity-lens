@@ -154,6 +154,11 @@ func normalizeDays(days []Day) ([]Day, error) {
 				RestSec: min(max(b.RestSec, 0), 3600),
 				Section: section,
 			}
+			// Only a section may stand on its own with a duration and no
+			// exercises. An ordinary block with nothing in it is nothing.
+			if section != SectionNone {
+				block.DurationSec = min(max(b.DurationSec, 0), 24*3600)
+			}
 			for _, e := range b.Options {
 				exName := strings.TrimSpace(e.Name)
 				if exName == "" {
@@ -185,10 +190,13 @@ func normalizeDays(days []Day) ([]Day, error) {
 					DurationSec: min(max(e.DurationSec, 0), 24*3600),
 					WeightKg:    max(e.WeightKg, 0),
 					RestSec:     min(max(e.RestSec, 0), 3600),
+					BreakSec:    min(max(e.BreakSec, 0), 3600),
 					Note:        clip(e.Note, MaxNoteLen),
 				})
 			}
-			if len(block.Options) == 0 {
+			// A section carrying only a duration is a real block — "warm up for
+			// ten minutes" needs no exercises to mean something.
+			if len(block.Options) == 0 && !(section != SectionNone && block.DurationSec > 0) {
 				continue
 			}
 			// Clamped to what the block can actually satisfy: "do 3 of these"
