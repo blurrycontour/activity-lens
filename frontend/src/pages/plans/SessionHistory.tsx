@@ -4,6 +4,7 @@ import { useRefreshHandler } from '../../context/RefreshContext'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import ListTools from './ListTools'
 import { useLongPress } from '../../lib/useLongPress'
+import { useSelection } from '../../lib/useSelection'
 import { api } from '../../lib/api'
 import {
   clockLabel, elapsedSec, sessionWhen, type PlanSession,
@@ -19,7 +20,6 @@ import {
 export default function SessionHistory({ onOpen }: { onOpen: (id: string) => void }) {
   const [sessions, setSessions] = useState<PlanSession[] | null>(null)
   const [error, setError] = useState('')
-  const [selected, setSelected] = useState<Set<string> | null>(null)
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
   const [query, setQuery] = useState('')
@@ -37,8 +37,8 @@ export default function SessionHistory({ onOpen }: { onOpen: (id: string) => voi
   useEffect(() => { void load() }, [load])
   useRefreshHandler(load)
 
-  const selecting = selected !== null
-  const chosen = useMemo(() => [...(selected ?? [])], [selected])
+  // The app-wide selection behaviour, back gesture and all.
+  const { selected, selecting, ids: chosen, count, start, stop, toggle, setSelected } = useSelection<string>()
 
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -59,21 +59,12 @@ export default function SessionHistory({ onOpen }: { onOpen: (id: string) => voi
    */
   const deletable = useCallback((s: PlanSession) => !!s.finishedAt, [])
 
-  function toggle(id: string) {
-    setSelected(cur => {
-      const next = new Set(cur ?? [])
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
   async function remove() {
     setBusy(true)
     try {
       await api.deletePlanSessions(chosen)
       setSessions(cur => cur?.filter(s => !chosen.includes(s.id)) ?? cur)
-      setSelected(null)
+      stop()
       setConfirming(false)
     } catch {
       setError('Could not delete those sessions.')
@@ -119,13 +110,15 @@ export default function SessionHistory({ onOpen }: { onOpen: (id: string) => voi
             {newestFirst ? 'Newest' : 'Oldest'}
           </button>
         }
+        noun="sessions"
         selecting={selecting}
-        count={chosen.length}
+        count={count}
+        total={selectable.length}
         allSelected={allSelected}
-        onSelect={() => setSelected(new Set())}
+        onSelect={() => start()}
         onToggleAll={() => setSelected(allSelected ? new Set() : new Set(selectable.map(s => s.id)))}
         onDelete={() => setConfirming(true)}
-        onCancel={() => setSelected(null)}
+        onCancel={() => stop()}
       />
 
       {shown.length === 0 ? (
@@ -141,7 +134,7 @@ export default function SessionHistory({ onOpen }: { onOpen: (id: string) => voi
               canSelect={deletable(s)}
               onOpen={() => onOpen(s.id)}
               onToggle={() => toggle(s.id)}
-              onLongPress={() => setSelected(new Set([s.id]))}
+              onLongPress={() => start(s.id)}
             />
           ))}
         </div>

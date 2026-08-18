@@ -3,7 +3,7 @@ import { ALL_WORKOUT_TYPES, type WorkoutType, type Workout } from '../data/worko
 import TypeIcon from '../components/TypeIcon'
 import ShareBadge from '../components/ShareBadge'
 import { useWorkouts } from '../context/WorkoutsContext'
-import { Search, Download, Plus, Grid2X2, List, Share2, FilterX, SlidersHorizontal, X, Trash2, CheckCheck, LoaderCircle, Layers, Image as ImageIcon, MoreVertical, Copy } from 'lucide-react'
+import { Search, Download, Plus, Grid2X2, List, Share2, FilterX, SlidersHorizontal, X, LoaderCircle, Layers, Image as ImageIcon, MoreVertical, Copy } from 'lucide-react'
 import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
 import SortDropdown, { SORT_OPTIONS, type SortKey } from '../components/SortDropdown'
@@ -22,6 +22,7 @@ import { useIsMobile } from '../lib/useIsMobile'
 import { LOCATION_EVENT } from '../App'
 import { useSessionState } from '../lib/useSessionState'
 import SearchInput from '../components/SearchInput'
+import SelectionBar from '../components/SelectionBar'
 import {
   applyWorkoutFilters, DEFAULT_FILTERS, describeImportWindow, parseAutoImportParams,
   type Has, type WorkoutFilters,
@@ -417,39 +418,16 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
             adding a second bar: the two are never useful at once, and pushing the
             list down a row on a phone would cost more than it gives. */}
         {selecting ? (
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <button className="btn-icon" onClick={() => stopSelecting()} aria-label="Cancel selection">
-              <X size={16} />
-            </button>
-            <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-mono)' }}>
-              {selected?.size ?? 0} selected
-            </span>
-            {/* Says how many it will take, because "all" on a filtered list is
-                not obviously the filtered set — and the label is the only thing
-                standing between a stray tap and 500 selected workouts. */}
-            <button
-              className="btn btn-ghost"
-              style={{ marginLeft: 'auto' }}
-              onClick={toggleAll}
-              aria-label={allSelected ? 'Deselect all' : `Select all ${filtered.length} workouts`}
-              title={allSelected ? 'Deselect all' : `Select all ${filtered.length} workouts`}
-            >
-              <CheckCheck size={15} />
-              {/* Shortened rather than dropped on a phone: there is room, and a
-                  bare glyph has no hover to explain itself there. */}
-              {isMobile
-                ? (allSelected ? 'Clear' : 'All')
-                : (allSelected ? 'Deselect all' : `Select all ${filtered.length}`)}
-            </button>
-            <button
-              className="btn btn-ghost"
-              style={{ color: 'var(--danger)' }}
-              disabled={(selected?.size ?? 0) === 0}
-              onClick={() => setConfirmDelete(true)}
-            >
-              <Trash2 size={15} /> Delete
-            </button>
-          </div>
+          <SelectionBar
+            count={selected?.size ?? 0}
+            total={filtered.length}
+            allSelected={allSelected}
+            noun="workouts"
+            compact={isMobile}
+            onCancel={() => stopSelecting()}
+            onToggleAll={toggleAll}
+            onDelete={() => setConfirmDelete(true)}
+          />
         ) : (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <SearchInput
