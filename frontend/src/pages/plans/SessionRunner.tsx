@@ -6,7 +6,7 @@ import { api } from '../../lib/api'
 import {
   blockComplete, blockLabel, blockProgress, chosenExercises, clockLabel, currentExercise,
   doneSetsFor, durationShort, effectivePicks, elapsedSec, exerciseComplete, leadingDone,
-  sessionTally, sessionVolume, setTappable, setsFor, targetLabel, trimNum, volumeLabel,
+  sessionTally, setTappable, setsFor, targetLabel, trimNum,
   type BlockProgress, type PlanBlock, type PlanExercise, type PlanSession, type SessionProgress, type SetLog,
 } from '../../data/plans'
 import { cacheProgress, clearCachedProgress, readCachedProgress } from './sessionCache'
@@ -268,37 +268,6 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
       <div className="page-content plan-run-page">
         {error && <div className="status-msg err" role="alert">{error}</div>}
 
-        <div className="card plan-run-summary">
-          <Ring pct={pct} />
-          <div className="plan-run-figures">
-            <div className="stat-chip">
-              <span className="label">Sets</span>
-              <span className="value">{tally.done}<span className="unit"> / {tally.total}</span></span>
-            </div>
-            <div className="stat-chip">
-              <span className="label">Elapsed</span>
-              <span className="value plan-num">{clockLabel(elapsedSec(session.startedAt))}</span>
-            </div>
-            {/* "Volume" is the strength-training term and the one the rest of
-                the app already uses, but it means nothing on sight — hence the
-                unit under it rather than a label people have to look up. */}
-            <div className="stat-chip" title="Total load moved: weight × reps, added up across every set you have ticked">
-              <span className="label">Volume lifted</span>
-              <span className="value">{volumeLabel(sessionVolume(session, progress))}</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="plan-run-tools">
-          <button
-            className="btn btn-ghost"
-            onClick={() => setOpenIds(allOpen ? new Set() : new Set(blocks.map(b => b.id)))}
-          >
-            {allOpen ? <ChevronsDownUp size={14} /> : <ChevronsUpDown size={14} />}
-            {allOpen ? 'Collapse all' : 'Expand all'}
-          </button>
-        </div>
-
         <div className="plan-rows">
           {blocks.map((block, i) => (
             <div key={block.id}>
@@ -333,26 +302,50 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
         </div>
       </div>
 
-      {/* The phone's controls, where the thumb is. Finish is the accent; stop
-          is the destructive one and wears the danger colour rather than sitting
-          next to it looking identical. */}
-      <div className="fab-stack">
-        <button
-          className="fab fab-danger"
-          onClick={() => setConfirmDiscard(true)}
-          title="Stop and discard"
-          aria-label="Stop and discard this session"
-        >
-          <Square size={19} />
-        </button>
-        <button
-          className="fab"
-          onClick={() => setConfirmFinish(true)}
-          title="Finish session"
-          aria-label="Finish session"
-        >
-          <Check size={22} />
-        </button>
+      {/*
+        The session's own bar, pinned above the navigation, in the shape a
+        phone already uses for something running in the background: a music
+        player. Where a summary card at the top of the page told you how far in
+        you were only while you happened to be looking at the top of the page,
+        this stays put — which is what the figures on it are for.
+
+        It replaces both the card and the pair of floating buttons. Two circles
+        hovering over the content said nothing about what they would do and
+        covered the exercise underneath them.
+      */}
+      <div className="plan-player" role="group" aria-label="Session controls">
+        <div className="plan-player-bar" aria-hidden>
+          <span className="plan-player-fill" style={{ width: `${pct}%` }} />
+        </div>
+        <div className="plan-player-row">
+          <div className="plan-player-figures">
+            <span className="plan-player-pct plan-num">{pct}%</span>
+            <span className="plan-player-meta plan-num">
+              {tally.done}/{tally.total} sets · {clockLabel(elapsedSec(session.startedAt))}
+            </span>
+          </div>
+          <button
+            className="btn-icon"
+            onClick={() => setOpenIds(allOpen ? new Set() : new Set(blocks.map(b => b.id)))}
+            title={allOpen ? 'Collapse every exercise' : 'Expand every exercise'}
+            aria-label={allOpen ? 'Collapse every exercise' : 'Expand every exercise'}
+          >
+            {allOpen ? <ChevronsDownUp size={18} /> : <ChevronsUpDown size={18} />}
+          </button>
+          <button
+            className="btn-icon plan-player-stop"
+            onClick={() => setConfirmDiscard(true)}
+            title="Stop and discard"
+            aria-label="Stop and discard this session"
+          >
+            {/* Filled: an outlined square beside a tick reads as an empty
+                checkbox rather than as stop. */}
+            <Square size={15} fill="currentColor" />
+          </button>
+          <button className="btn btn-primary plan-player-finish" onClick={() => setConfirmFinish(true)}>
+            <Check size={16} /> Finish
+          </button>
+        </div>
       </div>
 
       {confirmFinish && (
@@ -381,24 +374,6 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
         />
       )}
     </>
-  )
-}
-
-function Ring({ pct }: { pct: number }) {
-  const r = 26
-  const c = 2 * Math.PI * r
-  return (
-    <div className="plan-ring" role="img" aria-label={`${pct}% of sets done`}>
-      <svg width="62" height="62" viewBox="0 0 62 62">
-        <circle cx="31" cy="31" r={r} fill="none" stroke="var(--bg-3)" strokeWidth="5" />
-        <circle
-          cx="31" cy="31" r={r} fill="none" stroke="var(--primary)" strokeWidth="5"
-          strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - pct / 100)}
-          transform="rotate(-90 31 31)"
-        />
-      </svg>
-      <span className="plan-ring-num">{pct}%</span>
-    </div>
   )
 }
 
@@ -432,30 +407,41 @@ function BlockRow({ block, index, progress, open, rest, onRestDone, onStartRest,
 
   return (
     <div className={`plan-ex${complete ? ' done' : ''}${open ? ' open' : ''}${block.options.length > 1 ? ' plan-ex-grouped' : ''}`}>
-      <div className="plan-ex-top">
+      {/* The top row carries what the block is and the control that opens it.
+          Making the whole title a toggle read as a link to somewhere, and left
+          nothing on the row to say it could be opened at all. */}
+      <div className="plan-ex-head">
+        <span className="plan-ex-index">{index + 1}</span>
+        {label ? (
+          <span className="field-label plan-read-kind">{label}</span>
+        ) : (
+          <>
+            <span className="plan-ex-title">{chosen[0].name}</span>
+            <span className="plan-ex-target plan-num">{targetLabel(chosen[0])}</span>
+          </>
+        )}
         <button
-          className="plan-ex-name"
+          className="btn-icon plan-ex-toggle"
           onClick={onOpen}
           aria-expanded={open}
           aria-label={`${chosen.map(e => e.name).join(', ')}, ${open ? 'collapse' : 'expand'}`}
         >
-          <span className="plan-ex-index">{index + 1}</span>
-          <span className="plan-ex-titles">
-            {chosen.map(ex => (
-              <span key={ex.id} className="plan-ex-title">
-                {ex.name}
-                {chosen.length > 1 && (
-                  <span className="plan-ex-sub plan-num"> {targetLabel(ex)}</span>
-                )}
-              </span>
-            ))}
-          </span>
-          <ChevronDown size={15} className="plan-ex-caret" />
+          <ChevronDown size={16} className="plan-ex-caret" />
         </button>
-        {chosen.length === 1 && (
-          <div className="plan-ex-target plan-num">{targetLabel(chosen[0])}</div>
-        )}
       </div>
+
+      {/* A group names its exercises under the phrase, since the phrase is
+          what the row above is now about. */}
+      {label && (
+        <div className="plan-ex-names">
+          {chosen.map(ex => (
+            <div className="plan-read-row" key={ex.id}>
+              <span className="plan-read-name">{ex.name}</span>
+              <span className="plan-read-target plan-num">{targetLabel(ex)}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {!open && chosen.map(ex => {
         const sets = setsFor(progress, ex.id)
@@ -476,11 +462,11 @@ function BlockRow({ block, index, progress, open, rest, onRestDone, onStartRest,
                 {n + 1}
               </button>
             ))}
-            {/* The rest between sets, on the collapsed row too. It only ever
-                showed inside the expanded view, which is the one place you are
-                not looking while you wait for it. */}
+            {/* The rest between sets, on the collapsed row too, and pushed to
+                the far side: it appears mid-set and would otherwise shove the
+                set squares sideways under your thumb. */}
             {rest?.key === exKey(ex) && (
-              <RestTimer seconds={ex.restSec} label="Rest" until={rest.until} onDone={onRestDone} />
+              <RestTimer seconds={ex.restSec} label="Rest" until={rest.until} onDone={onRestDone} right />
             )}
           </div>
         )
@@ -506,7 +492,8 @@ function BlockRow({ block, index, progress, open, rest, onRestDone, onStartRest,
 
       {block.options.length > 1 && (
         <div className="plan-alt">
-          <span className="field-label plan-read-kind">{label}</span>
+          {/* No phrase here: it is on the block's top row now, and printed
+              twice in one card it read as two different instructions. */}
           {block.options.map((opt, n) => {
             const on = picked.has(n)
             const finished = exerciseComplete(opt, setsFor(progress, opt.id))
@@ -631,6 +618,7 @@ function ExerciseDetail({ ex, sets, heading, rest, onRestDone, onStartRest, onTo
           until={rest}
           onDone={onRestDone}
           onStart={() => onStartRest(ex.restSec)}
+          right
         />
       )}
       {ex.note && <p className="plan-ex-note">{ex.note}</p>}
@@ -646,13 +634,15 @@ function ExerciseDetail({ ex, sets, heading, rest, onRestDone, onStartRest, onTo
  * override for when you got there another way — so it is drawn as the button it
  * is, rather than the line of grey text it used to be.
  */
-function RestTimer({ seconds, label = 'Rest', until, onDone, onStart }: {
+function RestTimer({ seconds, label = 'Rest', until, onDone, onStart, right }: {
   seconds: number
   label?: string
   /** Epoch milliseconds the rest ends at, or null when not running. */
   until?: number | null
   onDone?: () => void
   onStart?: () => void
+  /** Sits at the far end of its row rather than the near one. */
+  right?: boolean
 }) {
   const [, tick] = useState(0)
 
@@ -664,7 +654,7 @@ function RestTimer({ seconds, label = 'Rest', until, onDone, onStart }: {
 
   if (!until) {
     return (
-      <button className="plan-rest" onClick={onStart} disabled={!onStart}>
+      <button className={`plan-rest${right ? ' right' : ''}`} onClick={onStart} disabled={!onStart}>
         <Timer size={14} /> Start {label.toLowerCase()} · {formatRest(seconds)}
       </button>
     )
@@ -672,7 +662,7 @@ function RestTimer({ seconds, label = 'Rest', until, onDone, onStart }: {
 
   const left = Math.max(0, Math.round((until - Date.now()) / 1000))
   return (
-    <div className={`plan-rest running${left <= 0 ? ' up' : ''}`}>
+    <div className={`plan-rest running${right ? ' right' : ''}${left <= 0 ? ' up' : ''}`}>
       <Timer size={14} />
       {left > 0 ? formatRest(left) : `${label} over`}
       <button
