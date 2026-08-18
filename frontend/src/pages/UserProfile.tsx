@@ -2,13 +2,15 @@ import { useCallback, useEffect, useState } from 'react'
 import { ArrowLeft, Globe, Handshake, LoaderCircle, Send } from 'lucide-react'
 import { api, ApiError, type UserProfileData } from '../lib/api'
 import type { Workout } from '../data/workouts'
+import type { PlanSession, TrainingPlan } from '../data/plans'
 import { useRefreshHandler } from '../context/RefreshContext'
 import { useSessionState } from '../lib/useSessionState'
 import ExpandModal from '../components/ExpandModal'
 import PingRow from '../components/PingRow'
 import TabStrip from '../components/TabStrip'
 import UserAvatar, { avatarUrl, userLabel } from '../components/UserAvatar'
-import WorkoutFilterList from '../components/WorkoutFilterList'
+import ItemList from '../components/ItemList'
+import { Byline } from '../components/WorkoutFilterList'
 
 /**
  * The last profile fetched, kept across unmounts.
@@ -49,12 +51,14 @@ type Tab = 'with-me' | 'with-them' | 'public'
  * toggle inside the library's filters. "With me" is dropped, because nobody
  * shares a workout with themselves.
  */
-export default function UserProfile({ id, onBack, onSelect, onOpenUser }: {
+export default function UserProfile({ id, onBack, onSelect, onOpenUser, onSelectPlan, onSelectSession }: {
   id: number
   onBack: () => void
   onSelect: (w: Workout) => void
   /** Opens one of the people a workout of yours was shared with. */
   onOpenUser: (id: number) => void
+  onSelectPlan?: (p: TrainingPlan) => void
+  onSelectSession?: (s: PlanSession) => void
 }) {
   // Seeded from the cache, so returning to a profile draws the person at once
   // and the fetch below only ever corrects it.
@@ -132,20 +136,22 @@ export default function UserProfile({ id, onBack, onSelect, onOpenUser }: {
       { id: 'public' as Tab, label: 'Public', icon: <Globe size={14} /> },
     ]
 
-  // Three named lists from the server rather than one merged one to slice
-  // apart: which rows are which is the server's answer to give.
+  // Named lists from the server rather than one merged one to slice apart:
+  // which rows are which is the server's answer to give. Three kinds now, and
+  // the tab picks the same relationship across all of them — a profile answers
+  // "what of theirs can I see", not "what of their workouts".
   const rows = tab === 'with-them'
-    ? data.sharedWithThem
+    ? { workouts: data.sharedWithThem, plans: data.plansSharedWithThem, sessions: data.sessionsSharedWithThem }
     : tab === 'public'
-      ? data.publicWorkouts
-      : data.sharedWithMe
+      ? { workouts: data.publicWorkouts, plans: data.publicPlans, sessions: data.publicSessions }
+      : { workouts: data.sharedWithMe, plans: data.sharedPlansWithMe, sessions: data.sharedSessionsWithMe }
 
   const empty = tab === 'with-them'
     ? data.self
-      ? 'You have not shared any workout with anyone yet.'
+      ? 'You have not shared anything with anyone yet.'
       : `You have not shared anything with ${name}.`
     : tab === 'public'
-      ? data.self ? 'You have not made any workout public.' : `${name} has no public workouts.`
+      ? data.self ? 'You have not made anything public.' : `${name} has nothing public.`
       : `${name} has not shared anything with you.`
 
   return (
@@ -182,21 +188,33 @@ export default function UserProfile({ id, onBack, onSelect, onOpenUser }: {
 
         <TabStrip items={tabs} value={tab} onChange={setTab} ariaLabel="Which workouts" fill />
 
-        <WorkoutFilterList
+        <ItemList
           // Keyed by tab so switching starts the next list at the top with its
           // own search rather than inheriting the previous tab's.
           key={tab}
-          rows={rows}
-          scope={tab === 'with-them' ? 'mine' : 'shared'}
+          kinds={['workout', 'plan', 'session']}
+          workouts={rows.workouts ?? []}
+          plans={rows.plans ?? []}
+          sessions={rows.sessions ?? []}
           storageKey={`profile.${tab}`}
           emptyMessage={empty}
-          onSelect={onSelect}
+          mine={data.self}
+          onSelectWorkout={onSelect}
+          onSelectPlan={onSelectPlan}
+          onSelectSession={onSelectSession}
+          onOpenUser={onOpenUser}
           // Only on your own outbound list: everywhere else on this page the
           // rows belong to the person in the header, and naming them again
-          // under every card says nothing.
-          byline={data.self && tab === 'with-them' ? 'recipients' : undefined}
-          mine={data.self}
-          onOpenUser={onOpenUser}
+          // under every card says nothing. Elsewhere ItemList falls back to
+          // the owner byline on its own.
+          footerFor={data.self && tab === 'with-them'
+            ? item => {
+              const people = item.workout?.sharedWith ?? item.plan?.sharedWith ?? item.session?.sharedWith ?? []
+              return people.length > 0
+                ? <Byline people={people} kind="recipients" onOpenUser={onOpenUser} />
+                : undefined
+            }
+            : undefined}
         />
       </div>
 

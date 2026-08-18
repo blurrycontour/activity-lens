@@ -113,6 +113,9 @@ export interface TrainingPlan {
    * Discover or opened by its id when someone else's. Absent on your own.
    */
   owner?: { id: number; username: string; displayName: string; avatarPath: string }
+  /** Who this was sent to, on your own profile. The mirror of `owner`: that
+   *  says who it came from, this says where it went. */
+  sharedWith?: { id: number; username: string; displayName: string; avatarPath: string }[]
   /**
    * Whether the single-plan fetch found you own it. Present only on that
    * response (never on a list row), same convention as Workout.isOwner —
@@ -178,10 +181,11 @@ export interface PlanSession {
   volumeKg: number
   notes: string
   workoutId?: string
-  /** See TrainingPlan — same three fields, same meaning, a session's own. */
+  /** See TrainingPlan — same fields, same meaning, a session's own. */
   visibility?: 'private' | 'public'
   sharedWithCount?: number
   owner?: { id: number; username: string; displayName: string; avatarPath: string }
+  sharedWith?: { id: number; username: string; displayName: string; avatarPath: string }[]
   isOwner?: boolean
 }
 

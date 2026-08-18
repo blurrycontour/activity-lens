@@ -766,6 +766,10 @@ export default function App() {
             onBack={() => window.history.back()}
             onSelect={selectWorkout}
             onOpenUser={id => openSection('users', String(id))}
+            // Under Discover, like anything else of someone else's — see
+            // DISCOVER_SECTIONS in nav.ts.
+            onSelectPlan={p => openSection('discover', 'plan', p.id)}
+            onSelectSession={s => openSection('discover', 'session', s.id)}
           />
         ) : page === 'equipment' ? (
           <Equipment

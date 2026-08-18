@@ -1,10 +1,12 @@
 package httpapi
 
 import (
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
 
+	"github.com/blurrycontour/activity-lens/backend/internal/plans"
 	"github.com/blurrycontour/activity-lens/backend/internal/settings"
 	"github.com/blurrycontour/activity-lens/backend/internal/workout"
 	"github.com/blurrycontour/go-authkit/httpmw"
@@ -108,6 +110,11 @@ func (s *Server) handleUserProfile(w http.ResponseWriter, r *http.Request) {
 		s.annotateFlags(r.Context(), list)
 	}
 
+	// The same three relationships, for plans and finished sessions. Built by
+	// the same helper for both kinds and both directions, because "theirs that
+	// I can see" and "mine that they can see" are one question asked twice.
+	pl := s.profilePlans(r, viewer.ID, id, ref)
+
 	prefs, err := s.settings.UserPreferences(r.Context(), id)
 	if err != nil {
 		// A missing tagline is not worth failing a profile for.
@@ -134,7 +141,109 @@ func (s *Server) handleUserProfile(w http.ResponseWriter, r *http.Request) {
 		// Yours, sent to them. The only list here that reads the caller's own
 		// library, and the reason it is owner-scoped rather than filtered.
 		"sharedWithThem": withThem,
+
+		"sharedPlansWithMe":      pl.plansWithMe,
+		"publicPlans":            pl.publicPlans,
+		"plansSharedWithThem":    pl.plansWithThem,
+		"sharedSessionsWithMe":   pl.sessionsWithMe,
+		"publicSessions":         pl.publicSessions,
+		"sessionsSharedWithThem": pl.sessionsWithThem,
 	})
+}
+
+// profileLists is the plan and session half of a profile: the same three
+// relationships the workout lists above answer, for the other two kinds.
+type profileLists struct {
+	plansWithMe      []plans.Plan
+	publicPlans      []plans.Plan
+	plansWithThem    []plans.Plan
+	sessionsWithMe   []plans.Session
+	publicSessions   []plans.Session
+	sessionsWithThem []plans.Session
+}
+
+// profilePlans fills profileLists for somebody else's profile.
+//
+// Every list is empty rather than absent on failure, and nothing here fails
+// the request: a profile whose workouts loaded but whose plans did not is
+// still worth drawing, and the alternative is that a plans service being off
+// (see withPlans) takes down every profile page on the instance.
+func (s *Server) profilePlans(r *http.Request, viewerID, ownerID int64, ref *workout.OwnerRef) profileLists {
+	out := profileLists{
+		plansWithMe: []plans.Plan{}, publicPlans: []plans.Plan{}, plansWithThem: []plans.Plan{},
+		sessionsWithMe: []plans.Session{}, publicSessions: []plans.Session{}, sessionsWithThem: []plans.Session{},
+	}
+	if s.plans == nil {
+		return out
+	}
+	ctx := r.Context()
+
+	// Theirs, sent to you, then theirs that is open to everyone — filtered to
+	// this person, since both feeds span the whole instance. A plan that is
+	// both shared and public belongs to the shared list: that is the stronger
+	// relationship, and the one the reader would rather know about.
+	seenPlans := map[string]struct{}{}
+	if list, err := s.plans.ListSharedPlansWithMe(ctx, viewerID); err == nil {
+		for i := range list {
+			if list[i].UserID != ownerID {
+				continue
+			}
+			seenPlans[list[i].ID] = struct{}{}
+			p := list[i]
+			p.Owner = ref
+			out.plansWithMe = append(out.plansWithMe, p)
+		}
+	} else {
+		slog.Warn("could not load plans shared with viewer", "user_id", ownerID, "error", err)
+	}
+	if list, err := s.plans.ListPublicPlans(ctx, viewerID); err == nil {
+		for i := range list {
+			if list[i].UserID != ownerID {
+				continue
+			}
+			if _, dup := seenPlans[list[i].ID]; dup {
+				continue
+			}
+			p := list[i]
+			p.Owner = ref
+			out.publicPlans = append(out.publicPlans, p)
+		}
+	}
+
+	seenSessions := map[string]struct{}{}
+	if list, err := s.plans.ListSharedSessionsWithMe(ctx, viewerID); err == nil {
+		for i := range list {
+			if list[i].UserID != ownerID {
+				continue
+			}
+			seenSessions[list[i].ID] = struct{}{}
+			sess := list[i]
+			sess.Owner = ref
+			out.sessionsWithMe = append(out.sessionsWithMe, sess)
+		}
+	}
+	if list, err := s.plans.ListPublicSessions(ctx, viewerID); err == nil {
+		for i := range list {
+			if list[i].UserID != ownerID {
+				continue
+			}
+			if _, dup := seenSessions[list[i].ID]; dup {
+				continue
+			}
+			sess := list[i]
+			sess.Owner = ref
+			out.publicSessions = append(out.publicSessions, sess)
+		}
+	}
+
+	// Yours, sent to them. Owner-scoped, so the id narrows and grants nothing.
+	if list, err := s.plans.ListPlansSharedByMeWith(ctx, viewerID, ownerID); err == nil {
+		out.plansWithThem = list
+	}
+	if list, err := s.plans.ListSessionsSharedByMeWith(ctx, viewerID, ownerID); err == nil {
+		out.sessionsWithThem = list
+	}
+	return out
 }
 
 // writeOwnProfile answers /api/users/{me} with the public face of your own
@@ -202,6 +311,8 @@ func (s *Server) writeOwnProfile(w http.ResponseWriter, r *http.Request, ref wor
 		s.annotateFlags(r.Context(), list)
 	}
 
+	own := s.ownProfilePlans(r, ref.ID)
+
 	prefs, err := s.settings.UserPreferences(r.Context(), ref.ID)
 	if err != nil {
 		prefs = settings.UserPrefs{}
@@ -218,5 +329,87 @@ func (s *Server) writeOwnProfile(w http.ResponseWriter, r *http.Request, ref wor
 		// with — the outbound half that was previously only reachable as a
 		// toggle buried in the library's filters.
 		"sharedWithThem": sent,
+
+		"sharedPlansWithMe":      []plans.Plan{},
+		"publicPlans":            own.publicPlans,
+		"plansSharedWithThem":    own.plansWithThem,
+		"sharedSessionsWithMe":   []plans.Session{},
+		"publicSessions":         own.publicSessions,
+		"sessionsSharedWithThem": own.sessionsWithThem,
 	})
+}
+
+// ownProfilePlans is the plan and session half of your *own* profile.
+//
+// A separate path from profilePlans for the same reason writeOwnProfile is:
+// the feeds deliberately exclude your own rows, so the only way to answer
+// "what of mine can other people see" is from your own library, filtered by
+// the visibility that is yours to read.
+func (s *Server) ownProfilePlans(r *http.Request, ownerID int64) profileLists {
+	out := profileLists{
+		publicPlans: []plans.Plan{}, plansWithThem: []plans.Plan{},
+		publicSessions: []plans.Session{}, sessionsWithThem: []plans.Session{},
+	}
+	if s.plans == nil {
+		return out
+	}
+	ctx := r.Context()
+	dir, err := s.userDirectory(r)
+	if err != nil {
+		dir = map[int64]workout.OwnerRef{}
+	}
+
+	// One grouped query per kind rather than a lookup per row, the same way
+	// the workout half above annotates itself.
+	planCounts, _ := s.plans.PlanShareCounts(ctx, ownerID)
+	planTo, _ := s.plans.PlanShareRecipientsByPlan(ctx, ownerID)
+	if list, err := s.plans.ListPlans(ctx, ownerID); err == nil {
+		for i := range list {
+			p := list[i]
+			// Deliberately no Owner: the field means "belongs to someone
+			// else", and setting it on your own rows opens them as a guest.
+			p.SharedWithCount = planCounts[p.ID]
+			if p.Visibility == workout.VisibilityPublic {
+				out.publicPlans = append(out.publicPlans, p)
+			}
+			// Sent to named people, which is a different act from making
+			// something public: a plan can be both, and belongs in both.
+			if p.SharedWithCount > 0 {
+				p.SharedWith = namesFor(planTo[p.ID], dir)
+				out.plansWithThem = append(out.plansWithThem, p)
+			}
+		}
+	} else {
+		slog.Warn("could not load own plans for profile", "user_id", ownerID, "error", err)
+	}
+
+	sessionCounts, _ := s.plans.SessionShareCounts(ctx, ownerID)
+	sessionTo, _ := s.plans.SessionShareRecipientsBySession(ctx, ownerID)
+	if list, err := s.plans.ListSessions(ctx, ownerID, plans.MaxSessionsPerListed, 0); err == nil {
+		for i := range list {
+			sess := list[i]
+			sess.SharedWithCount = sessionCounts[sess.ID]
+			if sess.Visibility == workout.VisibilityPublic {
+				out.publicSessions = append(out.publicSessions, sess)
+			}
+			if sess.SharedWithCount > 0 {
+				sess.SharedWith = namesFor(sessionTo[sess.ID], dir)
+				out.sessionsWithThem = append(out.sessionsWithThem, sess)
+			}
+		}
+	}
+	return out
+}
+
+// namesFor resolves share recipients, in the order they were shared with. An
+// account deleted since is simply absent — the share row goes with the user,
+// and a name we cannot resolve is not one worth inventing.
+func namesFor(ids []int64, dir map[int64]workout.OwnerRef) []workout.OwnerRef {
+	out := make([]workout.OwnerRef, 0, len(ids))
+	for _, id := range ids {
+		if who, ok := dir[id]; ok {
+			out = append(out, who)
+		}
+	}
+	return out
 }

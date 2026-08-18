@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowDown, ArrowUp, CheckCheck, History, Loader2 } from 'lucide-react'
+import { CheckCheck, History, Loader2 } from 'lucide-react'
 import { useRefreshHandler } from '../../context/RefreshContext'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import ListTools from './ListTools'
@@ -9,7 +9,11 @@ import { api } from '../../lib/api'
 import {
   clockLabel, elapsedSec, sessionWhen, type PlanSession,
 } from '../../data/plans'
-import { sessionHaystack } from '../../lib/discoverSearch'
+import ItemFilterBar from '../../components/ItemFilterBar'
+import {
+  applyItemFilters, asSessionItem, NO_NARROWING, type ItemNarrowing,
+} from '../../lib/itemFilters'
+import { useSessionState } from '../../lib/useSessionState'
 
 /**
  * Every session run, newest first.
@@ -23,8 +27,10 @@ export default function SessionHistory({ onOpen }: { onOpen: (id: string) => voi
   const [error, setError] = useState('')
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [query, setQuery] = useState('')
-  const [newestFirst, setNewestFirst] = useState(true)
+  // The same filter value the mixed feeds use, locked to sessions — so a sort
+  // or a period means exactly what it does on Discover.
+  const [narrow, setNarrow] = useSessionState<ItemNarrowing>(
+    'plans.history', { ...NO_NARROWING, kind: 'session' })
 
   const load = useCallback(async () => {
     try {
@@ -41,14 +47,12 @@ export default function SessionHistory({ onOpen }: { onOpen: (id: string) => voi
   // The app-wide selection behaviour, back gesture and all.
   const { selected, selecting, ids: chosen, count, start, stop, toggle, setSelected } = useSelection<string>()
 
-  const shown = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    const matched = (sessions ?? []).filter(s => !q || sessionHaystack(s).includes(q))
-    // Sorted here as well as on the server: the list is read as a timeline,
-    // and one row out of order is worse than a slow load.
-    return matched.sort((a, b) =>
-      a.startedAt.localeCompare(b.startedAt) * (newestFirst ? -1 : 1))
-  }, [sessions, query, newestFirst])
+  // Filtered and sorted here as well as on the server: the list is read as a
+  // timeline, and one row out of order is worse than a slow load.
+  const shown = useMemo(
+    () => applyItemFilters((sessions ?? []).map(asSessionItem), { ...narrow, kind: 'session' })
+      .map(i => i.session!),
+    [sessions, narrow])
 
   /**
    * A session still running cannot be deleted from here.
@@ -96,20 +100,16 @@ export default function SessionHistory({ onOpen }: { onOpen: (id: string) => voi
   return (
     <>
       <ListTools
-        query={query}
-        onQuery={setQuery}
-        placeholder="Search sessions…"
-        label="Search sessions"
-        sort={
-          <button
-            className="btn btn-ghost plan-sort"
-            onClick={() => setNewestFirst(v => !v)}
-            aria-label={newestFirst ? 'Newest first; switch to oldest first' : 'Oldest first; switch to newest first'}
-          >
-            {newestFirst ? <ArrowDown size={15} /> : <ArrowUp size={15} />}
-            {newestFirst ? 'Newest' : 'Oldest'}
-          </button>
-        }
+        tools={trailing => (
+          <ItemFilterBar
+            narrow={narrow}
+            onChange={setNarrow}
+            kinds={['session']}
+            mine
+            searchPlaceholder="Search sessions…"
+            trailing={trailing}
+          />
+        )}
         noun="sessions"
         selecting={selecting}
         count={count}
@@ -122,7 +122,7 @@ export default function SessionHistory({ onOpen }: { onOpen: (id: string) => voi
       />
 
       {shown.length === 0 ? (
-        <div className="empty-state"><p>No session matches “{query}”.</p></div>
+        <div className="empty-state"><p>No session matches that.</p></div>
       ) : (
         <div className="plan-list">
           {shown.map(s => (

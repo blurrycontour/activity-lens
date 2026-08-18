@@ -86,6 +86,34 @@ func (s *Service) RemovePlanShare(ctx context.Context, ownerID int64, planID str
 	return s.repo.RemovePlanShare(ctx, ownerID, planID, targetID)
 }
 
+// ListPlansSharedByMeWith returns the caller's own plans sent to one person.
+// Not redacted: these are the caller's own.
+func (s *Service) ListPlansSharedByMeWith(ctx context.Context, ownerID, recipientID int64) ([]Plan, error) {
+	return s.repo.ListPlansSharedByMeWith(ctx, ownerID, recipientID)
+}
+
+// PlanShareRecipientsByPlan maps the caller's shared plans to their recipients.
+func (s *Service) PlanShareRecipientsByPlan(ctx context.Context, ownerID int64) (map[string][]int64, error) {
+	return s.repo.PlanShareRecipientsByPlan(ctx, ownerID)
+}
+
+// ListSessionsSharedByMeWith mirrors ListPlansSharedByMeWith.
+func (s *Service) ListSessionsSharedByMeWith(ctx context.Context, ownerID, recipientID int64) ([]Session, error) {
+	return s.repo.ListSessionsSharedByMeWith(ctx, ownerID, recipientID)
+}
+
+// SessionShareCounts maps session id to recipient count for the caller.
+func (s *Service) SessionShareCounts(ctx context.Context, ownerID int64) (map[string]int, error) {
+	return s.repo.SessionShareCounts(ctx, ownerID)
+}
+
+// SessionShareRecipientsBySession mirrors PlanShareRecipientsByPlan.
+func (s *Service) SessionShareRecipientsBySession(ctx context.Context, ownerID int64) (map[string][]int64, error) {
+	return s.repo.SessionShareRecipientsBySession(ctx, ownerID)
+}
+
+// ListPlans and ListSessions for a profile go through the feed queries above.
+
 // ClonePlan copies a plan the caller can see (their own, shared with them, or
 // public) into a brand-new plan they own, with fresh ids throughout and no
 // visibility or share list carried over — a clone starts private, like any

@@ -7,7 +7,7 @@ import { useRefreshHandler } from '../context/RefreshContext'
 import PageHeader from '../components/PageHeader'
 import TabStrip from '../components/TabStrip'
 import UserAvatar, { userLabel } from '../components/UserAvatar'
-import DiscoverFeedList from '../components/DiscoverFeedList'
+import ItemList from '../components/ItemList'
 import { useSessionState } from '../lib/useSessionState'
 import SearchInput from '../components/SearchInput'
 
@@ -189,10 +189,11 @@ export default function Discover({ onOpenUser, onSelectWorkout, onSelectPlan, on
             )}
           </>
         ) : (
-          <DiscoverFeedList
+          <ItemList
             // Keyed so switching tabs starts the other feed's list at the top
             // with its own search, rather than inheriting this one's.
             key={tab}
+            kinds={['workout', 'plan', 'session']}
             workouts={feeds[tab]?.workouts}
             plans={feeds[tab]?.plans}
             sessions={feeds[tab]?.sessions}

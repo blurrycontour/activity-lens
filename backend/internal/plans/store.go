@@ -59,6 +59,8 @@ type Repository interface {
 	PlanShareCounts(ctx context.Context, ownerID int64) (map[string]int, error)
 	AddPlanShare(ctx context.Context, ownerID int64, planID string, targetID int64) error
 	RemovePlanShare(ctx context.Context, ownerID int64, planID string, targetID int64) error
+	ListPlansSharedByMeWith(ctx context.Context, ownerID, recipientID int64) ([]Plan, error)
+	PlanShareRecipientsByPlan(ctx context.Context, ownerID int64) (map[string][]int64, error)
 
 	GetViewableSession(ctx context.Context, viewerID int64, id string) (*Session, error)
 	ListPublicSessions(ctx context.Context, viewerID int64) ([]Session, error)
@@ -67,6 +69,9 @@ type Repository interface {
 	SessionShareRecipients(ctx context.Context, ownerID int64, sessionID string) ([]int64, error)
 	AddSessionShare(ctx context.Context, ownerID int64, sessionID string, targetID int64) error
 	RemoveSessionShare(ctx context.Context, ownerID int64, sessionID string, targetID int64) error
+	ListSessionsSharedByMeWith(ctx context.Context, ownerID, recipientID int64) ([]Session, error)
+	SessionShareCounts(ctx context.Context, ownerID int64) (map[string]int, error)
+	SessionShareRecipientsBySession(ctx context.Context, ownerID int64) (map[string][]int64, error)
 
 	// DeleteSharesForUser removes every share (both tables) naming userID as
 	// the recipient, for account deletion — the mirror of DeleteAllForUser,

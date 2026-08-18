@@ -53,6 +53,26 @@ func (r *SQLiteRepository) ListSharedPlansWithMe(ctx context.Context, viewerID i
 		ORDER BY p.updated_at DESC`, viewerID, viewerID)
 }
 
+// ListPlansSharedByMeWith is the outbound half of a profile: the caller's own
+// plans that they have sent to one named person. Owner-scoped, so the
+// recipient id narrows the query and grants nothing.
+func (r *SQLiteRepository) ListPlansSharedByMeWith(ctx context.Context, ownerID, recipientID int64) ([]Plan, error) {
+	return r.queryPlanSummaries(ctx, `SELECT `+planCols+` FROM training_plans p
+		WHERE p.user_id = ?
+		  AND p.id IN (SELECT plan_id FROM plan_shares WHERE user_id = ?)
+		ORDER BY p.updated_at DESC`, ownerID, recipientID)
+}
+
+// PlanShareRecipientsByPlan maps each of the caller's shared plans to who it
+// went to, in one query rather than one per row.
+func (r *SQLiteRepository) PlanShareRecipientsByPlan(ctx context.Context, ownerID int64) (map[string][]int64, error) {
+	return r.queryRecipientsByItem(ctx, `SELECT plan_shares.plan_id, plan_shares.user_id
+		FROM plan_shares
+		JOIN training_plans ON training_plans.id = plan_shares.plan_id
+		WHERE training_plans.user_id = ?
+		ORDER BY plan_shares.plan_id, plan_shares.created_at`, ownerID)
+}
+
 func (r *SQLiteRepository) queryPlanSummaries(ctx context.Context, query string, args ...any) ([]Plan, error) {
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -164,6 +184,32 @@ func (r *SQLiteRepository) ListSharedSessionsWithMe(ctx context.Context, viewerI
 		WHERE id IN (SELECT session_id FROM plan_session_shares WHERE user_id = ?)
 		  AND finished_at IS NOT NULL AND user_id <> ?
 		ORDER BY started_at DESC`, viewerID, viewerID)
+}
+
+// ListSessionsSharedByMeWith mirrors ListPlansSharedByMeWith.
+func (r *SQLiteRepository) ListSessionsSharedByMeWith(ctx context.Context, ownerID, recipientID int64) ([]Session, error) {
+	return r.querySessionSummaries(ctx, `SELECT `+sessionCols+` FROM plan_sessions
+		WHERE user_id = ?
+		  AND id IN (SELECT session_id FROM plan_session_shares WHERE user_id = ?)
+		ORDER BY started_at DESC`, ownerID, recipientID)
+}
+
+// SessionShareCounts maps session id to recipient count for the caller's own
+// history, for the badge on each row.
+func (r *SQLiteRepository) SessionShareCounts(ctx context.Context, ownerID int64) (map[string]int, error) {
+	return r.queryShareCounts(ctx, `SELECT plan_session_shares.session_id, COUNT(*)
+		FROM plan_session_shares
+		JOIN plan_sessions ON plan_sessions.id = plan_session_shares.session_id
+		WHERE plan_sessions.user_id = ? GROUP BY plan_session_shares.session_id`, ownerID)
+}
+
+// SessionShareRecipientsBySession mirrors PlanShareRecipientsByPlan.
+func (r *SQLiteRepository) SessionShareRecipientsBySession(ctx context.Context, ownerID int64) (map[string][]int64, error) {
+	return r.queryRecipientsByItem(ctx, `SELECT plan_session_shares.session_id, plan_session_shares.user_id
+		FROM plan_session_shares
+		JOIN plan_sessions ON plan_sessions.id = plan_session_shares.session_id
+		WHERE plan_sessions.user_id = ?
+		ORDER BY plan_session_shares.session_id, plan_session_shares.created_at`, ownerID)
 }
 
 func (r *SQLiteRepository) querySessionSummaries(ctx context.Context, query string, args ...any) ([]Session, error) {
@@ -278,6 +324,26 @@ func (r *SQLiteRepository) queryShareUserIDs(ctx context.Context, query string, 
 			return nil, err
 		}
 		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
+func (r *SQLiteRepository) queryRecipientsByItem(ctx context.Context, query string, args ...any) (map[string][]int64, error) {
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query share recipients: %w", err)
+	}
+	defer rows.Close()
+	out := make(map[string][]int64)
+	for rows.Next() {
+		var (
+			itemID string
+			userID int64
+		)
+		if err := rows.Scan(&itemID, &userID); err != nil {
+			return nil, err
+		}
+		out[itemID] = append(out[itemID], userID)
 	}
 	return out, rows.Err()
 }

@@ -4166,25 +4166,7 @@ body:has(.overlay) .fab { display: none; }
   margin: 14px 0 16px;
 }
 
-/* The Shared/Public feeds' type filter: four chips, not a dropdown — there is
-   nothing else to narrow a mix of workouts, plans and sessions by, so the
-   whole filter fits in one row without a sheet to hold it. */
-.discover-type-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
-.discover-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border-radius: 99px;
-  border: 1px solid var(--border);
-  background: var(--bg-2);
-  color: var(--text-2);
-  font-size: 12.5px;
-  cursor: pointer;
-}
-.discover-chip:hover { border-color: var(--border-strong); color: var(--text); }
-.discover-chip.active { border-color: var(--primary); background: var(--primary-dim); color: var(--primary); }
-.discover-chip-count { font-size: 11px; opacity: 0.75; }
+
 
 
 /* The edit dialog scrolls: with the advanced section open it is taller than a
@@ -6786,7 +6768,6 @@ body:has(.overlay) .fab { display: none; }
    while picking things to delete. */
 /* Both labels reserve the same width, so toggling the sort does not resize the
    button and shove the search field beside it. */
-.plan-sort { justify-content: center; min-width: 104px; }
 
 /* ── Training plans: sections, timers, fullscreen ───────────────────── */
 

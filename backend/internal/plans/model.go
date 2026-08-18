@@ -43,6 +43,9 @@ type Plan struct {
 	// Owner identifies the author, populated by the API layer only when the
 	// viewer is not it — a plan's own owner has no need to be told who they are.
 	Owner *workout.OwnerRef `json:"owner,omitempty"`
+	// SharedWith names the people this was sent to, on the owner's own profile.
+	// The mirror of Owner: that says who it came from, this says where it went.
+	SharedWith []workout.OwnerRef `json:"sharedWith,omitempty"`
 }
 
 // Redact clears the fields that belong to the owner alone, for a plan handed
@@ -210,6 +213,7 @@ type Session struct {
 	Visibility      workout.Visibility `json:"visibility,omitempty"`
 	SharedWithCount int                `json:"sharedWithCount,omitempty"`
 	Owner           *workout.OwnerRef  `json:"owner,omitempty"`
+	SharedWith      []workout.OwnerRef `json:"sharedWith,omitempty"`
 }
 
 // Redact clears what belongs to the owner alone. Unlike a workout or a plan,

@@ -290,6 +290,18 @@ export interface UserProfileData {
   /** Yours, sent to them. Empty on your own profile. */
   sharedWithThem: import('../data/workouts').Workout[]
   /**
+   * The same three relationships for training plans and finished sessions.
+   * Optional so a server that predates plan sharing simply shows none rather
+   * than breaking the page. Both "with me" lists are empty on your own
+   * profile, for the same reason sharedWithMe is.
+   */
+  sharedPlansWithMe?: TrainingPlan[]
+  publicPlans?: TrainingPlan[]
+  plansSharedWithThem?: TrainingPlan[]
+  sharedSessionsWithMe?: PlanSession[]
+  publicSessions?: PlanSession[]
+  sessionsSharedWithThem?: PlanSession[]
+  /**
    * What the nudge row needs to draw itself. Absent on your own profile, and
    * from servers that predate pings — both mean "do not offer it".
    */

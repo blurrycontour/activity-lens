@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowDownAZ, ArrowUpAZ, CheckCheck, ClipboardList, History, Loader2, Play, Plus, X,
+  CheckCheck, ClipboardList, History, Loader2, Play, Plus, X,
 } from 'lucide-react'
 import PageHeader from '../../components/PageHeader'
 import TabStrip from '../../components/TabStrip'
@@ -21,7 +21,11 @@ import { clearCachedProgress } from './sessionCache'
 import { useActiveSession } from '../../context/ActiveSessionContext'
 import { useLongPress } from '../../lib/useLongPress'
 import { useSelection } from '../../lib/useSelection'
-import { planHaystack } from '../../lib/discoverSearch'
+import { useSessionState } from '../../lib/useSessionState'
+import ItemFilterBar from '../../components/ItemFilterBar'
+import {
+  applyItemFilters, asPlanItem, NO_NARROWING, type ItemNarrowing,
+} from '../../lib/itemFilters'
 import useTicker from '../../lib/useTicker'
 
 interface Props {
@@ -54,8 +58,10 @@ export default function PlansPage({ section, detail, onOpen, onOpenUser }: Props
   const [renaming, setRenaming] = useState(false)
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState(false)
-  const [query, setQuery] = useState('')
-  const [az, setAz] = useState(true)
+  // The same filter value the mixed feeds use, locked to plans — so a sort or
+  // a period means exactly what it does on Discover.
+  const [narrow, setNarrow] = useSessionState<ItemNarrowing>(
+    'plans.list', { ...NO_NARROWING, kind: 'plan', sortBy: 'name-asc' })
   const [confirmBulk, setConfirmBulk] = useState(false)
   const [bulkBusy, setBulkBusy] = useState(false)
   // Which plan is waiting for a day to be picked, from the list's start button.
@@ -262,11 +268,10 @@ export default function PlansPage({ section, detail, onOpen, onOpenUser }: Props
     }
   }
 
-  const shown = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    const matched = q ? (plans ?? []).filter(p => planHaystack(p).includes(q)) : (plans ?? [])
-    return [...matched].sort((a, b) => a.name.localeCompare(b.name) * (az ? 1 : -1))
-  }, [plans, query, az])
+  const shown = useMemo(
+    () => applyItemFilters((plans ?? []).map(asPlanItem), { ...narrow, kind: 'plan' })
+      .map(i => i.plan!),
+    [plans, narrow])
 
   const allPicked = shown.length > 0 && shown.every(p => sel.selected?.has(p.id))
 
@@ -426,20 +431,16 @@ export default function PlansPage({ section, detail, onOpen, onOpenUser }: Props
                 from is a list with no way to delete anything. */}
             {(
               <ListTools
-                query={query}
-                onQuery={setQuery}
-                placeholder="Search plans…"
-                label="Search plans"
-                sort={
-                  <button
-                    className="btn btn-ghost plan-sort"
-                    onClick={() => setAz(v => !v)}
-                    aria-label={az ? 'Sorted A to Z; switch to Z to A' : 'Sorted Z to A; switch to A to Z'}
-                  >
-                    {az ? <ArrowDownAZ size={15} /> : <ArrowUpAZ size={15} />}
-                    {az ? 'A–Z' : 'Z–A'}
-                  </button>
-                }
+                tools={trailing => (
+                  <ItemFilterBar
+                    narrow={narrow}
+                    onChange={setNarrow}
+                    kinds={['plan']}
+                    mine
+                    searchPlaceholder="Search plans…"
+                    trailing={trailing}
+                  />
+                )}
                 noun="plans"
                 selecting={sel.selecting}
                 count={sel.count}
@@ -454,7 +455,7 @@ export default function PlansPage({ section, detail, onOpen, onOpenUser }: Props
 
             {shown.length === 0 ? (
               <div className="empty-state">
-                <p>No plan matches “{query}”.</p>
+                <p>No plan matches that.</p>
               </div>
             ) : (
               <div className="plan-list">
