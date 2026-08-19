@@ -29,6 +29,14 @@ import {
 import useTicker from '../../lib/useTicker'
 import { haptic } from '../../lib/haptics'
 
+/** "12 plans · 48 sessions", and the halves it has while they load. */
+function countLine(plans: TrainingPlan[] | null, sessions: PlanSession[] | null): string {
+  const parts: string[] = []
+  if (plans) parts.push(`${plans.length} plan${plans.length === 1 ? '' : 's'}`)
+  if (sessions) parts.push(`${sessions.length} session${sessions.length === 1 ? '' : 's'}`)
+  return parts.join(' · ') || 'Your training routines'
+}
+
 interface Props {
   /** From the URL: a plan id, or "session" with a session id in `detail`. */
   section: string | null
@@ -51,6 +59,9 @@ type TabId = 'plans' | 'history'
  */
 export default function PlansPage({ section, detail, onOpen, onOpenUser }: Props) {
   const [plans, setPlans] = useState<TrainingPlan[] | null>(null)
+  // Owned here rather than in SessionHistory: the header counts them, and it
+  // is on screen before that tab has ever been opened.
+  const [sessions, setSessions] = useState<PlanSession[] | null>(null)
   const [open, setOpen] = useState<TrainingPlan | null>(null)
   const [session, setSession] = useState<PlanSession | null>(null)
   const [tab, setTab] = useState<TabId>('plans')
@@ -62,7 +73,7 @@ export default function PlansPage({ section, detail, onOpen, onOpenUser }: Props
   // The same filter value the mixed feeds use, locked to plans — so a sort or
   // a period means exactly what it does on Discover.
   const [narrow, setNarrow] = useSessionState<ItemNarrowing>(
-    'plans.list', { ...NO_NARROWING, kind: 'plan', sortBy: 'name-asc' })
+    'plans.list', { ...NO_NARROWING, kind: 'plan' })
   const [confirmBulk, setConfirmBulk] = useState(false)
   const [bulkBusy, setBulkBusy] = useState(false)
   // Which plan is waiting for a day to be picked, from the list's start button.
@@ -90,11 +101,13 @@ export default function PlansPage({ section, detail, onOpen, onOpenUser }: Props
 
   const load = useCallback(async () => {
     try {
-      const [list] = await Promise.all([api.listPlans(), refreshActive()])
+      const [list, history] = await Promise.all([api.listPlans(), api.listPlanSessions(), refreshActive()])
       setPlans(list)
+      setSessions(history)
     } catch {
       setError('Could not load your plans.')
       setPlans([])
+      setSessions([])
     }
   }, [refreshActive])
 
@@ -398,7 +411,7 @@ export default function PlansPage({ section, detail, onOpen, onOpenUser }: Props
     <>
       <PageHeader
         title="Plans"
-        subtitle="Your training routines"
+        subtitle={countLine(plans, sessions)}
         actions={
           <button className="btn btn-primary desktop-only" onClick={() => setNaming(true)}>
             <Plus size={15} /> New plan
@@ -435,7 +448,7 @@ export default function PlansPage({ section, detail, onOpen, onOpenUser }: Props
         />
 
         {tab === 'history' ? (
-          <SessionHistory onOpen={id => onOpen('session', id)} />
+          <SessionHistory onOpen={id => onOpen('session', id)} sessions={sessions} setSessions={setSessions} />
         ) : plans === null ? (
           <div className="page-loading"><Loader2 size={18} className="spin" /></div>
         ) : plans.length === 0 ? (

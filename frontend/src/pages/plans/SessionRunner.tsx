@@ -17,7 +17,7 @@ import {
 } from '../../data/plans'
 import { cacheProgress, clearCachedProgress, readCachedProgress } from './sessionCache'
 import { clearSessionNotice, showSessionNotice } from '../../lib/native/sessionNotice'
-import { haptic, LONG_TIMER_SEC } from '../../lib/haptics'
+import { haptic, longTimerSec } from '../../lib/haptics'
 
 interface Props {
   session: PlanSession
@@ -86,10 +86,14 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
   const tally = useMemo(() => sessionTally({ ...session, progress }), [session, progress])
   const pct = tally.total ? Math.round(tally.done / tally.total * 100) : 0
   const allOpen = openIds.size === blocks.length && blocks.length > 0
-  // The block being worked on stays highlighted through the break after it —
-  // otherwise the moment the last set is ticked, the highlight jumped ahead to
-  // whatever comes next while the break you are still standing in went dark.
-  const currentId = running?.kind === 'break' ? running.blockId : currentBlockId(session, progress)
+  const nextId = currentBlockId(session, progress)
+  // The block just finished stays highlighted *while* its break runs —
+  // otherwise the moment the last set is ticked the highlight jumped ahead and
+  // the break you are standing in went dark. Once the break is over the
+  // highlight moves on by itself, which is the whole point of the break
+  // ending: the next thing is now the thing you are doing.
+  const breakRunning = running?.kind === 'break' && running.endsAt > Date.now()
+  const currentId = breakRunning ? running!.blockId : nextId
 
   // A clock in the bar has to move. One interval for the page rather than one
   // per timer, so a long day does not accumulate them.
@@ -307,13 +311,13 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
    * was. The ref holds which timer has already been announced.
    *
    * Only rests, and only long ones — a set's own clock ends with you standing
-   * over it, and see LONG_TIMER_SEC for why thirty seconds is not worth a
+   * over it, and see longTimerSec for why a short rest is not worth a
    * buzz you are already watching for.
    */
   const buzzed = useRef<string | null>(null)
   useEffect(() => {
     if (!running || running.kind === 'set') return
-    if (running.totalSec < LONG_TIMER_SEC) return
+    if (running.totalSec < longTimerSec()) return
     const id = `${running.blockId}:${running.exerciseId}:${running.endsAt}`
     if (buzzed.current === id) return
     if (Date.now() < running.endsAt) return
@@ -511,10 +515,16 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
                   <Minus size={13} /> {NUDGE_SEC}s
                 </button>
               </div>
+              {/* What is counting, named above the figure rather than beside
+                  it: "1:30" alone does not say whether it is the break between
+                  blocks or the rest between sets, and those are two different
+                  things to be waiting for. */}
               <span className={`plan-timer-now${left <= 0 ? ' up' : ''}`}>
-                {resting ? <Coffee size={15} aria-hidden /> : <Timer size={15} aria-hidden />}
+                <span className="plan-timer-what">
+                  {resting ? <Coffee size={12} aria-hidden /> : <Timer size={12} aria-hidden />}
+                  {timerNoun(running)}
+                </span>
                 <span className="plan-timer-digits plan-num">{left > 0 ? clockLabel(left) : 'over'}</span>
-                <span className="plan-timer-what">{timerNoun(running)}</span>
               </span>
               <div className="plan-nudge-group">
                 <button className="plan-nudge" onClick={() => nudge(NUDGE_SEC)} aria-label={`Add ${NUDGE_SEC} seconds`}>
@@ -535,10 +545,17 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
           <div className="plan-player-figures">
             <span className="plan-player-pct plan-num">{pct}<span className="unit">%</span></span>
             <div className="plan-player-col">
-              <span className="plan-player-time plan-num">{clockLabel(elapsedSec(session.startedAt))}</span>
+              {/* The wall clock, because the question in a gym is as often
+                  "how late is it" as "how long have I been here" — and the
+                  answer to the second one is on the bar between the two
+                  clusters, where it reads as the session's own figure. */}
+              <span className="plan-player-time plan-num">{timeOfDay()}</span>
               <span className="plan-player-meta plan-num">{tally.done}/{tally.total} sets</span>
             </div>
           </div>
+          <span className="plan-player-elapsed plan-num" title="Time since the session started">
+            {clockLabel(elapsedSec(session.startedAt))}
+          </span>
           <button
             className="btn-icon"
             onClick={toggleFull}
@@ -641,6 +658,11 @@ function exerciseIn(block: PlanBlock, id: string): PlanExercise | undefined {
   return block.options.find(o => o.id === id)
 }
 
+/** The wall clock, to the minute — the runner re-renders twice a second. */
+function timeOfDay(): string {
+  return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
 function timerNoun(r: Running): string {
   if (r.kind === 'break') return 'break'
   if (r.kind === 'gap') return 'next up'
@@ -654,8 +676,11 @@ function BreakLine({ seconds, active, left, onStart }: {
   left: number
   onStart: () => void
 }) {
+  // The line itself carries the state, not just the chip on it: a break is a
+  // step of the session like a block is, and while one is running it is the
+  // only thing happening.
   return (
-    <div className="plan-break-line">
+    <div className={`plan-break-line${active ? (left <= 0 ? ' over' : ' active') : ''}`}>
       {active ? (
         <span className={`plan-rest running${left <= 0 ? ' up' : ''}`}>
           <Coffee size={14} />

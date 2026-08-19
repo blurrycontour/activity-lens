@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { CheckCheck, History, Loader2 } from 'lucide-react'
-import { useRefreshHandler } from '../../context/RefreshContext'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import ListTools from './ListTools'
 import { useLongPress } from '../../lib/useLongPress'
@@ -22,8 +21,13 @@ import { useSessionState } from '../../lib/useSessionState'
  * sets, snapshotted on the day. That is the whole reason history is worth
  * keeping: a plan since rewritten still reads correctly here.
  */
-export default function SessionHistory({ onOpen }: { onOpen: (id: string) => void }) {
-  const [sessions, setSessions] = useState<PlanSession[] | null>(null)
+export default function SessionHistory({ onOpen, sessions, setSessions }: {
+  onOpen: (id: string) => void
+  /** Null while loading. Owned by PlansPage, which needs the count for its
+   *  header before this tab has ever been opened. */
+  sessions: PlanSession[] | null
+  setSessions: React.Dispatch<React.SetStateAction<PlanSession[] | null>>
+}) {
   const [error, setError] = useState('')
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -31,18 +35,6 @@ export default function SessionHistory({ onOpen }: { onOpen: (id: string) => voi
   // or a period means exactly what it does on Discover.
   const [narrow, setNarrow] = useSessionState<ItemNarrowing>(
     'plans.history', { ...NO_NARROWING, kind: 'session' })
-
-  const load = useCallback(async () => {
-    try {
-      setSessions(await api.listPlanSessions())
-    } catch {
-      setError('Could not load your history.')
-      setSessions([])
-    }
-  }, [])
-
-  useEffect(() => { void load() }, [load])
-  useRefreshHandler(load)
 
   // The app-wide selection behaviour, back gesture and all.
   const { selected, selecting, ids: chosen, count, start, stop, toggle, setSelected } = useSelection<string>()

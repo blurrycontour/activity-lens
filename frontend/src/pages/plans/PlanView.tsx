@@ -88,6 +88,28 @@ export default function PlanView({ plan, onBack, onEdit, onRename, onStart, onDe
         title={plan.name}
         subtitle={`${days.length} day${days.length === 1 ? '' : 's'}`}
         onBack={onBack}
+        /* The same shape a workout's header has: what kind of thing this is
+           beside its name, whether you have shared it, and whose it is on the
+           line under the date. It used to sit at the top of the page body,
+           which read as content of the plan rather than as its identity. */
+        titleAction={
+          <>
+            <span className="badge tag-plan"><ClipboardList size={12} /> Plan</span>
+            {isOwner && <ShareBadge workout={plan} />}
+          </>
+        }
+        meta={!isOwner && plan.owner ? (
+          <button
+            type="button"
+            className="owner-byline owner-byline-link page-header-byline"
+            onClick={() => onOpenUser?.(plan.owner!.id)}
+            disabled={!onOpenUser}
+          >
+            <span>Shared by</span>
+            <UserAvatar user={plan.owner} size={20} />
+            <span>{userLabel(plan.owner)}</span>
+          </button>
+        ) : undefined}
         /* Kept on the title's row: a lone icon button dropped below it sat
            under the back arrow, reading as part of the navigation rather than
            as the plan's own menu. */
@@ -134,13 +156,6 @@ export default function PlanView({ plan, onBack, onEdit, onRename, onStart, onDe
       />
 
       <div className={`page-content${startable ? ' with-fab' : ''}`}>
-        {!isOwner && plan.owner && (
-          <button type="button" className="owner-byline owner-byline-link plan-owner-byline" onClick={() => onOpenUser?.(plan.owner!.id)} disabled={!onOpenUser}>
-            <UserAvatar user={plan.owner} size={20} />
-            <span>By {userLabel(plan.owner)}</span>
-          </button>
-        )}
-        {isOwner && <ShareBadge workout={plan} />}
         {cloneError && <div className="status-msg err" role="alert">{cloneError}</div>}
         {days.length > 1 && (
           <div className="plan-tabs" role="tablist" aria-label="Days">

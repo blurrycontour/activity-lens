@@ -2,8 +2,8 @@ import { useState } from 'react'
 import SettingsCard from '../../components/SettingsCard'
 import { usePreferences } from '../../context/PreferencesContext'
 import {
-  canVibrate, hapticsEnabled, LONG_TIMER_SEC, setHapticsEnabled,
-  setTimerHapticsEnabled, timerHapticsEnabled,
+  canVibrate, hapticsEnabled, LONG_TIMER_CHOICES, longTimerSec, setHapticsEnabled,
+  setLongTimerSec, setTimerHapticsEnabled, timerHapticsEnabled,
 } from '../../lib/haptics'
 
 /**
@@ -20,6 +20,7 @@ export default function PlansSettings() {
   // localStorage, and the switches have to move when tapped.
   const [buzz, setBuzz] = useState(hapticsEnabled)
   const [buzzTimers, setBuzzTimers] = useState(timerHapticsEnabled)
+  const [longSec, setLongSec] = useState(longTimerSec)
 
   async function toggle(on: boolean) {
     setMsg(null)
@@ -44,14 +45,9 @@ export default function PlansSettings() {
         Record each finished session as a workout
       </label>
       <span className="field-hint">
-        Adds a strength workout named after the plan and the day, lasting from
-        when you started the session to when you finished it. It then counts
-        towards your streak, your goals and your totals like any other workout.
-      </span>
-      <span className="field-hint">
-        Off by default because everything else in your library was measured by a
-        device. Sessions are always kept in the plan's own history either way —
-        this only decides whether they also appear under Workouts.
+        Adds a strength workout for the session, so it counts towards your
+        streak, goals and totals. Sessions stay in the plan's history either
+        way.
       </span>
       {msg && <span className="status-msg err">{msg}</span>}
     </SettingsCard>
@@ -71,10 +67,9 @@ export default function PlansSettings() {
           Vibrate during a session
         </label>
         <span className="field-hint">
-          A short buzz when a set is ticked, a longer one when an exercise or
-          the whole session is done, and when a session starts or is discarded.
-          During a set your hands are busy and the phone is on the floor, which
-          is the one moment the screen cannot tell you anything.
+          A short buzz for a set, a longer one for a finished exercise, and for
+          a session starting, ending or being discarded — for the moments your
+          hands are busy and the phone is on the floor.
         </span>
 
         <label className="switch" style={{ fontSize: 13, color: 'var(--text)', marginTop: 14 }}>
@@ -88,16 +83,29 @@ export default function PlansSettings() {
           Vibrate when a long rest ends
         </label>
         <span className="field-hint">
-          Only for rests longer than {LONG_TIMER_SEC} seconds. A short rest is
-          spent standing over the bar watching the clock; past a minute you
-          have put the phone down and started doing something else, which is
-          the case this is for.
+          A short rest is spent watching the clock; a long one is spent doing
+          something else, which is what this is for.
         </span>
 
+        <label className="field" style={{ marginTop: 10 }}>
+          <span className="field-label">Count a rest as long from</span>
+          <select
+            className="input"
+            value={longSec}
+            disabled={!buzz || !buzzTimers}
+            onChange={e => { const n = Number(e.target.value); setLongSec(n); setLongTimerSec(n) }}
+          >
+            {LONG_TIMER_CHOICES.map(sec => (
+              <option key={sec} value={sec}>
+                {sec < 60 ? `${sec} seconds` : sec === 60 ? '1 minute' : `${sec / 60} minutes`}
+              </option>
+            ))}
+          </select>
+        </label>
+
         <span className="field-hint">
-          Kept on this device rather than on your account: vibration is a
-          property of the hardware in your hand, and no desktop browser has it
-          at all.
+          Kept on this device: vibration is a property of the hardware in your
+          hand, and no desktop browser has it at all.
         </span>
       </SettingsCard>
     )}

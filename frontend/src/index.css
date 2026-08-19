@@ -4158,10 +4158,7 @@ body:has(.overlay) .fab { display: none; }
 /* A shared/public plan or session's author, read at the top of the page
    rather than tucked under a card — there is only one row on this page and
    it deserves to be seen without scrolling to a footer. */
-.plan-owner-byline {
-  font-size: 13px;
-  margin-bottom: 14px;
-}
+.page-header-byline { margin-top: 4px; }
 
 /* Search and sort above the directory. */
 .discover-tools {
@@ -6491,6 +6488,12 @@ body:has(.overlay) .fab { display: none; }
   font-family: var(--font-mono);
   font-size: 11.5px;
 }
+/* A running break is the step the session is on, so the rule it sits on is
+   drawn in the same colour the timer bar uses — solid rather than dashed,
+   because this gap is happening rather than merely planned. */
+.plan-break-line.active::before { border-top-style: solid; border-top-color: var(--warning); }
+.plan-break-line.over::before { border-top-style: solid; border-top-color: var(--success); }
+
 .plan-break-chip.add { cursor: pointer; }
 .plan-break-chip.add:hover { color: var(--text-2); border-color: var(--border-strong); }
 .plan-break-chip .input {
@@ -6788,6 +6791,18 @@ body:has(.overlay) .fab { display: none; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* The session's own clock, between the two clusters of the player row. It is
+   the one figure that belongs to the session rather than to a control, so it
+   sits where nothing else competes with it. */
+.plan-player-elapsed {
+  flex: 0 0 auto;
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--text-2);
+  line-height: 1;
+}
+@media (max-width: 380px) { .plan-player-elapsed { display: none; } }
+
 .plan-player-stop { color: var(--danger); }
 .plan-player-stop:hover { background: var(--danger-dim); color: var(--danger); }
 .plan-player-finish { flex: 0 0 auto; }
@@ -6875,10 +6890,13 @@ body:has(.overlay) .fab { display: none; }
 .plan-timer-now {
   flex: 1;
   min-width: 0;
+  /* The name of what is counting sits above the figure: beside it, "1:30"
+     read as the whole message and the word next to it as decoration. */
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 7px;
+  gap: 2px;
   font-size: 15px;
   font-weight: 600;
   color: var(--warning);
@@ -6895,11 +6913,7 @@ body:has(.overlay) .fab { display: none; }
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-3);
-  /* Baseline-aligned beside a 20px number, "rest" or "break" sat visibly
-     higher than the digits without this — different font sizes on one line
-     do not share a baseline by default. */
-  align-self: center;
-  transform: translateY(1px);
+  gap: 4px;
 }
 
 /* --- Fullscreen --- */

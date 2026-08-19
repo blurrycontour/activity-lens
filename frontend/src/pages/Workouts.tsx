@@ -392,10 +392,14 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
           </span>
           {/* Desktop only: the phone has the floating button, and a header
               full of controls is what pushed the list below the fold there. */}
-          <button className="btn btn-primary desktop-only" style={{ marginLeft: 'auto' }} onClick={onImport}>
+          <button className="btn btn-primary desktop-only" onClick={onImport}>
             <Plus size={16} /> Add workout
           </button>
-          <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
+          {/* The push to the right edge lives here rather than on the Add
+              button beside it: that button is desktop-only, so on a phone
+              there was nothing left holding this cluster right and the
+              switcher slid up against the title. */}
+          <div style={{ marginLeft: 'auto', display: 'flex', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
             {([['list', <List key="l" size={15} />], ['grid', <Grid2X2 key="g" size={15} />]] as const).map(([id, icon]) => (
               <button
                 key={id}

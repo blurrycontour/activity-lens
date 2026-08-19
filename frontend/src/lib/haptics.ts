@@ -17,8 +17,10 @@
 
 /** Whether session events buzz at all. */
 const ENABLED_KEY = 'al_haptics'
-/** Whether a long rest ending buzzes. Separate — see LONG_TIMER_SEC. */
+/** Whether a long rest ending buzzes. Separate — see longTimerSec. */
 const TIMERS_KEY = 'al_haptic_timers'
+/** Where the "long enough to be worth a buzz" threshold is kept. */
+const TIMER_SEC_KEY = 'al_haptic_timer_sec'
 
 /**
  * How long a timer has to be before its end is worth a buzz.
@@ -29,6 +31,27 @@ const TIMERS_KEY = 'al_haptic_timers'
  * started doing something else, which is the case this exists for.
  */
 export const LONG_TIMER_SEC = 60
+
+/** The thresholds offered in settings, in seconds. */
+export const LONG_TIMER_CHOICES = [30, 60, 90, 120, 180] as const
+
+/** The threshold this device is set to, defaulting to LONG_TIMER_SEC. */
+export function longTimerSec(): number {
+  try {
+    const n = Number(localStorage.getItem(TIMER_SEC_KEY))
+    // Anything unrecognised — a hand-edited value, a key from an older
+    // build — falls back rather than silently disabling the buzz.
+    return LONG_TIMER_CHOICES.includes(n as typeof LONG_TIMER_CHOICES[number]) ? n : LONG_TIMER_SEC
+  } catch {
+    return LONG_TIMER_SEC
+  }
+}
+
+export function setLongTimerSec(sec: number) {
+  try {
+    localStorage.setItem(TIMER_SEC_KEY, String(sec))
+  } catch { /* nothing depends on it */ }
+}
 
 /**
  * What each event feels like.

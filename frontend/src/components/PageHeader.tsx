@@ -22,6 +22,13 @@ interface PageHeaderProps {
    * belonged to nothing.
    */
   compactActions?: boolean
+  /**
+   * A line under the subtitle, for what the title cannot hold: whose item this
+   * is, most of the time. Inside the header rather than at the top of the page
+   * body so it reads as part of the identity of the thing, which is where the
+   * workout page has always put it.
+   */
+  meta?: React.ReactNode
 }
 
 /**
@@ -32,7 +39,7 @@ interface PageHeaderProps {
  * header as opening a workout, so going one level deep looks the same wherever
  * you do it.
  */
-export default function PageHeader({ title, subtitle, onBack, actions, titleAction, compactActions }: PageHeaderProps) {
+export default function PageHeader({ title, subtitle, onBack, actions, titleAction, compactActions, meta }: PageHeaderProps) {
   return (
     <div className="page-header page-header-row">
       {onBack && (
@@ -46,6 +53,7 @@ export default function PageHeader({ title, subtitle, onBack, actions, titleActi
           {titleAction}
         </div>
         {subtitle && <p className="page-header-sub">{subtitle}</p>}
+        {meta}
       </div>
       {/* Wrapped so the phone layout can drop it onto its own line. Filters
           sharing a row with the title left the subtitle a few characters wide

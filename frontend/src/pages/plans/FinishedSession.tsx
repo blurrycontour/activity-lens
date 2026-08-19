@@ -7,7 +7,7 @@ import ShareDialog from '../../components/ShareDialog'
 import NotesAndSocial from '../../components/NotesAndSocial'
 import ShareBadge from '../../components/ShareBadge'
 import UserAvatar, { userLabel } from '../../components/UserAvatar'
-import { Check, MoreVertical, Share2, Timer, Trash2 } from 'lucide-react'
+import { Check, ClipboardCheck, MoreVertical, Share2, Timer, Trash2 } from 'lucide-react'
 import { api } from '../../lib/api'
 import {
   blockLabel, blockProgress, chosenExercises, clockLabel, doneSetsFor, durationShort,
@@ -94,6 +94,25 @@ export default function FinishedSession({ session, onBack, onOpenUser, onDeleted
         title={session.dayName}
         subtitle={`${session.planName} · ${sessionWhen(session.startedAt)}`}
         onBack={onBack}
+        /* Same header shape as a workout and a plan — see PlanView. */
+        titleAction={
+          <>
+            <span className="badge tag-session"><ClipboardCheck size={12} /> Session</span>
+            {isOwner && <ShareBadge workout={session} />}
+          </>
+        }
+        meta={!isOwner && session.owner ? (
+          <button
+            type="button"
+            className="owner-byline owner-byline-link page-header-byline"
+            onClick={() => onOpenUser?.(session.owner!.id)}
+            disabled={!onOpenUser}
+          >
+            <span>Shared by</span>
+            <UserAvatar user={session.owner} size={20} />
+            <span>{userLabel(session.owner)}</span>
+          </button>
+        ) : undefined}
         compactActions
         actions={isOwner ? (
           <MenuButton icon={<MoreVertical size={16} />} label="Session options">
@@ -107,13 +126,6 @@ export default function FinishedSession({ session, onBack, onOpenUser, onDeleted
         ) : undefined}
       />
       <div className="page-content">
-        {!isOwner && session.owner && (
-          <button type="button" className="owner-byline owner-byline-link plan-owner-byline" onClick={() => onOpenUser?.(session.owner!.id)} disabled={!onOpenUser}>
-            <UserAvatar user={session.owner} size={20} />
-            <span>By {userLabel(session.owner)}</span>
-          </button>
-        )}
-        {isOwner && <ShareBadge workout={session} />}
         <div className="card plan-run-summary">
           <div className="plan-run-figures">
             <div className="stat-chip">
