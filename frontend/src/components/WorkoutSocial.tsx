@@ -3,11 +3,11 @@ import { LoaderCircle, MessageSquare, Pencil, SendHorizontal, SmilePlus, Trash2 
 import ConfirmDialog from './ConfirmDialog'
 import UserAvatar, { userLabel } from './UserAvatar'
 import { useAuth } from '../context/AuthContext'
-import { api, ApiError, type WorkoutComment, type WorkoutSocial as Social } from '../lib/api'
+import { api, ApiError, type ShareKind, type WorkoutComment, type WorkoutSocial as Social } from '../lib/api'
 import useEscape from '../lib/useEscape'
 
 /**
- * Reactions and comments on a shared workout.
+ * Reactions and comments on a shared workout, training plan or session.
  *
  * Mounted only when its tab is opened — see WorkoutDetail's lazy import — so a
  * workout nobody has commented on costs no request until someone looks.
@@ -23,12 +23,17 @@ import useEscape from '../lib/useEscape'
  */
 
 interface WorkoutSocialProps {
+  /** What the conversation hangs off. All three share one set of endpoints. */
+  kind: ShareKind
   workoutId: string
   /** Owners may remove any comment; everyone may remove their own. */
   isOwner: boolean
+  /** The noun used when there is nothing to show, so the empty state names
+   *  the right thing. */
+  noun?: string
 }
 
-export default function WorkoutSocial({ workoutId, isOwner }: WorkoutSocialProps) {
+export default function WorkoutSocial({ kind, workoutId, isOwner, noun = 'workout' }: WorkoutSocialProps) {
   const { user } = useAuth()
   const [social, setSocial] = useState<Social | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -59,7 +64,7 @@ export default function WorkoutSocial({ workoutId, isOwner }: WorkoutSocialProps
 
   const load = useCallback(async () => {
     try {
-      setSocial(await api.workoutSocial(workoutId))
+      setSocial(await api.workoutSocial(kind, workoutId))
       setError(null)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not load comments.')
@@ -74,7 +79,7 @@ export default function WorkoutSocial({ workoutId, isOwner }: WorkoutSocialProps
     // string as "remove mine", so the toggle is one request either way.
     const next = social.myReaction === emoji ? '' : emoji
     try {
-      setSocial(await api.setWorkoutReaction(workoutId, next))
+      setSocial(await api.setWorkoutReaction(kind, workoutId, next))
       setPicking(false)
       setError(null)
     } catch (err) {
@@ -87,7 +92,7 @@ export default function WorkoutSocial({ workoutId, isOwner }: WorkoutSocialProps
     if (!body || posting) return
     setPosting(true)
     try {
-      const c = await api.addComment(workoutId, body)
+      const c = await api.addComment(kind, workoutId, body)
       setSocial(prev => (prev ? { ...prev, comments: [...prev.comments, c] } : prev))
       setDraft('')
       setError(null)
@@ -103,7 +108,7 @@ export default function WorkoutSocial({ workoutId, isOwner }: WorkoutSocialProps
     const body = editing.body.trim()
     if (!body) return
     try {
-      const c = await api.editComment(workoutId, editing.id, body)
+      const c = await api.editComment(kind, workoutId, editing.id, body)
       setSocial(prev => (prev
         ? { ...prev, comments: prev.comments.map(x => (x.id === c.id ? c : x)) }
         : prev))
@@ -117,7 +122,7 @@ export default function WorkoutSocial({ workoutId, isOwner }: WorkoutSocialProps
   async function remove(comment: WorkoutComment) {
     setDeleting(true)
     try {
-      await api.deleteComment(workoutId, comment.id)
+      await api.deleteComment(kind, workoutId, comment.id)
       setSocial(prev => (prev
         ? { ...prev, comments: prev.comments.filter(x => x.id !== comment.id) }
         : prev))
@@ -137,7 +142,7 @@ export default function WorkoutSocial({ workoutId, isOwner }: WorkoutSocialProps
   if (!social.shared) {
     return (
       <p className="social-empty">
-        Share this workout to open it for comments and reactions.
+        Share this {noun} to open it for comments and reactions.
       </p>
     )
   }
@@ -293,7 +298,7 @@ export default function WorkoutSocial({ workoutId, isOwner }: WorkoutSocialProps
       {confirmDelete && (
         <ConfirmDialog
           title="Delete this comment?"
-          message="It is removed for everyone this workout is shared with. This cannot be undone."
+          message={`It is removed for everyone this ${noun} is shared with. This cannot be undone.`}
           confirmLabel="Delete"
           busyLabel="Deleting…"
           busy={deleting}

@@ -12,19 +12,19 @@ import (
 // in the handler so every future caller — a mobile client, a script, a second
 // endpoint — gets the same limits without restating them.
 
-// Comments returns a workout's comments, oldest first.
-func (s *Service) Comments(ctx context.Context, workoutID string) ([]Comment, error) {
-	return s.repo.ListComments(ctx, workoutID)
+// Comments returns a subject's comments, oldest first.
+func (s *Service) Comments(ctx context.Context, subj Subject) ([]Comment, error) {
+	return s.repo.ListComments(ctx, subj)
 }
 
 // Comment reads one message. The delete path uses it to learn whose the
 // message was before it goes, since after the DELETE there is nobody to name.
-func (s *Service) Comment(ctx context.Context, workoutID, commentID string) (Comment, error) {
-	return s.repo.GetComment(ctx, workoutID, commentID)
+func (s *Service) Comment(ctx context.Context, subj Subject, commentID string) (Comment, error) {
+	return s.repo.GetComment(ctx, subj, commentID)
 }
 
-// AddComment stores a message from authorID on a workout they can see.
-func (s *Service) AddComment(ctx context.Context, workoutID string, authorID int64, body string) (Comment, error) {
+// AddComment stores a message from authorID on something they can see.
+func (s *Service) AddComment(ctx context.Context, subj Subject, authorID int64, body string) (Comment, error) {
 	body, err := cleanCommentBody(body)
 	if err != nil {
 		return Comment{}, err
@@ -35,32 +35,31 @@ func (s *Service) AddComment(ctx context.Context, workoutID string, authorID int
 	}
 	c := Comment{
 		ID:        id,
-		WorkoutID: workoutID,
 		UserID:    authorID,
 		Body:      body,
 		CreatedAt: time.Now().UTC(),
 	}
 	c.UpdatedAt = c.CreatedAt
-	if err := s.repo.AddComment(ctx, c); err != nil {
+	if err := s.repo.AddComment(ctx, subj, c); err != nil {
 		return Comment{}, err
 	}
 	return c, nil
 }
 
 // EditComment rewrites a comment the caller wrote.
-func (s *Service) EditComment(ctx context.Context, workoutID, commentID string, authorID int64, body string) (Comment, error) {
+func (s *Service) EditComment(ctx context.Context, subj Subject, commentID string, authorID int64, body string) (Comment, error) {
 	body, err := cleanCommentBody(body)
 	if err != nil {
 		return Comment{}, err
 	}
-	return s.repo.UpdateComment(ctx, workoutID, commentID, authorID, body)
+	return s.repo.UpdateComment(ctx, subj, commentID, authorID, body)
 }
 
 // RemoveComment deletes a comment. Its author may always remove it; the
-// workout's owner may remove any of them, which is the only moderation control
+// subject's owner may remove any of them, which is the only moderation control
 // on a page they published.
-func (s *Service) RemoveComment(ctx context.Context, workoutID, commentID string, requesterID int64, isWorkoutOwner bool) error {
-	return s.repo.DeleteComment(ctx, workoutID, commentID, requesterID, isWorkoutOwner)
+func (s *Service) RemoveComment(ctx context.Context, subj Subject, commentID string, requesterID int64, isOwner bool) error {
+	return s.repo.DeleteComment(ctx, subj, commentID, requesterID, isOwner)
 }
 
 // PurgeUserComments removes every comment a deleted account wrote.
@@ -68,22 +67,22 @@ func (s *Service) PurgeUserComments(ctx context.Context, userID int64) error {
 	return s.repo.DeleteCommentsForUser(ctx, userID)
 }
 
-// Reactions returns a workout's reactions, oldest first.
-func (s *Service) Reactions(ctx context.Context, workoutID string) ([]Reaction, error) {
-	return s.repo.ListReactions(ctx, workoutID)
+// Reactions returns a subject's reactions, oldest first.
+func (s *Service) Reactions(ctx context.Context, subj Subject) ([]Reaction, error) {
+	return s.repo.ListReactions(ctx, subj)
 }
 
 // SetReaction records one person's reaction, replacing whatever they had.
-func (s *Service) SetReaction(ctx context.Context, workoutID string, userID int64, emoji string) error {
+func (s *Service) SetReaction(ctx context.Context, subj Subject, userID int64, emoji string) error {
 	if !ValidReaction(emoji) {
 		return fmt.Errorf("%w: unknown reaction", ErrInvalid)
 	}
-	return s.repo.SetReaction(ctx, workoutID, userID, emoji)
+	return s.repo.SetReaction(ctx, subj, userID, emoji)
 }
 
 // ClearReaction removes one person's reaction.
-func (s *Service) ClearReaction(ctx context.Context, workoutID string, userID int64) error {
-	return s.repo.ClearReaction(ctx, workoutID, userID)
+func (s *Service) ClearReaction(ctx context.Context, subj Subject, userID int64) error {
+	return s.repo.ClearReaction(ctx, subj, userID)
 }
 
 // PurgeUserReactions removes every reaction a deleted account left.

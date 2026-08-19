@@ -91,16 +91,16 @@ func plural(n int) string {
 //
 // The actor never hears about their own action, and each recipient is told once
 // however many ways they qualify.
-func (s *Server) notifySocial(r *http.Request, actor auth.User, wk *workout.Workout, title, body, dedupe string) {
-	recipients := map[int64]bool{wk.UserID: true}
+func (s *Server) notifySocial(r *http.Request, actor auth.User, subj workout.Subject, ownerID int64, link, title, body, dedupe string) {
+	recipients := map[int64]bool{ownerID: true}
 	// Best effort: the comment or reaction has already been stored, and failing
 	// to read the thread is not a reason to fail the request that made it.
-	if comments, err := s.workout.Comments(r.Context(), wk.ID); err == nil {
+	if comments, err := s.workout.Comments(r.Context(), subj); err == nil {
 		for _, c := range comments {
 			recipients[c.UserID] = true
 		}
 	} else {
-		slog.Warn("could not load thread for social notification", "workout_id", wk.ID, "error", err)
+		slog.Warn("could not load thread for social notification", "subject", subj.ID, "error", err)
 	}
 	delete(recipients, actor.ID)
 
@@ -112,7 +112,7 @@ func (s *Server) notifySocial(r *http.Request, actor auth.User, wk *workout.Work
 			Body:   body,
 			// Straight to the tab it happened in: landing on the charts and
 			// leaving someone to find the conversation would waste the tap.
-			Link: "/workouts/" + wk.ID + "?tab=social",
+			Link: link,
 			// It came from a person, so it wears their face.
 			Icon:      effectiveAvatar(actor),
 			DedupeKey: dedupe,

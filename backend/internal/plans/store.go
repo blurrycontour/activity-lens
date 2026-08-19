@@ -67,6 +67,7 @@ type Repository interface {
 	ListSharedSessionsWithMe(ctx context.Context, viewerID int64) ([]Session, error)
 	SetSessionVisibility(ctx context.Context, ownerID int64, id string, v workout.Visibility) error
 	SessionShareRecipients(ctx context.Context, ownerID int64, sessionID string) ([]int64, error)
+	SetSessionNotes(ctx context.Context, ownerID int64, id, notes string) error
 	AddSessionShare(ctx context.Context, ownerID int64, sessionID string, targetID int64) error
 	RemoveSessionShare(ctx context.Context, ownerID int64, sessionID string, targetID int64) error
 	ListSessionsSharedByMeWith(ctx context.Context, ownerID, recipientID int64) ([]Session, error)

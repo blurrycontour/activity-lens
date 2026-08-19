@@ -41,7 +41,7 @@ func (r *SQLiteRepository) FlagsFor(ctx context.Context, ids []string) (map[stri
 		if err := r.countInto(ctx, out, "workout_media", chunk, func(f *RowFlags, n int) { f.Media = n }); err != nil {
 			return nil, err
 		}
-		if err := r.countInto(ctx, out, "workout_comments", chunk, func(f *RowFlags, n int) { f.Comments = n }); err != nil {
+		if err := r.countInto(ctx, out, "comments", chunk, func(f *RowFlags, n int) { f.Comments = n }); err != nil {
 			return nil, err
 		}
 	}
@@ -53,6 +53,10 @@ func (r *SQLiteRepository) FlagsFor(ctx context.Context, ids []string) (map[stri
 // The table name is interpolated and the ids are bound, which is the only safe
 // division: a table name cannot be a placeholder, and it is never anything but
 // one of the two literals above.
+//
+// `comments` holds plans and sessions too, but their rows have a NULL
+// workout_id and so cannot match an id in the IN list — the WHERE clause does
+// the filtering that a separate table used to.
 func (r *SQLiteRepository) countInto(
 	ctx context.Context, out map[string]RowFlags, table string, ids []string, set func(*RowFlags, int),
 ) error {

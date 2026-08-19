@@ -4,6 +4,7 @@ import PageHeader from '../../components/PageHeader'
 import MenuButton from '../../components/MenuButton'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import ShareDialog from '../../components/ShareDialog'
+import NotesAndSocial from '../../components/NotesAndSocial'
 import ShareBadge from '../../components/ShareBadge'
 import UserAvatar, { userLabel } from '../../components/UserAvatar'
 import { api, ApiError } from '../../lib/api'
@@ -24,6 +25,8 @@ interface Props {
   onCloned: (plan: TrainingPlan) => void
   /** Opens the plan's author, when it is not you. */
   onOpenUser?: (id: number) => void
+  /** The plan as the server returned it after a note edit. */
+  onNotesSaved: (plan: TrainingPlan) => void
 }
 
 /**
@@ -35,7 +38,7 @@ interface Props {
  * came for (what am I doing today, and start it) buried among controls for
  * changing it. Editing is now a mode you ask for.
  */
-export default function PlanView({ plan, onBack, onEdit, onRename, onStart, onDeleted, onCloned, onOpenUser }: Props) {
+export default function PlanView({ plan, onBack, onEdit, onRename, onStart, onDeleted, onCloned, onOpenUser, onNotesSaved }: Props) {
   const [active, setActive] = useState(0)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -127,7 +130,7 @@ export default function PlanView({ plan, onBack, onEdit, onRename, onStart, onDe
         )}
       />
 
-      <div className="page-content">
+      <div className={`page-content${startable ? ' with-fab' : ''}`}>
         {!isOwner && plan.owner && (
           <button type="button" className="owner-byline owner-byline-link plan-owner-byline" onClick={() => onOpenUser?.(plan.owner!.id)} disabled={!onOpenUser}>
             <UserAvatar user={plan.owner} size={20} />
@@ -235,6 +238,15 @@ export default function PlanView({ plan, onBack, onEdit, onRename, onStart, onDe
             ))}
           </div>
         )}
+
+        <NotesAndSocial
+          kind="plan"
+          id={plan.id}
+          isOwner={isOwner}
+          notes={plan.notes}
+          onSaveNotes={async notes => { onNotesSaved(await api.patchPlan(plan.id, { notes })) }}
+          placeholder="Anything about this plan — where the weights came from, what to progress next."
+        />
       </div>
 
       {/* The phone's start control, where the thumb is. Only for your own

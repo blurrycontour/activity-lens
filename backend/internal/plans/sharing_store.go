@@ -246,6 +246,24 @@ func (r *SQLiteRepository) SetSessionVisibility(ctx context.Context, ownerID int
 	return nil
 }
 
+// SetSessionNotes rewrites a finished session's note.
+//
+// Its own statement rather than a read-modify-write through UpdateSession:
+// that rewrites the snapshot and the progress JSON too, and a note edited
+// while the runner is open would race with an autosave over rows that have
+// nothing to do with the note.
+func (r *SQLiteRepository) SetSessionNotes(ctx context.Context, ownerID int64, id, notes string) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE plan_sessions SET notes = ? WHERE id = ? AND user_id = ?`, notes, id, ownerID)
+	if err != nil {
+		return fmt.Errorf("set session notes: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (r *SQLiteRepository) SessionShareRecipients(ctx context.Context, ownerID int64, sessionID string) ([]int64, error) {
 	if err := r.assertOwnsSession(ctx, ownerID, sessionID); err != nil {
 		return nil, err

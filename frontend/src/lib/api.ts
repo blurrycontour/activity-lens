@@ -813,15 +813,22 @@ export const api = {
   },
   deleteWorkoutPhoto: (id: string, mediaID: string) =>
     request<unknown>(`/api/workouts/${id}/media/${mediaID}`, { method: 'DELETE' }),
-  // Reactions and comments together: the tab is useless with half of them, so
-  // two requests would only add a state where the page is half drawn.
-  workoutSocial: (id: string) => request<WorkoutSocial>(`/api/workouts/${id}/social`),
-  addComment: (id: string, body: string) =>
-    request<WorkoutComment>(`/api/workouts/${id}/comments`, { method: 'POST', body: { body } }),
-  editComment: (id: string, commentID: string, body: string) =>
-    request<WorkoutComment>(`/api/workouts/${id}/comments/${commentID}`, { method: 'PATCH', body: { body } }),
-  deleteComment: (id: string, commentID: string) =>
-    request<unknown>(`/api/workouts/${id}/comments/${commentID}`, { method: 'DELETE' }),
+  /**
+   * Reactions and comments together: the tab is useless with half of them, so
+   * two requests would only add a state where the page is half drawn.
+   *
+   * Parameterized by kind like the sharing calls above, and for the same
+   * reason: a workout, a plan and a finished session each have the identical
+   * five routes under their own prefix, so this is one function per verb
+   * rather than three copies of five.
+   */
+  workoutSocial: (kind: ShareKind, id: string) => request<WorkoutSocial>(`${shareBase(kind, id)}/social`),
+  addComment: (kind: ShareKind, id: string, body: string) =>
+    request<WorkoutComment>(`${shareBase(kind, id)}/comments`, { method: 'POST', body: { body } }),
+  editComment: (kind: ShareKind, id: string, commentID: string, body: string) =>
+    request<WorkoutComment>(`${shareBase(kind, id)}/comments/${commentID}`, { method: 'PATCH', body: { body } }),
+  deleteComment: (kind: ShareKind, id: string, commentID: string) =>
+    request<unknown>(`${shareBase(kind, id)}/comments/${commentID}`, { method: 'DELETE' }),
   /**
    * Sets the caller's one reaction, or clears it with an empty emoji — tapping
    * the one you already chose is the same request as picking a new one.
@@ -829,8 +836,8 @@ export const api = {
    * Answers with the whole tab, because both the counts and who-reacted change
    * and merging that on the client would be a second copy of the same rules.
    */
-  setWorkoutReaction: (id: string, emoji: string) =>
-    request<WorkoutSocial>(`/api/workouts/${id}/reaction`, { method: 'PUT', body: { emoji } }),
+  setWorkoutReaction: (kind: ShareKind, id: string, emoji: string) =>
+    request<WorkoutSocial>(`${shareBase(kind, id)}/reaction`, { method: 'PUT', body: { emoji } }),
   // `deferChecks` suppresses the post-import gear and goal evaluation, which
   // re-reads the whole library each time. A batch sets it on every file and
   // calls finalizeImport() once at the end.
@@ -968,6 +975,9 @@ export const api = {
   finishPlanSession: (id: string, progress: SessionProgress, notes = '') =>
     request<PlanSession>(`/api/plan-sessions/${id}/finish`, { method: 'POST', body: { progress, notes } }),
   deletePlanSession: (id: string) => request<unknown>(`/api/plan-sessions/${id}`, { method: 'DELETE' }),
+  /** Rewrites a finished session's note; nothing else about one is editable. */
+  patchPlanSession: (id: string, patch: { notes?: string }) =>
+    request<PlanSession>(`/api/plan-sessions/${id}`, { method: 'PATCH', body: patch }),
   /** Clears a batch of history rows in one request. */
   deletePlanSessions: (ids: string[]) =>
     request<{ deleted: number }>('/api/plan-sessions/delete', { method: 'POST', body: { ids } }),

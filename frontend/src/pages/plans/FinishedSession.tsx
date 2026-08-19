@@ -4,6 +4,7 @@ import Confetti from '../../components/Confetti'
 import MenuButton from '../../components/MenuButton'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import ShareDialog from '../../components/ShareDialog'
+import NotesAndSocial from '../../components/NotesAndSocial'
 import ShareBadge from '../../components/ShareBadge'
 import UserAvatar, { userLabel } from '../../components/UserAvatar'
 import { Check, MoreVertical, Share2, Timer, Trash2 } from 'lucide-react'
@@ -51,13 +52,15 @@ interface DoneBlock {
  * when each set happened. A row that only said "12 of 14 sets" would be a
  * summary of something nobody can look at.
  */
-export default function FinishedSession({ session, onBack, onOpenUser, onDeleted }: {
+export default function FinishedSession({ session, onBack, onOpenUser, onDeleted, onNotesSaved }: {
   session: PlanSession
   onBack: () => void
   /** Opens the session's author, when it is not you. */
   onOpenUser?: (id: number) => void
   /** Called once the session is gone, so the caller can leave this page. */
   onDeleted?: () => void
+  /** The session as the server returned it after a note edit. */
+  onNotesSaved?: (s: PlanSession) => void
 }) {
   const blocks = useMemo(() => readBack(session), [session])
   const isOwner = session.isOwner !== false
@@ -175,7 +178,14 @@ export default function FinishedSession({ session, onBack, onOpenUser, onDeleted
           ))}
         </div>
 
-        {session.notes && <p className="plan-session-notes">{session.notes}</p>}
+        <NotesAndSocial
+          kind="session"
+          id={session.id}
+          isOwner={isOwner}
+          notes={session.notes}
+          onSaveNotes={async notes => { onNotesSaved?.(await api.patchPlanSession(session.id, { notes })) }}
+          placeholder="How it felt, what to change next time."
+        />
       </div>
 
       {confirmDelete && (

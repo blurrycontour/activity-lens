@@ -2368,6 +2368,12 @@ body {
 body:has(.overlay) .fab { display: none; }
 .fab:hover { transform: scale(1.08); box-shadow: 0 6px 28px var(--primary-glow); }
 .fab:active { transform: scale(0.96); }
+/* Room to scroll past a floating button. The FAB is fixed to the viewport, so
+   it covers whatever happens to be at the bottom of the screen — which was
+   fine until a page put a control there. A plan's comment box sat under it,
+   with the send button unreachable. Applied by the page that draws a FAB,
+   because most pages ending in text lose nothing to it being covered. */
+.page-content.with-fab { padding-bottom: calc(88px + var(--bottombar-h)); }
 
 /* ── Bottom bar (mobile) ── */
 .bottom-bar {
@@ -6168,6 +6174,41 @@ body:has(.overlay) .fab { display: none; }
   color: var(--text-2);
   line-height: 1.55;
 }
+
+/* The note and the conversation, below the content of a plan or a session.
+   Drawn as two separate panels rather than one card, because they are opposite
+   things: the note is private and the server redacts it from everyone else,
+   the conversation only exists once the thing is shared. */
+.plan-panel {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+.plan-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+}
+/* Pushed to the far end of the heading, so the pencil sits over the panel it
+   edits rather than beside the word. */
+.plan-panel-action { margin-left: auto; }
+/* A note is usually a list; collapsing the line breaks would turn one into a
+   paragraph nobody wrote. */
+.plan-panel-notes {
+  font-size: 13px;
+  color: var(--text-2);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.plan-panel-buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
 
 /* --- The editor --- */
 

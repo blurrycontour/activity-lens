@@ -233,6 +233,33 @@ func (s *Server) handleGetPlanSession(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, sessionResponse{Session: sess, IsOwner: isOwner})
 }
 
+// handlePatchPlanSession edits a finished session's own fields. Only the note
+// so far: everything else about a session is the record of what happened, and
+// the note is the one part that is commentary on it.
+func (s *Server) handlePatchPlanSession(w http.ResponseWriter, r *http.Request) {
+	user := httpmw.UserFrom(r)
+	var req struct {
+		Notes *string `json:"notes"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	id := r.PathValue("id")
+	if req.Notes != nil {
+		if err := s.plans.SetSessionNotes(r.Context(), user.ID, id, *req.Notes); err != nil {
+			s.writePlanError(w, err)
+			return
+		}
+	}
+	sess, isOwner, err := s.plans.GetViewableSession(r.Context(), user.ID, id)
+	if err != nil {
+		s.writePlanError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, sessionResponse{Session: sess, IsOwner: isOwner})
+}
+
 func (s *Server) handleSavePlanProgress(w http.ResponseWriter, r *http.Request) {
 	user := httpmw.UserFrom(r)
 	var req struct {

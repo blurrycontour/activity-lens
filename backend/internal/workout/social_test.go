@@ -29,7 +29,7 @@ func TestCommentCRUD(t *testing.T) {
 	svc := NewService(NewSQLiteRepository(newTestDB(t)))
 	wk := newSocialWorkout(t, svc, 1, "hash-comments")
 
-	c, err := svc.AddComment(ctx, wk.ID, 2, "  strong finish  ")
+	c, err := svc.AddComment(ctx, WorkoutSubject(wk.ID), 2, "  strong finish  ")
 	if err != nil {
 		t.Fatalf("AddComment: %v", err)
 	}
@@ -42,7 +42,7 @@ func TestCommentCRUD(t *testing.T) {
 		t.Errorf("id = %q, want a c_ prefix", c.ID)
 	}
 
-	edited, err := svc.EditComment(ctx, wk.ID, c.ID, 2, "strong finish!")
+	edited, err := svc.EditComment(ctx, WorkoutSubject(wk.ID), c.ID, 2, "strong finish!")
 	if err != nil {
 		t.Fatalf("EditComment: %v", err)
 	}
@@ -53,15 +53,15 @@ func TestCommentCRUD(t *testing.T) {
 		t.Errorf("updatedAt went backwards")
 	}
 
-	list, err := svc.Comments(ctx, wk.ID)
+	list, err := svc.Comments(ctx, WorkoutSubject(wk.ID))
 	if err != nil || len(list) != 1 {
 		t.Fatalf("Comments() = %d rows, %v; want 1", len(list), err)
 	}
 
-	if err := svc.RemoveComment(ctx, wk.ID, c.ID, 2, false); err != nil {
+	if err := svc.RemoveComment(ctx, WorkoutSubject(wk.ID), c.ID, 2, false); err != nil {
 		t.Fatalf("RemoveComment: %v", err)
 	}
-	if list, _ := svc.Comments(ctx, wk.ID); len(list) != 0 {
+	if list, _ := svc.Comments(ctx, WorkoutSubject(wk.ID)); len(list) != 0 {
 		t.Errorf("comment survived deletion")
 	}
 }
@@ -74,23 +74,23 @@ func TestCommentIsAuthorScoped(t *testing.T) {
 	svc := NewService(NewSQLiteRepository(newTestDB(t)))
 	wk := newSocialWorkout(t, svc, 1, "hash-author")
 
-	c, err := svc.AddComment(ctx, wk.ID, 2, "nice one")
+	c, err := svc.AddComment(ctx, WorkoutSubject(wk.ID), 2, "nice one")
 	if err != nil {
 		t.Fatalf("AddComment: %v", err)
 	}
 
-	if _, err := svc.EditComment(ctx, wk.ID, c.ID, 3, "rewritten"); !errors.Is(err, ErrCommentNotFound) {
+	if _, err := svc.EditComment(ctx, WorkoutSubject(wk.ID), c.ID, 3, "rewritten"); !errors.Is(err, ErrCommentNotFound) {
 		t.Errorf("stranger edit err = %v, want ErrCommentNotFound", err)
 	}
-	if err := svc.RemoveComment(ctx, wk.ID, c.ID, 3, false); !errors.Is(err, ErrCommentNotFound) {
+	if err := svc.RemoveComment(ctx, WorkoutSubject(wk.ID), c.ID, 3, false); !errors.Is(err, ErrCommentNotFound) {
 		t.Errorf("stranger delete err = %v, want ErrCommentNotFound", err)
 	}
 	// Even the workout's owner may not rewrite somebody's words — only remove
 	// them, and only through the moderation flag.
-	if _, err := svc.EditComment(ctx, wk.ID, c.ID, 1, "rewritten"); !errors.Is(err, ErrCommentNotFound) {
+	if _, err := svc.EditComment(ctx, WorkoutSubject(wk.ID), c.ID, 1, "rewritten"); !errors.Is(err, ErrCommentNotFound) {
 		t.Errorf("owner edit err = %v, want ErrCommentNotFound", err)
 	}
-	if err := svc.RemoveComment(ctx, wk.ID, c.ID, 1, true); err != nil {
+	if err := svc.RemoveComment(ctx, WorkoutSubject(wk.ID), c.ID, 1, true); err != nil {
 		t.Errorf("owner moderation delete: %v", err)
 	}
 }
@@ -103,11 +103,11 @@ func TestCommentIsWorkoutScoped(t *testing.T) {
 	mine := newSocialWorkout(t, svc, 1, "hash-scope-a")
 	other := newSocialWorkout(t, svc, 1, "hash-scope-b")
 
-	c, err := svc.AddComment(ctx, mine.ID, 2, "hello")
+	c, err := svc.AddComment(ctx, WorkoutSubject(mine.ID), 2, "hello")
 	if err != nil {
 		t.Fatalf("AddComment: %v", err)
 	}
-	if err := svc.RemoveComment(ctx, other.ID, c.ID, 2, false); !errors.Is(err, ErrCommentNotFound) {
+	if err := svc.RemoveComment(ctx, WorkoutSubject(other.ID), c.ID, 2, false); !errors.Is(err, ErrCommentNotFound) {
 		t.Errorf("cross-workout delete err = %v, want ErrCommentNotFound", err)
 	}
 }
@@ -117,17 +117,17 @@ func TestCommentValidation(t *testing.T) {
 	svc := NewService(NewSQLiteRepository(newTestDB(t)))
 	wk := newSocialWorkout(t, svc, 1, "hash-validate")
 
-	if _, err := svc.AddComment(ctx, wk.ID, 2, "   \n  "); !errors.Is(err, ErrInvalid) {
+	if _, err := svc.AddComment(ctx, WorkoutSubject(wk.ID), 2, "   \n  "); !errors.Is(err, ErrInvalid) {
 		t.Errorf("empty comment err = %v, want ErrInvalid", err)
 	}
 	// Counted in runes: a 2000-character comment in a multi-byte script is the
 	// same amount of writing as one in ASCII, and a byte limit would cut it to
 	// a third.
 	long := strings.Repeat("é", MaxCommentLength)
-	if _, err := svc.AddComment(ctx, wk.ID, 2, long); err != nil {
+	if _, err := svc.AddComment(ctx, WorkoutSubject(wk.ID), 2, long); err != nil {
 		t.Errorf("comment at the limit was rejected: %v", err)
 	}
-	if _, err := svc.AddComment(ctx, wk.ID, 2, long+"é"); !errors.Is(err, ErrInvalid) {
+	if _, err := svc.AddComment(ctx, WorkoutSubject(wk.ID), 2, long+"é"); !errors.Is(err, ErrInvalid) {
 		t.Errorf("over-long comment err = %v, want ErrInvalid", err)
 	}
 }
@@ -140,17 +140,17 @@ func TestReactionIsOnePerPerson(t *testing.T) {
 	svc := NewService(NewSQLiteRepository(newTestDB(t)))
 	wk := newSocialWorkout(t, svc, 1, "hash-reactions")
 
-	if err := svc.SetReaction(ctx, wk.ID, 2, "👏"); err != nil {
+	if err := svc.SetReaction(ctx, WorkoutSubject(wk.ID), 2, "👏"); err != nil {
 		t.Fatalf("SetReaction: %v", err)
 	}
-	if err := svc.SetReaction(ctx, wk.ID, 2, "🔥"); err != nil {
+	if err := svc.SetReaction(ctx, WorkoutSubject(wk.ID), 2, "🔥"); err != nil {
 		t.Fatalf("SetReaction (replace): %v", err)
 	}
-	if err := svc.SetReaction(ctx, wk.ID, 3, "💪"); err != nil {
+	if err := svc.SetReaction(ctx, WorkoutSubject(wk.ID), 3, "💪"); err != nil {
 		t.Fatalf("SetReaction (other user): %v", err)
 	}
 
-	list, err := svc.Reactions(ctx, wk.ID)
+	list, err := svc.Reactions(ctx, WorkoutSubject(wk.ID))
 	if err != nil {
 		t.Fatalf("Reactions: %v", err)
 	}
@@ -166,23 +166,23 @@ func TestReactionIsOnePerPerson(t *testing.T) {
 	// Deliberately something no plausible future row would add. The first
 	// version of this used a rocket, which promptly became a real reaction and
 	// turned the assertion into a lie — the failure is what caught the clash.
-	if err := svc.SetReaction(ctx, wk.ID, 2, "🦕"); !errors.Is(err, ErrInvalid) {
+	if err := svc.SetReaction(ctx, WorkoutSubject(wk.ID), 2, "🦕"); !errors.Is(err, ErrInvalid) {
 		t.Errorf("off-list emoji err = %v, want ErrInvalid", err)
 	}
 	// The allowlist is what the picker offers, so an empty or free-text value
 	// must not slip through either.
-	if err := svc.SetReaction(ctx, wk.ID, 2, "not an emoji"); !errors.Is(err, ErrInvalid) {
+	if err := svc.SetReaction(ctx, WorkoutSubject(wk.ID), 2, "not an emoji"); !errors.Is(err, ErrInvalid) {
 		t.Errorf("free text err = %v, want ErrInvalid", err)
 	}
 	// Clearing something that is not there is the wanted state already, not an
 	// error — a double tap must not fail.
-	if err := svc.ClearReaction(ctx, wk.ID, 99); err != nil {
+	if err := svc.ClearReaction(ctx, WorkoutSubject(wk.ID), 99); err != nil {
 		t.Errorf("clearing an absent reaction: %v", err)
 	}
-	if err := svc.ClearReaction(ctx, wk.ID, 2); err != nil {
+	if err := svc.ClearReaction(ctx, WorkoutSubject(wk.ID), 2); err != nil {
 		t.Fatalf("ClearReaction: %v", err)
 	}
-	if list, _ := svc.Reactions(ctx, wk.ID); len(list) != 1 {
+	if list, _ := svc.Reactions(ctx, WorkoutSubject(wk.ID)); len(list) != 1 {
 		t.Errorf("got %d reactions after clearing one, want 1", len(list))
 	}
 }
@@ -240,20 +240,20 @@ func TestUnsharingKeepsComments(t *testing.T) {
 	if err := svc.SetVisibility(ctx, 1, wk.ID, VisibilityPublic); err != nil {
 		t.Fatalf("SetVisibility: %v", err)
 	}
-	if _, err := svc.AddComment(ctx, wk.ID, 2, "great pace"); err != nil {
+	if _, err := svc.AddComment(ctx, WorkoutSubject(wk.ID), 2, "great pace"); err != nil {
 		t.Fatalf("AddComment: %v", err)
 	}
-	if err := svc.SetReaction(ctx, wk.ID, 2, "👏"); err != nil {
+	if err := svc.SetReaction(ctx, WorkoutSubject(wk.ID), 2, "👏"); err != nil {
 		t.Fatalf("SetReaction: %v", err)
 	}
 
 	if err := svc.SetVisibility(ctx, 1, wk.ID, VisibilityPrivate); err != nil {
 		t.Fatalf("SetVisibility back: %v", err)
 	}
-	if list, _ := svc.Comments(ctx, wk.ID); len(list) != 1 {
+	if list, _ := svc.Comments(ctx, WorkoutSubject(wk.ID)); len(list) != 1 {
 		t.Errorf("unsharing destroyed the comment thread")
 	}
-	if list, _ := svc.Reactions(ctx, wk.ID); len(list) != 1 {
+	if list, _ := svc.Reactions(ctx, WorkoutSubject(wk.ID)); len(list) != 1 {
 		t.Errorf("unsharing destroyed the reactions")
 	}
 }
@@ -265,13 +265,13 @@ func TestPurgeUserSocial(t *testing.T) {
 	svc := NewService(NewSQLiteRepository(newTestDB(t)))
 	wk := newSocialWorkout(t, svc, 1, "hash-purge")
 
-	if _, err := svc.AddComment(ctx, wk.ID, 2, "from a guest"); err != nil {
+	if _, err := svc.AddComment(ctx, WorkoutSubject(wk.ID), 2, "from a guest"); err != nil {
 		t.Fatalf("AddComment: %v", err)
 	}
-	if _, err := svc.AddComment(ctx, wk.ID, 3, "from another"); err != nil {
+	if _, err := svc.AddComment(ctx, WorkoutSubject(wk.ID), 3, "from another"); err != nil {
 		t.Fatalf("AddComment: %v", err)
 	}
-	if err := svc.SetReaction(ctx, wk.ID, 2, "🔥"); err != nil {
+	if err := svc.SetReaction(ctx, WorkoutSubject(wk.ID), 2, "🔥"); err != nil {
 		t.Fatalf("SetReaction: %v", err)
 	}
 
@@ -282,11 +282,103 @@ func TestPurgeUserSocial(t *testing.T) {
 		t.Fatalf("PurgeUserReactions: %v", err)
 	}
 
-	list, _ := svc.Comments(ctx, wk.ID)
+	list, _ := svc.Comments(ctx, WorkoutSubject(wk.ID))
 	if len(list) != 1 || list[0].UserID != 3 {
 		t.Errorf("purge removed the wrong comments: %+v", list)
 	}
-	if re, _ := svc.Reactions(ctx, wk.ID); len(re) != 0 {
+	if re, _ := svc.Reactions(ctx, WorkoutSubject(wk.ID)); len(re) != 0 {
 		t.Errorf("purge left %d reactions", len(re))
+	}
+}
+
+// The tests below are about the one thing migration 0038 changed: three kinds
+// of subject sharing one pair of tables. What is worth proving is that they
+// stay apart — a comment on a plan must not turn up on the workout whose id it
+// happens to share — and that "one reaction each" survived becoming three
+// partial indexes instead of a primary key.
+
+func TestSubjectsDoNotLeakIntoEachOther(t *testing.T) {
+	ctx := context.Background()
+	svc := NewService(NewSQLiteRepository(newTestDB(t)))
+	wk := newSocialWorkout(t, svc, 1, "hash-subjects")
+
+	// Deliberately the *same id string* on all three. Nothing stops a plan id
+	// and a workout id colliding — they come from different generators — and a
+	// single (kind, id) column pair would have made them one thread.
+	shared := Subject{Kind: SubjectPlan, ID: wk.ID}
+	if _, err := svc.AddComment(ctx, WorkoutSubject(wk.ID), 2, "on the workout"); err != nil {
+		t.Fatalf("AddComment on workout: %v", err)
+	}
+
+	got, err := svc.Comments(ctx, WorkoutSubject(wk.ID))
+	if err != nil {
+		t.Fatalf("Comments: %v", err)
+	}
+	if len(got) != 1 || got[0].Body != "on the workout" {
+		t.Fatalf("workout thread = %+v, want the one comment", got)
+	}
+	// The same id read as a plan is a different conversation, and an empty one
+	// — the foreign key column differs even though the id does not.
+	planThread, err := svc.Comments(ctx, shared)
+	if err != nil {
+		t.Fatalf("Comments on plan: %v", err)
+	}
+	if len(planThread) != 0 {
+		t.Fatalf("plan thread = %+v, want empty", planThread)
+	}
+}
+
+func TestOneReactionEachPerSubject(t *testing.T) {
+	ctx := context.Background()
+	svc := NewService(NewSQLiteRepository(newTestDB(t)))
+	wk := newSocialWorkout(t, svc, 1, "hash-reactions-subject")
+	subj := WorkoutSubject(wk.ID)
+
+	for _, e := range []string{"👏", "🔥", "💯"} {
+		if err := svc.SetReaction(ctx, subj, 2, e); err != nil {
+			t.Fatalf("SetReaction %s: %v", e, err)
+		}
+	}
+	got, err := svc.Reactions(ctx, subj)
+	if err != nil {
+		t.Fatalf("Reactions: %v", err)
+	}
+	// Three taps, one row: the delete-and-insert that replaced the upsert has
+	// to keep the guarantee the primary key used to give.
+	if len(got) != 1 || got[0].Emoji != "💯" {
+		t.Fatalf("reactions = %+v, want one row holding the last emoji", got)
+	}
+
+	if err := svc.ClearReaction(ctx, subj, 2); err != nil {
+		t.Fatalf("ClearReaction: %v", err)
+	}
+	if got, _ := svc.Reactions(ctx, subj); len(got) != 0 {
+		t.Fatalf("reactions after clear = %+v, want none", got)
+	}
+}
+
+func TestDeletingASubjectTakesItsThreadWithIt(t *testing.T) {
+	ctx := context.Background()
+	svc := NewService(NewSQLiteRepository(newTestDB(t)))
+	wk := newSocialWorkout(t, svc, 1, "hash-cascade")
+	subj := WorkoutSubject(wk.ID)
+
+	if _, err := svc.AddComment(ctx, subj, 2, "nice one"); err != nil {
+		t.Fatalf("AddComment: %v", err)
+	}
+	if err := svc.SetReaction(ctx, subj, 2, "🔥"); err != nil {
+		t.Fatalf("SetReaction: %v", err)
+	}
+	if err := svc.Delete(ctx, 1, wk.ID); err != nil {
+		t.Fatalf("Delete workout: %v", err)
+	}
+	// The real cascade is the whole reason for three nullable foreign keys
+	// rather than one polymorphic column; without it these rows would outlive
+	// the thing they were about, unread and unreachable.
+	if got, _ := svc.Comments(ctx, subj); len(got) != 0 {
+		t.Fatalf("comments after delete = %+v, want none", got)
+	}
+	if got, _ := svc.Reactions(ctx, subj); len(got) != 0 {
+		t.Fatalf("reactions after delete = %+v, want none", got)
 	}
 }

@@ -210,11 +210,11 @@ func (s *Server) apiRoutes() http.Handler {
 	mux.Handle("DELETE /api/workouts/{id}/media/{mediaID}", s.authedCSRF(s.handleDeleteMedia))
 	// Comments and reactions, readable by anyone who can see the workout and
 	// writable only while it is shared — see social.go, where both gates live.
-	mux.Handle("GET /api/workouts/{id}/social", s.authed(s.handleGetSocial))
-	mux.Handle("POST /api/workouts/{id}/comments", s.authedCSRF(s.handleAddComment))
-	mux.Handle("PATCH /api/workouts/{id}/comments/{commentID}", s.authedCSRF(s.handleEditComment))
-	mux.Handle("DELETE /api/workouts/{id}/comments/{commentID}", s.authedCSRF(s.handleDeleteComment))
-	mux.Handle("PUT /api/workouts/{id}/reaction", s.authedCSRF(s.handleSetReaction))
+	mux.Handle("GET /api/workouts/{id}/social", s.authed(s.handleGetSocial(s.resolveSocial)))
+	mux.Handle("POST /api/workouts/{id}/comments", s.authedCSRF(s.handleAddComment(s.resolveSocial)))
+	mux.Handle("PATCH /api/workouts/{id}/comments/{commentID}", s.authedCSRF(s.handleEditComment(s.resolveSocial)))
+	mux.Handle("DELETE /api/workouts/{id}/comments/{commentID}", s.authedCSRF(s.handleDeleteComment(s.resolveSocial)))
+	mux.Handle("PUT /api/workouts/{id}/reaction", s.authedCSRF(s.handleSetReaction(s.resolveSocial)))
 	mux.Handle("POST /api/workouts/{id}/recalculate", s.authedCSRF(s.handleRecalculateWorkout))
 	mux.Handle("POST /api/workouts/{id}/reshape", s.authedCSRF(s.handleReshapeWorkout))
 	mux.Handle("POST /api/workouts/{id}/restore", s.authedCSRF(s.handleRestoreWorkout))
@@ -286,6 +286,7 @@ func (s *Server) apiRoutes() http.Handler {
 	mux.Handle("POST /api/plan-sessions", s.authedCSRF(s.withPlans(s.handleStartPlanSession)))
 	mux.Handle("GET /api/plan-sessions/active", s.authed(s.withPlans(s.handleActivePlanSession)))
 	mux.Handle("GET /api/plan-sessions/{id}", s.authed(s.withPlans(s.handleGetPlanSession)))
+	mux.Handle("PATCH /api/plan-sessions/{id}", s.authedCSRF(s.withPlans(s.handlePatchPlanSession)))
 	mux.Handle("PUT /api/plan-sessions/{id}/progress", s.authedCSRF(s.withPlans(s.handleSavePlanProgress)))
 	mux.Handle("POST /api/plan-sessions/{id}/finish", s.authedCSRF(s.withPlans(s.handleFinishPlanSession)))
 	mux.Handle("DELETE /api/plan-sessions/{id}", s.authedCSRF(s.withPlans(s.handleDeletePlanSession)))
@@ -301,6 +302,20 @@ func (s *Server) apiRoutes() http.Handler {
 	mux.Handle("POST /api/plan-sessions/{id}/shares", s.authedCSRF(s.withPlans(s.handleAddSessionShare)))
 	mux.Handle("DELETE /api/plan-sessions/{id}/shares/{userId}", s.authedCSRF(s.withPlans(s.handleRemoveSessionShare)))
 	mux.Handle("PUT /api/plan-sessions/{id}/visibility", s.authedCSRF(s.withPlans(s.handleSetSessionVisibility)))
+	// The same conversation, on a plan and on a session. One set of handlers
+	// for all three kinds; only "may they see it, and is it shared" differs,
+	// which is what the resolver answers — see social.go.
+	mux.Handle("GET /api/plans/{id}/social", s.authed(s.withPlans(s.handleGetSocial(s.resolvePlanSocial))))
+	mux.Handle("POST /api/plans/{id}/comments", s.authedCSRF(s.withPlans(s.handleAddComment(s.resolvePlanSocial))))
+	mux.Handle("PATCH /api/plans/{id}/comments/{commentID}", s.authedCSRF(s.withPlans(s.handleEditComment(s.resolvePlanSocial))))
+	mux.Handle("DELETE /api/plans/{id}/comments/{commentID}", s.authedCSRF(s.withPlans(s.handleDeleteComment(s.resolvePlanSocial))))
+	mux.Handle("PUT /api/plans/{id}/reaction", s.authedCSRF(s.withPlans(s.handleSetReaction(s.resolvePlanSocial))))
+	mux.Handle("GET /api/plan-sessions/{id}/social", s.authed(s.withPlans(s.handleGetSocial(s.resolveSessionSocial))))
+	mux.Handle("POST /api/plan-sessions/{id}/comments", s.authedCSRF(s.withPlans(s.handleAddComment(s.resolveSessionSocial))))
+	mux.Handle("PATCH /api/plan-sessions/{id}/comments/{commentID}", s.authedCSRF(s.withPlans(s.handleEditComment(s.resolveSessionSocial))))
+	mux.Handle("DELETE /api/plan-sessions/{id}/comments/{commentID}", s.authedCSRF(s.withPlans(s.handleDeleteComment(s.resolveSessionSocial))))
+	mux.Handle("PUT /api/plan-sessions/{id}/reaction", s.authedCSRF(s.withPlans(s.handleSetReaction(s.resolveSessionSocial))))
+
 	mux.Handle("GET /api/feed/plans/public", s.authed(s.withPlans(s.handleFeedPlansPublic)))
 	mux.Handle("GET /api/feed/plans/shared", s.authed(s.withPlans(s.handleFeedPlansShared)))
 	mux.Handle("GET /api/feed/sessions/public", s.authed(s.withPlans(s.handleFeedSessionsPublic)))

@@ -326,6 +326,7 @@ export default function PlansPage({ section, detail, onOpen, onOpenUser }: Props
         // Back to the list, and reload it — the row that was just deleted is
         // still in the History tab's cache until something refetches.
         onDeleted={() => { setSession(null); void load(); onOpen(null) }}
+        onNotesSaved={saved => setSession(cur => (cur ? { ...cur, notes: saved.notes } : cur))}
       />
     )
   }
@@ -356,6 +357,11 @@ export default function PlansPage({ section, detail, onOpen, onOpenUser }: Props
             // land on the new plan rather than the one just viewed.
             onCloned={cloned => { void load(); onOpen(cloned.id) }}
             onOpenUser={onOpenUser}
+            // The open plan and the list row both hold a copy of the note.
+            onNotesSaved={saved => {
+              setOpen(cur => (cur ? { ...cur, notes: saved.notes } : cur))
+              setPlans(cur => cur?.map(p => (p.id === saved.id ? { ...p, notes: saved.notes } : p)) ?? cur)
+            }}
           />
         )}
         {renaming && (

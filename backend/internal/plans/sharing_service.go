@@ -238,6 +238,12 @@ func (s *Service) SetSessionVisibility(ctx context.Context, ownerID int64, id st
 	return s.repo.SetSessionVisibility(ctx, ownerID, id, v)
 }
 
+// SetSessionNotes rewrites the note on a session the caller owns. Clipped to
+// the same limit every other note in this package is.
+func (s *Service) SetSessionNotes(ctx context.Context, ownerID int64, id, notes string) error {
+	return s.repo.SetSessionNotes(ctx, ownerID, id, clip(notes, MaxNoteLen))
+}
+
 // SessionShareRecipients lists who a session the caller owns is shared with.
 func (s *Service) SessionShareRecipients(ctx context.Context, ownerID int64, sessionID string) ([]int64, error) {
 	return s.repo.SessionShareRecipients(ctx, ownerID, sessionID)

@@ -23,11 +23,11 @@ func TestFlagsFor(t *testing.T) {
 	bare := newSocialWorkout(t, svc, 1, "hash-bare")
 
 	for i := 0; i < 2; i++ {
-		if _, err := svc.AddComment(ctx, withBoth.ID, 2, fmt.Sprintf("nice %d", i)); err != nil {
+		if _, err := svc.AddComment(ctx, WorkoutSubject(withBoth.ID), 2, fmt.Sprintf("nice %d", i)); err != nil {
 			t.Fatalf("AddComment: %v", err)
 		}
 	}
-	if _, err := svc.AddComment(ctx, withComments.ID, 2, "one"); err != nil {
+	if _, err := svc.AddComment(ctx, WorkoutSubject(withComments.ID), 2, "one"); err != nil {
 		t.Fatalf("AddComment: %v", err)
 	}
 	if err := repo.AddMedia(ctx, Media{

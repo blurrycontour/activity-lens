@@ -1981,7 +1981,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             )}
             {activeTab === 'social' && (
               <Suspense fallback={<div className="detail-loading"><LoaderCircle size={16} className="spin" /></div>}>
-                <WorkoutSocial workoutId={w.id} isOwner={!readOnly} />
+                <WorkoutSocial kind="workout" workoutId={w.id} isOwner={!readOnly} />
               </Suspense>
             )}
           </TabPanel>
