@@ -21,8 +21,10 @@ import { useSessionState } from '../../lib/useSessionState'
  * sets, snapshotted on the day. That is the whole reason history is worth
  * keeping: a plan since rewritten still reads correctly here.
  */
-export default function SessionHistory({ onOpen, sessions, setSessions }: {
+export default function SessionHistory({ onOpen, sessions, setSessions, view }: {
   onOpen: (id: string) => void
+  /** List or cards — chosen once for the whole page, in PlansPage. */
+  view: 'list' | 'grid'
   /** Null while loading. Owned by PlansPage, which needs the count for its
    *  header before this tab has ever been opened. */
   sessions: PlanSession[] | null
@@ -116,7 +118,7 @@ export default function SessionHistory({ onOpen, sessions, setSessions }: {
       {shown.length === 0 ? (
         <div className="empty-state"><p>No session matches that.</p></div>
       ) : (
-        <div className="plan-list">
+        <div className={view === 'grid' ? 'plan-grid' : 'plan-list'}>
           {shown.map(s => (
             <SessionRow
               key={s.id}

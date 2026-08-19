@@ -2,8 +2,9 @@ import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { ALL_WORKOUT_TYPES, fmtDist, fmtDuration, TYPE_COLOR, type WorkoutType, type Workout } from '../data/workouts'
 import TypeIcon from '../components/TypeIcon'
 import ShareBadge from '../components/ShareBadge'
+import ViewSwitcher, { readView, writeView, type ListView } from '../components/ViewSwitcher'
 import { useWorkouts } from '../context/WorkoutsContext'
-import { Search, Download, Plus, Grid2X2, List, Share2, FilterX, SlidersHorizontal, X, LoaderCircle, Layers, Image as ImageIcon, MoreVertical, Copy } from 'lucide-react'
+import { Search, Download, Plus, Share2, FilterX, SlidersHorizontal, X, LoaderCircle, Layers, Image as ImageIcon, MoreVertical, Copy } from 'lucide-react'
 import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
 import SortDropdown, { SORT_OPTIONS, type SortKey } from '../components/SortDropdown'
@@ -130,14 +131,11 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
   const [deleting, setDeleting] = useState(false)
   const selecting = selected !== null
   const isMobile = useIsMobile()
-  const [view, setView] = useState<'list' | 'grid'>(() => {
-    const saved = localStorage.getItem('workouts.view')
-    return saved === 'grid' || saved === 'list' ? saved : 'list'
-  })
+  const [view, setView] = useState<ListView>(() => readView('workouts.view'))
 
-  function changeView(v: 'list' | 'grid') {
+  function changeView(v: ListView) {
     setView(v)
-    localStorage.setItem('workouts.view', v)
+    writeView('workouts.view', v)
   }
 
   // Claims a ?source= filter from the URL, on mount and whenever a link lands
@@ -399,22 +397,8 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
               button beside it: that button is desktop-only, so on a phone
               there was nothing left holding this cluster right and the
               switcher slid up against the title. */}
-          <div style={{ marginLeft: 'auto', display: 'flex', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
-            {([['list', <List key="l" size={15} />], ['grid', <Grid2X2 key="g" size={15} />]] as const).map(([id, icon]) => (
-              <button
-                key={id}
-                onClick={() => changeView(id)}
-                title={id === 'list' ? 'List view' : 'Grid view'}
-                aria-pressed={view === id}
-                style={{
-                  display: 'flex', alignItems: 'center', padding: '6px 12px', border: 'none', cursor: 'pointer',
-                  background: view === id ? 'var(--primary-dim)' : 'var(--bg-3)',
-                  color: view === id ? 'var(--primary)' : 'var(--text-3)',
-                }}
-              >
-                {icon}
-              </button>
-            ))}
+          <div style={{ marginLeft: 'auto' }}>
+            <ViewSwitcher view={view} onChange={changeView} />
           </div>
         </div>
 

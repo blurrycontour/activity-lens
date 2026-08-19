@@ -4,6 +4,7 @@ import {
 } from 'lucide-react'
 import PageHeader from '../../components/PageHeader'
 import TabStrip from '../../components/TabStrip'
+import ViewSwitcher, { readView, writeView, type ListView } from '../../components/ViewSwitcher'
 import Modal from '../../components/Modal'
 import ListTools from './ListTools'
 import ConfirmDialog from '../../components/ConfirmDialog'
@@ -65,6 +66,10 @@ export default function PlansPage({ section, detail, onOpen, onOpenUser }: Props
   const [open, setOpen] = useState<TrainingPlan | null>(null)
   const [session, setSession] = useState<PlanSession | null>(null)
   const [tab, setTab] = useState<TabId>('plans')
+  // One choice for both tabs: plans and sessions are read the same way, one
+  // after the other, and a layout that changed under you when you switched
+  // tab would be a setting pretending to be two.
+  const [view, setView] = useState<ListView>(() => readView('plans.view'))
   const [error, setError] = useState('')
   const [naming, setNaming] = useState(false)
   const [renaming, setRenaming] = useState(false)
@@ -412,10 +417,14 @@ export default function PlansPage({ section, detail, onOpen, onOpenUser }: Props
       <PageHeader
         title="Plans"
         subtitle={countLine(plans, sessions)}
+        compactActions
         actions={
-          <button className="btn btn-primary desktop-only" onClick={() => setNaming(true)}>
-            <Plus size={15} /> New plan
-          </button>
+          <>
+            <button className="btn btn-primary desktop-only" onClick={() => setNaming(true)}>
+              <Plus size={15} /> New plan
+            </button>
+            <ViewSwitcher view={view} onChange={v => { setView(v); writeView('plans.view', v) }} />
+          </>
         }
       />
 
@@ -448,7 +457,7 @@ export default function PlansPage({ section, detail, onOpen, onOpenUser }: Props
         />
 
         {tab === 'history' ? (
-          <SessionHistory onOpen={id => onOpen('session', id)} sessions={sessions} setSessions={setSessions} />
+          <SessionHistory onOpen={id => onOpen('session', id)} sessions={sessions} setSessions={setSessions} view={view} />
         ) : plans === null ? (
           <div className="page-loading"><Loader2 size={18} className="spin" /></div>
         ) : plans.length === 0 ? (
@@ -495,7 +504,7 @@ export default function PlansPage({ section, detail, onOpen, onOpenUser }: Props
                 <p>No plan matches that.</p>
               </div>
             ) : (
-              <div className="plan-list">
+              <div className={view === 'grid' ? 'plan-grid' : 'plan-list'}>
                 {shown.map(p => (
                   <PlanRow
                     key={p.id}
