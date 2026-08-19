@@ -1,34 +1,36 @@
 import { useEffect, useState } from 'react'
-import { MessageSquare, NotebookPen, Pencil } from 'lucide-react'
+import { Lock, MessageSquare, NotebookPen } from 'lucide-react'
 import { ApiError, type ShareKind } from '../lib/api'
+import TabStrip, { type TabStripItem } from './TabStrip'
 import WorkoutSocial from './WorkoutSocial'
+
+type SectionTab = 'notes' | 'social'
 
 /**
  * The note on a plan or a session, and the conversation about it.
  *
- * Two things below the content of the page rather than behind tabs, which is
- * where the workout page puts the same pair. A plan already spends its tab
- * strip on days and a session has no tabs at all, so a second strip would have
- * meant two rows of tabs meaning different things — and both of these are
- * short enough to read at the bottom of what they are about.
+ * The same strip-and-panel a workout uses for exactly the same pair, so the
+ * three kinds of thing read as one app rather than three. It sits last on the
+ * page, after the content it is about, which is where the workout page puts it
+ * too.
  *
- * They are deliberately not the same kind of thing, and are drawn apart:
+ * The two are deliberately not offered together:
  *
  *   the note is yours, private, and the server redacts it from everyone else
- *   — it is what you thought, not what you said;
+ *   — so a viewer is never shown a tab that can only ever be empty;
  *
- *   the conversation is the opposite, and only exists once the thing is
- *   shared with somebody.
- *
- * Putting them in one card would have implied the note was part of what other
- * people can read, which is the one misunderstanding worth designing against.
+ *   the conversation only exists once the thing is shared with somebody, for
+ *   the same reason a private workout has no Social tab: a thread that refuses
+ *   every comment is worse than no thread.
  */
 export default function NotesAndSocial({
-  kind, id, isOwner, notes, onSaveNotes, placeholder,
+  kind, id, isOwner, shared, notes, onSaveNotes, placeholder,
 }: {
   kind: ShareKind
   id: string
   isOwner: boolean
+  /** Whether anyone else can see this — see the Social tab's comment. */
+  shared: boolean
   /** The current note; empty when there is none, absent when redacted. */
   notes?: string
   /** Saves an edited note. Absent means the note is read-only here. */
@@ -37,33 +39,41 @@ export default function NotesAndSocial({
 }) {
   const noun = kind === 'plan' ? 'plan' : kind === 'session' ? 'session' : 'workout'
 
-  return (
-    <>
-      {/* Owner-only, because the server clears the note for everyone else —
-          offering the section to a viewer would be a heading over a blank
-          that can never fill in. */}
-      {isOwner && (
-        <NotesCard notes={notes ?? ''} onSave={onSaveNotes} placeholder={placeholder} />
-      )}
+  const tabs: TabStripItem<SectionTab>[] = [
+    ...(isOwner ? [{ id: 'notes' as SectionTab, label: 'Notes', icon: <NotebookPen size={14} /> }] : []),
+    ...(shared ? [{ id: 'social' as SectionTab, label: 'Social', icon: <MessageSquare size={14} /> }] : []),
+  ]
 
-      <section className="plan-panel">
-        <h3 className="plan-panel-title">
-          <MessageSquare size={14} aria-hidden /> Discussion
-        </h3>
-        <WorkoutSocial kind={kind} workoutId={id} isOwner={isOwner} noun={noun} />
-      </section>
-    </>
+  const [tab, setTab] = useState<SectionTab>('notes')
+  // A viewer has no Notes tab, and an unshared plan has no Social one, so the
+  // remembered choice can be a tab this item does not offer.
+  const active = tabs.some(t => t.id === tab) ? tab : tabs[0]?.id
+
+  if (!active) return null
+
+  return (
+    <div className="detail-sections">
+      <TabStrip items={tabs} value={active} onChange={setTab} ariaLabel={`${noun} sections`} fill />
+      <div className="card detail-tab-panel">
+        {active === 'notes' && (
+          <NotesPanel notes={notes ?? ''} onSave={onSaveNotes} placeholder={placeholder} />
+        )}
+        {active === 'social' && (
+          <WorkoutSocial kind={kind} workoutId={id} isOwner={isOwner} noun={noun} />
+        )}
+      </div>
+    </div>
   )
 }
 
 /**
  * The note, read until you click into it.
  *
- * An edit mode rather than a permanently live textarea: this sits at the
- * bottom of a page that is mostly read, and a focused input there invites a
- * stray tap into a save nobody meant.
+ * An edit mode rather than a permanently live textarea, matching the workout's
+ * notes panel: this is mostly read, and a focused input invites a stray tap
+ * into a save nobody meant.
  */
-function NotesCard({ notes, onSave, placeholder }: {
+function NotesPanel({ notes, onSave, placeholder }: {
   notes: string
   onSave?: (notes: string) => Promise<void>
   placeholder: string
@@ -92,30 +102,28 @@ function NotesCard({ notes, onSave, placeholder }: {
   }
 
   return (
-    <section className="plan-panel">
-      <h3 className="plan-panel-title">
-        <NotebookPen size={14} aria-hidden /> Notes
+    <div>
+      <div className="plan-notes-head">
+        <span className="notes-private" title="Notes stay private — they are never included when this is shared or made public">
+          <Lock size={10} /> Private
+        </span>
         {onSave && !editing && (
-          <button
-            className="btn-icon plan-panel-action"
-            onClick={() => setEditing(true)}
-            aria-label={notes ? 'Edit notes' : 'Add notes'}
-            title={notes ? 'Edit notes' : 'Add notes'}
-          >
-            <Pencil size={14} />
+          <button className="btn btn-ghost" style={{ fontSize: 12, padding: '4px 10px' }} onClick={() => setEditing(true)}>
+            {notes ? 'Edit' : 'Add note'}
           </button>
         )}
-      </h3>
+      </div>
 
       {editing ? (
         <>
           <textarea
-            className="input"
-            rows={4}
+            className="notes-input"
+            rows={5}
             autoFocus
             value={draft}
             onChange={e => setDraft(e.target.value)}
             placeholder={placeholder}
+            disabled={busy}
           />
           {error && <span className="status-msg err">{error}</span>}
           <div className="plan-panel-buttons">
@@ -134,6 +142,6 @@ function NotesCard({ notes, onSave, placeholder }: {
       ) : (
         <p className="social-empty">{placeholder}</p>
       )}
-    </section>
+    </div>
   )
 }

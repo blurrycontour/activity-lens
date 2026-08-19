@@ -49,6 +49,9 @@ export default function PlanView({ plan, onBack, onEdit, onRename, onStart, onDe
   // Absent (your own plan, fetched before sharing existed anywhere) reads as
   // true — every call site before this feature only ever saw its own plans.
   const isOwner = plan.isOwner !== false
+  // Whether anyone else can see this, and so whether there is a conversation
+  // to be had about it. A viewer is proof of it by being here at all.
+  const shared = !isOwner || plan.visibility === 'public' || (plan.sharedWithCount ?? 0) > 0
 
   const days = plan.days ?? []
   const day: PlanDay | undefined = days[active]
@@ -243,6 +246,7 @@ export default function PlanView({ plan, onBack, onEdit, onRename, onStart, onDe
           kind="plan"
           id={plan.id}
           isOwner={isOwner}
+          shared={shared}
           notes={plan.notes}
           onSaveNotes={async notes => { onNotesSaved(await api.patchPlan(plan.id, { notes })) }}
           placeholder="Anything about this plan — where the weights came from, what to progress next."

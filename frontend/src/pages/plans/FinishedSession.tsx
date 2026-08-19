@@ -64,6 +64,9 @@ export default function FinishedSession({ session, onBack, onOpenUser, onDeleted
 }) {
   const blocks = useMemo(() => readBack(session), [session])
   const isOwner = session.isOwner !== false
+  // Whether anyone else can see this, and so whether there is a conversation
+  // to be had about it. A viewer is proof of it by being here at all.
+  const shared = !isOwner || session.visibility === 'public' || (session.sharedWithCount ?? 0) > 0
   const [sharing, setSharing] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -182,6 +185,7 @@ export default function FinishedSession({ session, onBack, onOpenUser, onDeleted
           kind="session"
           id={session.id}
           isOwner={isOwner}
+          shared={shared}
           notes={session.notes}
           onSaveNotes={async notes => { onNotesSaved?.(await api.patchPlanSession(session.id, { notes })) }}
           placeholder="How it felt, what to change next time."

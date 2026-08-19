@@ -299,6 +299,20 @@ export default function PlansPage({ section, detail, onOpen, onOpenUser }: Props
     </>
   )
 
+  /*
+   * The URL asks for an item this page has not fetched yet.
+   *
+   * Without this the list rendered for the length of one request before the
+   * plan or session replaced it — so opening a shared item from Discover
+   * flashed somebody else's Plans page at them first. Derived rather than a
+   * loading flag, so it is already true on the very first render.
+   */
+  const wantsPlan = section && section !== 'session' ? section : null
+  const wantsSession = section === 'session' ? detail : null
+  if ((wantsPlan && open?.id !== wantsPlan) || (wantsSession && session?.id !== wantsSession)) {
+    return <div className="page-content page-loading">Loading…</div>
+  }
+
   // --- the runner --------------------------------------------------------
   if (session && !session.finishedAt) {
     return (

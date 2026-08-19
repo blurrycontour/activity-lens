@@ -6209,6 +6209,15 @@ body:has(.overlay) .fab { display: none; }
   overflow-wrap: anywhere;
 }
 .plan-panel-buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+/* The Private badge and the Edit button, on one row above a note — the same
+   header the workout's notes tab draws. */
+.plan-notes-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
 
 /* --- The editor --- */
 
