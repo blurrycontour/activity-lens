@@ -48,7 +48,7 @@ ENV VITE_APP_VERSION=$VERSION
 
 # Installed rather than left to corepack, which resolves the version at first use
 # — a network fetch, and a moving target, inside a build that wants neither.
-RUN npm install -g pnpm@11.17.0
+RUN npm install -g pnpm@11.22.0
 
 COPY frontend/package.json frontend/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile

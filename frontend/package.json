@@ -11,7 +11,7 @@
     "format": "oxfmt",
     "test": "vitest run"
   },
-  "packageManager": "pnpm@11.17.0",
+  "packageManager": "pnpm@11.22.0",
   "dependencies": {
     "@capacitor/core": "8.5.0",
     "@capacitor/preferences": "8.0.1",
