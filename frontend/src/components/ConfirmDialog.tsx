@@ -50,8 +50,7 @@ export default function ConfirmDialog({
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
             <button className="btn btn-ghost" onClick={onCancel} disabled={busy}>{cancelLabel}</button>
             <button
-              className="btn btn-primary"
-              style={danger ? { background: 'var(--danger)', borderColor: 'var(--danger)' } : undefined}
+              className={danger ? 'btn btn-danger' : 'btn btn-primary'}
               onClick={onConfirm}
               disabled={busy}
             >

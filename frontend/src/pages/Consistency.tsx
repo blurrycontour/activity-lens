@@ -9,6 +9,7 @@ import { AXIS_TICK, GRID_PROPS, HOVER_FILL, recencyRamp } from '../lib/chartColo
 import { useThemeTokens } from '../lib/useThemeTokens'
 import { recentWeekStarts, weekdayMatrix } from '../lib/insights'
 import ChartCard, { EmptyPlot } from '../components/ChartCard'
+import TrainingSessionsChart from '../components/TrainingSessionsChart'
 import InfoTip from '../components/InfoTip'
 import { useChartSpace } from '../components/ChartAxis'
 import {
@@ -384,6 +385,10 @@ export default function Consistency() {
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
+
+        {/* Strength work, which leaves no GPS trace and so appears in none of
+            the charts above. */}
+        <TrainingSessionsChart rangeDays={rangeDays} />
         </>)}
 
         {tab === 'compare' && (<>

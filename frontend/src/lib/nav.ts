@@ -5,6 +5,8 @@ export type Page =
   | 'consistency'
   | 'map'
   | 'equipment'
+  /** Training plans, and the sessions run against them. */
+  | 'plans'
   /** Everyone on this instance; each entry opens their profile. */
   | 'discover'
   | 'help'
@@ -24,7 +26,7 @@ export type Page =
  * The primary pages, in order. Mobile swipe navigation walks this list
  * cyclically, so swiping right on the first page wraps around to the last.
  */
-export const MOBILE_PAGES: Page[] = ['dashboard', 'workouts', 'discover', 'analysis', 'consistency', 'map', 'equipment']
+export const MOBILE_PAGES: Page[] = ['dashboard', 'workouts', 'discover', 'plans', 'analysis', 'consistency', 'map', 'equipment']
 
 /** Sidebar order on desktop: the mobile set plus Help. */
 export const DESKTOP_PAGES: Page[] = [...MOBILE_PAGES, 'help']
@@ -40,10 +42,17 @@ export const DESKTOP_PAGES: Page[] = [...MOBILE_PAGES, 'help']
  * Everything still reachable: the rest live behind More, and swipe navigation
  * walks all of MOBILE_PAGES regardless.
  */
-export const BOTTOM_BAR_PAGES: Page[] = ['dashboard', 'workouts', 'discover', 'analysis']
+export const BOTTOM_BAR_PAGES: Page[] = ['dashboard', 'workouts', 'discover', 'plans']
 
-/** The pages behind "More" on a phone. */
-export const MORE_PAGES: Page[] = ['consistency', 'map', 'equipment', 'help']
+/**
+ * The pages behind "More" on a phone, in the same order they appear in the
+ * desktop sidebar.
+ *
+ * The bar and the sheet are read as one list, so what matters is that walking
+ * bar-then-sheet gives the same order as the sidebar. That is why Plans sits in
+ * the bar and Analysis leads the sheet rather than the other way round.
+ */
+export const MORE_PAGES: Page[] = ['analysis', 'consistency', 'map', 'equipment', 'help']
 
 /** Every page that owns a route, including the ones reached from the user menu. */
 export const PAGES: Page[] = [...DESKTOP_PAGES, 'settings', 'admin', 'users']
@@ -58,6 +67,7 @@ export const SETTINGS_SECTIONS = [
   'profile', 'security', 'body',
   'appearance', 'dashboard', 'goals', 'notifications', 'weather',
   'feedback',
+  'plans',
   'autoimport', 'app', 'server',
 ] as const
 export type SettingsSection = typeof SETTINGS_SECTIONS[number]
@@ -65,10 +75,27 @@ export type SettingsSection = typeof SETTINGS_SECTIONS[number]
 export const ADMIN_SECTIONS = ['users', 'feedback', 'email', 'sso', 'storage', 'social'] as const
 export type AdminSection = typeof ADMIN_SECTIONS[number]
 
+/**
+ * A plan or a session belonging to somebody else, at `/discover/plan/{id}`
+ * and `/discover/session/{id}`.
+ *
+ * Under Discover rather than under Plans, because that is where it was found
+ * and that is what the nav should say while it is open. Routing someone
+ * else's plan to `/plans/{id}` lit up the Plans tab — which is your own
+ * library, the one place the thing on screen is certainly not — and pressing
+ * that tab then went somewhere you were apparently already at.
+ *
+ * The page rendered is still PlansPage: the item is the same item, only the
+ * route it hangs off differs. A clone, being yours, moves to `/plans/{id}`.
+ */
+export const DISCOVER_SECTIONS = ['plan', 'session'] as const
+export type DiscoverSection = typeof DISCOVER_SECTIONS[number]
+
 /** The section ids valid under a given hub page. */
 function sectionsFor(page: Page): readonly string[] {
   if (page === 'settings') return SETTINGS_SECTIONS
   if (page === 'admin') return ADMIN_SECTIONS
+  if (page === 'discover') return DISCOVER_SECTIONS
   return []
 }
 
@@ -84,7 +111,7 @@ function sectionsFor(page: Page): readonly string[] {
  * component unmounts and any id it was holding in local state goes with it.
  * Coming back then landed on the inventory rather than the gear you left.
  */
-const ID_SECTION_PAGES: readonly Page[] = ['equipment', 'users']
+const ID_SECTION_PAGES: readonly Page[] = ['equipment', 'users', 'plans']
 
 /**
  * Routes that no longer exist, pointing at whatever absorbed them. Timeline was
@@ -120,6 +147,22 @@ export interface AppLocation {
   workoutId: string | null
   /** The URL was a legacy form and should be rewritten. */
   redirect?: boolean
+}
+
+/**
+ * The nav item that should light up while `page` is open.
+ *
+ * A page reached *through* another one still belongs to it: opening someone's
+ * profile from Discover, or one of their workouts from there, does not stop
+ * you being in Discover. Without this the bar highlighted nothing at all, which
+ * reads as "you are nowhere" — the same failure the More button was given a
+ * highlight to avoid.
+ */
+export function navHighlight(page: Page): Page {
+  // Profiles are only ever reached from Discover, a shared workout, or a
+  // notification; Discover is the only one of those that is a nav item.
+  if (page === 'users') return 'discover'
+  return page
 }
 
 /** The path for a page, optionally drilled into one of its categories. */

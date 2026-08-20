@@ -1981,7 +1981,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             )}
             {activeTab === 'social' && (
               <Suspense fallback={<div className="detail-loading"><LoaderCircle size={16} className="spin" /></div>}>
-                <WorkoutSocial workoutId={w.id} isOwner={!readOnly} />
+                <WorkoutSocial kind="workout" workoutId={w.id} isOwner={!readOnly} />
               </Suspense>
             )}
           </TabPanel>
@@ -2016,7 +2016,22 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
       )}
 
       {sharing && (
-        <ShareDialog workout={w} onClose={() => setSharing(false)} />
+        <ShareDialog
+          kind="workout"
+          id={w.id}
+          noun="workout"
+          subject={{
+            icon: <TypeIcon type={w.type} />,
+            name: w.name,
+            meta: [
+              new Date(w.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }),
+              w.distance > 0 ? fmtDist(w.distance) : null,
+              w.duration > 0 ? fmtDuration(w.duration) : null,
+            ].filter(Boolean).join(' · '),
+            accent: color,
+          }}
+          onClose={() => setSharing(false)}
+        />
       )}
 
       {cardOpen && (

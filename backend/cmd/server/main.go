@@ -18,6 +18,7 @@ import (
 	"github.com/blurrycontour/activity-lens/backend/internal/feedback"
 	"github.com/blurrycontour/activity-lens/backend/internal/httpapi"
 	"github.com/blurrycontour/activity-lens/backend/internal/notify"
+	"github.com/blurrycontour/activity-lens/backend/internal/plans"
 	"github.com/blurrycontour/activity-lens/backend/internal/sessions"
 	"github.com/blurrycontour/activity-lens/backend/internal/settings"
 	"github.com/blurrycontour/activity-lens/backend/internal/store"
@@ -133,6 +134,8 @@ func run() error {
 	// both only ever read by Settings -> Security and the admin screens.
 	apiServer.UseSessionClients(sessions.NewStore(db))
 	apiServer.UseAdminStats(httpapi.NewAdminStatsStore(db, cfg.DataDir))
+	// Training plans and the sessions run against them.
+	apiServer.UsePlans(plans.NewService(plans.NewSQLiteRepository(db)))
 
 	handler, err := apiServer.Handler()
 	if err != nil {

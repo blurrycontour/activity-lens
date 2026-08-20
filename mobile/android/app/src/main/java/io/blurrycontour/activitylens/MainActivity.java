@@ -34,6 +34,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(FolderSyncPlugin.class);
         registerPlugin(NativeAuthPlugin.class);
         registerPlugin(IncomingFilesPlugin.class);
+        registerPlugin(SessionNoticePlugin.class);
         super.onCreate(savedInstanceState);
 
         // Replace the launch theme's window background with a flat colour.

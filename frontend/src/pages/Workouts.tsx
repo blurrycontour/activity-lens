@@ -1,9 +1,10 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
-import { ALL_WORKOUT_TYPES, type WorkoutType, type Workout } from '../data/workouts'
+import { ALL_WORKOUT_TYPES, fmtDist, fmtDuration, TYPE_COLOR, type WorkoutType, type Workout } from '../data/workouts'
 import TypeIcon from '../components/TypeIcon'
 import ShareBadge from '../components/ShareBadge'
+import ViewSwitcher, { readView, writeView, type ListView } from '../components/ViewSwitcher'
 import { useWorkouts } from '../context/WorkoutsContext'
-import { Search, Download, Plus, Grid2X2, List, Share2, FilterX, SlidersHorizontal, X, Trash2, CheckCheck, LoaderCircle, Layers, Image as ImageIcon, MoreVertical, Copy } from 'lucide-react'
+import { Search, Download, Plus, Share2, FilterX, SlidersHorizontal, X, LoaderCircle, Layers, Image as ImageIcon, MoreVertical, Copy } from 'lucide-react'
 import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
 import SortDropdown, { SORT_OPTIONS, type SortKey } from '../components/SortDropdown'
@@ -22,6 +23,7 @@ import { useIsMobile } from '../lib/useIsMobile'
 import { LOCATION_EVENT } from '../App'
 import { useSessionState } from '../lib/useSessionState'
 import SearchInput from '../components/SearchInput'
+import SelectionBar from '../components/SelectionBar'
 import {
   applyWorkoutFilters, DEFAULT_FILTERS, describeImportWindow, parseAutoImportParams,
   type Has, type WorkoutFilters,
@@ -129,14 +131,11 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
   const [deleting, setDeleting] = useState(false)
   const selecting = selected !== null
   const isMobile = useIsMobile()
-  const [view, setView] = useState<'list' | 'grid'>(() => {
-    const saved = localStorage.getItem('workouts.view')
-    return saved === 'grid' || saved === 'list' ? saved : 'list'
-  })
+  const [view, setView] = useState<ListView>(() => readView('workouts.view'))
 
-  function changeView(v: 'list' | 'grid') {
+  function changeView(v: ListView) {
     setView(v)
-    localStorage.setItem('workouts.view', v)
+    writeView('workouts.view', v)
   }
 
   // Claims a ?source= filter from the URL, on mount and whenever a link lands
@@ -389,22 +388,17 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
           <span style={{ fontSize: 12, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
             {filtered.length} of {source?.length ?? 0}
           </span>
-          <div style={{ marginLeft: 'auto', display: 'flex', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
-            {([['list', <List key="l" size={15} />], ['grid', <Grid2X2 key="g" size={15} />]] as const).map(([id, icon]) => (
-              <button
-                key={id}
-                onClick={() => changeView(id)}
-                title={id === 'list' ? 'List view' : 'Grid view'}
-                aria-pressed={view === id}
-                style={{
-                  display: 'flex', alignItems: 'center', padding: '6px 12px', border: 'none', cursor: 'pointer',
-                  background: view === id ? 'var(--primary-dim)' : 'var(--bg-3)',
-                  color: view === id ? 'var(--primary)' : 'var(--text-3)',
-                }}
-              >
-                {icon}
-              </button>
-            ))}
+          {/* Desktop only: the phone has the floating button, and a header
+              full of controls is what pushed the list below the fold there. */}
+          <button className="btn btn-primary desktop-only" onClick={onImport}>
+            <Plus size={16} /> Add workout
+          </button>
+          {/* The push to the right edge lives here rather than on the Add
+              button beside it: that button is desktop-only, so on a phone
+              there was nothing left holding this cluster right and the
+              switcher slid up against the title. */}
+          <div style={{ marginLeft: 'auto' }}>
+            <ViewSwitcher view={view} onChange={changeView} />
           </div>
         </div>
 
@@ -412,39 +406,16 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
             adding a second bar: the two are never useful at once, and pushing the
             list down a row on a phone would cost more than it gives. */}
         {selecting ? (
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <button className="btn-icon" onClick={() => stopSelecting()} aria-label="Cancel selection">
-              <X size={16} />
-            </button>
-            <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-mono)' }}>
-              {selected?.size ?? 0} selected
-            </span>
-            {/* Says how many it will take, because "all" on a filtered list is
-                not obviously the filtered set — and the label is the only thing
-                standing between a stray tap and 500 selected workouts. */}
-            <button
-              className="btn btn-ghost"
-              style={{ marginLeft: 'auto' }}
-              onClick={toggleAll}
-              aria-label={allSelected ? 'Deselect all' : `Select all ${filtered.length} workouts`}
-              title={allSelected ? 'Deselect all' : `Select all ${filtered.length} workouts`}
-            >
-              <CheckCheck size={15} />
-              {/* Shortened rather than dropped on a phone: there is room, and a
-                  bare glyph has no hover to explain itself there. */}
-              {isMobile
-                ? (allSelected ? 'Clear' : 'All')
-                : (allSelected ? 'Deselect all' : `Select all ${filtered.length}`)}
-            </button>
-            <button
-              className="btn btn-ghost"
-              style={{ color: 'var(--danger)' }}
-              disabled={(selected?.size ?? 0) === 0}
-              onClick={() => setConfirmDelete(true)}
-            >
-              <Trash2 size={15} /> Delete
-            </button>
-          </div>
+          <SelectionBar
+            count={selected?.size ?? 0}
+            total={filtered.length}
+            allSelected={allSelected}
+            noun="workouts"
+            compact={isMobile}
+            onCancel={() => stopSelecting()}
+            onToggleAll={toggleAll}
+            onDelete={() => setConfirmDelete(true)}
+          />
         ) : (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <SearchInput
@@ -595,7 +566,19 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
 
       {sharing && (
         <ShareDialog
-          workout={sharing}
+          kind="workout"
+          id={sharing.id}
+          noun="workout"
+          subject={{
+            icon: <TypeIcon type={sharing.type} />,
+            name: sharing.name,
+            meta: [
+              new Date(sharing.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }),
+              sharing.distance > 0 ? fmtDist(sharing.distance) : null,
+              sharing.duration > 0 ? fmtDuration(sharing.duration) : null,
+            ].filter(Boolean).join(' · '),
+            accent: TYPE_COLOR[sharing.type],
+          }}
           onClose={() => setSharing(null)}
           // The badges are driven by the library array, which WorkoutsContext
           // owns and the dashboard also reads — so re-fetch rather than patch

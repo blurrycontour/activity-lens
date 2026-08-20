@@ -180,8 +180,10 @@ export default function EquipmentPage({ onSelectWorkout, detail, onOpenDetail }:
               {detail ? `${items.length} ${items.length === 1 ? 'item' : 'items'}` : `${filtered.length} of ${items.length}`}
             </span>
           </div>
+          {/* Desktop only: on a phone the same action is the floating button,
+              which is where the thumb already is. */}
           {!detail && (
-            <button className="btn btn-primary" onClick={() => setEditing('new')}>
+            <button className="btn btn-primary desktop-only" onClick={() => setEditing('new')}>
               <Plus size={16} /> Add Equipment
             </button>
           )}

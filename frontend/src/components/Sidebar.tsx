@@ -1,6 +1,7 @@
 import { useRef, useCallback } from 'react'
-import { LayoutDashboard, Dumbbell, CalendarCheck, BarChart2, HelpCircle, Map as MapIcon, Plus, Watch, Tag, Compass } from 'lucide-react'
+import { LayoutDashboard, Dumbbell, CalendarCheck, BarChart2, HelpCircle, Map as MapIcon, Plus, Watch, Tag, Compass, ClipboardList } from 'lucide-react'
 import { DESKTOP_PAGES, type Page } from '../lib/nav'
+import { useActiveSession } from '../context/ActiveSessionContext'
 
 interface SidebarProps {
   currentPage: Page
@@ -22,6 +23,7 @@ export const PAGE_META: Partial<Record<Page, { label: string; icon: (size: numbe
   map: { label: 'Map', icon: s => <MapIcon size={s} /> },
   equipment: { label: 'Equipment', icon: s => <Watch size={s} /> },
   discover: { label: 'Discover', icon: s => <Compass size={s} /> },
+  plans: { label: 'Plans', icon: s => <ClipboardList size={s} /> },
   help: { label: 'Help', icon: s => <HelpCircle size={s} /> },
 }
 
@@ -31,6 +33,7 @@ const navItems = DESKTOP_PAGES.flatMap(id => {
 })
 
 export default function Sidebar({ currentPage, onNavigate, collapsed, sidebarWidth, onWidthChange, onImport, isMobile }: SidebarProps) {
+  const { active: running } = useActiveSession()
   const dragRef = useRef(false)
   const startXRef = useRef(0)
   const startWRef = useRef(0)
@@ -132,7 +135,14 @@ export default function Sidebar({ currentPage, onNavigate, collapsed, sidebarWid
                   width: 3, background: 'var(--primary)', borderRadius: '0 3px 3px 0',
                 }} />
               )}
-              <span style={{ flexShrink: 0 }}>{item.icon}</span>
+              <span style={{ flexShrink: 0, position: 'relative' }}>
+                {item.icon}
+                {/* Same live dot as the phone's tab bar: a running session is
+                    reachable from wherever you happen to be. */}
+                {item.id === 'plans' && running && !active && (
+                  <span className="nav-live-dot" role="img" aria-label="Session in progress" />
+                )}
+              </span>
               {!collapsed && <span>{item.label}</span>}
             </button>
           )

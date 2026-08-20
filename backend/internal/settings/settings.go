@@ -149,6 +149,14 @@ type UserPrefs struct {
 	// column default in 0022 has to agree with the Go default below, or a user
 	// who has never saved preferences disagrees with one who has.
 	WeatherEnabled bool `json:"weatherEnabled"`
+	// PlanWorkouts records a finished training session as a manual strength
+	// workout, so it counts towards streaks, goals and the year's totals.
+	//
+	// Off by default, and deliberately a choice rather than a default-on: the
+	// rest of the library is measured by a device, and folding hand-entered
+	// gym sessions into the same totals is a decision about what those totals
+	// mean. Someone who wants it says so.
+	PlanWorkouts bool `json:"planWorkouts"`
 }
 
 // VAPID is the Web Push keypair identifying this server to browser push
@@ -302,18 +310,20 @@ func DefaultUserPrefs() UserPrefs {
 func (s *Store) UserPreferences(ctx context.Context, userID int64) (UserPrefs, error) {
 	v := DefaultUserPrefs()
 	var (
-		goalsJSON   string
-		notifyJSON  string
-		legacyCount int
-		legacyType  string
-		legacyMinKm float64
-		weather     int
+		goalsJSON    string
+		notifyJSON   string
+		legacyCount  int
+		legacyType   string
+		legacyMinKm  float64
+		weather      int
+		planWorkouts int
 	)
 	err := s.db.QueryRowContext(ctx,
 		`SELECT calorie_method, body_weight_kg, sex, birth_year, height_cm, max_hr, resting_hr, threshold_pace, ftp, step_length_cm,
-		        goals, notify_prefs, weekly_goal_count, weekly_goal_type, weekly_goal_min_km, weather_enabled, tagline FROM user_prefs WHERE user_id = ?`, userID).
+		        goals, notify_prefs, weekly_goal_count, weekly_goal_type, weekly_goal_min_km, weather_enabled, tagline,
+		        plan_workouts FROM user_prefs WHERE user_id = ?`, userID).
 		Scan(&v.CalorieMethod, &v.BodyWeightKg, &v.Sex, &v.BirthYear, &v.HeightCm, &v.MaxHR, &v.RestingHR, &v.ThresholdPace, &v.FTP, &v.StepLengthCm,
-			&goalsJSON, &notifyJSON, &legacyCount, &legacyType, &legacyMinKm, &weather, &v.Tagline)
+			&goalsJSON, &notifyJSON, &legacyCount, &legacyType, &legacyMinKm, &weather, &v.Tagline, &planWorkouts)
 	if errors.Is(err, sql.ErrNoRows) {
 		return v, nil
 	}
@@ -336,6 +346,7 @@ func (s *Store) UserPreferences(ctx context.Context, userID int64) (UserPrefs, e
 		v.Notify = json.RawMessage(notifyJSON)
 	}
 	v.WeatherEnabled = weather != 0
+	v.PlanWorkouts = planWorkouts != 0
 	return v, nil
 }
 
@@ -350,8 +361,8 @@ func (s *Store) SaveUserPreferences(ctx context.Context, userID int64, v UserPre
 	}
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO user_prefs (user_id, calorie_method, body_weight_kg, sex, birth_year, height_cm, max_hr, resting_hr, threshold_pace, ftp, step_length_cm,
-		                         goals, notify_prefs, weather_enabled, tagline, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		                         goals, notify_prefs, weather_enabled, tagline, plan_workouts, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(user_id) DO UPDATE SET
 		   calorie_method = excluded.calorie_method,
 		   body_weight_kg = excluded.body_weight_kg,
@@ -367,9 +378,11 @@ func (s *Store) SaveUserPreferences(ctx context.Context, userID int64, v UserPre
 		   notify_prefs = excluded.notify_prefs,
 		   weather_enabled = excluded.weather_enabled,
 		   tagline = excluded.tagline,
+		   plan_workouts = excluded.plan_workouts,
 		   updated_at = excluded.updated_at`,
 		userID, v.CalorieMethod, v.BodyWeightKg, v.Sex, v.BirthYear, v.HeightCm, v.MaxHR, v.RestingHR, v.ThresholdPace, v.FTP, v.StepLengthCm,
-		string(goalsJSON), string(v.Notify), boolToInt(v.WeatherEnabled), CleanTagline(v.Tagline), time.Now().UTC().Format(time.RFC3339))
+		string(goalsJSON), string(v.Notify), boolToInt(v.WeatherEnabled), CleanTagline(v.Tagline),
+		boolToInt(v.PlanWorkouts), time.Now().UTC().Format(time.RFC3339))
 	return err
 }
 

@@ -30,6 +30,9 @@ import Help from './pages/Help'
  * since the library was already loaded by then.
  */
 const MapPage = lazy(() => import('./pages/MapPage'))
+// Lazy for the same reason: the editor and the runner are a page most sessions
+// never open, and they are only ever reached by navigating to them.
+const PlansPage = lazy(() => import('./pages/plans/PlansPage'))
 import Settings from './pages/settings'
 import Admin from './pages/admin'
 import Login from './pages/Login'
@@ -38,8 +41,9 @@ import { useAuth } from './context/AuthContext'
 import { useRefresh } from './context/RefreshContext'
 import { WorkoutsProvider } from './context/WorkoutsContext'
 import { PreferencesProvider } from './context/PreferencesContext'
+import { ActiveSessionProvider } from './context/ActiveSessionContext'
 import {
-  adjacentPage, parseLocation, pathForPage,
+  adjacentPage, navHighlight, parseLocation, pathForPage,
   type AdminSection, type Page, type SettingsSection,
 } from './lib/nav'
 import { useSwipeNav } from './lib/useSwipeNav'
@@ -648,6 +652,7 @@ export default function App() {
     // rather than fetched again by each page that wants it.
     <PreferencesProvider>
     <WorkoutsProvider>
+    <ActiveSessionProvider>
       <div className={layoutClass}>
       <TopBar
         onToggleSidebar={toggleSidebar}
@@ -680,7 +685,7 @@ export default function App() {
 
       {/* Desktop sidebar — hidden on mobile via CSS */}
       <Sidebar
-        currentPage={page}
+        currentPage={navHighlight(page)}
         onNavigate={navigate}
         collapsed={sidebarCollapsed}
         sidebarWidth={sidebarWidth}
@@ -710,7 +715,10 @@ export default function App() {
             Loading workout…
           </div>
         ) : page === 'dashboard' ? (
-          <Dashboard onSelect={selectWorkout} />
+          <Dashboard
+            onSelect={selectWorkout}
+            onResumeSession={id => openSection('plans', 'session', id)}
+          />
         ) : page === 'workouts' ? (
           <Workouts onSelect={selectWorkout} onImport={() => setShowImport(true)} />
         ) : page === 'analysis' ? (
@@ -722,10 +730,35 @@ export default function App() {
         ) : page === 'consistency' ? (
           <Consistency />
         ) : page === 'discover' ? (
-          <Discover
-            onOpenUser={id => openSection('users', String(id))}
-            onSelectWorkout={selectWorkout}
-          />
+          // A plan or session found here opens *under* Discover — see
+          // DISCOVER_SECTIONS in nav.ts for why it does not go to /plans.
+          section === 'plan' || section === 'session' ? (
+            <Suspense fallback={<div className="page-content page-loading">Loading…</div>}>
+              <PlansPage
+                // PlansPage takes a plan id as its section, or the literal
+                // "session" with the id in detail. /discover/plan/{id} carries
+                // the id one segment further out, so it is shifted back here.
+                section={section === 'session' ? 'session' : detail}
+                detail={section === 'session' ? detail : null}
+                onOpen={(sec, det) => {
+                  // Back out of the item, to the feed it was found in.
+                  if (!sec) return openSection('discover', null)
+                  // A session stays under Discover; a bare id is a clone, which
+                  // is yours now and belongs in your own library.
+                  if (sec === 'session') return openSection('discover', 'session', det ?? null)
+                  return openSection('plans', sec)
+                }}
+                onOpenUser={id => openSection('users', String(id))}
+              />
+            </Suspense>
+          ) : (
+            <Discover
+              onOpenUser={id => openSection('users', String(id))}
+              onSelectWorkout={selectWorkout}
+              onSelectPlan={p => openSection('discover', 'plan', p.id)}
+              onSelectSession={s => openSection('discover', 'session', s.id)}
+            />
+          )
         ) : page === 'users' ? (
           // section carries the user id; see ID_SECTION_PAGES in nav.ts.
           <UserProfile
@@ -733,6 +766,10 @@ export default function App() {
             onBack={() => window.history.back()}
             onSelect={selectWorkout}
             onOpenUser={id => openSection('users', String(id))}
+            // Under Discover, like anything else of someone else's — see
+            // DISCOVER_SECTIONS in nav.ts.
+            onSelectPlan={p => openSection('discover', 'plan', p.id)}
+            onSelectSession={s => openSection('discover', 'session', s.id)}
           />
         ) : page === 'equipment' ? (
           <Equipment
@@ -740,6 +777,17 @@ export default function App() {
             onOpenDetail={id => openSection('equipment', id)}
             onSelectWorkout={id => { api.getWorkout(id).then(selectWorkout).catch(() => {}) }}
           />
+        ) : page === 'plans' ? (
+          // section is a plan id, or "session" with the id in detail; see
+          // ID_SECTION_PAGES in nav.ts.
+          <Suspense fallback={<div className="page-content page-loading">Loading plans…</div>}>
+            <PlansPage
+              section={section}
+              detail={detail}
+              onOpen={(sec, det) => openSection('plans', sec, det ?? null)}
+              onOpenUser={id => openSection('users', String(id))}
+            />
+          </Suspense>
         ) : page === 'settings' ? (
           <Settings
             section={section as SettingsSection | null}
@@ -767,7 +815,7 @@ export default function App() {
 
       {/* Mobile bottom bar */}
       {isMobile && (
-        <BottomBar currentPage={page} onNavigate={navigate} />
+        <BottomBar currentPage={navHighlight(page)} onNavigate={navigate} />
       )}
 
       {/* Overlays */}
@@ -792,6 +840,7 @@ export default function App() {
         />
       )}
       </div>
+    </ActiveSessionProvider>
     </WorkoutsProvider>
     </PreferencesProvider>
   )

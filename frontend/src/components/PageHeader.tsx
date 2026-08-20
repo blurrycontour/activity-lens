@@ -7,6 +7,28 @@ interface PageHeaderProps {
   onBack?: () => void
   /** Controls aligned to the right of the title, e.g. a save button. */
   actions?: React.ReactNode
+  /**
+   * A control sitting directly beside the title, for when the title *is* the
+   * editable thing — a plan's name, say. Distinct from `actions`, which is a
+   * group aligned to the far right and drops onto its own line on a phone.
+   */
+  titleAction?: React.ReactNode
+  /**
+   * Keeps `actions` on the title's row on a phone instead of dropping it below.
+   *
+   * The default exists because a group of labelled buttons squeezes the title
+   * to a few hyphenated characters. A single icon button does not, and pushing
+   * one onto its own line left it sitting under the back arrow looking like it
+   * belonged to nothing.
+   */
+  compactActions?: boolean
+  /**
+   * A line under the subtitle, for what the title cannot hold: whose item this
+   * is, most of the time. Inside the header rather than at the top of the page
+   * body so it reads as part of the identity of the thing, which is where the
+   * workout page has always put it.
+   */
+  meta?: React.ReactNode
 }
 
 /**
@@ -17,7 +39,7 @@ interface PageHeaderProps {
  * header as opening a workout, so going one level deep looks the same wherever
  * you do it.
  */
-export default function PageHeader({ title, subtitle, onBack, actions }: PageHeaderProps) {
+export default function PageHeader({ title, subtitle, onBack, actions, titleAction, compactActions, meta }: PageHeaderProps) {
   return (
     <div className="page-header page-header-row">
       {onBack && (
@@ -26,13 +48,19 @@ export default function PageHeader({ title, subtitle, onBack, actions }: PageHea
         </button>
       )}
       <div className="page-header-text">
-        <h1 className="page-header-title">{title}</h1>
+        <div className="page-header-title-row">
+          <h1 className="page-header-title">{title}</h1>
+          {titleAction}
+        </div>
         {subtitle && <p className="page-header-sub">{subtitle}</p>}
+        {meta}
       </div>
       {/* Wrapped so the phone layout can drop it onto its own line. Filters
           sharing a row with the title left the subtitle a few characters wide
           and hyphenating, which is what a header is meant to prevent. */}
-      {actions && <div className="page-header-actions">{actions}</div>}
+      {actions && (
+        <div className={`page-header-actions${compactActions ? ' compact' : ''}`}>{actions}</div>
+      )}
     </div>
   )
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/blurrycontour/activity-lens/backend/internal/equipment"
 	"github.com/blurrycontour/activity-lens/backend/internal/feedback"
 	"github.com/blurrycontour/activity-lens/backend/internal/notify"
+	"github.com/blurrycontour/activity-lens/backend/internal/plans"
 	"github.com/blurrycontour/activity-lens/backend/internal/sessions"
 	"github.com/blurrycontour/activity-lens/backend/internal/settings"
 	"github.com/blurrycontour/activity-lens/backend/internal/weather"
@@ -22,12 +23,15 @@ import (
 
 // Server bundles the dependencies needed to serve the API and SPA.
 type Server struct {
-	cfg        config.Config
-	auth       *auth.Service
-	mw         *httpmw.Middleware
-	oidc       *oidc.Handler
-	workout    *workout.Service
-	equipment  *equipment.Service
+	cfg       config.Config
+	auth      *auth.Service
+	mw        *httpmw.Middleware
+	oidc      *oidc.Handler
+	workout   *workout.Service
+	equipment *equipment.Service
+	// plans is training plans, or nil when this server was built without
+	// them — see UsePlans.
+	plans      *plans.Service
 	settings   *settings.Store
 	rawUploads *workout.RawUploadStore
 	// Gallery photos on disk. Always present; unlike raw uploads there is no
@@ -118,6 +122,12 @@ func (s *Server) UseSessionClients(store *sessions.Store) { s.sessionClients = s
 // UseAdminStats wires the per-user totals shown in Admin -> Users.
 func (s *Server) UseAdminStats(store *AdminStatsStore) { s.adminStats = store }
 
+// UsePlans wires training plans. Optional for the same reason UseWeather is:
+// New already takes nine dependencies, and leaving this unset keeps every
+// existing test's Server valid — the routes then answer 404, which is what a
+// client that asks for a feature this server does not have should hear.
+func (s *Server) UsePlans(svc *plans.Service) { s.plans = svc }
+
 // Handler builds the top-level http.Handler: API routes plus the SPA.
 func (s *Server) Handler() (http.Handler, error) {
 	api := s.apiRoutes()
@@ -200,11 +210,11 @@ func (s *Server) apiRoutes() http.Handler {
 	mux.Handle("DELETE /api/workouts/{id}/media/{mediaID}", s.authedCSRF(s.handleDeleteMedia))
 	// Comments and reactions, readable by anyone who can see the workout and
 	// writable only while it is shared — see social.go, where both gates live.
-	mux.Handle("GET /api/workouts/{id}/social", s.authed(s.handleGetSocial))
-	mux.Handle("POST /api/workouts/{id}/comments", s.authedCSRF(s.handleAddComment))
-	mux.Handle("PATCH /api/workouts/{id}/comments/{commentID}", s.authedCSRF(s.handleEditComment))
-	mux.Handle("DELETE /api/workouts/{id}/comments/{commentID}", s.authedCSRF(s.handleDeleteComment))
-	mux.Handle("PUT /api/workouts/{id}/reaction", s.authedCSRF(s.handleSetReaction))
+	mux.Handle("GET /api/workouts/{id}/social", s.authed(s.handleGetSocial(s.resolveSocial)))
+	mux.Handle("POST /api/workouts/{id}/comments", s.authedCSRF(s.handleAddComment(s.resolveSocial)))
+	mux.Handle("PATCH /api/workouts/{id}/comments/{commentID}", s.authedCSRF(s.handleEditComment(s.resolveSocial)))
+	mux.Handle("DELETE /api/workouts/{id}/comments/{commentID}", s.authedCSRF(s.handleDeleteComment(s.resolveSocial)))
+	mux.Handle("PUT /api/workouts/{id}/reaction", s.authedCSRF(s.handleSetReaction(s.resolveSocial)))
 	mux.Handle("POST /api/workouts/{id}/recalculate", s.authedCSRF(s.handleRecalculateWorkout))
 	mux.Handle("POST /api/workouts/{id}/reshape", s.authedCSRF(s.handleReshapeWorkout))
 	mux.Handle("POST /api/workouts/{id}/restore", s.authedCSRF(s.handleRestoreWorkout))
@@ -261,6 +271,56 @@ func (s *Server) apiRoutes() http.Handler {
 	mux.Handle("GET /api/equipment/{id}", s.authed(s.handleGetEquipment))
 	mux.Handle("PATCH /api/equipment/{id}", s.authedCSRF(s.handlePatchEquipment))
 	mux.Handle("DELETE /api/equipment/{id}", s.authedCSRF(s.handleDeleteEquipment))
+	// --- Training plans (authenticated) ---
+	mux.Handle("GET /api/plans", s.authed(s.withPlans(s.handleListPlans)))
+	mux.Handle("POST /api/plans", s.authedCSRF(s.withPlans(s.handleCreatePlan)))
+	mux.Handle("GET /api/plans/{id}", s.authed(s.withPlans(s.handleGetPlan)))
+	mux.Handle("PATCH /api/plans/{id}", s.authedCSRF(s.withPlans(s.handlePatchPlan)))
+	mux.Handle("DELETE /api/plans/{id}", s.authedCSRF(s.withPlans(s.handleDeletePlan)))
+	mux.Handle("PUT /api/plans/{id}/days", s.authedCSRF(s.withPlans(s.handlePutPlanDays)))
+	// Before /api/plans/{id}, or "exercise-names" is read as a plan id.
+	mux.Handle("GET /api/plan-exercise-names", s.authed(s.withPlans(s.handleExerciseNames)))
+	// Sessions sit beside plans rather than under one, because a session
+	// outlives the plan it came from.
+	mux.Handle("GET /api/plan-sessions", s.authed(s.withPlans(s.handleListPlanSessions)))
+	mux.Handle("POST /api/plan-sessions", s.authedCSRF(s.withPlans(s.handleStartPlanSession)))
+	mux.Handle("GET /api/plan-sessions/active", s.authed(s.withPlans(s.handleActivePlanSession)))
+	mux.Handle("GET /api/plan-sessions/{id}", s.authed(s.withPlans(s.handleGetPlanSession)))
+	mux.Handle("PATCH /api/plan-sessions/{id}", s.authedCSRF(s.withPlans(s.handlePatchPlanSession)))
+	mux.Handle("PUT /api/plan-sessions/{id}/progress", s.authedCSRF(s.withPlans(s.handleSavePlanProgress)))
+	mux.Handle("POST /api/plan-sessions/{id}/finish", s.authedCSRF(s.withPlans(s.handleFinishPlanSession)))
+	mux.Handle("DELETE /api/plan-sessions/{id}", s.authedCSRF(s.withPlans(s.handleDeletePlanSession)))
+	mux.Handle("POST /api/plan-sessions/delete", s.authedCSRF(s.withPlans(s.handleDeletePlanSessions)))
+
+	// --- Plan & session sharing (authenticated) --- see plan_sharing.go.
+	mux.Handle("GET /api/plans/{id}/shares", s.authed(s.withPlans(s.handleListPlanShares)))
+	mux.Handle("POST /api/plans/{id}/shares", s.authedCSRF(s.withPlans(s.handleAddPlanShare)))
+	mux.Handle("DELETE /api/plans/{id}/shares/{userId}", s.authedCSRF(s.withPlans(s.handleRemovePlanShare)))
+	mux.Handle("PUT /api/plans/{id}/visibility", s.authedCSRF(s.withPlans(s.handleSetPlanVisibility)))
+	mux.Handle("POST /api/plans/{id}/clone", s.authedCSRF(s.withPlans(s.handleClonePlan)))
+	mux.Handle("GET /api/plan-sessions/{id}/shares", s.authed(s.withPlans(s.handleListSessionShares)))
+	mux.Handle("POST /api/plan-sessions/{id}/shares", s.authedCSRF(s.withPlans(s.handleAddSessionShare)))
+	mux.Handle("DELETE /api/plan-sessions/{id}/shares/{userId}", s.authedCSRF(s.withPlans(s.handleRemoveSessionShare)))
+	mux.Handle("PUT /api/plan-sessions/{id}/visibility", s.authedCSRF(s.withPlans(s.handleSetSessionVisibility)))
+	// The same conversation, on a plan and on a session. One set of handlers
+	// for all three kinds; only "may they see it, and is it shared" differs,
+	// which is what the resolver answers — see social.go.
+	mux.Handle("GET /api/plans/{id}/social", s.authed(s.withPlans(s.handleGetSocial(s.resolvePlanSocial))))
+	mux.Handle("POST /api/plans/{id}/comments", s.authedCSRF(s.withPlans(s.handleAddComment(s.resolvePlanSocial))))
+	mux.Handle("PATCH /api/plans/{id}/comments/{commentID}", s.authedCSRF(s.withPlans(s.handleEditComment(s.resolvePlanSocial))))
+	mux.Handle("DELETE /api/plans/{id}/comments/{commentID}", s.authedCSRF(s.withPlans(s.handleDeleteComment(s.resolvePlanSocial))))
+	mux.Handle("PUT /api/plans/{id}/reaction", s.authedCSRF(s.withPlans(s.handleSetReaction(s.resolvePlanSocial))))
+	mux.Handle("GET /api/plan-sessions/{id}/social", s.authed(s.withPlans(s.handleGetSocial(s.resolveSessionSocial))))
+	mux.Handle("POST /api/plan-sessions/{id}/comments", s.authedCSRF(s.withPlans(s.handleAddComment(s.resolveSessionSocial))))
+	mux.Handle("PATCH /api/plan-sessions/{id}/comments/{commentID}", s.authedCSRF(s.withPlans(s.handleEditComment(s.resolveSessionSocial))))
+	mux.Handle("DELETE /api/plan-sessions/{id}/comments/{commentID}", s.authedCSRF(s.withPlans(s.handleDeleteComment(s.resolveSessionSocial))))
+	mux.Handle("PUT /api/plan-sessions/{id}/reaction", s.authedCSRF(s.withPlans(s.handleSetReaction(s.resolveSessionSocial))))
+
+	mux.Handle("GET /api/feed/plans/public", s.authed(s.withPlans(s.handleFeedPlansPublic)))
+	mux.Handle("GET /api/feed/plans/shared", s.authed(s.withPlans(s.handleFeedPlansShared)))
+	mux.Handle("GET /api/feed/sessions/public", s.authed(s.withPlans(s.handleFeedSessionsPublic)))
+	mux.Handle("GET /api/feed/sessions/shared", s.authed(s.withPlans(s.handleFeedSessionsShared)))
+
 	mux.Handle("POST /api/equipment/{id}/workouts", s.authedCSRF(s.handleLinkWorkouts))
 	mux.Handle("DELETE /api/equipment/{id}/workouts/{workoutId}", s.authedCSRF(s.handleUnlinkWorkout))
 

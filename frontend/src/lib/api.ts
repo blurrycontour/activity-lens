@@ -4,6 +4,9 @@
 import { reportReachability, respondedFromBackend } from './network'
 import { fetchWithCache } from './nativeCache'
 import { apiBase, authToken, isNative } from './serverConfig'
+// Training-plan shapes live with the other domain types in data/, beside the
+// helpers that read them, rather than being declared here like the older ones.
+import type { PlanDay, PlanSession, SessionProgress, TrainingPlan } from '../data/plans'
 
 /** What kind of report this is — mirrors feedback.AllCategories on the server. */
 export type FeedbackCategory = 'bug' | 'idea' | 'other'
@@ -212,6 +215,14 @@ export interface UserPreferences {
    * explicit backfill below.
    */
   weatherEnabled?: boolean
+  /**
+   * Record a finished training session as a manual strength workout.
+   *
+   * Off by default: everything else in the library was measured by a device,
+   * and folding hand-entered gym work into the same totals is a decision about
+   * what those totals mean.
+   */
+  planWorkouts?: boolean
 }
 
 export interface ApiGoal {
@@ -278,6 +289,18 @@ export interface UserProfileData {
   publicWorkouts: import('../data/workouts').Workout[]
   /** Yours, sent to them. Empty on your own profile. */
   sharedWithThem: import('../data/workouts').Workout[]
+  /**
+   * The same three relationships for training plans and finished sessions.
+   * Optional so a server that predates plan sharing simply shows none rather
+   * than breaking the page. Both "with me" lists are empty on your own
+   * profile, for the same reason sharedWithMe is.
+   */
+  sharedPlansWithMe?: TrainingPlan[]
+  publicPlans?: TrainingPlan[]
+  plansSharedWithThem?: TrainingPlan[]
+  sharedSessionsWithMe?: PlanSession[]
+  publicSessions?: PlanSession[]
+  sessionsSharedWithThem?: PlanSession[]
   /**
    * What the nudge row needs to draw itself. Absent on your own profile, and
    * from servers that predate pings — both mean "do not offer it".
@@ -790,15 +813,22 @@ export const api = {
   },
   deleteWorkoutPhoto: (id: string, mediaID: string) =>
     request<unknown>(`/api/workouts/${id}/media/${mediaID}`, { method: 'DELETE' }),
-  // Reactions and comments together: the tab is useless with half of them, so
-  // two requests would only add a state where the page is half drawn.
-  workoutSocial: (id: string) => request<WorkoutSocial>(`/api/workouts/${id}/social`),
-  addComment: (id: string, body: string) =>
-    request<WorkoutComment>(`/api/workouts/${id}/comments`, { method: 'POST', body: { body } }),
-  editComment: (id: string, commentID: string, body: string) =>
-    request<WorkoutComment>(`/api/workouts/${id}/comments/${commentID}`, { method: 'PATCH', body: { body } }),
-  deleteComment: (id: string, commentID: string) =>
-    request<unknown>(`/api/workouts/${id}/comments/${commentID}`, { method: 'DELETE' }),
+  /**
+   * Reactions and comments together: the tab is useless with half of them, so
+   * two requests would only add a state where the page is half drawn.
+   *
+   * Parameterized by kind like the sharing calls above, and for the same
+   * reason: a workout, a plan and a finished session each have the identical
+   * five routes under their own prefix, so this is one function per verb
+   * rather than three copies of five.
+   */
+  workoutSocial: (kind: ShareKind, id: string) => request<WorkoutSocial>(`${shareBase(kind, id)}/social`),
+  addComment: (kind: ShareKind, id: string, body: string) =>
+    request<WorkoutComment>(`${shareBase(kind, id)}/comments`, { method: 'POST', body: { body } }),
+  editComment: (kind: ShareKind, id: string, commentID: string, body: string) =>
+    request<WorkoutComment>(`${shareBase(kind, id)}/comments/${commentID}`, { method: 'PATCH', body: { body } }),
+  deleteComment: (kind: ShareKind, id: string, commentID: string) =>
+    request<unknown>(`${shareBase(kind, id)}/comments/${commentID}`, { method: 'DELETE' }),
   /**
    * Sets the caller's one reaction, or clears it with an empty emoji — tapping
    * the one you already chose is the same request as picking a new one.
@@ -806,8 +836,8 @@ export const api = {
    * Answers with the whole tab, because both the counts and who-reacted change
    * and merging that on the client would be a second copy of the same rules.
    */
-  setWorkoutReaction: (id: string, emoji: string) =>
-    request<WorkoutSocial>(`/api/workouts/${id}/reaction`, { method: 'PUT', body: { emoji } }),
+  setWorkoutReaction: (kind: ShareKind, id: string, emoji: string) =>
+    request<WorkoutSocial>(`${shareBase(kind, id)}/reaction`, { method: 'PUT', body: { emoji } }),
   // `deferChecks` suppresses the post-import gear and goal evaluation, which
   // re-reads the whole library each time. A batch sets it on every file and
   // calls finalizeImport() once at the end.
@@ -845,13 +875,24 @@ export const api = {
   // readable without an account.
   feedPublic: () => request<import('../data/workouts').Workout[]>('/api/feed/public'),
   feedShared: () => request<import('../data/workouts').Workout[]>('/api/feed/shared'),
-  getShares: (id: string) => request<WorkoutShares>(`/api/workouts/${id}/shares`),
-  setVisibility: (id: string, visibility: Visibility) =>
-    request<WorkoutShares>(`/api/workouts/${id}/visibility`, { method: 'PUT', body: { visibility } }),
-  addShare: (id: string, userId: number) =>
-    request<WorkoutShares>(`/api/workouts/${id}/shares`, { method: 'POST', body: { userId } }),
-  removeShare: (id: string, userId: number) =>
-    request<unknown>(`/api/workouts/${id}/shares/${userId}`, { method: 'DELETE' }),
+  feedPlansPublic: () => request<TrainingPlan[]>('/api/feed/plans/public'),
+  feedPlansShared: () => request<TrainingPlan[]>('/api/feed/plans/shared'),
+  feedSessionsPublic: () => request<PlanSession[]>('/api/feed/sessions/public'),
+  feedSessionsShared: () => request<PlanSession[]>('/api/feed/sessions/shared'),
+  clonePlan: (id: string) => request<TrainingPlan>(`/api/plans/${id}/clone`, { method: 'POST' }),
+  /**
+   * Sharing state and its four mutations, parameterized by what is being
+   * shared. A workout, a plan and a finished session each have their own
+   * `{id}/shares` and `{id}/visibility` routes on the server — same shape,
+   * different URL prefix — so one function per verb here, not three.
+   */
+  getShares: (kind: ShareKind, id: string) => request<WorkoutShares>(`${shareBase(kind, id)}/shares`),
+  setVisibility: (kind: ShareKind, id: string, visibility: Visibility) =>
+    request<WorkoutShares>(`${shareBase(kind, id)}/visibility`, { method: 'PUT', body: { visibility } }),
+  addShare: (kind: ShareKind, id: string, userId: number) =>
+    request<WorkoutShares>(`${shareBase(kind, id)}/shares`, { method: 'POST', body: { userId } }),
+  removeShare: (kind: ShareKind, id: string, userId: number) =>
+    request<unknown>(`${shareBase(kind, id)}/shares/${userId}`, { method: 'DELETE' }),
   /**
    * Everyone on this instance.
    *
@@ -890,10 +931,68 @@ export const api = {
     request<Equipment & { workouts: LinkedWorkout[] }>(`/api/equipment/${id}/workouts`, { method: 'POST', body: { workoutIds } }),
   unlinkEquipmentWorkout: (id: string, workoutId: string) =>
     request<Equipment & { workouts: LinkedWorkout[] }>(`/api/equipment/${id}/workouts/${workoutId}`, { method: 'DELETE' }),
+
+  // --- Training plans ---
+  listPlans: () => request<TrainingPlan[]>('/api/plans'),
+  getPlan: (id: string) => request<TrainingPlan>(`/api/plans/${id}`),
+  createPlan: (payload: { name: string; notes?: string }) =>
+    request<TrainingPlan>('/api/plans', { method: 'POST', body: payload }),
+  patchPlan: (id: string, patch: { name?: string; notes?: string; archived?: boolean }) =>
+    request<TrainingPlan>(`/api/plans/${id}`, { method: 'PATCH', body: patch }),
+  deletePlan: (id: string) => request<unknown>(`/api/plans/${id}`, { method: 'DELETE' }),
+  /**
+   * Saves a plan's whole day structure at once.
+   *
+   * The editor sends everything it is holding rather than a diff, and the
+   * answer carries the ids the server issued for anything newly added — so
+   * the next save updates those rows instead of creating them again.
+   */
+  savePlanDays: (id: string, days: PlanDay[]) =>
+    request<TrainingPlan>(`/api/plans/${id}/days`, { method: 'PUT', body: { days } }),
+  /**
+   * Every exercise name this account has written, most recently used first.
+   *
+   * Its own endpoint rather than a wider plans list: the suggestions are
+   * wanted on a screen that has not loaded the other plans, and the list page
+   * has no business downloading every exercise to draw a dozen rows.
+   */
+  exerciseNames: () => request<{ names: string[] }>('/api/plan-exercise-names'),
+
+  // --- Plan sessions ---
+  /** The session in progress, or undefined when nothing is running. */
+  activePlanSession: () => request<PlanSession | undefined>('/api/plan-sessions/active'),
+  listPlanSessions: (limit = 50, offset = 0) =>
+    request<PlanSession[]>(`/api/plan-sessions?limit=${limit}&offset=${offset}`),
+  getPlanSession: (id: string) => request<PlanSession>(`/api/plan-sessions/${id}`),
+  startPlanSession: (planId: string, dayId: string) =>
+    request<PlanSession>('/api/plan-sessions', { method: 'POST', body: { planId, dayId } }),
+  savePlanProgress: (id: string, progress: SessionProgress) =>
+    request<PlanSession>(`/api/plan-sessions/${id}/progress`, { method: 'PUT', body: { progress } }),
+  /**
+   * Closes a session. The progress goes along with it so the last few ticks
+   * cannot be lost to an autosave that failed on the way to the Finish tap.
+   */
+  finishPlanSession: (id: string, progress: SessionProgress, notes = '') =>
+    request<PlanSession>(`/api/plan-sessions/${id}/finish`, { method: 'POST', body: { progress, notes } }),
+  deletePlanSession: (id: string) => request<unknown>(`/api/plan-sessions/${id}`, { method: 'DELETE' }),
+  /** Rewrites a finished session's note; nothing else about one is editable. */
+  patchPlanSession: (id: string, patch: { notes?: string }) =>
+    request<PlanSession>(`/api/plan-sessions/${id}`, { method: 'PATCH', body: patch }),
+  /** Clears a batch of history rows in one request. */
+  deletePlanSessions: (ids: string[]) =>
+    request<{ deleted: number }>('/api/plan-sessions/delete', { method: 'POST', body: { ids } }),
 }
 
-/** Who, beyond the owner, can read a workout. Direct shares are separate. */
+/** Who, beyond the owner, can read a workout, plan or session. Direct shares are separate. */
 export type Visibility = 'private' | 'public'
+
+/** What is being shared — picks the URL prefix the four sharing calls use. */
+export type ShareKind = 'workout' | 'plan' | 'session'
+
+function shareBase(kind: ShareKind, id: string): string {
+  const prefix = kind === 'workout' ? '/api/workouts' : kind === 'plan' ? '/api/plans' : '/api/plan-sessions'
+  return `${prefix}/${id}`
+}
 
 /** A user as shown in the share picker and as a workout's author. */
 export interface UserRef {

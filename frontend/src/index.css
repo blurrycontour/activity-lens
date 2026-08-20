@@ -53,6 +53,14 @@
   /* Deliberately the one grey in the sport palette: Other is not a sport, it is
      the absence of one. A workout that reads as unclassified is doing its job. */
   --other: #94a3b8;
+  /* Training plans and the sessions run against them. Their own two colours
+     rather than a borrowed sport one: a plan and a session appear in the same
+     mixed list as workouts, and reusing --strength would have said "this is a
+     strength workout" about a row that is neither strength nor a workout.
+     Kept apart from each other too — a plan is the intent, a session is the
+     record, and the feed shows both at once. */
+  --plan: #6366f1;
+  --session: #f43f5e;
   /* Status colours. Separate from the activity-type palette above even where
      the hex matches (--hike is also amber): those track a sport, these track
      an outcome, and they are free to diverge. Never the accent — the accent is
@@ -1184,6 +1192,11 @@ body {
    the five above — those predate --other existing, and a sixth literal would be
    a second copy of a colour that already has a name. */
 .tag-other    { background: color-mix(in srgb, var(--other) 14%, transparent); color: var(--other); }
+/* A plan and a session share the row shape workouts use, so they need the
+   badge that names them too — without it the only thing distinguishing the
+   three kinds in a mixed feed is an icon. */
+.tag-plan     { background: color-mix(in srgb, var(--plan) 14%, transparent); color: var(--plan); }
+.tag-session  { background: color-mix(in srgb, var(--session) 14%, transparent); color: var(--session); }
 
 .stat-chip { display: flex; flex-direction: column; gap: 2px; }
 .stat-chip .label { font-size: 11px; color: var(--text-3); font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.06em; }
@@ -2355,6 +2368,12 @@ body {
 body:has(.overlay) .fab { display: none; }
 .fab:hover { transform: scale(1.08); box-shadow: 0 6px 28px var(--primary-glow); }
 .fab:active { transform: scale(0.96); }
+/* Room to scroll past a floating button. The FAB is fixed to the viewport, so
+   it covers whatever happens to be at the bottom of the screen — which was
+   fine until a page put a control there. A plan's comment box sat under it,
+   with the send button unreachable. Applied by the page that draws a FAB,
+   because most pages ending in text lose nothing to it being covered. */
+.page-content.with-fab { padding-bottom: calc(88px + var(--bottombar-h)); }
 
 /* ── Bottom bar (mobile) ── */
 .bottom-bar {
@@ -3476,6 +3495,26 @@ body:has(.overlay) .fab { display: none; }
 }
 .workout-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
 
+/* The list/grid toggle. One segmented control, shared by every list that has
+   two layouts — see ViewSwitcher. */
+.view-switch {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+.view-switch button {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  border: none;
+  cursor: pointer;
+  background: var(--bg-3);
+  color: var(--text-3);
+}
+.view-switch button.active { background: var(--primary-dim); color: var(--primary); }
+
 .spin { animation: spin 0.8s linear infinite; }
 /* For glyphs that point anticlockwise, so the motion agrees with the arrow. */
 .spin-reverse { animation: spin 0.8s linear infinite reverse; }
@@ -4136,6 +4175,11 @@ body:has(.overlay) .fab { display: none; }
 .owner-byline { flex-wrap: wrap; gap: 6px 8px; }
 .owner-byline-more { font-size: 12px; color: var(--text-3); white-space: nowrap; }
 
+/* A shared/public plan or session's author, read at the top of the page
+   rather than tucked under a card — there is only one row on this page and
+   it deserves to be seen without scrolling to a footer. */
+.page-header-byline { margin-top: 4px; }
+
 /* Search and sort above the directory. */
 .discover-tools {
   display: flex;
@@ -4144,6 +4188,9 @@ body:has(.overlay) .fab { display: none; }
   flex-wrap: wrap;
   margin: 14px 0 16px;
 }
+
+
+
 
 /* The edit dialog scrolls: with the advanced section open it is taller than a
    laptop screen, and the Save button was what fell off the bottom. Head and
@@ -4768,8 +4815,10 @@ body:has(.overlay) .fab { display: none; }
   }
   .bottom-bar-item.active { color: var(--primary); }
   /* Five slots share the width, and "Consistency" is the longest label — clip
-     rather than wrap so every item keeps the same height. */
-  .bottom-bar-item span {
+     rather than wrap so every item keeps the same height. Scoped to the label:
+     applied to every span in the item it also clipped the icon, and with it the
+     live dot that deliberately overhangs the icon's corner. */
+  .bottom-bar-label {
     font-size: 10px;
     font-weight: 500;
     max-width: 100%;
@@ -4779,7 +4828,7 @@ body:has(.overlay) .fab { display: none; }
   }
   .bottom-bar-item { padding: 8px 2px; min-width: 0; }
 
-  .fab { bottom: calc(80px + 8px); }
+  .fab { bottom: calc(64px + var(--safe-bottom) + 18px); }
 }
 
 @media (min-width: 769px) {
@@ -5768,8 +5817,9 @@ body:has(.overlay) .fab { display: none; }
 .session-expanded .session-profile { flex: 1; min-width: 0; min-height: 0; }
 .session-expanded .session-sky { border-radius: 0; border: none; }
 
-/* A page that is still arriving. Only the map is loaded this way — it is the
-   one page heavy enough to be worth a separate chunk. */
+/* A page that is still arriving. The map and the plans pages are loaded this
+   way — both are heavy enough, and reached rarely enough, to be worth their
+   own chunk. */
 .page-loading {
   display: grid;
   place-items: center;
@@ -5777,3 +5827,1244 @@ body:has(.overlay) .fab { display: none; }
   color: var(--text-3);
   font-size: 13px;
 }
+
+/* ── Training plans ──────────────────────────────────────────────────
+   Three surfaces: the list of plans, the editor, and the runner. They share
+   the row rhythm and accent rail the Workouts list already uses, so the page
+   reads as part of the app rather than a feature bolted to the side.
+
+   Colour is the accent, not a hue of this feature's own. A wall of purple
+   cards read as a decorated list rather than a plan, and it fought whatever
+   accent the user had chosen — so exercises wear --primary and a section
+   (warm-up, cool-down, stretch) wears --hike, which is the one other colour
+   in the palette that reads as "the easy part". */
+
+/* Numbers, wherever they line up or get compared. */
+.plan-num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+}
+
+/* A shared empty state. Every page had grown its own — .feed-empty,
+   .notif-empty, .gallery-empty, .social-empty — so this one is written to be
+   adopted by them rather than to be a fifth. */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 40px 24px;
+  text-align: center;
+  color: var(--text-2);
+  font-size: 14px;
+}
+.empty-state svg { color: var(--text-3); }
+.empty-state-hint {
+  font-size: 12.5px;
+  color: var(--text-3);
+  line-height: 1.55;
+  max-width: 46ch;
+}
+
+/* --- The list --- */
+
+.plan-list { display: flex; flex-direction: column; gap: 9px; margin-top: 14px; }
+/* The same rows as cards: two or three to a row, each one taller, with the
+   figures under the name instead of pushed to the far end. Same components and
+   the same classes — only the direction changes, so there is one row to keep
+   right rather than two. */
+.plan-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+.plan-grid .plan-card {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  min-height: 104px;
+}
+.plan-grid .plan-card-row { position: relative; }
+/* Padded on all four sides here — in a row the card's own right edge belongs
+   to the start button, in a card that button is in the corner below. */
+.plan-grid .plan-card-open { flex-direction: column; align-items: stretch; gap: 10px; padding: 13px 15px 40px; }
+.plan-grid .plan-card-figures { justify-content: space-between; gap: 8px; }
+.plan-grid .plan-card-main { flex: 1; }
+/* The start button has no row to sit at the end of, so it takes the corner. */
+.plan-grid .plan-card-start { position: absolute; right: 10px; bottom: 10px; }
+.plan-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 15px;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  width: 100%;
+}
+.plan-card:hover { border-color: var(--border-strong); }
+.plan-card-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.plan-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.plan-card-meta { font-size: 11.5px; color: var(--text-3); }
+.plan-card-figures {
+  display: flex;
+  gap: 14px;
+  font-size: 11.5px;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.plan-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 2px 8px;
+}
+.plan-badge.running { color: var(--primary); border-color: var(--primary); }
+
+/* The way back into a session already running. Deliberately loud: it is the
+   one thing on this page that is time-sensitive. */
+.plan-resume {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 13px 15px;
+  margin-bottom: 14px;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, var(--bg-2));
+}
+.plan-resume-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 99px;
+  background: var(--primary);
+  flex: 0 0 auto;
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .plan-resume-dot { animation: none; }
+}
+.plan-resume-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.plan-resume-text strong { font-size: 14px; letter-spacing: -0.01em; }
+.plan-resume-meta { font-size: 11.5px; color: var(--text-2); }
+.plan-resume-cta { flex: 0 0 auto; pointer-events: none; }
+
+/* --- The runner --- */
+
+.plan-run-actions { display: flex; gap: 8px; }
+.plan-run-summary {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+.plan-run-figures { display: flex; gap: 26px; flex-wrap: wrap; }
+.plan-ring { position: relative; flex: 0 0 auto; width: 62px; height: 62px; }
+.plan-ring svg { display: block; }
+.plan-ring circle { transition: stroke-dashoffset 0.3s ease; }
+@media (prefers-reduced-motion: reduce) {
+  .plan-ring circle { transition: none; }
+}
+.plan-ring-num {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: -0.03em;
+}
+
+.plan-rows { display: flex; flex-direction: column; gap: 9px; }
+.plan-ex {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) * 1.5);
+  padding: 12px 14px;
+}
+/* Found from across the room, which is the actual viewing distance: a phone
+   propped against a water bottle two metres away. A hairline border and a 5%
+   tint were invisible at that range — so the whole border thickens, evenly on
+   every side, rather than a rail down the left that only reads up close. */
+.plan-ex.current {
+  border-width: 2px;
+  padding: 11px 13px;
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 11%, var(--bg-2));
+  box-shadow: 0 0 0 1px var(--primary), 0 6px 22px var(--primary-glow);
+}
+/* A warm-up, cool-down or stretch carries its own colour everywhere else, so
+   the card that is current within a section keeps that colour rather than
+   switching to the exercise accent. */
+.plan-ex.plan-ex-section.current {
+  border-color: var(--hike);
+  box-shadow: 0 0 0 1px var(--hike), 0 6px 22px color-mix(in srgb, var(--hike) 30%, transparent);
+}
+.plan-ex.done .plan-ex-title { color: var(--text-3); text-decoration: line-through; }
+/* Once it is behind you, it should read as behind you: the room for the eye is
+   what is current and what is still ahead. */
+.plan-ex.done { opacity: 0.6; }
+/* Not on a grouped block, whose purple frame says something the open state
+   does not — the rotated caret already marks open. */
+.plan-ex.open:not(.plan-ex-grouped) { border-color: var(--border-strong); }
+
+.plan-ex-top { display: flex; align-items: flex-start; gap: 10px; }
+.plan-ex-name {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.plan-ex-index {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+  flex: 0 0 auto;
+}
+.plan-ex-title { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+.plan-ex-caret { color: var(--text-3); transition: transform 0.15s; flex: 0 0 auto; }
+.plan-ex.open .plan-ex-caret { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) {
+  .plan-ex-caret { transition: none; }
+}
+.plan-ex-target { font-size: 12.5px; color: var(--text-2); white-space: nowrap; }
+
+/* Sets as squares. 36px, above the 44px-with-padding touch target, because
+   this is tapped with gym hands and often one-handed. */
+.plan-sets { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 11px; }
+.plan-set {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius);
+  /* Two-pixel, on --border-strong rather than --border: an unticked box on a
+     dark background was a hairline in a colour barely off the card, which is
+     no target at all. These are the thing you aim at. */
+  border: 2px solid var(--border-strong);
+  background: var(--bg-3);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.plan-set:hover:not(:disabled) { border-color: var(--border-strong); color: var(--text); }
+/* Under way: the one thing on a page of static squares that is happening now,
+   so the border travels. Read from a metre away with a barbell in the way. */
+.plan-set.running {
+  border-style: dashed;
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--primary-dim);
+  animation: set-march 0.9s linear infinite;
+}
+@keyframes set-march {
+  to { background-position: 12px 0; }
+}
+.plan-set.running {
+  background-image: repeating-linear-gradient(
+    45deg,
+    color-mix(in srgb, var(--primary) 16%, transparent) 0 3px,
+    transparent 3px 6px
+  );
+  background-size: 12px 12px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .plan-set.running { animation: none; }
+}
+.plan-set.done {
+  background: var(--success);
+  border-color: var(--success);
+  color: var(--bg);
+}
+
+/* The expanded row: direction B's readability, without leaving the list. */
+.plan-ex-focus {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.plan-focus-targets { display: flex; gap: 26px; flex-wrap: wrap; }
+.plan-setrows { display: flex; flex-direction: column; gap: 7px; }
+.plan-setrow {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 8px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.plan-setrow.done { border-color: var(--success); }
+.plan-setrow.running { border-color: var(--primary); border-style: dashed; }
+.plan-setrow-tick {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border-radius: 99px;
+  border: 1.5px solid var(--border-strong);
+  background: transparent;
+  color: transparent;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.plan-setrow-tick[aria-pressed='true'] {
+  background: var(--success);
+  border-color: var(--success);
+  color: var(--bg);
+}
+.plan-setrow-n { font-size: 13px; }
+.plan-setrow-reps { font-size: 12.5px; color: var(--text-3); }
+.plan-setrow-kg { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.plan-setrow-kg .input { width: 76px; text-align: right; font-family: var(--font-mono); }
+.plan-setrow-kg span { font-size: 11.5px; color: var(--text-3); }
+.plan-ex-note { font-size: 12.5px; color: var(--text-3); line-height: 1.5; }
+
+.plan-rest {
+  align-self: flex-start;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 99px;
+  border: 1px dashed var(--border-strong);
+  background: var(--bg);
+  color: var(--text-2);
+  cursor: pointer;
+}
+.plan-rest:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--text);
+  background: var(--primary-dim);
+}
+.plan-rest:disabled { cursor: default; opacity: 0.6; }
+.plan-rest.running { color: var(--warning); border-color: var(--warning); cursor: default; }
+.plan-rest.running .btn-icon { width: 20px; height: 20px; color: inherit; }
+.plan-rest.up { color: var(--success); border-color: var(--success); }
+
+/* The choose-one strip under a row. */
+.plan-alt {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  margin-top: 11px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+.plan-swap {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  padding: 5px 11px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.plan-swap:hover { border-color: var(--primary); color: var(--text); }
+.plan-swap.on {
+  background: var(--primary-dim);
+  border-color: var(--primary);
+  color: var(--text);
+}
+
+.plan-snapshot-note { margin: 18px 0 9px; }
+.plan-session-notes {
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--text-2);
+  line-height: 1.55;
+}
+
+/* The note and the conversation, below the content of a plan or a session.
+   Drawn as two separate panels rather than one card, because they are opposite
+   things: the note is private and the server redacts it from everyone else,
+   the conversation only exists once the thing is shared. */
+.plan-panel {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+.plan-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+}
+/* Pushed to the far end of the heading, so the pencil sits over the panel it
+   edits rather than beside the word. */
+.plan-panel-action { margin-left: auto; }
+/* A note is usually a list; collapsing the line breaks would turn one into a
+   paragraph nobody wrote. */
+.plan-panel-notes {
+  font-size: 13px;
+  color: var(--text-2);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.plan-panel-buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+/* The Private badge and the Edit button, on one row above a note — the same
+   header the workout's notes tab draws. */
+.plan-notes-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+/* --- The editor --- */
+
+.plan-tabs {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+  margin: 16px 0 14px;
+  scrollbar-width: none;
+}
+.plan-tabs::-webkit-scrollbar { display: none; }
+.plan-tab {
+  font: inherit;
+  font-size: 13px;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 9px 13px;
+  color: var(--text-3);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.plan-tab:hover { color: var(--text); }
+.plan-tab.active { color: var(--text); border-bottom-color: var(--primary); }
+.plan-tab.add { display: inline-flex; align-items: center; gap: 5px; }
+
+.plan-day-head { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+.plan-day-head .input { flex: 1; min-width: 0; font-weight: 600; }
+
+/* Queried against itself, not the viewport: what squeezes an exercise row is
+   the width of the editor column, which on a desktop is the page content and
+   inside a narrow window is something else entirely. A 768px media query got
+   this wrong in both directions — it stacked the fields on a phone-sized
+   viewport even where the column was wide, and left the name crushed to "Be"
+   in a narrow column on a wide screen. */
+.plan-edit-rows { display: flex; flex-direction: column; gap: 10px; container-type: inline-size; }
+.plan-edit-block { display: flex; flex-direction: column; gap: 6px; }
+.plan-erow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 9px;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-2);
+}
+/* The name and its label. Basis 180px rather than auto: with auto the field is
+   as wide as whatever has been typed, so an empty row and a row holding
+   "Incline dumbbell press" laid the card out differently. */
+.plan-ename-field { display: flex; flex-direction: column; gap: 3px; flex: 1 1 180px; min-width: 0; }
+.plan-ename-field .plan-name-field { width: 100%; }
+.plan-ename { width: 100%; }
+.plan-erow-menu { flex: 0 0 auto; }
+.plan-efields { display: flex; gap: 7px; flex: 0 0 auto; align-items: flex-end; }
+.plan-efields label { display: flex; flex-direction: column; gap: 3px; }
+.plan-efields .input {
+  width: 62px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  padding: 6px 7px;
+}
+/* Wide enough to read the word: "Weight" and "Bodyweight" clipped to "We" and
+   "Bo" tell you nothing. */
+.plan-kind-field { min-width: 118px; }
+
+/* The choose-one group. */
+.plan-group {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--primary) 45%, var(--border));
+  border-radius: calc(var(--radius) * 1.5);
+  background: color-mix(in srgb, var(--primary) 5%, transparent);
+}
+.plan-group-head { display: flex; align-items: center; gap: 8px; }
+.plan-group-head .field-label { color: var(--primary); }
+.plan-group-head .btn-icon { margin-left: auto; }
+
+.plan-add-row,
+.plan-add-alt {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 12.5px;
+  background: transparent;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--text-3);
+  padding: 9px 11px;
+  cursor: pointer;
+}
+.plan-add-row:hover,
+.plan-add-alt:hover { color: var(--text); border-color: var(--primary); }
+.plan-add-alt { align-self: flex-start; border-style: dashed; padding: 6px 10px; font-size: 12px; }
+
+/* The three number fields leave the name a stub in a narrow column, and "Be"
+   is not an exercise. Name on its own line, fields under it. min-width: 0 is
+   load-bearing: an <input> has an intrinsic width from its size attribute, and
+   without it each field claims a line of its own. */
+
+@media (max-width: 768px) {
+  .plan-run-summary { gap: 14px; }
+  .plan-run-figures { gap: 18px; }
+  .plan-resume { flex-wrap: wrap; }
+  .plan-resume-cta { width: 100%; justify-content: center; }
+  .plan-card-figures { flex-direction: column; gap: 2px; text-align: right; }
+}
+
+/* Shown only where there is room for it. The counterpart is .fab below, which
+   is the same action on a phone — one control at a time, never both. */
+@media (max-width: 768px) {
+  .desktop-only { display: none; }
+}
+/* The floating button is the phone's add control and only the phone's: on a
+   desktop it floated over the page beside a header with room for a real
+   button, which is two ways to do one thing. */
+@media (min-width: 769px) {
+  .fab { display: none; }
+}
+
+/* The title and anything that acts directly on it — a plan's rename pencil.
+   Separate from .page-header-actions, which is a group pinned to the far
+   right and wraps to its own line on a phone. */
+.page-header-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.page-header-title-row .page-header-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Training plans: editor extras ─────────────────────────────────── */
+
+/* Exercise-name suggestions. */
+.plan-name-field { position: relative; flex: 1; min-width: 0; }
+.plan-suggest {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: var(--z-popover);
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--bg-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  max-height: 220px;
+  overflow-y: auto;
+}
+.plan-suggest-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-2);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  padding: 7px 9px;
+  cursor: pointer;
+}
+.plan-suggest-item:hover,
+.plan-suggest-item.on { background: var(--bg-3); color: var(--text); }
+
+
+
+/* A narrow editor column: the name gets the first row with the remove button
+   beside it, and the four number fields share the row below.
+   
+   The remove button acts on the whole row and the row's identity is its name,
+   so the two belong together; DOM order stays name → fields → remove for the
+   keyboard, and only the painting order changes.
+   
+   min-width: 0 is load-bearing in three places. An <input> carries an
+   intrinsic width from its size attribute and a flex item defaults to
+   min-width: auto, so without it the fields refuse to shrink and spill out of
+   the card. */
+@container (max-width: 520px) {
+  /* The type is a word and the rest are two-digit numbers, so they cannot
+     share a line in a narrow column without the numbers being squeezed to
+     nothing. Type takes its own row; the numbers divide the one below. */
+  .plan-efields { flex-wrap: wrap; flex: 1 0 100%; min-width: 0; }
+  /* Basis 0, not auto: with auto the name is as wide as its text and fills
+     the first line, pushing the menu button onto one of its own. */
+  .plan-ename-field { flex: 1 1 0; min-width: 0; }
+  .plan-efields label { flex: 1; min-width: 0; }
+  .plan-efields .input { width: auto; min-width: 0; }
+  /* After the rule above and matching it on specificity plus one class, so
+     the type really does take the whole line. */
+  .plan-efields .plan-kind-field { flex: 1 0 100%; }
+}
+
+/* A destructive action's button. Was an inline style on the confirm dialog
+   until a second one turned up on the history bar. */
+.btn-danger { background: var(--danger); color: #fff; border-color: var(--danger); }
+.btn-danger:hover { opacity: 0.9; transform: translateY(-1px); }
+.btn-danger:disabled { opacity: 0.45; transform: none; cursor: default; }
+
+/* ── Training plans: reading a plan ─────────────────────────────────── */
+
+/* The read view's rows: no controls, just what you are about to do. */
+.plan-ex-read { display: flex; flex-direction: column; gap: 6px; }
+.plan-read-body { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
+.plan-read-kind { color: var(--primary); }
+.plan-read-row { display: flex; align-items: baseline; gap: 12px; }
+.plan-read-name { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; flex: 1; min-width: 0; }
+.plan-read-target {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.plan-read-rest {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+/* ── Training plans: the editor ─────────────────────────────────────── */
+
+.plan-block-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+/* The break chip, on the rule between two exercise cards. It reads as the gap
+   it describes rather than as another control stacked under the card. */
+.plan-break-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  margin: 10px 0;
+}
+.plan-break-line::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  border-top: 1px dashed var(--border);
+}
+.plan-break-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+/* A running break is the step the session is on, so the rule it sits on is
+   drawn in the same colour the timer bar uses — solid rather than dashed,
+   because this gap is happening rather than merely planned. */
+.plan-break-line.active::before { border-top-style: solid; border-top-color: var(--warning); }
+.plan-break-line.over::before { border-top-style: solid; border-top-color: var(--success); }
+
+.plan-break-chip.add { cursor: pointer; }
+.plan-break-chip.add:hover { color: var(--text-2); border-color: var(--border-strong); }
+.plan-break-chip .input {
+  width: 56px;
+  padding: 2px 6px;
+  font-size: 11.5px;
+  font-family: var(--font-mono);
+  text-align: center;
+}
+.plan-break-chip .btn-icon { width: 20px; height: 20px; }
+
+/* ── Training plans: the runner ─────────────────────────────────────── */
+
+/* A superset draws every exercise it holds, so the row's title is a list. */
+.plan-ex-titles { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.plan-ex-sub { font-size: 11.5px; color: var(--text-3); font-weight: 400; }
+.plan-sets-for {
+  font-size: 11px;
+  color: var(--text-3);
+  min-width: 84px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plan-focus-block { display: flex; flex-direction: column; gap: 12px; }
+.plan-focus-block + .plan-focus-block {
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.plan-focus-heading { font-size: 13px; font-weight: 650; letter-spacing: -0.01em; }
+
+/* A chip for an alternative that has work behind it. */
+.plan-swap.finished {
+  border-color: var(--success);
+  color: var(--text);
+}
+.plan-swap.finished.on {
+  background: color-mix(in srgb, var(--success) 18%, transparent);
+}
+.plan-swap-count { margin-left: 5px; font-size: 10.5px; color: var(--text-3); }
+.plan-swap { display: inline-flex; align-items: center; gap: 5px; }
+
+/* ── Training plans: history ────────────────────────────────────────── */
+
+.plan-history-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.plan-history-bar .btn { padding: 5px 11px; font-size: 12px; }
+.plan-card.picked { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, var(--bg-2)); }
+.plan-pick {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  display: grid;
+  place-items: center;
+  color: var(--primary);
+}
+
+/* A finished session, set by set. */
+.plan-done-ex { display: flex; flex-direction: column; gap: 7px; }
+.plan-done-ex + .plan-done-ex { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.plan-done-sets { display: flex; flex-wrap: wrap; gap: 6px; }
+.plan-done-set {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  background: var(--bg-3);
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+.plan-done-set svg { color: var(--success); }
+.plan-done-set.skipped {
+  background: transparent;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+}
+.plan-done-gap { display: inline-flex; align-items: center; gap: 3px; color: var(--text-3); font-size: 10.5px; }
+.plan-done-gap svg { color: var(--text-3); }
+.plan-ex-target.all-done { color: var(--success); }
+.plan-when { font-size: 14px !important; }
+
+/* ── Training plans: the list ───────────────────────────────────────── */
+
+/* The card is two controls: open the plan, or start it. A button inside a
+   button is not markup that exists, so the row is a div holding both. */
+.plan-card-row { padding: 0; }
+.plan-card-open {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  padding: 13px 0 13px 15px;
+  background: transparent;
+  border: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.plan-card-start {
+  flex: 0 0 auto;
+  margin-right: 10px;
+  color: var(--primary);
+}
+.plan-card-start:hover { background: var(--primary-dim); }
+.plan-card-start:disabled { color: var(--text-3); }
+
+@media (max-width: 768px) {
+  /* An actions row holding nothing but a desktop-only button still claimed a
+     full-width line under the subtitle, which read as a hole in the header.
+     Whether it has anything to show is a question about its children, which
+     is exactly what :has answers. */
+  .page-header-actions:not(:has(> :not(.desktop-only))) { display: none; }
+  .plan-history-bar { flex-wrap: wrap; }
+}
+
+/* ── Training plans: the fixes this batch ──────────────────────────── */
+
+/* A lone icon button beside the title stays on the title's row. The default —
+   actions dropping to a full-width line below — exists for groups of labelled
+   buttons that would otherwise squeeze the title to a few hyphenated
+   characters. One icon does not, and dropped below it landed under the back
+   arrow, reading as part of the navigation rather than as the page's menu. */
+@media (max-width: 768px) {
+  .page-header-row .page-header-actions.compact { width: auto; }
+}
+
+/* An action inside an empty state is a button, not another muted glyph.
+   `.empty-state svg` greys every icon in the block, which took the primary
+   button's icon with it and left it unreadable on a dark accent. */
+.empty-state .btn svg { color: inherit; }
+
+/* First thing on the page, so no leading gap: the day strip sat 16px below
+   the page's own 16px of padding. */
+.plan-tabs:first-child { margin-top: 0; }
+
+.options-menu-item:disabled {
+  opacity: 0.4;
+  cursor: default;
+  background: transparent;
+}
+
+/* A block holding more than one exercise, wherever it is read. Drawn flat, a
+   superset and three unrelated exercises were the same three rows. */
+.plan-ex-grouped { border-color: color-mix(in srgb, var(--primary) 40%, var(--border)); }
+.plan-ex-read.plan-ex-grouped { gap: 8px; }
+
+/* The editor's block header: the phrase picker, then the block's own menu. */
+.plan-block-head .al-dropdown { flex: 1; min-width: 0; }
+.plan-block-head .al-dropdown-trigger { font-size: 12px; padding: 4px 9px; color: var(--primary); }
+
+/* --- The runner --- */
+
+/* Room for the floating controls to sit over, so the last exercise is not
+   permanently under them. The timer bar adds its own height on top of the
+   player when something is counting, so its own padding accounts for both —
+   a static number sized for the player alone left the open row's controls
+   sitting behind the timer the moment one started. */
+.plan-run-page { padding-bottom: 96px; }
+.plan-run-page.has-timer { padding-bottom: 168px; }
+@media (min-width: 769px) {
+  .plan-run-page { padding-bottom: 24px; }
+  .plan-run-page.has-timer { padding-bottom: 96px; }
+}
+
+/* A set that is not next in line. Sets are ticked in order, so the rest are
+   shown as targets rather than offered as controls. */
+.plan-set:disabled { opacity: 0.4; cursor: default; }
+.plan-set:disabled:hover { border-color: var(--border); color: var(--text-3); }
+.plan-setrow.locked { opacity: 0.55; }
+.plan-setrow-tick:disabled { cursor: default; }
+
+/* The live dot: beside the title of a session being recorded, and on the nav
+   item that leads back to it. Same mark in both places on purpose. */
+.plan-live-dot,
+.nav-live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+  background: var(--danger);
+  flex: 0 0 auto;
+  animation: pulse-dot 1.6s ease-in-out infinite;
+}
+.nav-icon { position: relative; display: inline-flex; }
+.nav-live-dot {
+  position: absolute;
+  top: -2px;
+  right: -3px;
+  border: 2px solid var(--bg-2);
+  width: 10px;
+  height: 10px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .plan-live-dot, .nav-live-dot { animation: none; }
+}
+
+/* Three, two, one. Deliberately enormous: it is read from arm's length with a
+   phone already propped against something. */
+.plan-countdown {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 32px 40px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) * 2);
+}
+.plan-countdown-n {
+  font-size: 76px;
+  line-height: 1;
+  font-weight: 700;
+  color: var(--primary);
+}
+.plan-countdown-hint { font-size: 13px; color: var(--text-3); }
+
+/* A history row that cannot be selected, because the session is still running
+   and the way to end one is to finish or stop it. */
+.plan-card.inert { opacity: 0.55; cursor: default; }
+.plan-card.inert:hover { border-color: var(--border); }
+
+/* ── Training plans: the session bar ────────────────────────────────
+   A session is something running in the background that you dip in and out of,
+   which is the shape a phone already has a control for: the music player's
+   bar. Pinned above the navigation, it keeps the figures and the two decisions
+   — stop, finish — in one place instead of a card that scrolls away at the top
+   and a pair of circles floating over the exercise underneath them. */
+
+.plan-player {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: var(--bottombar-h);
+  z-index: var(--z-chrome);
+  background: var(--bg-2);
+  border-top: 1px solid var(--border);
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
+}
+/* Above the bar on a desktop there is no navigation to sit on, so the safe
+   inset is the bar's own. */
+@media (min-width: 769px) {
+  .plan-player { padding-bottom: var(--safe-bottom); }
+}
+
+/* The progress bar is the top edge of the player, not a widget inside it —
+   the same trick a player uses. Thick enough to read as a real bar rather
+   than a hairline, since it is the one figure on this screen you can read
+   without focusing on it. */
+.plan-player-bar {
+  height: 5px;
+  background: var(--bg-3);
+  overflow: hidden;
+}
+.plan-player-fill {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+  transition: width 0.3s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .plan-player-fill { transition: none; }
+}
+
+.plan-player-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+}
+/* The percentage is the one figure worth seeing at a glance, so it is the
+   biggest thing on the bar; the elapsed clock sits beside it in its own
+   column, legible without being the headline; sets ticked stays small
+   underneath it, the detail you check rather than glance at. */
+.plan-player-figures { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; }
+.plan-player-pct { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; line-height: 1; }
+.plan-player-pct .unit { font-size: 14px; font-weight: 600; margin-left: 1px; }
+.plan-player-col { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.plan-player-time { font-size: 15px; font-weight: 650; color: var(--text); line-height: 1.2; }
+.plan-player-meta {
+  font-size: 11px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The session's own clock, between the two clusters of the player row. It is
+   the one figure that belongs to the session rather than to a control, so it
+   sits where nothing else competes with it. */
+.plan-player-elapsed {
+  flex: 0 0 auto;
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--text-2);
+  line-height: 1;
+}
+@media (max-width: 380px) { .plan-player-elapsed { display: none; } }
+
+.plan-player-stop { color: var(--danger); }
+.plan-player-stop:hover { background: var(--danger-dim); color: var(--danger); }
+.plan-player-finish { flex: 0 0 auto; }
+.plan-player-end { flex: 0 0 auto; color: var(--danger); }
+.plan-player-end:hover { background: var(--danger-dim); color: var(--danger); }
+
+/* --- A block's top row --- */
+
+/* What the block is, and the control that opens it. Making the whole title a
+   toggle read as a link to somewhere else and left nothing on the row saying
+   it could be opened at all. */
+.plan-ex-head { display: flex; align-items: center; gap: 9px; }
+.plan-ex-head .plan-ex-title { flex: 1; min-width: 0; }
+.plan-ex-head .plan-read-kind { flex: 1; min-width: 0; }
+.plan-ex-toggle { flex: 0 0 auto; margin-left: auto; }
+.plan-ex-names { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.plan-ex.open .plan-ex-caret { transform: rotate(180deg); }
+
+/* A timer appears mid-set. At the near end of the row it would shove the set
+   squares sideways under a thumb already on its way to one. */
+.plan-rest.right { margin-left: auto; align-self: flex-end; }
+.plan-sets { align-items: center; }
+
+/* --- The list tools --- */
+
+/* Selecting replaces search rather than appearing under it: two rows of chrome
+   above a list is most of a phone screen, and search is not something you want
+   while picking things to delete. */
+/* Both labels reserve the same width, so toggling the sort does not resize the
+   button and shove the search field beside it. */
+
+/* ── Training plans: sections, timers, fullscreen ───────────────────── */
+
+/* A warm-up, cool-down or stretch. Visibly not working sets: dashed rather
+   than solid, in the "hike" amber so it reads as the easy end of the day
+   without competing with the accent a block of working sets wears. */
+.plan-ex-section,
+.plan-section {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--hike) 55%, var(--border));
+  background: color-mix(in srgb, var(--hike) 7%, transparent);
+}
+.plan-ex-section .plan-read-kind,
+.plan-section .plan-block-head .al-dropdown-trigger { color: var(--hike); }
+.plan-add-section:hover { border-color: var(--hike); }
+
+/* An exercise inside a block: its own name, then its own row of squares.
+   The name used to sit to the left of the squares, which left a superset's
+   rows starting in different places and the timer nowhere to go but the next
+   line. */
+.plan-ex-line { display: flex; flex-direction: column; gap: 6px; margin-top: 9px; }
+.plan-ex-line .plan-read-row { align-items: baseline; }
+.plan-ex-line .plan-sets { margin-top: 0; align-items: center; }
+
+.plan-add-row-group { display: flex; flex-direction: column; gap: 8px; }
+
+/* --- The timer's row, above the player --- */
+
+/* This timer's own bar — how much of *it* is left, not how much of the
+   session is done, which is what the player's bar underneath already says. */
+.plan-timer-progress {
+  height: 3px;
+  background: var(--bg-3);
+  overflow: hidden;
+}
+.plan-timer-progress span {
+  display: block;
+  height: 100%;
+  background: var(--warning);
+  transition: width 1s linear;
+}
+@media (prefers-reduced-motion: reduce) {
+  .plan-timer-progress span { transition: none; }
+}
+
+.plan-timer-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--warning) 8%, var(--bg-2));
+}
+.plan-timer-bar .btn { padding: 5px 11px; font-size: 12px; }
+.plan-timer-now {
+  flex: 1;
+  min-width: 0;
+  /* The name of what is counting sits above the figure: beside it, "1:30"
+     read as the whole message and the word next to it as decoration. */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--warning);
+}
+.plan-timer-now.up { color: var(--success); }
+/* The clock is the point of this row, so it is the biggest thing on it. */
+.plan-timer-digits { font-size: 20px; font-weight: 700; line-height: 1; }
+.plan-timer-what {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+  gap: 4px;
+}
+
+/* --- Fullscreen --- */
+
+/* The session with the app taken away from around it. Everything that goes is
+   rendered outside the runner — the top bar, the sidebar, the tab bar — which
+   is why this is a class on the body rather than a prop threaded through. */
+body.session-full .topbar,
+body.session-full .sidebar,
+body.session-full .bottom-bar { display: none !important; }
+body.session-full { --topbar-h: 0px; --bottombar-h: 0px; }
+body.session-full .plan-player { bottom: 0; padding-bottom: var(--safe-bottom); }
+
+/* --- The selection toolbar, shared by workouts, plans and history --- */
+
+.selection-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+.selection-count { font-size: 13px; font-weight: 600; }
+.selection-all { margin-left: auto; }
+.selection-delete { color: var(--danger); }
+.selection-delete:disabled { opacity: 0.45; }
+
+/* ── Training plans: read at arm's length ───────────────────────────── */
+
+/* The session page is read from further away than any other screen in the app
+   — a phone propped against something, mid-set, with a barbell in the way. So
+   its type is a step up from the list it grew out of. */
+.plan-run-page .plan-ex-title,
+.plan-run-page .plan-read-name { font-size: 18px; font-weight: 650; }
+.plan-run-page .plan-read-target { font-size: 13.5px; }
+.plan-run-page .plan-read-kind { font-size: 11.5px; }
+.plan-run-page .plan-set { width: 38px; height: 38px; font-size: 14px; }
+.plan-run-page .plan-setrow-n { font-size: 14px; }
+.plan-run-page .plan-swap { font-size: 12.5px; padding: 6px 12px; }
+
+/* "Now" — the badge on the block being worked on. */
+.plan-now {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--bg);
+  background: var(--primary);
+  border-radius: 99px;
+  padding: 2px 8px;
+  flex: 0 0 auto;
+}
+
+/* The reading view's figures, in the shape the expanded runner uses — that
+   view reads well precisely because each number says what it is. */
+.plan-read-ex { display: flex; flex-direction: column; gap: 7px; }
+.plan-read-ex + .plan-read-ex {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.plan-read-stats { display: flex; gap: 22px; flex-wrap: wrap; }
+.plan-read-ex .plan-read-name { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; }
+
+/* A section that is only a length of time. */
+.plan-section-duration { display: flex; flex-direction: column; gap: 3px; }
+.plan-section-duration .input { width: 100%; }
+
+/* --- The timer bar's controls --- */
+
+/* Big targets either side of the clock: this is tapped mid-set, one-handed,
+   without looking properly. A 28px button in a row of text is not that. */
+.plan-nudge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  min-width: 56px;
+  height: 40px;
+  justify-content: center;
+  padding: 0 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-2);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  cursor: pointer;
+}
+.plan-nudge:hover { border-color: var(--warning); color: var(--warning); }
+.plan-nudge:active { transform: scale(0.96); }
+/* The two on each side sit together as one group, rather than spread across
+   the row, so the pair to reach for — usually the small one — is a short
+   thumb travel from the other rather than a full row width. */
+.plan-nudge-group { display: flex; gap: 4px; }
+
+/* The dialog that asks how a session ends. */
+.plan-end-box {
+  max-width: 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  text-align: center;
+}
+.plan-end-title { font-size: 17px; font-weight: 700; }
+.plan-end-sub { font-size: 13px; color: var(--text-3); margin-bottom: 6px; }
+.plan-end-choice { justify-content: center; width: 100%; padding: 11px 14px; font-size: 14px; }
+
+/* Fullscreen leaves the phone's own status bar in place, so the title has to
+   clear it — the safe inset is the only thing that knows how tall it is. */
+body.session-full .page-header { padding-top: calc(16px + var(--safe-top)); }

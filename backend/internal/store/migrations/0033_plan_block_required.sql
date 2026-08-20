@@ -1,0 +1,12 @@
+-- How many of a block's options have to be done.
+--
+-- 1 is "choose one" — bench press or push-ups — which is what every block was
+-- before this column existed, hence the default. Setting it to the number of
+-- options makes the block a superset: do all of them, back to back. Anything
+-- between is "2 of these 3", which is how people actually write accessory
+-- work.
+--
+-- A count rather than a mode enum, because "choose one", "do all" and "do two
+-- of three" are the same rule with different numbers, and an enum would need a
+-- separate count column the moment the third case turned up.
+ALTER TABLE plan_blocks ADD COLUMN required INTEGER NOT NULL DEFAULT 1;

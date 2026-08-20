@@ -10,6 +10,7 @@ import (
 
 	"github.com/blurrycontour/activity-lens/backend/internal/equipment"
 	"github.com/blurrycontour/activity-lens/backend/internal/notify"
+	"github.com/blurrycontour/activity-lens/backend/internal/plans"
 	"github.com/blurrycontour/activity-lens/backend/internal/settings"
 	"github.com/blurrycontour/activity-lens/backend/internal/workout"
 
@@ -40,6 +41,46 @@ func (s *Server) notifyWorkoutShared(r *http.Request, sender auth.User, targetID
 	})
 }
 
+// notifyPlanShared tells the recipient that someone shared a training plan.
+func (s *Server) notifyPlanShared(r *http.Request, sender auth.User, targetID int64, p *plans.Plan) {
+	from := sender.DisplayName
+	if from == "" {
+		from = sender.Username
+	}
+	days := len(p.Days)
+	s.notify.Notify(r.Context(), notify.Event{
+		UserID: targetID,
+		Kind:   notify.KindPlanShared,
+		Title:  fmt.Sprintf("%s shared a plan with you", from),
+		Body:   fmt.Sprintf("%s · %d day%s", p.Name, days, plural(days)),
+		Link:   "/discover/plan/" + p.ID,
+		Icon:   effectiveAvatar(sender),
+	})
+}
+
+// notifySessionShared tells the recipient that someone shared a finished session.
+func (s *Server) notifySessionShared(r *http.Request, sender auth.User, targetID int64, sess *plans.Session) {
+	from := sender.DisplayName
+	if from == "" {
+		from = sender.Username
+	}
+	s.notify.Notify(r.Context(), notify.Event{
+		UserID: targetID,
+		Kind:   notify.KindSessionShared,
+		Title:  fmt.Sprintf("%s shared a session with you", from),
+		Body:   fmt.Sprintf("%s · %d/%d sets", sess.DayName, sess.DoneSets, sess.TotalSets),
+		Link:   "/discover/session/" + sess.ID,
+		Icon:   effectiveAvatar(sender),
+	})
+}
+
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
+}
+
 // notifySocial tells the people following a workout that someone said
 // something on it.
 //
@@ -50,16 +91,16 @@ func (s *Server) notifyWorkoutShared(r *http.Request, sender auth.User, targetID
 //
 // The actor never hears about their own action, and each recipient is told once
 // however many ways they qualify.
-func (s *Server) notifySocial(r *http.Request, actor auth.User, wk *workout.Workout, title, body, dedupe string) {
-	recipients := map[int64]bool{wk.UserID: true}
+func (s *Server) notifySocial(r *http.Request, actor auth.User, subj workout.Subject, ownerID int64, link, title, body, dedupe string) {
+	recipients := map[int64]bool{ownerID: true}
 	// Best effort: the comment or reaction has already been stored, and failing
 	// to read the thread is not a reason to fail the request that made it.
-	if comments, err := s.workout.Comments(r.Context(), wk.ID); err == nil {
+	if comments, err := s.workout.Comments(r.Context(), subj); err == nil {
 		for _, c := range comments {
 			recipients[c.UserID] = true
 		}
 	} else {
-		slog.Warn("could not load thread for social notification", "workout_id", wk.ID, "error", err)
+		slog.Warn("could not load thread for social notification", "subject", subj.ID, "error", err)
 	}
 	delete(recipients, actor.ID)
 
@@ -71,7 +112,7 @@ func (s *Server) notifySocial(r *http.Request, actor auth.User, wk *workout.Work
 			Body:   body,
 			// Straight to the tab it happened in: landing on the charts and
 			// leaving someone to find the conversation would waste the tap.
-			Link: "/workouts/" + wk.ID + "?tab=social",
+			Link: link,
 			// It came from a person, so it wears their face.
 			Icon:      effectiveAvatar(actor),
 			DedupeKey: dedupe,

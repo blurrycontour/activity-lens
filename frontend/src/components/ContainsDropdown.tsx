@@ -83,19 +83,32 @@ export function containsState(value: HasFilter[], v: unknown): 'on' | 'excluded'
 }
 
 /**
- * The desktop half of the "contains" filter: several attributes at once.
+ * A dropdown holding several independent on/off (or on/excluded/off) options.
  *
  * Its own component rather than a mode on Dropdown, which closes on choosing
  * and shows one value — both wrong here, where the point is to tick two things
- * and see them both. It borrows Dropdown's classes so it sits in the filter row
+ * and see them both. It borrows Dropdown's classes so it sits in a filter row
  * as one of the same controls.
+ *
+ * Generic over what the options mean, because there are now two of these: the
+ * workout "contains" filter below, and the plan/session one in ItemFilterBar.
+ * They differ only in their option list and whether a third "without" state is
+ * offered, which is exactly what `state` and `onToggle` leave to the caller.
  */
-export default function ContainsDropdown({ value, onToggle, mine }: {
-  value: HasFilter[]
-  /** Called with the attribute that was clicked; the caller owns the array. */
-  onToggle: (v: Has) => void
-  /** Whether these are the caller's own workouts, which unlocks Notes. */
-  mine: boolean
+export function MultiDropdown<T extends string>({
+  label, icon, options, count, state, onToggle, describe,
+}: {
+  /** Trigger text when nothing is chosen. */
+  label: string
+  icon?: React.ReactNode
+  options: { value: T; label: string; glyph?: React.ReactNode }[]
+  /** How many are on, for the trigger. */
+  count: number
+  /** How one option currently stands. */
+  state: (v: T) => 'on' | 'excluded' | undefined
+  onToggle: (v: T) => void
+  /** Tooltip for an option, given its state. */
+  describe?: (o: { value: T; label: string }, state: 'on' | 'excluded' | undefined) => string
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -111,50 +124,46 @@ export default function ContainsDropdown({ value, onToggle, mine }: {
     return () => document.removeEventListener('mousedown', onDown)
   }, [open])
 
-  const options = containsOptions(mine)
-
   return (
     <div className="al-dropdown" ref={ref}>
       <button
         type="button"
-        className={`al-dropdown-trigger${value.length > 0 ? ' active' : ''}`}
+        className={`al-dropdown-trigger${count > 0 ? ' active' : ''}`}
         onClick={() => setOpen(o => !o)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-label="Filter by what a workout contains"
+        aria-label={label}
       >
-        <SlidersHorizontal size={14} color="var(--text-3)" aria-hidden />
+        {icon ?? <SlidersHorizontal size={14} color="var(--text-3)" aria-hidden />}
         {/* The count rather than the names: two or three labels would not fit,
             and a trigger that changes width as you tick things is worse than
             one that says how many. */}
-        <span>{value.length === 0 ? 'Contains' : `Contains (${value.length})`}</span>
+        <span>{count === 0 ? label : `${label} (${count})`}</span>
         <ChevronDown size={13} style={{ marginLeft: 'auto', flexShrink: 0 }} aria-hidden />
       </button>
       {open && (
         <div className="al-dropdown-menu" role="listbox" aria-multiselectable>
           {options.map(o => {
-            const state = value.find(f => hasKey(f) === o.value)
-            const without = state !== undefined && isNegated(state)
+            const st = state(o.value)
+            const without = st === 'excluded'
             return (
               <button
                 key={o.value}
                 type="button"
                 role="option"
-                aria-selected={state !== undefined}
-                className={`al-dropdown-item${state !== undefined ? ' active' : ''}`}
+                aria-selected={st !== undefined}
+                className={`al-dropdown-item${st !== undefined ? ' active' : ''}`}
                 // Deliberately does not close: ticking one of several is the
                 // whole point, and a menu that shut each time would take four
                 // clicks to say "photos and heart rate".
                 onClick={() => onToggle(o.value)}
-                title={state === undefined
-                  ? `Only workouts with ${o.label.toLowerCase()}`
-                  : without ? 'Click to clear' : `Click again for workouts without ${o.label.toLowerCase()}`}
+                title={describe?.(o, st)}
               >
                 {o.glyph}
                 <span style={{ flex: 1, textAlign: 'left' }}>{without ? `No ${o.label.toLowerCase()}` : o.label}</span>
                 {/* A tick for "must have", a cross for "must not" — the state
                     has to be readable without hovering for the tooltip. */}
-                {state !== undefined && (without
+                {st !== undefined && (without
                   ? <X size={13} color="var(--danger)" aria-hidden />
                   : <Check size={13} aria-hidden />)}
               </button>
@@ -163,5 +172,27 @@ export default function ContainsDropdown({ value, onToggle, mine }: {
         </div>
       )}
     </div>
+  )
+}
+
+/** The desktop half of the workout "contains" filter, over CONTAINS_OPTIONS. */
+export default function ContainsDropdown({ value, onToggle, mine }: {
+  value: HasFilter[]
+  /** Called with the attribute that was clicked; the caller owns the array. */
+  onToggle: (v: Has) => void
+  /** Whether these are the caller's own workouts, which unlocks Notes. */
+  mine: boolean
+}) {
+  return (
+    <MultiDropdown<Has>
+      label="Contains"
+      options={containsOptions(mine)}
+      count={value.length}
+      state={v => containsState(value, v)}
+      onToggle={onToggle}
+      describe={(o, st) => st === undefined
+        ? `Only workouts with ${o.label.toLowerCase()}`
+        : st === 'excluded' ? 'Click to clear' : `Click again for workouts without ${o.label.toLowerCase()}`}
+    />
   )
 }

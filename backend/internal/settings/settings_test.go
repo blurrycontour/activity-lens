@@ -156,3 +156,62 @@ func TestPurgeUserWithNothingStored(t *testing.T) {
 		t.Errorf("PurgeUser() with no rows: %v", err)
 	}
 }
+
+// Every boolean preference is stored as its own column and has to be written,
+// read *and* assigned back onto the struct. PlanWorkouts shipped with the
+// last step missing: the column was written correctly and the API answered
+// "off" forever, which looks exactly like a save that did not happen.
+func TestUserPrefsBooleansSurviveARoundTrip(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+
+	if err := st.SaveUserPreferences(ctx, 1, UserPrefs{
+		CalorieMethod:  "heart-rate",
+		BodyWeightKg:   70,
+		WeatherEnabled: true,
+		PlanWorkouts:   true,
+	}); err != nil {
+		t.Fatalf("SaveUserPreferences() error = %v", err)
+	}
+
+	got, err := st.UserPreferences(ctx, 1)
+	if err != nil {
+		t.Fatalf("UserPreferences() error = %v", err)
+	}
+	if !got.WeatherEnabled {
+		t.Error("weatherEnabled came back off after being saved on")
+	}
+	if !got.PlanWorkouts {
+		t.Error("planWorkouts came back off after being saved on")
+	}
+
+	// And the other direction, since a column that is never read looks the
+	// same as one that is always false.
+	if err := st.SaveUserPreferences(ctx, 1, UserPrefs{CalorieMethod: "heart-rate", BodyWeightKg: 70}); err != nil {
+		t.Fatal(err)
+	}
+	got, err = st.UserPreferences(ctx, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.WeatherEnabled || got.PlanWorkouts {
+		t.Errorf("switches stayed on after being saved off: weather=%v plans=%v",
+			got.WeatherEnabled, got.PlanWorkouts)
+	}
+}
+
+// A user who has never opened Settings must agree with one who has saved and
+// never touched this switch, or the feature turns itself on for half of them.
+func TestPlanWorkoutsDefaultsOff(t *testing.T) {
+	st := newTestStore(t)
+	got, err := st.UserPreferences(context.Background(), 99)
+	if err != nil {
+		t.Fatalf("UserPreferences() error = %v", err)
+	}
+	if got.PlanWorkouts {
+		t.Error("planWorkouts defaults to on; the column default in 0031 is 0")
+	}
+	if !DefaultUserPrefs().WeatherEnabled {
+		t.Error("weatherEnabled default drifted from the column default in 0022")
+	}
+}

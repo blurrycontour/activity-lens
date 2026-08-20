@@ -1,0 +1,11 @@
+-- Whether a finished training session is also recorded as a manual strength
+-- workout.
+--
+-- 0 by default, unlike weather_enabled above, and for the opposite reason:
+-- this one writes rows into the workout library, where everything else was
+-- measured by a device. Folding hand-entered gym work into the same streaks
+-- and yearly totals changes what those numbers mean, so it waits to be asked
+-- for. The default here has to agree with the Go zero value in
+-- settings.UserPrefs, or a user who has never saved preferences disagrees with
+-- one who has.
+ALTER TABLE user_prefs ADD COLUMN plan_workouts INTEGER NOT NULL DEFAULT 0;

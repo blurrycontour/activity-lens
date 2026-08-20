@@ -332,7 +332,7 @@ export function bylinePeople(w: Workout, kind?: 'owner' | 'recipients') {
  * your own to — and drawing them differently would suggest a distinction that
  * is not there.
  */
-function Byline({ people, kind, onOpenUser }: {
+export function Byline({ people, kind, onOpenUser }: {
   people: NonNullable<Workout['sharedWith']>
   kind?: 'owner' | 'recipients'
   onOpenUser?: (id: number) => void

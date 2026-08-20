@@ -99,6 +99,33 @@ var userTaglineSchema string
 //go:embed migrations/0029_cadence_points.sql
 var cadencePointsSchema string
 
+//go:embed migrations/0030_training_plans.sql
+var trainingPlansSchema string
+
+//go:embed migrations/0031_plan_workouts_pref.sql
+var planWorkoutsPrefSchema string
+
+//go:embed migrations/0032_plan_block_rest.sql
+var planBlockRestSchema string
+
+//go:embed migrations/0033_plan_block_required.sql
+var planBlockRequiredSchema string
+
+//go:embed migrations/0034_plan_exercise_kind.sql
+var planExerciseKindSchema string
+
+//go:embed migrations/0035_plan_block_section.sql
+var planBlockSectionSchema string
+
+//go:embed migrations/0036_plan_block_duration.sql
+var planBlockDurationSchema string
+
+//go:embed migrations/0037_plan_sharing.sql
+var planSharingSchema string
+
+//go:embed migrations/0038_social_subjects.sql
+var socialSubjectsSchema string
+
 // maxOpenConns is how many connections the pool will open.
 //
 // It was 1, which made every request in the process queue behind every other
@@ -168,6 +195,11 @@ func MigrateApp(ctx context.Context, db *sql.DB) error {
 	if _, err := db.ExecContext(ctx, equipmentSchema); err != nil {
 		return fmt.Errorf("apply equipment schema: %w", err)
 	}
+	// Training plans reference workouts(id), so this has to follow the app
+	// schema that creates that table.
+	if _, err := db.ExecContext(ctx, trainingPlansSchema); err != nil {
+		return fmt.Errorf("apply training plans schema: %w", err)
+	}
 	// Backfill ALTER-based migrations on older databases. Each statement is
 	// executed individually so a duplicate-column error on one does not abort
 	// the rest, keeping startup idempotent.
@@ -198,6 +230,14 @@ func MigrateApp(ctx context.Context, db *sql.DB) error {
 		{"session clients", sessionClientsSchema},
 		{"user tagline", userTaglineSchema},
 		{"cadence points", cadencePointsSchema},
+		{"plan workouts pref", planWorkoutsPrefSchema},
+		{"plan block rest", planBlockRestSchema},
+		{"plan block required", planBlockRequiredSchema},
+		{"plan exercise kind", planExerciseKindSchema},
+		{"plan block section", planBlockSectionSchema},
+		{"plan block duration", planBlockDurationSchema},
+		{"plan sharing", planSharingSchema},
+		{"social subjects", socialSubjectsSchema},
 	} {
 		if err := applyAlters(ctx, db, m.schema); err != nil {
 			return fmt.Errorf("apply %s schema: %w", m.name, err)
