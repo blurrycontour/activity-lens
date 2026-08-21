@@ -30,6 +30,23 @@ export default function SpeedDial({ actions, label }: {
 }) {
   const [open, setOpen] = useState(false)
 
+  /*
+   * The page behind is blurred by blurring the page, not by a scrim that
+   * claims to see through it.
+   *
+   * `backdrop-filter` is the elegant way and it has now failed twice here for
+   * reasons that cannot be seen from the outside — it depends on which element
+   * happens to be the backdrop root, and the app frame, the swipe pager and
+   * the portal all have opinions about that. A `filter` on the app root has no
+   * such subtlety: it blurs the thing it is on. The dial itself is outside
+   * that root, which is the whole reason it is portalled, so it stays sharp.
+   */
+  useEffect(() => {
+    if (!open) return
+    document.body.classList.add('dial-open')
+    return () => document.body.classList.remove('dial-open')
+  }, [open])
+
   // Escape closes it, like every other transient thing in the app.
   useEffect(() => {
     if (!open) return

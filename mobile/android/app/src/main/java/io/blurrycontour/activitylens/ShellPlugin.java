@@ -114,19 +114,27 @@ public class ShellPlugin extends Plugin {
             call.reject("no vibrator");
             return;
         }
-        // -1 is "do not repeat": a pattern that loops has to be cancelled by
-        // someone, and nothing here would be alive to do it.
         /*
-         * No attributes.
+         * A single pulse is a one-shot, not a waveform of one.
          *
-         * Declaring the buzz an alarm looked like the explanation for one
-         * signal arriving and another not, and it stopped every vibration in
-         * the app on the one device that could test it. Whatever the reason --
-         * a usage the platform refuses from an app in this state, a builder
-         * that throws where it is not expected -- the plain call is the one
-         * that demonstrably works, and a theory is not worth a feature.
+         * This is the difference between the buzz that ends a session and the
+         * buzz that throws one away: identical code, identical moment, and the
+         * only thing that is not the same is that discard's pattern has one
+         * entry and finish's has five. A one-entry pattern becomes the
+         * waveform {0, n} -- wait nothing, then buzz -- which is a legal thing
+         * to ask for and which some devices decline to render at all. The
+         * platform has an API for exactly this case, and it is the one that
+         * works. Every pattern with a real rhythm still goes the waveform way.
+         *
+         * -1 is "do not repeat": a pattern that loops has to be cancelled by
+         * someone, and nothing here would be alive to do it.
          */
-        vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1));
+        // createOneShot refuses a zero-length buzz, which a hand-edited or
+        // future pattern could ask for; a waveform simply does nothing for it.
+        VibrationEffect effect = pattern.length == 2 && pattern[1] > 0
+            ? VibrationEffect.createOneShot(pattern[1], VibrationEffect.DEFAULT_AMPLITUDE)
+            : VibrationEffect.createWaveform(pattern, -1);
+        vibrator.vibrate(effect);
         call.resolve();
     }
 
