@@ -11,6 +11,11 @@ Folder: /frontend
 
 Always keep in mind that UI components should be reusable and should work well both on desktop and mobile devices. Use Tailwind's responsive utilities to handle different screen sizes. Make sure the design is consistent across the app.
 
+For a layout change, a floating element or a two-account flow, check it in a
+real browser rather than only in tests — see
+[docs/visual-verification.md](docs/visual-verification.md) for the Playwright
+setup and, importantly, how to keep the token cost of it down.
+
 ### Backend
 Stack: Golang
 Folder: /backend
