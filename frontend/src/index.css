@@ -2362,9 +2362,11 @@ body {
   justify-content: center;
   /* Its own glow, and a shadow under it. The glow says which colour the
      button is; the shadow is what lifts it off whatever it happens to be
-     floating over, which on a list of cards is otherwise nothing at all. A
-     shadow is painted, never hit-tested, so it costs no tap and no swipe. */
-  box-shadow: 0 4px 20px var(--primary-glow), 0 8px 22px rgba(0, 0, 0, 0.4);
+     floating over. Deep and wide, because in the dark theme the page behind
+     it is nearly black already — a polite shadow there is invisible, and the
+     only thing it has to separate from is the cards, which are lighter.
+     A shadow is painted, never hit-tested, so it costs no tap and no swipe. */
+  box-shadow: 0 4px 20px var(--primary-glow), 0 10px 30px rgba(0, 0, 0, 0.75), 0 2px 8px rgba(0, 0, 0, 0.55);
   z-index: var(--z-fab);
   transition: transform 0.2s, box-shadow 0.2s;
 }
@@ -2376,7 +2378,7 @@ body {
    `:has` is not load-bearing — where it is unsupported the FAB simply stays
    where it was. */
 body:has(.overlay) .fab { display: none; }
-.fab:hover { transform: scale(1.08); box-shadow: 0 6px 28px var(--primary-glow), 0 10px 28px rgba(0, 0, 0, 0.45); }
+.fab:hover { transform: scale(1.08); box-shadow: 0 6px 28px var(--primary-glow), 0 14px 36px rgba(0, 0, 0, 0.75), 0 2px 8px rgba(0, 0, 0, 0.55); }
 .fab:active { transform: scale(0.96); }
 /* ── Speed dial ──
    The dashboard's floating button, which makes one of several things. The
@@ -2469,7 +2471,7 @@ body:has(.overlay) .dial { display: none; }
   background: var(--bg-2);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.7);
 }
 .dial-glyph {
   width: 50px;
@@ -2481,7 +2483,7 @@ body:has(.overlay) .dial { display: none; }
   color: var(--primary);
   background: var(--bg-2);
   border: 1px solid var(--border-strong);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.75), 0 2px 8px rgba(0, 0, 0, 0.55);
   transition: transform 0.12s, border-color 0.12s;
 }
 .dial-action:hover .dial-glyph { border-color: var(--primary); transform: scale(1.06); }
