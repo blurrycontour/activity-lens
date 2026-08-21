@@ -2402,9 +2402,9 @@ body:has(.overlay) .fab { display: none; }
   position: fixed;
   inset: 0;
   z-index: calc(var(--z-fab) - 1);
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(14px) saturate(70%);
-  -webkit-backdrop-filter: blur(14px) saturate(70%);
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(18px) saturate(70%);
+  -webkit-backdrop-filter: blur(18px) saturate(70%);
   animation: scrimIn 0.16s ease-out;
 }
 /* As strongly as a dialog's overlay. A dashboard is charts and numbers edge to
@@ -7190,7 +7190,9 @@ body:has(.overlay) .dial { display: none; }
 .plan-player-stop { color: var(--danger); }
 .plan-player-stop:hover { background: var(--danger-dim); color: var(--danger); }
 .plan-player-finish { flex: 0 0 auto; }
-.plan-player-end { flex: 0 0 auto; color: var(--danger); }
+/* Larger than the icon buttons beside it. It is the one control on the bar
+   that ends the thing the bar is about, and it was the smallest mark on it. */
+.plan-player-end { flex: 0 0 auto; width: 40px; height: 40px; color: var(--danger); }
 .plan-player-end:hover { background: var(--danger-dim); color: var(--danger); }
 
 /* --- A block's top row --- */

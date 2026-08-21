@@ -3,6 +3,7 @@ import { Armchair, Check, Hand } from 'lucide-react'
 import { api, ApiError, type PingInfo } from '../lib/api'
 import type { WorkoutType } from '../data/workouts'
 import { useLongPress } from '../lib/useLongPress'
+import { primeSound, sound } from '../lib/sessionFeedback'
 import Toast from './Toast'
 import TypeIcon from './TypeIcon'
 
@@ -74,8 +75,6 @@ export default function PingRow({ userId, name, info }: {
   const [toast, setToast] = useState<string | null>(null)
   /** Which message is showing its full text, from a press and hold. */
   const [tip, setTip] = useState<string | null>(null)
-  /** Ticked once a second purely to re-read the clock above. */
-  const [, tick] = useState(0)
 
   // Seeded from the server on every load of the profile, so a cooldown started
   // on another device is honoured here rather than discovered by a rejection.
@@ -83,25 +82,38 @@ export default function PingRow({ userId, name, info }: {
   // "this is what you just sent", and by then you have been somewhere else.
   useEffect(() => { setUntil(deadline(info.waitSeconds)) }, [info.waitSeconds])
 
-  // One timer for the life of the row rather than one per cooldown: there is
-  // no interval to start, clear and restart as the countdown crosses zero, and
-  // nothing it does can move the deadline it is reading.
+  /*
+   * One timeout, landing on the deadline itself.
+   *
+   * Nothing here counts: no number is shown, the ring is a CSS animation of
+   * its own length, and the only question anyone asks of this state is whether
+   * the wait is over. A once-a-second interval answered that question up to a
+   * second late — the ring reached empty and the tick sat there waiting for a
+   * tick to notice — while a timeout is simply set for the moment it changes.
+   */
   useEffect(() => {
-    const t = setInterval(() => tick(n => n + 1), 1000)
-    return () => clearInterval(t)
-  }, [])
+    if (!until) return
+    const t = setTimeout(() => setUntil(0), Math.max(0, until - Date.now()))
+    return () => clearTimeout(t)
+  }, [until])
 
-  // Rounded up, so a wait is over only once it is actually over.
-  const wait = Math.max(0, Math.ceil((until - Date.now()) / 1000))
+  const waiting = until > 0
 
-  // The tick belongs to the cooldown, so it clears itself with it rather than
-  // needing a second timer that could disagree about when it is over.
-  useEffect(() => { if (wait <= 0) setSent(null) }, [wait])
+  // The tick belongs to the cooldown, so it goes with it rather than needing a
+  // second timer that could disagree about when it is over.
+  useEffect(() => { if (!waiting) setSent(null) }, [waiting])
 
   async function send(id: string) {
+    // From inside the tap, which is the only moment a browser will let an
+    // audio device open; the note itself plays when the server answers.
+    primeSound()
     setBusy(id); setErr(null)
     try {
       const res = await api.pingUser(userId, id)
+      // Two notes for a thing that left. The tick is the receipt you can see
+      // and this is the one you cannot miss, which between them is the whole
+      // answer to "did that go?".
+      sound('ping')
       setSent(id)
       setUntil(deadline(res.cooldownSeconds))
       setToast(`Sent to ${name}`)
@@ -125,7 +137,7 @@ export default function PingRow({ userId, name, info }: {
             message={m}
             name={name}
             sent={sent === m.id}
-            disabled={wait > 0 || busy !== null}
+            disabled={waiting || busy !== null}
             /* The ring runs for as long as the wait actually does, grace
                and all, so it empties as the button comes back rather than a
                moment before it. */

@@ -666,7 +666,7 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
             title="End session"
             aria-label="End session"
           >
-            <Square size={16} fill="currentColor" />
+            <Square size={19} fill="currentColor" />
           </button>
           </div>
         </div>

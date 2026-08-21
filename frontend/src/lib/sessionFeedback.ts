@@ -50,6 +50,13 @@ export type Signal =
   | 'discard'
   /** A rest is over. The one that has to reach you across a room. */
   | 'timer'
+  /**
+   * A nudge sent to someone. The one signal here that is not about a session
+   * at all — it lives here because a second copy of the audio device, the
+   * envelope and the two switches, kept somewhere else, would be the same code
+   * drifting apart.
+   */
+  | 'ping'
 
 /** Vibration patterns, in milliseconds: buzz, pause, buzz… */
 const PATTERNS: Record<Signal, number[]> = {
@@ -61,6 +68,8 @@ const PATTERNS: Record<Signal, number[]> = {
   /** One flat pulse: nothing to celebrate. */
   discard: [140],
   timer: [180, 90, 180],
+  /** Barely there: this is a receipt, not an event. */
+  ping: [14],
 }
 
 /**
@@ -79,6 +88,8 @@ const TONES: Record<Signal, [number, number, number][]> = {
   /** Falling, and low: the one signal that is not good news. */
   discard: [[440, 0, 0.14], [330, 0.16, 0.2]],
   timer: [[880, 0, 0.12], [1320, 0.16, 0.18]],
+  /** Two quick notes, up a fifth: the sound of something small being sent. */
+  ping: [[1046, 0, 0.06], [1568, 0.07, 0.11]],
 }
 
 /**

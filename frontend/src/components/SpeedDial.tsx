@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Plus, X } from 'lucide-react'
 
 export interface DialAction {
@@ -37,7 +38,16 @@ export default function SpeedDial({ actions, label }: {
     return () => window.removeEventListener('keydown', onKey)
   }, [open])
 
-  return (
+  /*
+   * Rendered into the body rather than into the page.
+   *
+   * `backdrop-filter` blurs what is behind an element within its own stacking
+   * context, and the swipe pager makes every page one — so a scrim living
+   * inside the dashboard had nothing behind it to blur and only ever dimmed.
+   * A floating button belongs to the window rather than to the page under it,
+   * which is what the modals in this app already do for the same reason.
+   */
+  return createPortal(
     <>
       {/* A tap anywhere else closes it, over a page pushed back far enough to
           read three circles against — a dashboard is charts and numbers edge
@@ -82,6 +92,7 @@ export default function SpeedDial({ actions, label }: {
           {open ? <X size={24} /> : <Plus size={24} />}
         </button>
       </div>
-    </>
+    </>,
+    document.body,
   )
 }
