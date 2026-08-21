@@ -155,41 +155,22 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
   const heading = currentExercise(session, progress)
   const upNext = nextExercise(session, progress)
   /*
-   * The two lines a collapsed notification gets, and what goes on each.
+   * What the shade says, and where each part of it goes.
    *
    * Collapsed is how a notification is read nine times out of ten -- glanced
-   * at on a lock screen between sets, with a bar in one hand. So the first
-   * line is the answer to "what am I doing", in the largest text the shade
-   * has, and the second is the answer to "where am I", as a row of small
-   * facts each with a glyph in front of it. The plan and the day move to the
-   * header line, where identity belongs: you know which plan you are on, and
-   * the two lines in the middle are worth more than repeating it.
+   * at on a lock screen between sets, with a bar in one hand. So: the exercise
+   * on the first line, in the largest text the shade has; the clock and the
+   * tally on the second, side by side; how far in as a ring where every other
+   * app puts a photograph. What comes next waits until the thing is opened,
+   * which is the question opening it asks.
    *
-   * Glyphs rather than words for the labels, because they survive being
-   * skimmed: "✅ 6/15 · ⏭ Squats" is read without being parsed, and it fits
-   * where "6 of 15 sets done, next up Squats" would be truncated.
+   * No glyphs in any of it. They were meant to make the line skimmable and
+   * instead made it look like a chat message, and they cost characters in the
+   * one place there are not many.
    */
-  const noticeTitle = resting
-    ? '☕ Resting'
-    : heading
-      ? `🏋 ${heading}`
-      : '✅ Every set done'
-  const notice = [
-    `✅ ${tally.done}/${tally.total} sets`,
-    `📊 ${pct}%`,
-    upNext && `⏭ ${upNext}`,
-  ].filter(Boolean).join(' · ')
-  /*
-   * The expanded view, which has room for the lines the collapsed one cannot
-   * hold: what you are on, what comes after it, and where the day stands.
-   * Pulled open is also where somebody looks when they have forgotten what
-   * they were in the middle of, which is exactly what this answers.
-   */
-  const noticeDetail = [
-    resting ? '☕ Resting' : heading ? `🏋 ${heading}` : '✅ Every set done',
-    upNext && `⏭ Next: ${upNext}`,
-    `📋 ${tally.done} of ${tally.total} sets · ${pct}%`,
-  ].filter(Boolean).join('\n')
+  const noticeTitle = resting ? 'Resting' : heading || 'Every set done'
+  const notice = `${tally.done}/${tally.total} sets`
+  const nextUp = upNext ? `Next: ${upNext}` : ''
   // Only while one is actually counting: Android draws the countdown itself
   // from this, and a stale timestamp would leave a clock ticking down in the
   // shade for a rest that ended.
@@ -199,13 +180,15 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
       sessionId: session.id,
       title: noticeTitle,
       body: notice,
+      done: tally.done,
+      total: tally.total,
       // Identity, in the small header line: which day of which plan.
       subText: `${session.dayName} · ${session.planName}`,
       startedAt: session.startedAt,
-      bigText: noticeDetail,
+      nextUp,
       restEndsAt,
     })
-  }, [session.id, session.dayName, session.planName, session.startedAt, noticeTitle, notice, noticeDetail, restEndsAt])
+  }, [session.id, session.dayName, session.planName, session.startedAt, noticeTitle, notice, nextUp, tally.done, tally.total, restEndsAt])
 
   /*
    * Put back whenever the app returns to the foreground.

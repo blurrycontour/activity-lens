@@ -78,10 +78,12 @@ export function ActiveSessionProvider({ children }: { children: React.ReactNode 
       if (sessionNoticeClaimed()) { void repostSessionNotice(); return }
       void showSessionNotice({
         sessionId: active.id,
-        // The same two lines the runner posts, with the little this knows to
-        // put on them: it has the tally and not the exercise.
-        title: '🏋 Session in progress',
-        body: `✅ ${active.doneSets}/${active.totalSets} sets`,
+        // The same shape the runner posts, with the little this knows to fill
+        // it with: it has the tally and not the exercise.
+        title: 'Session in progress',
+        body: `${active.doneSets}/${active.totalSets} sets`,
+        done: active.doneSets,
+        total: active.totalSets,
         subText: `${active.dayName} · ${active.planName}`,
         startedAt: active.startedAt,
       })

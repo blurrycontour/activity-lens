@@ -22,17 +22,20 @@ export interface SessionNotice {
   sessionId: string
   /** The day being trained. */
   title: string
-  /** How far in, and what is being done — the shade's one useful line. */
+  /** The row of numbers beside the running clock. */
   body: string
+  /** Sets done and the day's total, drawn as a ring in the icon slot. */
+  done: number
+  total: number
   /** The day and the plan, shown small in the header beside the app's name. */
   subText: string
   startedAt: string
   /**
-   * The expanded view: several lines, shown when the notification is pulled
-   * open. Where the collapsed line has to choose one fact, this can say what
-   * is being done, what is next and how far in the session is.
+   * One more line, shown only when the notification is pulled open: what comes
+   * after the thing you are on. Collapsed has two lines and both are spoken
+   * for; this is the question you open a notification to answer.
    */
-  bigText?: string
+  nextUp?: string
   /**
    * When the rest now running ends, in epoch milliseconds. Android turns it
    * into a countdown in the notification's header — the one number worth
