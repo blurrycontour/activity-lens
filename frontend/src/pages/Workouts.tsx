@@ -4,7 +4,7 @@ import TypeIcon from '../components/TypeIcon'
 import ShareBadge from '../components/ShareBadge'
 import ViewSwitcher, { readView, writeView, type ListView } from '../components/ViewSwitcher'
 import { useWorkouts } from '../context/WorkoutsContext'
-import { Search, Download, Plus, Share2, FilterX, SlidersHorizontal, X, LoaderCircle, Layers, Image as ImageIcon, MoreVertical, Copy } from 'lucide-react'
+import { Search, Plus, Share2, FilterX, SlidersHorizontal, X, LoaderCircle, Layers, Image as ImageIcon, MoreVertical, Copy } from 'lucide-react'
 import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
 import SortDropdown, { SORT_OPTIONS, type SortKey } from '../components/SortDropdown'
@@ -18,7 +18,6 @@ import ConfirmDialog from '../components/ConfirmDialog'
 import DuplicatesDialog from '../components/DuplicatesDialog'
 import { RANGE_OPTIONS } from '../lib/range'
 import { api } from '../lib/api'
-import { downloadWorkoutGPX, reportSaveFailure } from '../lib/download'
 import { useIsMobile } from '../lib/useIsMobile'
 import { LOCATION_EVENT } from '../App'
 import { useSessionState } from '../lib/useSessionState'
@@ -526,14 +525,6 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
                         <ImageIcon size={14} /> Share card
                       </button>
                     </MenuButton>
-                    <button
-                      className="btn-icon card-export-btn"
-                      title="Export as GPX"
-                      onClick={e => { void exportWorkout(w, e) }}
-                      style={{ opacity: 0.6 }}
-                    >
-                      <Download size={15} />
-                    </button>
                   </>
                 )}
               />
@@ -621,13 +612,3 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
   )
 }
 
-async function exportWorkout(w: Workout, e: React.MouseEvent) {
-  e.stopPropagation()
-  // The list view only carries summary fields (no route) for efficiency, so
-  // fetch the full workout — including its route — on demand when exporting.
-  try {
-    await downloadWorkoutGPX(await api.getWorkout(w.id))
-  } catch (err) {
-    reportSaveFailure(err)
-  }
-}

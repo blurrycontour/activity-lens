@@ -82,6 +82,12 @@ export interface WeatherCounts {
  */
 export type WeatherStatus = 'none' | 'pending' | 'ok' | 'manual' | 'skipped' | 'failed'
 
+/** One sample of a named extra series; see Workout.extraSeries. */
+export interface ExtraPoint {
+  t: number
+  v: number
+}
+
 export interface Workout {
   id: string
   name: string
@@ -134,6 +140,17 @@ export interface Workout {
   paceTimeline: PacePoint[]
   elevTimeline: ElevPoint[]
   cadenceTimeline?: CadencePoint[]
+  /**
+   * Metrics the source file recorded that this app has no page of its own for
+   * — power, temperature — keyed by name, in seconds from the start like every
+   * other series.
+   *
+   * Absent from every GPX and TCX import, and from every workout entered by
+   * hand: only a FIT file carries these today. The names are the server's, and
+   * `lib/extraSeries.ts` is the only place that decides what one means, so a
+   * name this build has never seen still draws rather than disappearing.
+   */
+  extraSeries?: Record<string, ExtraPoint[]>
   /** Absent when the workout recorded straight through, or predates the feature. */
   pauses?: Pause[]
   /**

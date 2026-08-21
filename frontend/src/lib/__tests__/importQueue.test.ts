@@ -20,10 +20,10 @@ describe('expand', () => {
     expect(skipped).toEqual([])
   })
 
-  // The shape a Strava export actually has: a ZIP of gzipped GPX under an
-  // activities/ prefix, alongside metadata this app has no use for, plus .fit
-  // files it cannot parse yet. Getting this wrong means either importing
-  // nothing or reporting a wrong count, both of which look broken.
+  // The shape a Strava export actually has: a ZIP of gzipped GPX and raw .fit
+  // under an activities/ prefix, alongside metadata this app has no use for.
+  // Getting this wrong means either importing nothing or reporting a wrong
+  // count, both of which look broken.
   it('unwraps a Strava-shaped export and accounts for every entry', async () => {
     const zip = zipSync({
       'activities/1001.gpx': strToU8(GPX),
@@ -35,11 +35,14 @@ describe('expand', () => {
 
     const { files, skipped } = await expand([file('export.zip', zip)])
 
-    expect(files.map(f => f.name).sort()).toEqual(['1001.gpx', '1002.gpx.gz'.replace('.gz', '')])
+    // The .fit rides along with the rest now that the server can read one —
+    // in a Strava export it is the original recording and the .gpx is the
+    // lossy copy beside it.
+    expect(files.map(f => f.name).sort()).toEqual(['1001.gpx', '1002.gpx', '1003.fit'])
     // The .gz came out decompressed, not still gzipped.
     expect(await files.find(f => f.name === '1002.gpx')!.text()).toBe(GPX)
-    // Nothing vanishes silently: the .fit and the .csv are both reported.
-    expect(skipped.map(s => s.name).sort()).toEqual(['1003.fit', 'activities.csv'])
+    // Nothing vanishes silently: the .csv is reported rather than dropped.
+    expect(skipped.map(s => s.name).sort()).toEqual(['activities.csv'])
     expect(skipped.every(s => s.reason === 'unsupported')).toBe(true)
   })
 

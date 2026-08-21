@@ -11,12 +11,16 @@ import path from 'node:path'
 const WORKOUT_FILE_TYPES = [
   '.gpx',
   '.tcx',
+  // What watches actually record. Its registered type is rare in the wild —
+  // most apps share a .fit as octet-stream — so the extension does the work.
+  '.fit',
   // Export archives: Strava and Garmin both hand you a zip, and the files
   // inside are often individually gzipped. The app unpacks them client-side.
   '.zip',
   '.gz',
   'application/gpx+xml',
   'application/vnd.garmin.tcx+xml',
+  'application/vnd.ant.fit',
   'application/zip',
   'application/gzip',
   'application/xml',
@@ -132,6 +136,7 @@ export default defineConfig(({ mode }) => {
               accept: {
                 'application/gpx+xml': ['.gpx'],
                 'application/vnd.garmin.tcx+xml': ['.tcx'],
+                'application/vnd.ant.fit': ['.fit'],
               },
             },
           ],

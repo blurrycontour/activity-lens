@@ -4665,8 +4665,6 @@ body:has(.overlay) .fab { display: none; }
      the FAB's offset both clear the real bar rather than its visible part. */
   :root { --bottombar-h: calc(64px + var(--safe-bottom)); }
 
-  .card-export-btn { display: none; }
-
   /* No visible scrollbar on mobile: touch scrolling doesn't need one, and a
      persistent thumb reads as a leftover desktop affordance in an installed
      PWA. Mobile Chrome otherwise renders a permanent thin thumb (rather than

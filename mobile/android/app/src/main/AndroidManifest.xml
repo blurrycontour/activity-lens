@@ -66,6 +66,7 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="application/gpx+xml" />
                 <data android:mimeType="application/vnd.garmin.tcx+xml" />
+                <data android:mimeType="application/vnd.ant.fit" />
                 <data android:mimeType="application/zip" />
                 <data android:mimeType="application/gzip" />
                 <data android:mimeType="application/xml" />
@@ -87,12 +88,13 @@
                 <data android:scheme="file" />
                 <data android:mimeType="application/gpx+xml" />
                 <data android:mimeType="application/vnd.garmin.tcx+xml" />
+                <data android:mimeType="application/vnd.ant.fit" />
                 <data android:mimeType="application/zip" />
                 <data android:mimeType="application/gzip" />
             </intent-filter>
 
-            <!-- `.gpx` and `.tcx`, which the filter above cannot catch.
-                 Neither extension is in Android's MimeTypeMap, so nothing ever
+            <!-- `.gpx`, `.tcx` and `.fit`, which the filter above cannot catch.
+                 None of the three is in Android's MimeTypeMap, so nothing ever
                  sends application/gpx+xml: a file manager asks the platform for
                  the type, gets null, and falls back to application/octet-stream
                  or */*. Matching on the *name* is the only thing that works,
@@ -127,6 +129,11 @@
                 <data android:pathPattern=".*\\..*\\..*\\.tcx" />
                 <data android:pathPattern=".*\\..*\\..*\\..*\\.tcx" />
                 <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.tcx" />
+                <data android:pathPattern=".*\\.fit" />
+                <data android:pathPattern=".*\\..*\\.fit" />
+                <data android:pathPattern=".*\\..*\\..*\\.fit" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.fit" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.fit" />
             </intent-filter>
 
             <!-- The same names again, for an intent that carries no type at all.
@@ -150,6 +157,11 @@
                 <data android:pathPattern=".*\\..*\\..*\\.tcx" />
                 <data android:pathPattern=".*\\..*\\..*\\..*\\.tcx" />
                 <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.tcx" />
+                <data android:pathPattern=".*\\.fit" />
+                <data android:pathPattern=".*\\..*\\.fit" />
+                <data android:pathPattern=".*\\..*\\..*\\.fit" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.fit" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.fit" />
             </intent-filter>
 
         </activity>

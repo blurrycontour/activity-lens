@@ -23,7 +23,7 @@ interface ImportModalProps {
 
 type Tab = 'file' | 'manual'
 
-const SUPPORTED = ['gpx', 'tcx']
+const SUPPORTED = ['gpx', 'tcx', 'fit']
 
 /**
  * What the file picker offers. Archives are unpacked in the browser.
@@ -37,7 +37,7 @@ const SUPPORTED = ['gpx', 'tcx']
  * afterwards, the same as a dropped or shared file, which never passed through
  * `accept` in the first place.
  */
-const ACCEPT_ATTR = isNative() ? '' : '.gpx,.tcx,.zip,.gz'
+const ACCEPT_ATTR = isNative() ? '' : '.gpx,.tcx,.fit,.zip,.gz'
 
 /** Where a batch is in its lifecycle. `null` items means single-file mode. */
 type BatchPhase = 'expanding' | 'preflight' | 'review' | 'importing' | 'done'
@@ -413,7 +413,7 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
                       <Upload size={32} color={dragging ? 'var(--primary)' : 'var(--text-3)'} style={{ margin: '0 auto 12px' }} />
                       <p style={{ fontWeight: 600, fontSize: 14 }}>Drop your files here</p>
                       <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>or click to browse — several at once is fine</p>
-                      <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8, fontFamily: 'var(--font-mono)' }}>.gpx · .tcx · .zip</p>
+                      <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8, fontFamily: 'var(--font-mono)' }}>.fit · .gpx · .tcx · .zip</p>
                       <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 6 }}>
                         A Strava or Garmin export .zip can be dropped in whole.
                       </p>
@@ -442,7 +442,7 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
                         </div>
                       ) : (
                         <div style={{ display: 'flex', gap: 6, marginTop: 12, alignItems: 'center', color: 'var(--danger)', fontSize: 12 }}>
-                          <AlertCircle size={14} /> Unsupported format. Use .gpx or .tcx
+                          <AlertCircle size={14} /> Unsupported format. Use .fit, .gpx or .tcx
                         </div>
                       )}
                       {fileSupported && (previewBusy || preview) && (

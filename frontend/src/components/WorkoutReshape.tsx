@@ -1,11 +1,16 @@
 import { useCallback, useMemo, useRef } from 'react'
-import { Footprints, Heart, MapPin, Mountain, Timer } from 'lucide-react'
+import { Footprints, Heart, LineChart, MapPin, Mountain, Timer } from 'lucide-react'
 import { fmtDuration, type Workout } from '../data/workouts'
+import { extraSeriesMeta } from '../lib/extraSeries'
 
 /**
  * A series that can be dropped, matching workout.Stream on the server.
+ *
+ * The `extra:` half is open, because that half of what a workout records is:
+ * a power meter that was reading nonsense is exactly as worth removing as a
+ * chest strap that dropped out, and the server accepts the same shape.
  */
-export type Stream = 'hr' | 'cadence' | 'elevation' | 'pace' | 'route'
+export type Stream = 'hr' | 'cadence' | 'elevation' | 'pace' | 'route' | `extra:${string}`
 
 /** The staged edit: what to keep, and what to throw away. */
 export interface ReshapePlan {
@@ -38,7 +43,16 @@ const STREAMS: { id: Stream; label: string; glyph: React.ReactNode; count: (w: W
 
 /** The streams this workout actually recorded — the only ones worth offering. */
 export function presentStreams(w: Workout) {
-  return STREAMS.filter(s => s.count(w) > 0)
+  const extras = Object.entries(w.extraSeries ?? {})
+    .filter(([, points]) => (points?.length ?? 0) > 0)
+    .map(([key, points]) => ({
+      id: `extra:${key}` as Stream,
+      label: extraSeriesMeta(key).label,
+      glyph: <LineChart size={14} />,
+      count: () => points.length,
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label))
+  return [...STREAMS.filter(s => s.count(w) > 0), ...extras]
 }
 
 /** mm:ss, or h:mm:ss past an hour. Parsed back by `parseClock`. */

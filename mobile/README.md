@@ -175,7 +175,7 @@ regenerated.
 | `AndroidManifest.xml` | `VIEW` intent filter on `${applicationId}://auth` | Where the browser returns a finished SSO sign-in. `${applicationId}` so a local build claims a different scheme than the published app. |
 | `java/.../NativeAuthPlugin.java` | new | Opens SSO in a Custom Tab and collects the code the deep link brings back. |
 | `AndroidManifest.xml` | `SEND` / `SEND_MULTIPLE` intent filter | Puts the app in the share sheet for workout files. Android does not honour the web manifest's `share_target` for an installed PWA, so without this the APK is the one install that cannot receive a share. |
-| `AndroidManifest.xml` | `VIEW` intent filters for `.gpx` / `.tcx` / `.zip` / `.gz` | "Open with" on a workout file, the native equivalent of the manifest's `file_handlers`. Archives match on MIME type; `.gpx` and `.tcx` have none registered on Android and must match on the file name. See below. |
+| `AndroidManifest.xml` | `VIEW` intent filters for `.fit` / `.gpx` / `.tcx` / `.zip` / `.gz` | "Open with" on a workout file, the native equivalent of the manifest's `file_handlers`. Archives match on MIME type; `.fit`, `.gpx` and `.tcx` have none registered on Android and must match on the file name. See below. |
 | `java/.../IncomingFiles.java`, `java/.../IncomingFilesPlugin.java` | new | Copies a shared file out of its `content://` URI while the read grant is still valid, and hands the page a path. See below. |
 
 ## Distribution and updating
@@ -536,12 +536,12 @@ sides of the bridge, where this costs none.
 Exporters routinely share a `.gpx` as `application/octet-stream`, or with no type
 at all, so a filter that accepted only the correct MIME types would miss most
 real shares. `IncomingFiles.isWorkoutFile` then drops anything whose name is not
-`.gpx`, `.tcx`, `.zip` or `.gz`. Being offered a file the app cannot use costs a
+`.fit`, `.gpx`, `.tcx`, `.zip` or `.gz`. Being offered a file the app cannot use costs a
 message; not being offered one it can costs the feature.
 
 #### Why "open with" needs four filters and ten path patterns
 
-**`.gpx` and `.tcx` are not in Android's `MimeTypeMap`.** Nothing on the platform
+**`.fit`, `.gpx` and `.tcx` are not in Android's `MimeTypeMap`.** Nothing on the platform
 will ever hand you `application/gpx+xml`: a file manager asks for the type, gets
 null, and sends `application/octet-stream` or `*/*`. Matching those two
 extensions on type cannot work, so they match on the file name instead. Archives

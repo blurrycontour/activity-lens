@@ -4,7 +4,7 @@
 
 **A self-hosted haven for your training history.**
 
-Import runs, rides, hikes and swims from `.gpx` or `.tcx` files, then see what the
+Import runs, rides, hikes and swims from `.fit`, `.gpx` or `.tcx` files, then see what the
 numbers actually say — trends, consistency, training load, gear wear and personal
 bests. Your data stays on your own server.
 
@@ -27,8 +27,10 @@ services. It is built for a handful of people using it for years, not for scale.
 ## Features
 
 **Track**
-- Import `.gpx` and `.tcx` files — one at a time, hundreds at once, or a whole
-  Strava/Garmin export `.zip` dropped in as it came. Re-importing the same file
+- Import `.fit`, `.gpx` and `.tcx` files — one at a time, hundreds at once, or a
+  whole Strava/Garmin export `.zip` dropped in as it came. A `.fit` is what your
+  watch actually recorded, and carries what the other two drop: power and
+  temperature arrive as extra charts on the workout. Re-importing the same file
   is a no-op: imports are content-addressed, so a repeated share from a tracker
   app updates nothing instead of creating a duplicate.
 - Before a batch commits you see exactly what will happen — how many are new,
@@ -39,8 +41,8 @@ services. It is built for a handful of people using it for years, not for scale.
 - Calories and steps are taken from the file when it states them, and estimated
   otherwise (heart-rate or distance based, your choice).
 - Private notes on any workout.
-- Export any workout as GPX, and — when the server is set to keep originals —
-  download the exact file it was imported from. Your data stays yours to take.
+- When the server is set to keep originals, download the exact file a workout
+  was imported from, byte for byte. Your data stays yours to take.
 
 **Understand**
 - **Dashboard** — stat cards with period-over-period deltas and sparklines,
@@ -60,7 +62,7 @@ services. It is built for a handful of people using it for years, not for scale.
 **Live with**
 - Installable PWA with an offline shell, pull-to-refresh, and Android
   share-sheet import — several files at once. On desktop it also registers as
-  an "Open with" handler for `.gpx` and `.tcx`.
+  an "Open with" handler for `.fit`, `.gpx` and `.tcx`.
 - Web Push notifications for shares, gear wear and training goals — including
   when the app is closed.
 - Light and dark themes with a choice of accent colours.

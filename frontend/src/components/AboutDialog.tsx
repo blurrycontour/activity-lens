@@ -86,7 +86,7 @@ export default function AboutDialog({ onClose }: { onClose: () => void }) {
 
           <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6, marginBottom: 4 }}>
             A self-hosted home for your training history. Import runs, rides, hikes and
-            swims from .gpx or .tcx files, then see what the numbers actually say —
+            swims from .fit, .gpx or .tcx files, then see what the numbers actually say —
             trends, consistency, training load, gear wear, and personal bests. Your data
             stays on your own server.
           </p>

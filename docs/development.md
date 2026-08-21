@@ -55,7 +55,7 @@ What is covered, and why — these were all real bugs:
 | Notifications | `internal/notify/notify_test.go` | Dedupe firing once, disabled kinds being dropped, per-user scoping, unknown kinds defaulting to *on* |
 | Web Push | `internal/notify/push_test.go` | Delivery actually reaching the wire (real VAPID signing and encryption against an `httptest` server), and expired subscriptions being cleaned up on 410 |
 | API contracts | `internal/httpapi/contract_test.go` | `decodeJSON` rejecting the browser's real push-subscription payload; the user directory leaking emails |
-| Import | `internal/ingest/ingest_test.go` | Cadence and calorie parsing from `.gpx`/`.tcx` |
+| Import | `internal/ingest/ingest_test.go`, `fit_test.go` | Cadence and calorie parsing from `.gpx`/`.tcx`; the FIT decoder against bytes written from the protocol |
 | Offline | `src/lib/__tests__/network.test.ts` | Gateway errors and cache hits being mistaken for a healthy backend |
 | Dates | `src/lib/__tests__/range.test.ts` | UTC drift filing workouts under the wrong day |
 | Goals | `src/lib/__tests__/insights.test.ts` | A 4,983 m run displayed as "5.0 km" not counting toward a 5 km goal; multi-week windows sliding instead of tiling |
