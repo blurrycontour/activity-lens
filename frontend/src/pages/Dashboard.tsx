@@ -6,8 +6,9 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
   RadialBarChart, RadialBar,
 } from 'recharts'
-import { TrendingUp, Zap, Flame, Clock, Mountain, Heart, Trophy, Target, Activity, Footprints, ChartColumnBig, Play, Plus, Watch, ClipboardList } from 'lucide-react'
+import { TrendingUp, Zap, Flame, Clock, Mountain, Heart, Trophy, Target, Activity, Footprints, ChartColumnBig, Play } from 'lucide-react'
 import SpeedDial from '../components/SpeedDial'
+import { PAGE_META } from '../components/Sidebar'
 import Confetti from '../components/Confetti'
 import GoalSportMark, { goalColor } from '../components/GoalSportMark'
 import { useLocalStorage } from '../lib/useLocalStorage'
@@ -795,9 +796,12 @@ export default function Dashboard({ onSelect, onResumeSession, onImport, onCreat
       <SpeedDial
         label="Add"
         actions={[
-          { id: 'workout', label: 'Workout', icon: <Plus size={19} />, onSelect: onImport },
-          { id: 'equipment', label: 'Equipment', icon: <Watch size={19} />, onSelect: () => onCreate('equipment') },
-          { id: 'plan', label: 'Plan', icon: <ClipboardList size={19} />, onSelect: () => onCreate('plan') },
+          /* The same marks the navigation uses for the three pages these
+             land on, read from the one place that owns them. A plus here was
+             the toggle's own icon repeated, which named nothing. */
+          { id: 'workout', label: 'Workout', icon: PAGE_META.workouts?.icon(19), onSelect: onImport },
+          { id: 'equipment', label: 'Equipment', icon: PAGE_META.equipment?.icon(19), onSelect: () => onCreate('equipment') },
+          { id: 'plan', label: 'Plan', icon: PAGE_META.plans?.icon(19), onSelect: () => onCreate('plan') },
         ]}
       />
 

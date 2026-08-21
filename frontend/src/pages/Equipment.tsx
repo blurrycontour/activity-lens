@@ -354,7 +354,7 @@ export default function EquipmentPage({ onSelectWorkout, detail, onOpenDetail }:
 
       {!detail && (
         <button className="fab" onClick={() => setEditing('new')} title="Add Equipment" aria-label="Add equipment">
-          <Plus size={24} strokeWidth={2.5} />
+          <Plus size={24} />
         </button>
       )}
 

@@ -32,14 +32,40 @@ const SPORT: Record<string, WorkoutType> = {
  * receipt, and it stays there for as long as the cooldown does — so what was
  * sent, and that nothing more can be sent yet, are one mark rather than two.
  */
+/**
+ * When a wait of this many seconds is up.
+ *
+ * With a moment's grace on the end. The server is measuring the same cooldown
+ * from a slightly earlier instant — it started counting when the request
+ * arrived, and this starts when the answer got back — so a row that re-enabled
+ * itself the instant its own arithmetic said zero could still be a few
+ * milliseconds early, and be refused for them.
+ */
+const GRACE_MS = 400
+
+function deadline(seconds: number): number {
+  return seconds > 0 ? Date.now() + seconds * 1000 + GRACE_MS : 0
+}
+
 export default function PingRow({ userId, name, info }: {
   userId: number
   /** Who is being nudged, for the button labels. */
   name: string
   info: PingInfo
 }) {
-  /** Seconds until another ping may be sent; 0 means now. */
-  const [wait, setWait] = useState(info.waitSeconds)
+  /**
+   * When another ping may be sent, in epoch milliseconds; 0 means now.
+   *
+   * A deadline rather than a count of seconds ticked down. A counter is only
+   * ever as accurate as the moment its interval happens to fire: the timer runs
+   * for the life of the row, so the first tick after a send lands somewhere in
+   * the next second and takes a whole one off a cooldown that has barely
+   * started. The row then re-enabled itself up to a second before the server
+   * would accept anything, and pressing in that window earned a rejection
+   * saying to wait — which is exactly what the row had just stopped saying.
+   * A deadline cannot drift, whatever the interval does.
+   */
+  const [until, setUntil] = useState(0)
   const [busy, setBusy] = useState<string | null>(null)
   /** Which one was just sent, and so wears the tick until the wait is over. */
   const [sent, setSent] = useState<string | null>(null)
@@ -48,21 +74,25 @@ export default function PingRow({ userId, name, info }: {
   const [toast, setToast] = useState<string | null>(null)
   /** Which message is showing its full text, from a press and hold. */
   const [tip, setTip] = useState<string | null>(null)
+  /** Ticked once a second purely to re-read the clock above. */
+  const [, tick] = useState(0)
 
   // Seeded from the server on every load of the profile, so a cooldown started
   // on another device is honoured here rather than discovered by a rejection.
   // Which ping that was is not worth carrying across a reload — the tick says
   // "this is what you just sent", and by then you have been somewhere else.
-  useEffect(() => { setWait(info.waitSeconds) }, [info.waitSeconds])
+  useEffect(() => { setUntil(deadline(info.waitSeconds)) }, [info.waitSeconds])
 
-  // One timer for the life of the row rather than one per cooldown. Setting the
-  // same zero back is a no-op React drops, so an idle row does not re-render
-  // once a second, and there is no interval to start, clear and restart as the
-  // countdown crosses zero.
+  // One timer for the life of the row rather than one per cooldown: there is
+  // no interval to start, clear and restart as the countdown crosses zero, and
+  // nothing it does can move the deadline it is reading.
   useEffect(() => {
-    const t = setInterval(() => setWait(w => (w > 0 ? w - 1 : 0)), 1000)
+    const t = setInterval(() => tick(n => n + 1), 1000)
     return () => clearInterval(t)
   }, [])
+
+  // Rounded up, so a wait is over only once it is actually over.
+  const wait = Math.max(0, Math.ceil((until - Date.now()) / 1000))
 
   // The tick belongs to the cooldown, so it clears itself with it rather than
   // needing a second timer that could disagree about when it is over.
@@ -73,13 +103,13 @@ export default function PingRow({ userId, name, info }: {
     try {
       const res = await api.pingUser(userId, id)
       setSent(id)
-      setWait(res.cooldownSeconds)
+      setUntil(deadline(res.cooldownSeconds))
       setToast(`Sent to ${name}`)
     } catch (e) {
       // A 429 means another device got there first, so the cooldown is running
       // whatever this one believed. Starting it here keeps the row honest
       // rather than letting it offer a button that will only be refused again.
-      if (e instanceof ApiError && e.status === 429) setWait(info.cooldownSeconds)
+      if (e instanceof ApiError && e.status === 429) setUntil(deadline(info.cooldownSeconds))
       setErr(e instanceof ApiError ? e.message : 'Could not send that')
     } finally { setBusy(null) }
   }
@@ -96,7 +126,10 @@ export default function PingRow({ userId, name, info }: {
             name={name}
             sent={sent === m.id}
             disabled={wait > 0 || busy !== null}
-            cooldown={info.cooldownSeconds}
+            /* The ring runs for as long as the wait actually does, grace
+               and all, so it empties as the button comes back rather than a
+               moment before it. */
+            cooldown={info.cooldownSeconds + GRACE_MS / 1000}
             showTip={tip === m.id}
             onTip={open => setTip(open ? m.id : null)}
             onSend={() => void send(m.id)}

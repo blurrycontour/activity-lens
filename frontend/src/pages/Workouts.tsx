@@ -608,7 +608,7 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
       )}
 
       <button className="fab" onClick={onImport} title="Add Workout" aria-label="Add workout">
-        <Plus size={24} strokeWidth={2.5} />
+        <Plus size={24} />
       </button>
     </div>
   )

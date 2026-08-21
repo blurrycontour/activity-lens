@@ -5,10 +5,12 @@ import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.media.AudioAttributes;
 import android.media.MediaScannerConnection;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
+import android.os.VibrationAttributes;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.os.VibratorManager;
@@ -116,7 +118,28 @@ public class ShellPlugin extends Plugin {
         }
         // -1 is "do not repeat": a pattern that loops has to be cancelled by
         // someone, and nothing here would be alive to do it.
-        vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1));
+        VibrationEffect effect = VibrationEffect.createWaveform(pattern, -1);
+        /*
+         * Said to be an alarm, not left unattributed.
+         *
+         * A vibration with no stated usage is USAGE_UNKNOWN, and Android is
+         * free to drop those -- it treats them as incidental touch feedback,
+         * which is suppressed under a good many conditions the app cannot see
+         * and is never told about. Every buzz this app makes is something the
+         * user asked to be told during a session with the phone out of sight,
+         * which is what USAGE_ALARM means: it is the whole reason the buzz
+         * exists, and it is the one usage the system will not quietly discard.
+         */
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            vibrator.vibrate(effect, new VibrationAttributes.Builder()
+                .setUsage(VibrationAttributes.USAGE_ALARM)
+                .build());
+        } else {
+            vibrator.vibrate(effect, new AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_ALARM)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build());
+        }
         call.resolve();
     }
 

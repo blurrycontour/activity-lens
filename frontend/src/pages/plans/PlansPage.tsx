@@ -553,7 +553,7 @@ export default function PlansPage({ section, detail, onOpen, onOpenUser }: Props
           you already did, nor while choosing what to throw away. */}
       {tab === 'plans' && !sel.selecting && (
         <button className="fab" onClick={() => setNaming(true)} title="New plan" aria-label="New plan">
-          <Plus size={22} />
+          <Plus size={24} />
         </button>
       )}
 

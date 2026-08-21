@@ -74,10 +74,12 @@ export default function SpeedDial({ actions, label }: {
           aria-label={open ? 'Close' : label}
           aria-expanded={open}
         >
-          {/* The same mark at the same weight as every other page's button:
-              a plus a half-weight lighter than the one on Workouts is not a
-              different icon, it is the same icon looking slightly wrong. */}
-          {open ? <X size={24} strokeWidth={2.5} /> : <Plus size={24} strokeWidth={2.5} />}
+          {/* The same mark at the same weight as every other page's button.
+              It was drawn at three different weights across four pages, which
+              is not four icons -- it is one icon looking slightly wrong on
+              three of them. This is the lighter of the two, which is what the
+              rest of the app's icons are set at. */}
+          {open ? <X size={24} /> : <Plus size={24} />}
         </button>
       </div>
     </>
