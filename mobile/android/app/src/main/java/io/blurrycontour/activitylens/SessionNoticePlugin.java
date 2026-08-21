@@ -274,22 +274,28 @@ public class SessionNoticePlugin extends Plugin {
         if (restEnds > now) {
             views.setChronometer(R.id.notice_clock, SystemClock.elapsedRealtime() + (restEnds - now), null, true);
             // Counting down: mid-rest, "40 seconds left" is the only number
-            // anyone wants from a glance at the shade.
+            // anyone wants from a glance at the shade. The glyph changes with
+            // it, so which way the number is going is legible before it is
+            // read.
+            views.setImageViewResource(R.id.notice_clock_icon, R.drawable.ic_notice_break);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 views.setChronometerCountDown(R.id.notice_clock, true);
             }
         } else if (started > 0) {
             views.setChronometer(R.id.notice_clock, SystemClock.elapsedRealtime() - (now - started), null, true);
+            views.setImageViewResource(R.id.notice_clock_icon, R.drawable.ic_notice_clock);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 views.setChronometerCountDown(R.id.notice_clock, false);
             }
         } else {
+            // No clock and no glyph for it: half a pair says less than none.
             views.setViewVisibility(R.id.notice_clock, android.view.View.GONE);
+            views.setViewVisibility(R.id.notice_clock_icon, android.view.View.GONE);
         }
 
         if (next != null && !next.isEmpty()) {
             views.setTextViewText(R.id.notice_next, next);
-            views.setViewVisibility(R.id.notice_next, android.view.View.VISIBLE);
+            views.setViewVisibility(R.id.notice_next_row, android.view.View.VISIBLE);
         }
         return views;
     }

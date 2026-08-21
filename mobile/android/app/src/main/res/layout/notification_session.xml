@@ -9,6 +9,11 @@
   training. A Chronometer here counts on its own, with nothing re-posted for
   it — the same free tick, in the right place.
 
+  Each number wears a glyph, because two numbers side by side with no labels
+  are a puzzle: "01:54 2/15" could be anything. The glyphs are what make the
+  row readable at the speed a notification is actually read, and they cost no
+  characters in a line that has few to spend.
+
   Wrapped by DecoratedCustomViewStyle, so the header, the icons and the action
   buttons are still the system's own.
 -->
@@ -31,16 +36,37 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:baselineAligned="true"
-        android:paddingTop="1dp">
+        android:gravity="center_vertical"
+        android:paddingTop="2dp">
+
+        <!-- A clock while the session runs, a cup while a rest counts down.
+             Which one is showing says whether the number beside it is time
+             spent or time left, without reading the number. -->
+        <ImageView
+            android:id="@+id/notice_clock_icon"
+            android:layout_width="14dp"
+            android:layout_height="14dp"
+            android:layout_marginEnd="4dp"
+            android:layout_marginRight="4dp"
+            android:src="@drawable/ic_notice_clock"
+            android:contentDescription="@null" />
 
         <Chronometer
             android:id="@+id/notice_clock"
             style="@style/TextAppearance.Compat.Notification"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:paddingEnd="6dp"
-            android:paddingRight="6dp" />
+            android:layout_marginEnd="10dp"
+            android:layout_marginRight="10dp" />
+
+        <ImageView
+            android:id="@+id/notice_sets_icon"
+            android:layout_width="14dp"
+            android:layout_height="14dp"
+            android:layout_marginEnd="4dp"
+            android:layout_marginRight="4dp"
+            android:src="@drawable/ic_notice_sets"
+            android:contentDescription="@null" />
 
         <TextView
             android:id="@+id/notice_body"
@@ -54,12 +80,30 @@
 
     <!-- What comes next. Only the expanded view sets this visible: collapsed
          has two lines and they are both spoken for. -->
-    <TextView
-        android:id="@+id/notice_next"
-        style="@style/TextAppearance.Compat.Notification"
+    <LinearLayout
+        android:id="@+id/notice_next_row"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:visibility="gone"
-        android:maxLines="2"
-        android:ellipsize="end" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingTop="2dp"
+        android:visibility="gone">
+
+        <ImageView
+            android:layout_width="14dp"
+            android:layout_height="14dp"
+            android:layout_marginEnd="4dp"
+            android:layout_marginRight="4dp"
+            android:src="@drawable/ic_notice_next"
+            android:contentDescription="@null" />
+
+        <TextView
+            android:id="@+id/notice_next"
+            style="@style/TextAppearance.Compat.Notification"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:maxLines="1"
+            android:ellipsize="end" />
+    </LinearLayout>
 </LinearLayout>

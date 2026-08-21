@@ -79,12 +79,12 @@ export function ActiveSessionProvider({ children }: { children: React.ReactNode 
       void showSessionNotice({
         sessionId: active.id,
         // The same shape the runner posts, with the little this knows to fill
-        // it with: it has the tally and not the exercise.
-        title: 'Session in progress',
+        // it with: it has the day and the tally, and not the exercise.
+        title: active.dayName,
         body: `${active.doneSets}/${active.totalSets} sets`,
         done: active.doneSets,
         total: active.totalSets,
-        subText: `${active.dayName} · ${active.planName}`,
+        subText: active.planName,
         startedAt: active.startedAt,
       })
     }

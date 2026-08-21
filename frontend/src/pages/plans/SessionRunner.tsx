@@ -170,7 +170,8 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
    */
   const noticeTitle = resting ? 'Resting' : heading || 'Every set done'
   const notice = `${tally.done}/${tally.total} sets`
-  const nextUp = upNext ? `Next: ${upNext}` : ''
+  // No 'Next:' in front of it — the arrow beside it already says that.
+  const nextUp = upNext || ''
   // Only while one is actually counting: Android draws the countdown itself
   // from this, and a stale timestamp would leave a clock ticking down in the
   // shade for a rest that ended.
@@ -182,8 +183,16 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
       body: notice,
       done: tally.done,
       total: tally.total,
-      // Identity, in the small header line: which day of which plan.
-      subText: `${session.dayName} · ${session.planName}`,
+      /*
+       * The plan's name, and only that.
+       *
+       * The header line is app name, this, and nothing else fits — putting the
+       * day beside the plan there truncated all three, so the line read
+       * "Activity Le… · Day 1 · Next p…" and named none of them. Of the two,
+       * the plan is the one you would recognise: "Day 1" is a position within
+       * something you have to already know.
+       */
+      subText: session.planName,
       startedAt: session.startedAt,
       nextUp,
       restEndsAt,
