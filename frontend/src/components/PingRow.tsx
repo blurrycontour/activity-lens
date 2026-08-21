@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Armchair, Check, Hand } from 'lucide-react'
 import { api, ApiError, type PingInfo } from '../lib/api'
 import type { WorkoutType } from '../data/workouts'
+import { useLongPress } from '../lib/useLongPress'
+import Toast from './Toast'
 import TypeIcon from './TypeIcon'
 
 /**
@@ -42,6 +44,10 @@ export default function PingRow({ userId, name, info }: {
   /** Which one was just sent, and so wears the tick until the wait is over. */
   const [sent, setSent] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
+  /** The "sent" toast, held as text so the same one cannot show twice. */
+  const [toast, setToast] = useState<string | null>(null)
+  /** Which message is showing its full text, from a press and hold. */
+  const [tip, setTip] = useState<string | null>(null)
 
   // Seeded from the server on every load of the profile, so a cooldown started
   // on another device is honoured here rather than discovered by a rejection.
@@ -68,6 +74,7 @@ export default function PingRow({ userId, name, info }: {
       const res = await api.pingUser(userId, id)
       setSent(id)
       setWait(res.cooldownSeconds)
+      setToast(`Sent to ${name}`)
     } catch (e) {
       // A 429 means another device got there first, so the cooldown is running
       // whatever this one believed. Starting it here keeps the row honest
@@ -80,32 +87,100 @@ export default function PingRow({ userId, name, info }: {
   return (
     <div className="ping-row">
       <div className="ping-buttons">
-        {info.messages.map(m => {
-          const sport = SPORT[m.id]
-          const done = sent === m.id
-          return (
-            <button
-              key={m.id}
-              type="button"
-              className={`ping-btn${done ? ' sent' : ''}`}
-              disabled={wait > 0 || busy !== null}
-              onClick={() => void send(m.id)}
-              title={m.text}
-              aria-label={`${m.text} — send to ${name}`}
-            >
-              {done
-                ? <Check size={18} aria-hidden />
-                : sport
-                  ? <TypeIcon type={sport} size={18} />
-                  : m.id === 'couch'
-                    ? <Armchair size={18} aria-hidden />
-                    : <Hand size={18} aria-hidden />}
-            </button>
-          )
-        })}
+        {info.messages.map(m => (
+          <PingButton
+            key={m.id}
+            message={m}
+            name={name}
+            sent={sent === m.id}
+            disabled={wait > 0 || busy !== null}
+            /* How much of the cooldown is left, as a fraction. The ring is
+               drawn from it, so it is only meaningful on the one that was
+               pressed — the others are simply disabled. */
+            remaining={info.cooldownSeconds > 0 ? wait / info.cooldownSeconds : 0}
+            showTip={tip === m.id}
+            onTip={open => setTip(open ? m.id : null)}
+            onSend={() => void send(m.id)}
+          />
+        ))}
       </div>
       {/* The only text, and only when something went wrong. */}
       {err && <span className="ping-err">{err}</span>}
+      {toast && (
+        <Toast
+          message={toast}
+          icon={<Check size={15} aria-hidden />}
+          onDone={() => setToast(null)}
+        />
+      )}
     </div>
+  )
+}
+
+/**
+ * One nudge: press to send it, hold to read it.
+ *
+ * Its own component because it carries a gesture and two pieces of state that
+ * are nobody else's business. The hold is the answer to a row of six wordless
+ * circles — the icons say which sport, and holding one says exactly what the
+ * other person will read, which is the part you cannot guess from a bicycle.
+ */
+function PingButton({ message: m, name, sent, disabled, remaining, showTip, onTip, onSend }: {
+  message: { id: string; text: string }
+  name: string
+  sent: boolean
+  disabled: boolean
+  remaining: number
+  showTip: boolean
+  onTip: (open: boolean) => void
+  onSend: () => void
+}) {
+  const press = useLongPress(() => onTip(true))
+  const hide = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // The tip closes itself, because the gesture that opened it has no matching
+  // "un-hold" on a phone: a finger lifts and nothing else happens.
+  useEffect(() => {
+    if (!showTip) return
+    hide.current = setTimeout(() => onTip(false), 2200)
+    return () => { if (hide.current) clearTimeout(hide.current) }
+  }, [showTip, onTip])
+
+  const sport = SPORT[m.id]
+  return (
+    <span className="ping-slot">
+      <button
+        type="button"
+        className={`ping-btn${sent ? ' sent' : ''}`}
+        disabled={disabled}
+        onClick={() => { if (!press.consumedClick()) onSend() }}
+        {...press.handlers}
+        title={m.text}
+        aria-label={`${m.text} — send to ${name}`}
+      >
+        {sent
+          ? <Check size={18} aria-hidden />
+          : sport
+            ? <TypeIcon type={sport} size={18} />
+            : m.id === 'couch'
+              ? <Armchair size={18} aria-hidden />
+              : <Hand size={18} aria-hidden />}
+        {/* The cooldown, drawn around the tick: the row already says "you
+            cannot send another one yet" by being disabled, and this says how
+            much longer without a number nobody would watch. Stroked from the
+            top and clockwise, and it empties as the wait runs out. */}
+        {sent && remaining > 0 && (
+          <svg className="ping-ring" viewBox="0 0 40 40" aria-hidden>
+            <circle
+              cx="20" cy="20" r="18"
+              pathLength={100}
+              strokeDasharray="100"
+              strokeDashoffset={100 - Math.max(0, Math.min(100, remaining * 100))}
+            />
+          </svg>
+        )}
+      </button>
+      {showTip && <span className="ping-tip" role="status">{m.text}</span>}
+    </span>
   )
 }

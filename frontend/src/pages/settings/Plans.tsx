@@ -3,7 +3,7 @@ import Dropdown from '../../components/Dropdown'
 import SettingsCard from '../../components/SettingsCard'
 import { usePreferences } from '../../context/PreferencesContext'
 import {
-  buzzEnabled, canBuzz, canSound, LONG_TIMER_CHOICES, longTimerSec, primeSound,
+  buzz as playBuzz, buzzEnabled, canBuzz, canSound, LONG_TIMER_CHOICES, longTimerSec, primeSound,
   setBuzzEnabled, setLongTimerSec, setSoundEnabled, sound as playSound, soundEnabled,
 } from '../../lib/sessionFeedback'
 
@@ -71,7 +71,15 @@ export default function PlansSettings() {
             <input
               type="checkbox"
               checked={buzz}
-              onChange={e => { setBuzz(e.target.checked); setBuzzEnabled(e.target.checked) }}
+              onChange={e => {
+                setBuzz(e.target.checked)
+                setBuzzEnabled(e.target.checked)
+                // Buzzed from inside the tap that turned it on, the way the
+                // sound switch plays its note: it is the only way to find out
+                // whether this phone actually does it, and a switch you cannot
+                // test is a switch you have to take on faith.
+                if (e.target.checked) playBuzz('exercise')
+              }}
             />
             <span className="switch-track" />
             Vibrate

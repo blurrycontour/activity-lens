@@ -3,13 +3,18 @@ package io.blurrycontour.activitylens;
 import android.Manifest;
 import android.content.ContentResolver;
 import android.content.ContentValues;
+import android.content.Context;
 import android.content.Intent;
 import android.media.MediaScannerConnection;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
+import android.os.VibratorManager;
 import android.provider.MediaStore;
 import android.util.Base64;
+import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
@@ -22,11 +27,12 @@ import androidx.core.content.FileProvider;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.OutputStream;
+import java.util.List;
 
 /**
  * The things a WebView cannot do for itself.
  *
- * Right now that is saving a file. In a browser the app builds a Blob, points an
+ * Saving a file, and vibrating. In a browser the app builds a Blob, points an
  * anchor at it and clicks it; in an Android WebView that does nothing at all —
  * `blob:` URLs are explicitly not handed to the system (see Bridge.launchIntent)
  * and the download attribute is not implemented. The export buttons therefore
@@ -58,6 +64,62 @@ public class ShellPlugin extends Plugin {
      * here. A file that lands silently in a folder the user cannot see is
      * indistinguishable from one that failed, so Android's toast stands in.
      */
+    /**
+     * Vibrates, with a pattern.
+     *
+     * `navigator.vibrate` exists in the WebView and is the obvious way to do
+     * this, but it has now failed twice in ways that report nothing: without
+     * the VIBRATE permission it is silently ignored while still returning
+     * true, and Chrome drops the call outright whenever the page is not
+     * visible — which, during a rest with the phone in a pocket, is exactly
+     * when the buzz is the whole point. The system Vibrator has neither
+     * problem and says so when it is not there.
+     *
+     * The pattern is the same shape the web API takes: milliseconds on, off,
+     * on, and so forth.
+     */
+    @PluginMethod
+    public void vibrate(PluginCall call) {
+        JSArray raw = call.getArray("pattern");
+        long[] pattern;
+        try {
+            List<Object> values = raw == null ? null : raw.toList();
+            if (values == null || values.isEmpty()) {
+                call.reject("pattern is required");
+                return;
+            }
+            pattern = new long[values.size() + 1];
+            // A waveform alternates off/on and starts with off, where the web
+            // API's first number is already an on. One leading zero makes the
+            // two the same list.
+            pattern[0] = 0;
+            for (int i = 0; i < values.size(); i++) {
+                pattern[i + 1] = Math.max(0, Math.min(5000, ((Number) values.get(i)).longValue()));
+            }
+        } catch (Exception e) {
+            call.reject("pattern must be a list of milliseconds");
+            return;
+        }
+
+        Vibrator vibrator;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            VibratorManager manager = (VibratorManager) getContext().getSystemService(Context.VIBRATOR_MANAGER_SERVICE);
+            vibrator = manager == null ? null : manager.getDefaultVibrator();
+        } else {
+            vibrator = (Vibrator) getContext().getSystemService(Context.VIBRATOR_SERVICE);
+        }
+        if (vibrator == null || !vibrator.hasVibrator()) {
+            // A tablet with no motor. Reported rather than swallowed, so the
+            // caller can stop offering something this device cannot do.
+            call.reject("no vibrator");
+            return;
+        }
+        // -1 is "do not repeat": a pattern that loops has to be cancelled by
+        // someone, and nothing here would be alive to do it.
+        vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1));
+        call.resolve();
+    }
+
     @PluginMethod
     public void toast(PluginCall call) {
         String message = call.getString("message");

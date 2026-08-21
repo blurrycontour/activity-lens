@@ -19,6 +19,9 @@
  * laptop where it never worked also turned it off in the gym.
  */
 
+import { vibrateNative } from './native/shell'
+import { isNative } from './serverConfig'
+
 const BUZZ_KEY = 'al_haptics'
 const SOUND_KEY = 'al_chime'
 /** Where the "long enough to be worth announcing" threshold is kept. */
@@ -135,8 +138,15 @@ export const setBuzzEnabled = (on: boolean) => writeFlag(BUZZ_KEY, on)
 export const soundEnabled = () => readFlag(SOUND_KEY)
 export const setSoundEnabled = (on: boolean) => writeFlag(SOUND_KEY, on)
 
-/** Whether this device can vibrate at all, for hiding a switch that would lie. */
-export const canBuzz = () => typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function'
+/**
+ * Whether this device can vibrate at all, for hiding a switch that would lie.
+ *
+ * True in the native app whatever the WebView says: the buzz goes through the
+ * system Vibrator there, and `navigator.vibrate` being absent from a WebView
+ * says nothing about whether the phone has a motor.
+ */
+export const canBuzz = () =>
+  isNative() || (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function')
 
 type Ctor = typeof AudioContext
 
@@ -205,11 +215,30 @@ export function sound(kind: Signal): void {
   } catch { /* see primeSound */ }
 }
 
-/** Buzzes, if this device can and the user wants it. */
+/**
+ * Buzzes, if this device can and the user wants it.
+ *
+ * Native first, then the web API. In the Android app `navigator.vibrate` is a
+ * function that exists, returns true and does nothing — it needs a manifest
+ * permission it never mentions, and Chrome ignores it outright while the page
+ * is hidden, which during a rest is most of the time. The native path has
+ * neither problem, and the browser path is what every other device uses.
+ */
 export function buzz(kind: Signal): void {
-  if (!canBuzz() || !buzzEnabled()) return
+  if (!buzzEnabled()) return
+  const pattern = PATTERNS[kind]
+  if (isNative()) {
+    void vibrateNative(pattern).then(done => {
+      if (!done) webVibrate(pattern)
+    })
+    return
+  }
+  webVibrate(pattern)
+}
+
+function webVibrate(pattern: number[]) {
   try {
-    navigator.vibrate(PATTERNS[kind])
+    navigator.vibrate?.(pattern)
   } catch { /* a failed vibration is not a failed workout */ }
 }
 
