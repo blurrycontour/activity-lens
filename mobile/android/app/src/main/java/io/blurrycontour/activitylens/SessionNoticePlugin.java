@@ -53,7 +53,6 @@ public class SessionNoticePlugin extends Plugin {
         String title = call.getString("title", "Training session");
         String body = call.getString("body", "");
         String startedAt = call.getString("startedAt", "");
-        int percent = call.getInt("percent", 0);
         String subText = call.getString("subText", "");
         // The expanded view: what the shade shows when the notification is
         // pulled open, which is where there is room to say what comes next.
@@ -98,11 +97,17 @@ public class SessionNoticePlugin extends Plugin {
             .setAutoCancel(false)
             .setShowWhen(true)
             .setOnlyAlertOnce(true)
-            .setContentIntent(tap)
-            // How much of the day is done, as a bar. The shade shows a
-            // collapsed notification most of the time, and a bar is readable
-            // there in a way a second line of text is not.
-            .setProgress(100, Math.max(0, Math.min(100, percent)), false);
+            .setContentIntent(tap);
+        /*
+         * No progress bar, deliberately.
+         *
+         * The collapsed template gives a notification two lines, and a bar
+         * takes one of them -- it was drawn where the body went, so the only
+         * line saying what was being done and how far in never appeared at
+         * all. A grey line that is empty at the start of a session and full at
+         * the end says less than "7/18 sets" does, and it was costing the
+         * sentence that says it. Both lines carry words now.
+         */
 
         // Pulled open, the notification has room for what the collapsed line
         // cannot hold: what is next, and where the session is up to. Built

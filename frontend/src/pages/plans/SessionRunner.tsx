@@ -154,15 +154,31 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
   // anywhere but the Android app.
   const heading = currentExercise(session, progress)
   const upNext = nextExercise(session, progress)
-  // Glyphs rather than a bare percentage: the shade shows two lines at a
-  // glance, and "🏋 Lat pulldown · 6/15" is read without being parsed, where
-  // "40% · Lat pulldown" repeated what the progress bar underneath already
-  // said. The percentage stays, as the bar.
-  const notice = resting
-    ? `☕ Resting · ${tally.done}/${tally.total} sets`
+  /*
+   * The two lines a collapsed notification gets, and what goes on each.
+   *
+   * Collapsed is how a notification is read nine times out of ten -- glanced
+   * at on a lock screen between sets, with a bar in one hand. So the first
+   * line is the answer to "what am I doing", in the largest text the shade
+   * has, and the second is the answer to "where am I", as a row of small
+   * facts each with a glyph in front of it. The plan and the day move to the
+   * header line, where identity belongs: you know which plan you are on, and
+   * the two lines in the middle are worth more than repeating it.
+   *
+   * Glyphs rather than words for the labels, because they survive being
+   * skimmed: "✅ 6/15 · ⏭ Squats" is read without being parsed, and it fits
+   * where "6 of 15 sets done, next up Squats" would be truncated.
+   */
+  const noticeTitle = resting
+    ? '☕ Resting'
     : heading
-      ? `🏋 ${heading} · ${tally.done}/${tally.total} sets`
-      : `✅ ${tally.done}/${tally.total} sets done`
+      ? `🏋 ${heading}`
+      : '✅ Every set done'
+  const notice = [
+    `✅ ${tally.done}/${tally.total} sets`,
+    `📊 ${pct}%`,
+    upNext && `⏭ ${upNext}`,
+  ].filter(Boolean).join(' · ')
   /*
    * The expanded view, which has room for the lines the collapsed one cannot
    * hold: what you are on, what comes after it, and where the day stands.
@@ -181,15 +197,15 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
   useEffect(() => {
     void showSessionNotice({
       sessionId: session.id,
-      title: session.dayName,
+      title: noticeTitle,
       body: notice,
-      subText: session.planName,
+      // Identity, in the small header line: which day of which plan.
+      subText: `${session.dayName} · ${session.planName}`,
       startedAt: session.startedAt,
-      percent: pct,
       bigText: noticeDetail,
       restEndsAt,
     })
-  }, [session.id, session.dayName, session.planName, session.startedAt, notice, noticeDetail, pct, restEndsAt])
+  }, [session.id, session.dayName, session.planName, session.startedAt, noticeTitle, notice, noticeDetail, restEndsAt])
 
   /*
    * Put back whenever the app returns to the foreground.

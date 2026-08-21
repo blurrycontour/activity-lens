@@ -24,11 +24,9 @@ export interface SessionNotice {
   title: string
   /** How far in, and what is being done — the shade's one useful line. */
   body: string
-  /** The plan's name, shown small beside the app's. */
+  /** The day and the plan, shown small in the header beside the app's name. */
   subText: string
   startedAt: string
-  /** Sets done as a percentage, drawn as a bar under the text. */
-  percent: number
   /**
    * The expanded view: several lines, shown when the notification is pulled
    * open. Where the collapsed line has to choose one fact, this can say what
