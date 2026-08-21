@@ -183,6 +183,24 @@ const (
 	maxFitChained  = 16
 )
 
+/*
+minSalvageMessages is how much of a file must have decoded before a failure
+part-way through is treated as damage rather than as a misreading.
+
+Both cases exist and they need opposite answers. A watch whose battery died
+mid-ride writes a file that is perfectly well-formed until it simply stops:
+thousands of messages, then nothing, and that ride happened and should import. A
+file this decoder has misread — an encoding it does not handle, or a bug here —
+also fails part-way, but after a handful of messages, and salvaging that produces
+a workout assembled from misaligned bytes: a plausible-looking row with a
+distance and a heart rate that were never recorded. Refusing is the only safe
+answer there, because nothing downstream can tell the difference.
+
+A real recording writes a message a second, so anything worth keeping is
+hundreds; this sits far below that and far above what a misparse survives.
+*/
+const minSalvageMessages = 32
+
 // decodeFIT reads every data message in a file, in order.
 //
 // Errors are returned only for a file that cannot be read at all — a bad
@@ -218,8 +236,10 @@ func decodeFIT(data []byte) ([]fitMessage, error) {
 		}
 		msgs, err := decodeFITRecords(data[headerSize:end], len(out))
 		if err != nil {
-			// Same reasoning: keep what was decoded before the damage.
-			if len(out) == 0 && len(msgs) == 0 {
+			// Keep what was decoded before the damage, but only if there is
+			// enough of it to be a recording rather than a misreading. See
+			// minSalvageMessages.
+			if len(out)+len(msgs) < minSalvageMessages {
 				return nil, err
 			}
 			return append(out, msgs...), nil

@@ -309,20 +309,26 @@ func (c *extraCollector) result() map[string][]workout.ExtraPoint {
 /*
 applyFitSession fills in from the session summary what the samples could not.
 
-The device's own totals are used only where the derived value is missing, with
-one exception: distance. An indoor ride, a treadmill run and a pool swim have no
-route to measure, and the machine's own figure is the only distance there is —
-without this they import as "0.00 km", which is what a FIT file is most often
-imported to avoid.
+Everything here is a fallback for a value the samples did not yield — except
+distance, which the session wins outright.
+
+That is deliberate and it is the one place this differs from the GPX and TCX
+importers. Those have nothing but coordinates, so distance can only be the sum
+of the gaps between fixes. A FIT file has the figure the device itself arrived
+at, from the same fixes fused with an accelerometer or a foot pod and with its
+own error model — which is also the number the watch displayed at the end of the
+run, and therefore the number the person remembers. Summing haversines over the
+device's own fixes to contradict it would be showing our arithmetic instead of
+their workout. It also covers the case where there is no route at all: an indoor
+ride, a treadmill run, a pool swim, all of which would otherwise import as
+"0.00 km".
 */
 func applyFitSession(in *workout.Input, session fitMessage) {
 	if session.fields == nil {
 		return
 	}
-	if in.Distance == 0 {
-		if v, ok := session.num(sesDistance); ok {
-			in.Distance = v / scaleDistance
-		}
+	if v, ok := session.num(sesDistance); ok && v > 0 {
+		in.Distance = v / scaleDistance
 	}
 	if in.Duration == 0 {
 		if v, ok := session.num(sesElapsedTime); ok {
@@ -422,6 +428,13 @@ func fitName(sport, session fitMessage) string {
 				return label + " Activity"
 			}
 		}
+	}
+	// Failing that, the sub-sport. A treadmill run and an indoor ride both
+	// arrive as sport=fitness_equipment, which has no name worth printing —
+	// but the sub-sport does, and "Cycling Activity" beats "Imported Activity"
+	// for a row someone has to recognise in a list.
+	if name := fitSubSportName(session, sport); name != "" {
+		return strings.ToUpper(name[:1]) + strings.ReplaceAll(name[1:], "_", " ") + " Activity"
 	}
 	return "Imported Activity"
 }

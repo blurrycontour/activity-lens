@@ -62,8 +62,11 @@ func writeRunFIT(t *testing.T) []byte {
 		}, nil)
 	}
 	w.define(2, msgSession, sessionFields)
+	// The session's distance is deliberately not what the route sums to: the
+	// device fuses its fixes with a foot pod and knows its own error, and which
+	// of the two numbers wins is the point of TestParseFITPrefersTheDeviceDistance.
 	w.data(2, sessionFields, []any{
-		fitTime(fitStart), 1, 0, int(59 * scaleTime), int(180.0 * scaleDistance), 420, 145, 168, 12,
+		fitTime(fitStart), 1, 0, int(59 * scaleTime), int(700.0 * scaleDistance), 420, 145, 168, 12,
 	}, nil)
 	return w.bytes()
 }
@@ -85,10 +88,6 @@ func TestParseFITRun(t *testing.T) {
 	if len(in.Route) != 60 {
 		t.Errorf("route has %d points, want 60", len(in.Route))
 	}
-	// 0.0001° of latitude is about 11 m, times 59 steps.
-	if in.Distance < 600 || in.Distance > 700 {
-		t.Errorf("distance = %.0f m, want roughly 656", in.Distance)
-	}
 	if in.AvgHR == 0 || in.MaxHR == 0 {
 		t.Errorf("heart rate = %d/%d, want both set", in.AvgHR, in.MaxHR)
 	}
@@ -105,6 +104,21 @@ func TestParseFITRun(t *testing.T) {
 	}
 	if got := in.PaceTimeline[0].Pace; got != 333 {
 		t.Errorf("pace = %d s/km, want 333 (3 m/s)", got)
+	}
+}
+
+/*
+The distance a watch reports is the distance its owner remembers, and it is not
+the sum of the gaps between its own GPS fixes. Summing haversines to contradict
+the figure on the wrist is showing our arithmetic instead of their workout.
+*/
+func TestParseFITPrefersTheDeviceDistance(t *testing.T) {
+	in, err := parseFIT(writeRunFIT(t), workout.TypeOther)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if in.Distance != 700 {
+		t.Errorf("distance = %.0f m, want the session's 700 — the route sums to about 656", in.Distance)
 	}
 }
 
@@ -382,6 +396,38 @@ func TestFITRefusesNonActivityFiles(t *testing.T) {
 	w.data(0, fileIDFields, []any{6 /* course */, fitTime(fitStart)}, nil)
 	if _, err := parseFIT(w.bytes(), workout.TypeRun); err == nil {
 		t.Fatal("a course file was imported as an activity")
+	}
+}
+
+/*
+A file that stops part-way is a battery that died, and the ride happened. A file
+that goes wrong after four messages is one this decoder has misread, and
+salvaging that assembles a workout out of misaligned bytes — a plausible
+distance and heart rate that were never recorded, with nothing downstream able
+to tell. The two look identical from the inside, so the amount that decoded is
+what separates them.
+*/
+func TestFITSalvagesATruncatedFileButNotAMisreadOne(t *testing.T) {
+	full := writeRunFIT(t)
+
+	// Cut the last few records off, leaving the file well-formed until it
+	// simply ends.
+	truncated := full[:len(full)-40]
+	msgs, err := decodeFIT(truncated)
+	if err != nil {
+		t.Fatalf("a truncated recording was refused: %v", err)
+	}
+	if len(msgs) < minSalvageMessages {
+		t.Fatalf("kept %d messages of a truncated file, want most of them", len(msgs))
+	}
+
+	// A definition that promises more fields than the data that follows: the
+	// shape of a misread rather than of damage, and it fails immediately.
+	w := newFitWriter()
+	w.define(1, msgRecord, recordFields)
+	w.data(1, recordFields[:2], []any{fitTime(fitStart), 0}, nil)
+	if _, err := decodeFIT(w.bytes()); err == nil {
+		t.Error("a file that went wrong after one message was salvaged anyway")
 	}
 }
 
