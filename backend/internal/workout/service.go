@@ -50,6 +50,7 @@ func (s *Service) Create(ctx context.Context, userID int64, in Input) (*Workout,
 		Notes:            strings.TrimSpace(in.Notes),
 		CaloriesReported: in.CaloriesReported,
 		CadenceTimeline:  in.CadenceTimeline,
+		ExtraSeries:      in.ExtraSeries,
 		Source:           in.Source,
 		ExternalID:       in.ExternalID,
 		ContentHash:      in.ContentHash,
@@ -121,6 +122,7 @@ func (s *Service) Preview(in Input) (*Workout, error) {
 		Notes:            strings.TrimSpace(in.Notes),
 		CaloriesReported: in.CaloriesReported,
 		CadenceTimeline:  in.CadenceTimeline,
+		ExtraSeries:      in.ExtraSeries,
 	}
 	deriveMetrics(w, in.StepLengthM)
 	w.Date = w.StartTime.Format("2006-01-02")
@@ -422,6 +424,9 @@ func sortTimelines(w *Workout) {
 	sort.Slice(w.PaceTimeline, func(i, j int) bool { return w.PaceTimeline[i].T < w.PaceTimeline[j].T })
 	sort.Slice(w.ElevTimeline, func(i, j int) bool { return w.ElevTimeline[i].T < w.ElevTimeline[j].T })
 	sort.Slice(w.CadenceTimeline, func(i, j int) bool { return w.CadenceTimeline[i].T < w.CadenceTimeline[j].T })
+	for _, series := range w.ExtraSeries {
+		sort.Slice(series, func(i, j int) bool { return series[i].T < series[j].T })
+	}
 }
 
 // derivePauses finds the gaps in the recording and the moving time they leave.

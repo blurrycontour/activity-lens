@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 )
 
@@ -23,13 +24,37 @@ const (
 	StreamRoute     Stream = "route"
 )
 
+/*
+StreamExtraPrefix names one of the workout's own extra series.
+
+"extra:power" rather than "power", because that half of the set is open: it is
+whatever the file happened to record, and a bare name would put an unbounded
+namespace next to five fixed ones with nothing to tell them apart. The prefix
+means a future series called "pace" cannot collide with the real one.
+*/
+const StreamExtraPrefix = "extra:"
+
+// ExtraStream names the extra series called name.
+func ExtraStream(name string) Stream { return Stream(StreamExtraPrefix + name) }
+
+// ExtraStreamName returns the series an extra stream refers to, if it is one.
+func ExtraStreamName(s Stream) (string, bool) {
+	name, ok := strings.CutPrefix(string(s), StreamExtraPrefix)
+	return name, ok && name != ""
+}
+
 // ValidStream reports whether s names a series that can be dropped.
+//
+// An extra stream is accepted by shape rather than by membership: which ones a
+// workout has is the workout's business, and dropping one it does not have is a
+// no-op rather than an error — the same as dropping a heart rate it never had.
 func ValidStream(s Stream) bool {
 	switch s {
 	case StreamHeartRate, StreamCadence, StreamElevation, StreamPace, StreamRoute:
 		return true
 	}
-	return false
+	_, ok := ExtraStreamName(s)
+	return ok
 }
 
 // Reshape is an edit to what a workout actually recorded, as opposed to what it
@@ -123,6 +148,10 @@ func applyReshape(w *Workout, r Reshape) bool {
 			// Distance stays: it is still how far you went, and it is the one
 			// number a dropped route cannot re-derive.
 			w.Route = nil
+		default:
+			if name, ok := ExtraStreamName(s); ok {
+				delete(w.ExtraSeries, name)
+			}
 		}
 		changed = true
 	}
@@ -146,6 +175,18 @@ func trimWorkout(w *Workout, start, end int) {
 	w.PaceTimeline = trimSeries(w.PaceTimeline, start, end, func(p *PacePoint, t int) { p.T = t }, func(p PacePoint) int { return p.T })
 	w.ElevTimeline = trimSeries(w.ElevTimeline, start, end, func(p *ElevPoint, t int) { p.T = t }, func(p ElevPoint) int { return p.T })
 	w.CadenceTimeline = trimSeries(w.CadenceTimeline, start, end, func(p *CadencePoint, t int) { p.T = t }, func(p CadencePoint) int { return p.T })
+	// The named series are trimmed with everything else. They are recorded
+	// samples on the same clock, so a window that rebased the charted four and
+	// left these on the original one would draw power against the wrong
+	// seconds — and it would look like the trim had worked.
+	for name, series := range w.ExtraSeries {
+		kept := trimSeries(series, start, end, func(p *ExtraPoint, t int) { p.T = t }, func(p ExtraPoint) int { return p.T })
+		if len(kept) == 0 {
+			delete(w.ExtraSeries, name)
+			continue
+		}
+		w.ExtraSeries[name] = kept
+	}
 
 	// Pauses are clipped to the window rather than dropped: a pause that
 	// straddles the new start is still a pause, just a shorter one.
@@ -314,6 +355,7 @@ func (s *Service) Restore(ctx context.Context, userID int64, id string, in Input
 	w.PaceTimeline = in.PaceTimeline
 	w.ElevTimeline = in.ElevTimeline
 	w.CadenceTimeline = in.CadenceTimeline
+	w.ExtraSeries = in.ExtraSeries
 	w.AvgHR, w.MaxHR = in.AvgHR, in.MaxHR
 	w.ElevationGain = in.ElevationGain
 	// Cleared so the derivations below rebuild them from the restored series

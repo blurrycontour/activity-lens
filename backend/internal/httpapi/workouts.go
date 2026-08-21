@@ -581,7 +581,7 @@ func (s *Server) parseWorkoutUpload(w http.ResponseWriter, r *http.Request, user
 	in, err := ingest.Parse(header.Filename, data, workout.TypeOther)
 	if err != nil {
 		if errors.Is(err, ingest.ErrUnsupported) {
-			writeError(w, http.StatusUnsupportedMediaType, "unsupported file format (use .gpx or .tcx)")
+			writeError(w, http.StatusUnsupportedMediaType, "unsupported file format (use .fit, .gpx or .tcx)")
 			return workout.Input{}, nil, nil, false
 		}
 		writeError(w, http.StatusBadRequest, "could not parse file: "+err.Error())

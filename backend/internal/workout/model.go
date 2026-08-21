@@ -117,6 +117,24 @@ type CadencePoint struct {
 	Cad int `json:"cad"`
 }
 
+/*
+ExtraPoint is one sample of a metric this app has no first-class home for.
+
+FIT files carry more than the four series the app charts — power, temperature,
+and whatever the next format brings. Rather than a column, a scanner slot and a
+migration per metric, those arrive as named series: the workout says what it
+has, and the detail page draws it. Nothing else reads them, which is the point.
+They cannot be compared across workouts because not every workout has them, so
+they belong on the one page that is about a single activity.
+
+Float, not int, because the set is open: today's members are whole watts and
+whole degrees, and the first breathing rate would have been rounded away.
+*/
+type ExtraPoint struct {
+	T int     `json:"t"`
+	V float64 `json:"v"`
+}
+
 // Pause is a stretch of a workout during which nothing was recorded, in
 // seconds from the start. See pauses.go for how these are found and why only
 // gaps in the recording count.
@@ -157,6 +175,10 @@ type Workout struct {
 	PaceTimeline     []PacePoint    `json:"paceTimeline"`
 	ElevTimeline     []ElevPoint    `json:"elevTimeline"`
 	CadenceTimeline  []CadencePoint `json:"cadenceTimeline"`
+	// ExtraSeries holds metrics beyond the four above, keyed by a stable name
+	// ("power", "temperature"). Omitted when empty, which is every workout that
+	// came from a GPX or a TCX.
+	ExtraSeries map[string][]ExtraPoint `json:"extraSeries,omitempty"`
 	// Pauses are the stretches with no samples in them. Omitted when empty,
 	// which covers both "recorded straight through" and "too few samples to
 	// tell" — MovingTime is what separates those.
@@ -350,7 +372,10 @@ type Input struct {
 	PaceTimeline     []PacePoint
 	ElevTimeline     []ElevPoint
 	CadenceTimeline  []CadencePoint
-	Notes            string
+	// ExtraSeries carries whatever named metrics the source file had beyond the
+	// four charted everywhere; see Workout.ExtraSeries.
+	ExtraSeries map[string][]ExtraPoint
+	Notes       string
 	// Source, ExternalID and ContentHash drive de-duplication; see the
 	// corresponding fields on Workout. Source defaults to SourceManual when
 	// left empty.

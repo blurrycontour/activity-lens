@@ -126,6 +126,9 @@ var planSharingSchema string
 //go:embed migrations/0038_social_subjects.sql
 var socialSubjectsSchema string
 
+//go:embed migrations/0039_workout_extra_series.sql
+var workoutExtraSeriesSchema string
+
 // maxOpenConns is how many connections the pool will open.
 //
 // It was 1, which made every request in the process queue behind every other
@@ -238,6 +241,7 @@ func MigrateApp(ctx context.Context, db *sql.DB) error {
 		{"plan block duration", planBlockDurationSchema},
 		{"plan sharing", planSharingSchema},
 		{"social subjects", socialSubjectsSchema},
+		{"workout extra series", workoutExtraSeriesSchema},
 	} {
 		if err := applyAlters(ctx, db, m.schema); err != nil {
 			return fmt.Errorf("apply %s schema: %w", m.name, err)
