@@ -112,11 +112,33 @@ func (r *SQLiteRepository) CreatePlan(ctx context.Context, p *Plan) error {
 	return nil
 }
 
-// planCols carries the two aggregates the list page shows beside each plan.
-// Both are correlated subqueries over small indexed tables, which keeps the
-// list a single round trip instead of one query per plan.
+/*
+planCols carries the aggregates the list page shows beside each plan.
+
+All three are correlated subqueries over small indexed tables, which keeps the
+list a single round trip instead of one query per plan.
+
+The set count is the interesting one. A block can offer alternatives — "2 of
+these 3" — so its sets are not the sum of everything in it; they are the sum of
+the options a session would actually pick, which is the first `required` of them
+in order. That is what EffectivePicks does when nobody has chosen yet, and this
+has to agree with it or the number on the card contradicts the number on the
+session started from it. Sections that are a duration and no exercises
+contribute nothing here: they are a stretch of time, not a set to tick.
+
+ROW_NUMBER and a CASE rather than a LIMIT per block or SQLite's max(): both of
+those are the kind of thing that works here and stops working on Postgres.
+*/
 const planCols = `p.id, p.user_id, p.name, p.notes, p.archived, p.visibility, p.created_at, p.updated_at,
 	(SELECT COUNT(*) FROM plan_days d WHERE d.plan_id = p.id) AS day_count,
+	(SELECT COALESCE(SUM(x.sets), 0) FROM (
+		SELECT e.sets AS sets, b.required AS required,
+			ROW_NUMBER() OVER (PARTITION BY b.id ORDER BY e.position, e.id) AS rn
+		FROM plan_days d
+		JOIN plan_blocks b ON b.day_id = d.id
+		JOIN plan_exercises e ON e.block_id = b.id
+		WHERE d.plan_id = p.id
+	) x WHERE x.rn <= CASE WHEN x.required < 1 THEN 1 ELSE x.required END) AS set_count,
 	(SELECT COALESCE(MAX(s.started_at), '') FROM plan_sessions s WHERE s.plan_id = p.id) AS last_session_at`
 
 func scanPlan(row interface{ Scan(...any) error }) (*Plan, error) {
@@ -124,7 +146,7 @@ func scanPlan(row interface{ Scan(...any) error }) (*Plan, error) {
 	var archived int
 	var visibility string
 	if err := row.Scan(&p.ID, &p.UserID, &p.Name, &p.Notes, &archived, &visibility,
-		&p.CreatedAt, &p.UpdatedAt, &p.DayCount, &p.LastSessionAt); err != nil {
+		&p.CreatedAt, &p.UpdatedAt, &p.DayCount, &p.SetCount, &p.LastSessionAt); err != nil {
 		return nil, err
 	}
 	p.Archived = archived != 0

@@ -590,25 +590,30 @@ function PlanRow({ plan, selecting, picked, onOpen, onStart, onToggle, onLongPre
         {...press.handlers}
         aria-pressed={selecting ? picked : undefined}
       >
-        {/* The mark and the badge share a line so that as a card — where the
-            rest of the content is stacked — the top of every tile reads the
-            same, whether or not it carries a badge. In a row they simply sit
-            at the two ends, as they always did. */}
+        {/* The mark alone, so that as a card the name can sit beside it and
+            the tile opens with something to read rather than an icon on a line
+            of its own. */}
         <span className="plan-card-head">
           {selecting
             ? <span className="plan-pick" aria-hidden>{picked && <CheckCheck size={14} />}</span>
             : <span className="plan-card-mark"><ClipboardList size={15} /></span>}
-          {plan.archived && <span className="plan-badge">Archived</span>}
         </span>
         <div className="plan-card-main">
-          <strong className="plan-card-name">{plan.name}</strong>
+          <strong className="plan-card-name">
+            {plan.name}
+            {plan.archived && <span className="plan-badge">Archived</span>}
+          </strong>
+          {/* What the plan holds, under its name: the two numbers that say how
+              big a thing you are about to start. */}
+          <span className="plan-card-meta plan-num">
+            {plan.dayCount} day{plan.dayCount === 1 ? '' : 's'}
+            {plan.setCount ? ` · ${plan.setCount} set${plan.setCount === 1 ? '' : 's'}` : ''}
+          </span>
         </div>
-        {/* The same footer a session card has, rather than a second line under
-            the name: as a tile it gives every plan a foot that lines up with
-            its neighbours whatever the name above it did, and as a row it is
-            simply the figures at the far end. */}
+        {/* When it was last run, at the far end of a row and along the foot of
+            a card. The one fact here that is about you rather than about the
+            plan, which is why it is the one kept apart from the name. */}
         <div className="plan-card-figures plan-num">
-          <span>{plan.dayCount} day{plan.dayCount === 1 ? '' : 's'}</span>
           {plan.lastSessionAt && <span>{relativeDay(plan.lastSessionAt)}</span>}
         </div>
       </button>

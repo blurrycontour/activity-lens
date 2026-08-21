@@ -210,6 +210,74 @@ func TestOnlyOneSessionRunsAtATime(t *testing.T) {
 	}
 }
 
+/*
+The set count on a plan row has to mean the same thing as the total on a session
+started from it, or the card and the runner contradict each other about the same
+workout. It is computed in SQL and the session's is computed in Go, which is
+exactly why it is worth pinning that the two agree.
+
+The sample plan is 4 sets of bench (or 4 of push-ups — an alternative, not an
+addition) plus 3 of cable fly: 7 either way.
+*/
+func TestPlanSetCountMatchesWhatASessionWouldTick(t *testing.T) {
+	s, _ := newTestService(t)
+	ctx := context.Background()
+	p := samplePlan(t, s, 1)
+
+	list, err := s.ListPlans(ctx, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("got %d plans, want 1", len(list))
+	}
+	if list[0].SetCount != 7 {
+		t.Errorf("setCount = %d, want 7 — the alternative must not be added to the option it replaces", list[0].SetCount)
+	}
+	if list[0].DayCount != 1 {
+		t.Errorf("dayCount = %d, want 1", list[0].DayCount)
+	}
+
+	sess, err := s.StartSession(ctx, 1, p.ID, p.Days[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, total, _ := sess.Stats(); total != list[0].SetCount {
+		t.Errorf("a session of this plan totals %d sets, the plan says %d", total, list[0].SetCount)
+	}
+}
+
+// A block that asks for two of its three options counts both, since a session
+// picks both by default.
+func TestPlanSetCountFollowsRequired(t *testing.T) {
+	s, _ := newTestService(t)
+	ctx := context.Background()
+	p, err := s.CreatePlan(ctx, 1, PlanInput{Name: "Accessories"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ReplaceDays(ctx, 1, p.ID, []Day{{
+		Name: "Arms",
+		Blocks: []Block{{
+			Required: 2,
+			Options: []Exercise{
+				{Name: "Curls", Sets: 3},
+				{Name: "Hammer curls", Sets: 2},
+				{Name: "Preacher curls", Sets: 5},
+			},
+		}},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	list, err := s.ListPlans(ctx, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if list[0].SetCount != 5 {
+		t.Errorf("setCount = %d, want 5 (the first two of three: 3 + 2)", list[0].SetCount)
+	}
+}
+
 func TestStatsCountTheChosenAlternative(t *testing.T) {
 	s, _ := newTestService(t)
 	ctx := context.Background()

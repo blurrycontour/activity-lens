@@ -1,4 +1,5 @@
 import { useIsMobile } from './lib/useIsMobile'
+import { lazyChunk } from './lib/lazyChunk'
 import NotificationBanner, { type BannerNotification } from './components/NotificationBanner'
 import { consumeOpenedParam, markNotificationOpened, PUSH_EVENT, READ_NOTIFICATION_EVENT } from './lib/notifications'
 import UpdateToast from './components/UpdateToast'
@@ -29,10 +30,10 @@ import Help from './pages/Help'
  * ever opened — and it made WorkoutDetail's lazy import of RouteMap pointless,
  * since the library was already loaded by then.
  */
-const MapPage = lazy(() => import('./pages/MapPage'))
+const MapPage = lazy(lazyChunk(() => import('./pages/MapPage')))
 // Lazy for the same reason: the editor and the runner are a page most sessions
 // never open, and they are only ever reached by navigating to them.
-const PlansPage = lazy(() => import('./pages/plans/PlansPage'))
+const PlansPage = lazy(lazyChunk(() => import('./pages/plans/PlansPage')))
 import Settings from './pages/settings'
 import Admin from './pages/admin'
 import Login from './pages/Login'

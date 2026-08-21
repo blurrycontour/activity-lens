@@ -101,6 +101,14 @@ export interface TrainingPlan {
   /** Present on the single-plan fetch; the list omits it. */
   days?: PlanDay[]
   dayCount: number
+  /**
+   * How many sets a run through every day of this plan would tick off.
+   *
+   * Counts the options a session picks by default, so a block offering "2 of
+   * these 3" contributes two rather than three — the card and the runner have
+   * to agree about the same workout. Absent from a server older than the field.
+   */
+  setCount?: number
   createdAt: string
   updatedAt: string
   lastSessionAt?: string

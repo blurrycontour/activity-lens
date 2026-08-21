@@ -13,6 +13,7 @@ import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
 import { downloadWorkoutOriginal } from '../lib/download'
 import { extraSeriesMeta, extraSeriesStats, type ExtraSeriesMeta } from '../lib/extraSeries'
+import { lazyChunk } from '../lib/lazyChunk'
 import { useLocalStorage } from '../lib/useLocalStorage'
 import { DEFAULT_HR_ZONE_CHART, HR_ZONE_CHART_KEY, type HRZoneChart } from '../lib/dashboardConfig'
 import InfoTip from '../components/InfoTip'
@@ -35,14 +36,14 @@ import type { Shading } from '../components/RouteMap'
  * the map arrives a beat later behind its own placeholder, which is a far
  * better trade than a slower first paint on every page in the app.
  */
-const RouteMap = lazy(() => import('../components/RouteMap'))
+const RouteMap = lazy(lazyChunk(() => import('../components/RouteMap')))
 import ExpandModal from '../components/ExpandModal'
 import TabStrip, { type TabStripItem } from '../components/TabStrip'
 import ShareBadge from '../components/ShareBadge'
 import { useRefreshHandler } from '../context/RefreshContext'
 import { inlineTicks } from '../lib/chartTicks'
-const WorkoutGallery = lazy(() => import('../components/WorkoutGallery'))
-const WorkoutSocial = lazy(() => import('../components/WorkoutSocial'))
+const WorkoutGallery = lazy(lazyChunk(() => import('../components/WorkoutGallery')))
+const WorkoutSocial = lazy(lazyChunk(() => import('../components/WorkoutSocial')))
 
 /** The sections under the charts. */
 type DetailTab = 'notes' | 'gallery' | 'social'

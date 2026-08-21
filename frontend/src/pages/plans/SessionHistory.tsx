@@ -187,11 +187,11 @@ function SessionRow({ session: s, selecting, picked, canSelect, onOpen, onToggle
         {selecting
           ? <span className="plan-pick" aria-hidden>{picked && <CheckCheck size={14} />}</span>
           : <span className="plan-card-mark session"><History size={15} /></span>}
-        {!finished && <span className="plan-badge running">In progress</span>}
       </span>
       <div className="plan-card-main">
         <strong className="plan-card-name">
           {s.dayName}
+          {!finished && <span className="plan-badge running">In progress</span>}
         </strong>
         {/* Three lines, narrowing: which day, which plan, when. They were two,
             with the plan name tacked onto the end of the date, where the one

@@ -387,16 +387,18 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
           <span style={{ fontSize: 12, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
             {filtered.length} of {source?.length ?? 0}
           </span>
-          {/* Desktop only: the phone has the floating button, and a header
-              full of controls is what pushed the list below the fold there. */}
-          <button className="btn btn-primary desktop-only" onClick={onImport}>
-            <Plus size={16} /> Add workout
-          </button>
-          {/* The push to the right edge lives here rather than on the Add
-              button beside it: that button is desktop-only, so on a phone
-              there was nothing left holding this cluster right and the
-              switcher slid up against the title. */}
-          <div style={{ marginLeft: 'auto' }}>
+          {/* Both controls at the far end, the way Plans and Equipment put
+              theirs: an Add button tucked in beside the title read as part of
+              the heading rather than as the page's main action.
+
+              The push to the right edge lives on the cluster rather than on
+              the Add button inside it, which is desktop-only — on a phone
+              there would be nothing left holding the switcher right and it
+              would slide up against the title. */}
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button className="btn btn-primary desktop-only" onClick={onImport}>
+              <Plus size={16} /> Add workout
+            </button>
             <ViewSwitcher view={view} onChange={changeView} />
           </div>
         </div>

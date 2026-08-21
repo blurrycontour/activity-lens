@@ -34,7 +34,37 @@ func TestHandlerPWAContract(t *testing.T) {
 		}
 	})
 
+	/*
+		A hashed asset that this build does not have must 404 rather than be
+		answered with the shell.
+
+		Serving index.html there is how a client holding yesterday's HTML — a
+		pinned service worker, a proxy cache, a tab left open across a deploy —
+		gets told "Failed to load module script: the server responded with a
+		non-JavaScript MIME type of text/html". The map simply does not appear,
+		and the message names the wrong thing entirely.
+	*/
+	t.Run("a missing asset is a 404, not the shell", func(t *testing.T) {
+		for _, p := range []string{
+			"/assets/maplibre-DEADBEEF.js",
+			"/assets/index-00000000.css",
+			"/nope.mjs",
+		} {
+			if rec := get(p); rec.Code != http.StatusNotFound {
+				t.Errorf("GET %s = %d, want 404 (body starts %.20q)", p, rec.Code, rec.Body.String())
+			}
+		}
+	})
+
 	t.Run("deep links fall back to the shell", func(t *testing.T) {
+		// Every route the app mints is dot-free, which is what lets the rule
+		// above tell a route from a file. If that ever stops being true, this
+		// is the test that says so.
+		for _, p := range []string{"/users/42", "/admin/users/42", "/equipment/e_277564788d8a", "/plans"} {
+			if rec := get(p); rec.Code != http.StatusOK {
+				t.Errorf("GET %s = %d, want the shell", p, rec.Code)
+			}
+		}
 		rec := get("/workouts/w_abc123")
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, want 200", rec.Code)
