@@ -371,6 +371,26 @@ export function currentExercise(session: PlanSession, progress: SessionProgress)
   return ''
 }
 
+/**
+ * The exercise after the one being done, or "" when this is the last.
+ *
+ * For the notification's expanded view, which has room for one more line than
+ * the shade's collapsed one — and "next: Lat pulldown" is the line worth
+ * having while resting, since it is the thing you are resting *for*.
+ */
+export function nextExercise(session: PlanSession, progress: SessionProgress): string {
+  let seenCurrent = false
+  for (const b of session.snapshot.blocks) {
+    const p = blockProgress(progress, b.id)
+    for (const ex of chosenExercises(b, p)) {
+      if (exerciseComplete(ex, setsFor(p, ex.id))) continue
+      if (seenCurrent) return ex.name
+      seenCurrent = true
+    }
+  }
+  return ''
+}
+
 /** "4 × 8 · 60 kg", "3 × 8 · body", "3 × 45 s" — whatever the kind calls for. */
 export function targetLabel(ex: PlanExercise): string {
   if (ex.kind === 'time') return `${ex.sets} × ${durationShort(ex.durationSec)}`

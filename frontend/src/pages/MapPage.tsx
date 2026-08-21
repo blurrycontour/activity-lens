@@ -9,7 +9,7 @@ import RangeDropdown from '../components/RangeDropdown'
 // From mapLayers, not RouteMap: importing them from there would pull the map
 // component into this page's graph statically, and undo the lazy import that
 // WorkoutDetail uses to keep MapLibre out of the first paint.
-import { LayerSwitcher, MAP_LAYERS, MAP_LAYER_KEY, ResetViewControl, hasWebGL, type MapLayerId } from '../components/mapLayers'
+import { LayerSwitcher, MAP_LAYERS, MAP_LAYER_KEY, ResetViewControl, hasWebGL, keepAttributionCompact, type MapLayerId } from '../components/mapLayers'
 import { TYPE_COLOR, type WorkoutType } from '../data/workouts'
 import { api, type Track } from '../lib/api'
 import { useLocalStorage } from '../lib/useLocalStorage'
@@ -311,18 +311,9 @@ export default function MapPage() {
       const apply = () => applyRef.current()
       map.on('load', apply)
       map.on('styledata', apply)
-      // MapLibre builds the compact attribution *expanded* and only folds it
-      // away on the first interaction with the map, so a page that is looked at
-      // before it is touched wears a bar of tile credits across its corner.
-      // Removing the class is exactly what MapLibre's own minimise does. It is
-      // a documented stylesheet class rather than a private method, and the
-      // worst outcome if it is ever renamed is the attribution staying open —
-      // which is where it starts anyway.
-      map.on('load', () => {
-        map.getContainer()
-          .querySelector('.maplibregl-ctrl-attrib')
-          ?.classList.remove('maplibregl-compact-show')
-      })
+      // Folded into its button from the first frame rather than on load; see
+      // keepAttributionCompact.
+      keepAttributionCompact(map)
     }
 
     // The box around it changed size, which MapLibre cannot detect on its own.

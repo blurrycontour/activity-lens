@@ -1,10 +1,18 @@
 import { useState } from 'react'
+import Dropdown from '../../components/Dropdown'
 import SettingsCard from '../../components/SettingsCard'
 import { usePreferences } from '../../context/PreferencesContext'
+import { canChime, chime, chimeEnabled, primeChime, setChimeEnabled } from '../../lib/chime'
 import {
   canVibrate, hapticsEnabled, LONG_TIMER_CHOICES, longTimerSec, setHapticsEnabled,
   setLongTimerSec, setTimerHapticsEnabled, timerHapticsEnabled,
 } from '../../lib/haptics'
+
+/** "15 seconds", "1 minute", "3 minutes" — the same phrasing in both places. */
+function thresholdLabel(sec: number): string {
+  if (sec < 60) return `${sec} seconds`
+  return sec === 60 ? '1 minute' : `${sec / 60} minutes`
+}
 
 /**
  * What happens to a training session once it is finished.
@@ -21,6 +29,7 @@ export default function PlansSettings() {
   const [buzz, setBuzz] = useState(hapticsEnabled)
   const [buzzTimers, setBuzzTimers] = useState(timerHapticsEnabled)
   const [longSec, setLongSec] = useState(longTimerSec)
+  const [sound, setSound] = useState(chimeEnabled)
 
   async function toggle(on: boolean) {
     setMsg(null)
@@ -87,25 +96,58 @@ export default function PlansSettings() {
           something else, which is what this is for.
         </span>
 
-        <label className="field" style={{ marginTop: 10 }}>
-          <span className="field-label">Count a rest as long from</span>
-          <select
-            className="input"
-            value={longSec}
-            disabled={!buzz || !buzzTimers}
-            onChange={e => { const n = Number(e.target.value); setLongSec(n); setLongTimerSec(n) }}
-          >
-            {LONG_TIMER_CHOICES.map(sec => (
-              <option key={sec} value={sec}>
-                {sec < 60 ? `${sec} seconds` : sec === 60 ? '1 minute' : `${sec / 60} minutes`}
-              </option>
-            ))}
-          </select>
-        </label>
-
         <span className="field-hint">
           Kept on this device: vibration is a property of the hardware in your
           hand, and no desktop browser has it at all.
+        </span>
+      </SettingsCard>
+    )}
+
+    {/* Sound and vibration answer the same question — "has the rest ended?" —
+        and differ only in how far they carry, so they share a threshold and
+        sit in one place. */}
+    {(canChime() || canVibrate()) && (
+      <SettingsCard title="When a rest ends">
+        {canChime() && (
+          <>
+            <label className="switch" style={{ fontSize: 13, color: 'var(--text)' }}>
+              <input
+                type="checkbox"
+                checked={sound}
+                onChange={e => {
+                  setSound(e.target.checked)
+                  setChimeEnabled(e.target.checked)
+                  // Played on the way in, from inside the tap that turned it
+                  // on: it is the only way to hear what you just agreed to,
+                  // and the only moment a browser will let it make a sound.
+                  if (e.target.checked) { primeChime(); chime() }
+                }}
+              />
+              <span className="switch-track" />
+              Play a sound
+            </label>
+            <span className="field-hint">
+              Two short notes, for when the phone is on a bench rather than in
+              your pocket. Nothing else in the app makes a sound.
+            </span>
+          </>
+        )}
+
+        <div className="field" style={{ marginTop: canChime() ? 14 : 0 }}>
+          <span className="field-label">Count a rest as long from</span>
+          <Dropdown
+            block
+            value={longSec}
+            options={LONG_TIMER_CHOICES.map(sec => ({ value: sec, label: thresholdLabel(sec) }))}
+            onChange={v => { setLongSec(v); setLongTimerSec(v) }}
+            active={longSec !== 60}
+            ariaLabel="Count a rest as long from"
+          />
+        </div>
+        <span className="field-hint">
+          Shorter rests pass without a word: you spend those standing over the
+          bar watching the clock, where a buzz says something you can already
+          see. Set it to 15 seconds to be told about every one.
         </span>
       </SettingsCard>
     )}

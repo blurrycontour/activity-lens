@@ -9,14 +9,17 @@ import Modal from '../../components/Modal'
 import { api } from '../../lib/api'
 import {
   blockComplete, blockLabel, blockProgress, chosenExercises, clockLabel, currentBlockId,
-  currentExercise, doneSetsFor, durationShort, effectivePicks, elapsedSec, exerciseComplete,
+  currentExercise, doneSetsFor, durationShort, effectivePicks, elapsedSec, exerciseComplete, nextExercise,
   isBareSection, leadingDone, sectionExercise, sectionLabel, sessionTally, setState, setTappable, setsFor,
   targetLabel, trimNum,
   type BlockProgress, type PlanBlock, type PlanExercise, type PlanSession, type SessionProgress,
   type SetLog, type SetState,
 } from '../../data/plans'
 import { cacheProgress, clearCachedProgress, readCachedProgress } from './sessionCache'
-import { clearSessionNotice, showSessionNotice } from '../../lib/native/sessionNotice'
+import {
+  claimSessionNotice, clearSessionNotice, repostSessionNotice, showSessionNotice,
+} from '../../lib/native/sessionNotice'
+import { chime, primeChime } from '../../lib/chime'
 import { haptic, longTimerSec } from '../../lib/haptics'
 
 interface Props {
@@ -150,6 +153,7 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
   // are and what you are on, not just that something is running. A no-op
   // anywhere but the Android app.
   const heading = currentExercise(session, progress)
+  const upNext = nextExercise(session, progress)
   // Glyphs rather than a bare percentage: the shade shows two lines at a
   // glance, and "🏋 Lat pulldown · 6/15" is read without being parsed, where
   // "40% · Lat pulldown" repeated what the progress bar underneath already
@@ -159,6 +163,21 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
     : heading
       ? `🏋 ${heading} · ${tally.done}/${tally.total} sets`
       : `✅ ${tally.done}/${tally.total} sets done`
+  /*
+   * The expanded view, which has room for the lines the collapsed one cannot
+   * hold: what you are on, what comes after it, and where the day stands.
+   * Pulled open is also where somebody looks when they have forgotten what
+   * they were in the middle of, which is exactly what this answers.
+   */
+  const noticeDetail = [
+    resting ? '☕ Resting' : heading ? `🏋 ${heading}` : '✅ Every set done',
+    upNext && `⏭ Next: ${upNext}`,
+    `📋 ${tally.done} of ${tally.total} sets · ${pct}%`,
+  ].filter(Boolean).join('\n')
+  // Only while one is actually counting: Android draws the countdown itself
+  // from this, and a stale timestamp would leave a clock ticking down in the
+  // shade for a rest that ended.
+  const restEndsAt = resting && running && running.endsAt > Date.now() ? running.endsAt : 0
   useEffect(() => {
     void showSessionNotice({
       sessionId: session.id,
@@ -167,8 +186,30 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
       subText: session.planName,
       startedAt: session.startedAt,
       percent: pct,
+      bigText: noticeDetail,
+      restEndsAt,
     })
-  }, [session.id, session.dayName, session.planName, session.startedAt, notice, pct])
+  }, [session.id, session.dayName, session.planName, session.startedAt, notice, noticeDetail, pct, restEndsAt])
+
+  /*
+   * Put back whenever the app returns to the foreground.
+   *
+   * An ongoing notification can still be swiped away on Android 14, and once
+   * it is gone nothing tells us so — there is no event, and no way to ask. The
+   * moment the app is opened is the moment we can be sure again, and re-posting
+   * an identical notification that is already showing costs nothing.
+   */
+  // While this page is on screen, the shade says what this page says.
+  useEffect(() => claimSessionNotice(), [])
+  useEffect(() => {
+    const onShow = () => { if (document.visibilityState === 'visible') void repostSessionNotice() }
+    document.addEventListener('visibilitychange', onShow)
+    window.addEventListener('focus', onShow)
+    return () => {
+      document.removeEventListener('visibilitychange', onShow)
+      window.removeEventListener('focus', onShow)
+    }
+  }, [])
 
   // --- persistence -------------------------------------------------------
   //
@@ -303,16 +344,20 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
   }
 
   /**
-   * A long rest running out, buzzed exactly once.
+   * A rest running out, announced exactly once.
+   *
+   * Both ways at once: a buzz reaches you through a pocket and a chime reaches
+   * you across a room, and which of the two arrives depends on where the phone
+   * ended up rather than on anything the app can know. Each has its own switch.
    *
    * Edge-triggered on the timer's identity rather than on `left` reaching
    * zero: the tick keeps firing while the clock sits at 0:00 waiting to be
-   * dismissed, so a plain `left <= 0` would vibrate twice a second until it
-   * was. The ref holds which timer has already been announced.
+   * dismissed, so a plain `left <= 0` would fire twice a second until it was.
+   * The ref holds which timer has already been announced.
    *
-   * Only rests, and only long ones — a set's own clock ends with you standing
-   * over it, and see longTimerSec for why a short rest is not worth a
-   * buzz you are already watching for.
+   * Only rests, and only ones past the threshold — a set's own clock ends with
+   * you standing over it, and see longTimerSec for why a short rest is not
+   * worth interrupting a room for.
    */
   const buzzed = useRef<string | null>(null)
   useEffect(() => {
@@ -323,6 +368,7 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
     if (Date.now() < running.endsAt) return
     buzzed.current = id
     haptic('timer')
+    chime()
   })
 
   /**
@@ -444,7 +490,13 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
         }
       />
 
-      <div className={`page-content plan-run-page${running ? ' has-timer' : ''}`}>
+      {/* Any tap in a running session opens the audio device, because a
+          browser will only let one open in response to one — and a rest timer
+          ends minutes later with nobody touching anything. See primeChime. */}
+      <div
+        className={`page-content plan-run-page${running ? ' has-timer' : ''}`}
+        onPointerDown={primeChime}
+      >
         {error && <div className="status-msg err" role="alert">{error}</div>}
 
         <div className="plan-rows">
@@ -541,21 +593,28 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
         <div className="plan-player-bar" aria-hidden>
           <span className="plan-player-fill" style={{ width: `${pct}%` }} />
         </div>
+        {/* Three groups: how far in, how long you have been here, and the two
+            controls. Each is a column of a big figure over its own small one,
+            so the row reads as two clocks rather than as four numbers spread
+            across a bar with a hole in the middle of it. */}
         <div className="plan-player-row">
           <div className="plan-player-figures">
             <span className="plan-player-pct plan-num">{pct}<span className="unit">%</span></span>
-            <div className="plan-player-col">
-              {/* The wall clock, because the question in a gym is as often
-                  "how late is it" as "how long have I been here" — and the
-                  answer to the second one is on the bar between the two
-                  clusters, where it reads as the session's own figure. */}
-              <span className="plan-player-time plan-num">{timeOfDay()}</span>
-              <span className="plan-player-meta plan-num">{tally.done}/{tally.total} sets</span>
-            </div>
+            <span className="plan-player-meta plan-num">{tally.done}/{tally.total} sets</span>
           </div>
-          <span className="plan-player-elapsed plan-num" title="Time since the session started">
-            {clockLabel(elapsedSec(session.startedAt))}
-          </span>
+          <div className="plan-player-clocks">
+            {/* The session's own clock is the headline. It used to be the
+                smallest thing on the row while the wall clock was the biggest,
+                so the bar answered "what time is it" in the size that should
+                have answered "how long have I been here". */}
+            <span className="plan-player-elapsed plan-num" title="Time since the session started">
+              {clockLabel(elapsedSec(session.startedAt))}
+            </span>
+            {/* Still worth having: the question in a gym is as often "how late
+                is it" as "how long have I been here". */}
+            <span className="plan-player-time plan-num">{timeOfDay()}</span>
+          </div>
+          <div className="plan-player-actions">
           <button
             className="btn-icon"
             onClick={toggleFull}
@@ -577,6 +636,7 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
           >
             <Square size={16} fill="currentColor" />
           </button>
+          </div>
         </div>
       </div>
 

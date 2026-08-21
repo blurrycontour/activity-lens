@@ -55,6 +55,12 @@ public class SessionNoticePlugin extends Plugin {
         String startedAt = call.getString("startedAt", "");
         int percent = call.getInt("percent", 0);
         String subText = call.getString("subText", "");
+        // The expanded view: what the shade shows when the notification is
+        // pulled open, which is where there is room to say what comes next.
+        String bigText = call.getString("bigText", "");
+        // When the rest currently running ends, in epoch milliseconds, or 0
+        // when nothing is counting.
+        double restEndsAt = call.getDouble("restEndsAt", 0d);
 
         Context context = getContext();
         createChannel(context);
@@ -98,12 +104,33 @@ public class SessionNoticePlugin extends Plugin {
             // there in a way a second line of text is not.
             .setProgress(100, Math.max(0, Math.min(100, percent)), false);
 
-        // Counts up from when the session started, so the shade shows how long
-        // you have been training without the app having to post an update.
+        // Pulled open, the notification has room for what the collapsed line
+        // cannot hold: what is next, and where the session is up to. Built
+        // from the same session the app is showing, so the two never disagree.
+        if (!bigText.isEmpty()) {
+            builder.setStyle(new NotificationCompat.BigTextStyle().bigText(bigText).setSummaryText(subText));
+        }
+
+        /*
+         * The clock in the header, which Android draws for free and keeps
+         * ticking with the app closed -- the one part of this that stays true
+         * without being re-posted.
+         *
+         * It counts the rest *down* while one is running and the session *up*
+         * the rest of the time. During a rest, "40 seconds left" is the only
+         * number anyone wants from a glance at the shade; between sets it is
+         * how long you have been training.
+         */
+        long restEnds = (long) restEndsAt;
         long started = parseTime(startedAt);
-        if (started > 0) {
+        if (restEnds > System.currentTimeMillis()) {
+            builder.setWhen(restEnds);
+            builder.setUsesChronometer(true);
+            builder.setChronometerCountDown(true);
+        } else if (started > 0) {
             builder.setWhen(started);
             builder.setUsesChronometer(true);
+            builder.setChronometerCountDown(false);
         }
 
         try {

@@ -32,8 +32,14 @@ const TIMER_SEC_KEY = 'al_haptic_timer_sec'
  */
 export const LONG_TIMER_SEC = 60
 
-/** The thresholds offered in settings, in seconds. */
-export const LONG_TIMER_CHOICES = [30, 60, 90, 120, 180] as const
+/**
+ * The thresholds offered in settings, in seconds.
+ *
+ * Fifteen is here because "long" is a matter of what you are doing: a fifteen
+ * second rest between drop sets is still long enough to look away, and someone
+ * who wants every timer to reach them should be able to say so.
+ */
+export const LONG_TIMER_CHOICES = [15, 30, 60, 90, 120, 180] as const
 
 /** The threshold this device is set to, defaulting to LONG_TIMER_SEC. */
 export function longTimerSec(): number {

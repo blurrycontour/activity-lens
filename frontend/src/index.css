@@ -3242,6 +3242,12 @@ body:has(.overlay) .fab { display: none; }
   font-size: 10px;
 }
 .maplibregl-ctrl-attrib a { color: var(--text-2) !important; }
+/* Before MapLibre has measured itself it has not yet decided to be compact,
+   and in that window its own stylesheet shows the full credit line — which is
+   the wide bar that appears while a map is loading and vanishes once it has.
+   Hidden until the control is compact; from there MapLibre's own rules and
+   keepAttributionCompact() take over. */
+.maplibregl-ctrl-attrib:not(.maplibregl-compact) .maplibregl-ctrl-attrib-inner { display: none; }
 /* The control glyphs are dark artwork meant for a light map, so they are
    inverted for the dark theme and left alone for the light one. */
 :root { --map-ctrl-invert: 1; }
@@ -4773,14 +4779,16 @@ body:has(.overlay) .fab { display: none; }
     grid-column: 1 / -1;
   }
 
-  /* Narrower gutters than the vertical rhythm, which is the opposite of the
-     desktop's even box. A phone has 390px to work with and the cards inside
-     carry their own padding, so 16px of page plus 14px of card put 30px of
-     nothing between the screen edge and the first word. Eight still reads as a
-     margin rather than a bleed, and it is the same on the header so the two
-     boxes keep a single left edge. */
+  /* A narrow gutter for the body, because the cards inside carry their own
+     padding and the two add up: 8 + 14 puts the first word 22px in, which is
+     where a phone wants it.
+
+     The header is not inside that box and has no card of its own, so the same
+     8px would start its title 14px to the left of every word beneath it. It
+     takes the sum instead — the title and the card text share one left edge,
+     which is the line the eye actually follows down the page. */
   .page-content { padding: 16px 8px; }
-  .page-header { padding: 16px 8px; }
+  .page-header { padding: 16px 22px; }
   /* Controls take the full width below the title rather than competing with it
      for a phone's worth of room. Scoped to the component's own row, so the
      pages that hand-roll this header keep the layout they had. */
@@ -6929,35 +6937,58 @@ body:has(.overlay) .fab { display: none; }
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 16px;
+  padding: 10px 14px;
 }
-/* The percentage is the one figure worth seeing at a glance, so it is the
-   biggest thing on the bar; the elapsed clock sits beside it in its own
-   column, legible without being the headline; sets ticked stays small
-   underneath it, the detail you check rather than glance at. */
-.plan-player-figures { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; }
-.plan-player-pct { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; line-height: 1; }
-.plan-player-pct .unit { font-size: 14px; font-weight: 600; margin-left: 1px; }
-.plan-player-col { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.plan-player-time { font-size: 15px; font-weight: 650; color: var(--text); line-height: 1.2; }
+/*
+ * Three groups across the bar: how far in, how long you have been here, and
+ * the controls. The outer two share the leftover room equally so the clocks
+ * sit in the middle of the bar rather than wherever the group to their left
+ * happened to end — which is what left a hole in it.
+ */
+.plan-player-figures {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+.plan-player-clocks {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+.plan-player-actions { flex: 1; display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+/* Both columns are a figure over its own label, at the same two sizes, so the
+   bar reads as two clocks rather than four unrelated numbers. */
+.plan-player-pct { font-size: 26px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
+.plan-player-pct .unit { font-size: 13px; font-weight: 600; margin-left: 1px; color: var(--text-3); }
+/* The session's own clock, and the headline of the row: "how long have I been
+   here" is the question a bar pinned above a workout exists to answer. */
+.plan-player-elapsed {
+  font-size: 22px;
+  font-weight: 750;
+  color: var(--text);
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.plan-player-time { font-size: 11px; color: var(--text-3); line-height: 1.2; }
 .plan-player-meta {
   font-size: 11px;
   color: var(--text-3);
+  line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* The session's own clock, between the two clusters of the player row. It is
-   the one figure that belongs to the session rather than to a control, so it
-   sits where nothing else competes with it. */
-.plan-player-elapsed {
-  flex: 0 0 auto;
-  font-size: 15px;
-  font-weight: 650;
-  color: var(--text-2);
-  line-height: 1;
+/* On the narrowest phones the wall clock goes rather than the elapsed one: a
+   watch, a lock screen and the status bar all still have the time of day. */
+@media (max-width: 360px) {
+  .plan-player-time { display: none; }
+  .plan-player-row { padding: 10px 10px; gap: 8px; }
 }
-@media (max-width: 380px) { .plan-player-elapsed { display: none; } }
 
 .plan-player-stop { color: var(--danger); }
 .plan-player-stop:hover { background: var(--danger-dim); color: var(--danger); }
@@ -7038,14 +7069,17 @@ body:has(.overlay) .fab { display: none; }
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 16px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--warning) 8%, var(--bg-2));
 }
 .plan-timer-bar .btn { padding: 5px 11px; font-size: 12px; }
 .plan-timer-now {
   flex: 1;
-  min-width: 0;
+  /* Wide enough for "5:00" under its label at the size below: the middle of
+     this row is what the row is for, and four buttons either side had been
+     squeezing it to the width of the digits themselves. */
+  min-width: 86px;
   /* The name of what is counting sits above the figure: beside it, "1:30"
      read as the whole message and the word next to it as decoration. */
   display: flex;
@@ -7058,16 +7092,17 @@ body:has(.overlay) .fab { display: none; }
   color: var(--warning);
 }
 .plan-timer-now.up { color: var(--success); }
-/* The clock is the point of this row, so it is the biggest thing on it. */
-.plan-timer-digits { font-size: 20px; font-weight: 700; line-height: 1; }
+/* The clock is the point of this row, so it is the biggest thing on it — and
+   by a clear step, or the label above it reads as the same size shrunk. */
+.plan-timer-digits { font-size: 25px; font-weight: 750; line-height: 1; letter-spacing: -0.02em; }
 .plan-timer-what {
   display: inline-flex;
   align-items: center;
   line-height: 1;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 10.5px;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   color: var(--text-3);
   gap: 4px;
 }
@@ -7144,9 +7179,11 @@ body.session-full .plan-player { bottom: 0; padding-bottom: var(--safe-bottom); 
 .plan-nudge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   flex: 0 0 auto;
-  min-width: 56px;
+  /* Two of these a side, on a 360px phone, either side of the clock: every
+     pixel here is one the clock does not get. Still a 40px-tall target. */
+  min-width: 50px;
   height: 40px;
   justify-content: center;
   padding: 0 10px;

@@ -17,7 +17,8 @@ import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&ur
 import { Activity, Gauge, Heart, Mountain, Route } from 'lucide-react'
 import Dropdown from './Dropdown'
 import {
-  LayerSwitcher, MAP_LAYERS, MAP_LAYER_KEY, ResetViewControl, hasWebGL, type MapLayerId,
+  LayerSwitcher, MAP_LAYERS, MAP_LAYER_KEY, ResetViewControl, hasWebGL, keepAttributionCompact,
+  type MapLayerId,
 } from './mapLayers'
 // Re-exported because this is still where a map comes from: callers that build
 // one keep importing both from here, and only MapPage — which builds its own —
@@ -447,14 +448,9 @@ export default function RouteMap({
       scrub(t)
       setSelectedPoint(idx)
     })
-    // Attribution opens expanded even when compact, and on a phone that is a
-    // bar of link text across the bottom of the map. Collapsed to the "i" it
-    // already knows how to be; the class stays, so it is not re-expanded.
-    map.once('load', () => {
-      const attrib = map.getContainer().querySelector('.maplibregl-ctrl-attrib')
-      attrib?.classList.remove('maplibregl-compact-show')
-      attrib?.removeAttribute('open')
-    })
+    // Folded into its button from the first frame rather than on load; see
+    // keepAttributionCompact.
+    keepAttributionCompact(map)
     mapRef.current = map
     return () => { map.remove(); mapRef.current = null }
     // Built once, on the first render that has a route to put in it. Layer and

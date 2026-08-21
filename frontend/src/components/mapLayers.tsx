@@ -194,3 +194,32 @@ export function hasWebGL(): boolean {
   }
   return webglAnswer
 }
+
+/**
+ * Keeps the attribution folded into its ⓘ button from the first frame.
+ *
+ * MapLibre builds the compact attribution *expanded* and only folds it away
+ * once the style has loaded and it has measured itself, so a map that is
+ * looked at before it is touched wears a bar of tile credits across its corner
+ * and then visibly loses it. Nothing about that is information the reader
+ * asked for; the credits are one tap away either way.
+ *
+ * Bound to every event that can rebuild the control rather than to `load`
+ * alone — a base-layer switch discards the style and puts the expanded bar
+ * back — and run once immediately, for the case where the element is already
+ * there. Removing the class is exactly what MapLibre's own minimise does, and
+ * it is a documented stylesheet class rather than a private method: if it is
+ * ever renamed, the worst outcome is the attribution staying open, which is
+ * where it started.
+ */
+export function keepAttributionCompact(map: maplibregl.Map): void {
+  const collapse = () => {
+    const el = map.getContainer().querySelector('.maplibregl-ctrl-attrib')
+    el?.classList.remove('maplibregl-compact-show')
+    el?.removeAttribute('open')
+  }
+  collapse()
+  for (const event of ['styledata', 'load', 'idle'] as const) {
+    map.on(event, collapse)
+  }
+}
