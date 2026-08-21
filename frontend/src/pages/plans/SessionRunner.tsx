@@ -175,7 +175,7 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
   // Only while one is actually counting: Android draws the countdown itself
   // from this, and a stale timestamp would leave a clock ticking down in the
   // shade for a rest that ended.
-  const restEndsAt = resting && running && running.endsAt > Date.now() ? running.endsAt : 0
+  const restEndsAt = resting && running && running.endsAt > Date.now() ? String(running.endsAt) : ''
   useEffect(() => {
     void showSessionNotice({
       sessionId: session.id,

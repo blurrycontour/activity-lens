@@ -37,12 +37,19 @@ export interface SessionNotice {
    */
   nextUp?: string
   /**
-   * When the rest now running ends, in epoch milliseconds. Android turns it
-   * into a countdown in the notification's header — the one number worth
-   * having from a glance at the shade mid-rest — and the app posts nothing
-   * further for it, because the platform ticks it down on its own.
+   * When the rest now running ends, in epoch milliseconds — **as a string**.
+   *
+   * A string because the bridge carries JSON and Capacitor reads a number back
+   * out by asking what Java type it landed as: an epoch in milliseconds is far
+   * past the range of an int, so it arrives as a Long, and `getDouble` returns
+   * null for those rather than converting. The countdown silently never
+   * started, while `startedAt` — which has always been an ISO string — worked
+   * the whole time. Digits in a string have no such opinion.
+   *
+   * Android ticks it down on its own once it has it, so nothing is re-posted
+   * for the countdown.
    */
-  restEndsAt?: number
+  restEndsAt?: string
 }
 
 export interface SessionNoticePlugin {

@@ -64,9 +64,17 @@ public class SessionNoticePlugin extends Plugin {
         // The one extra line the expanded view has room for: what comes after
         // the thing you are on.
         String nextUp = call.getString("nextUp", "");
-        // When the rest currently running ends, in epoch milliseconds, or 0
-        // when nothing is counting.
-        double restEndsAt = call.getDouble("restEndsAt", 0d);
+        /*
+         * When the rest currently running ends, in epoch milliseconds, or
+         * empty when nothing is counting.
+         *
+         * Read as a string, and sent as one. An epoch in milliseconds is well
+         * past what an int holds, so the bridge hands it over as a Long --
+         * which getDouble does not convert, returning null and leaving this 0.
+         * The countdown never ran, and the elapsed clock beside it always did,
+         * because startedAt has always crossed as text.
+         */
+        long restEnds = parseMillis(call.getString("restEndsAt", ""));
         // Sets done out of the day's total, drawn as a ring.
         int done = call.getInt("done", 0);
         int total = call.getInt("total", 0);
@@ -133,7 +141,6 @@ public class SessionNoticePlugin extends Plugin {
          * nothing re-posted to keep it moving.
          */
         long started = parseTime(startedAt);
-        long restEnds = (long) restEndsAt;
         builder.setCustomContentView(noticeView(context, title, body, "", started, restEnds))
             .setCustomBigContentView(noticeView(context, title, body, nextUp, started, restEnds))
             .setStyle(new NotificationCompat.DecoratedCustomViewStyle());
@@ -304,6 +311,19 @@ public class SessionNoticePlugin extends Plugin {
     public void clear(PluginCall call) {
         NotificationManagerCompat.from(getContext()).cancel(NOTIFICATION_ID);
         call.resolve();
+    }
+
+    /** Digits to epoch milliseconds, or 0 when there are none. */
+    private static long parseMillis(String value) {
+        if (value == null || value.isEmpty()) {
+            return 0;
+        }
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException e) {
+            Log.w(TAG, "unparseable timestamp: " + value);
+            return 0;
+        }
     }
 
     /** RFC 3339 to epoch milliseconds, or 0 when it cannot be read. */
