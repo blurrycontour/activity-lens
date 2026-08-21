@@ -61,7 +61,7 @@ final class IncomingFiles {
      * the manifest's intent filters can afford to be broad. Anything that gets
      * past them and is not one of these is dropped here.
      */
-    private static final String[] EXTENSIONS = { ".gpx", ".tcx", ".zip", ".gz" };
+    private static final String[] EXTENSIONS = { ".gpx", ".tcx", ".fit", ".zip", ".gz" };
 
     /** Upper bound on one share, mirroring MAX_SHARED_FILES on the web side. */
     private static final int MAX_FILES = 200;

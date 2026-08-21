@@ -33,8 +33,8 @@ const faqs = [
   { q: 'What is the row of icons on someone\'s profile?', a: 'Pings — a nudge you send by tapping one: a sport to suggest it, or the couch to admit you are doing nothing today. There is nothing to type; the message is the icon, and the person gets a notification with your picture that opens your profile. You have to wait a short while before nudging the same person again (an administrator sets how long, under Admin → Social), and anyone who would rather not receive them can switch pings off in Settings → Notifications.' },
   { q: 'What can other people see?', a: 'Everything you see on the workout page — the route, map, heart rate, pace, cadence and splits — except your private notes and your equipment. They cannot edit, delete, recalculate or change anything.' },
   { q: 'If I make a workout private again, does that unshare it?', a: 'No. The public toggle and direct shares are independent, so switching back to private removes it from the Public tab on Discover but the people you shared it with keep access. Remove them individually in the share dialog, or use "Remove everyone".' },
-  { q: 'How do I add a workout?', a: 'Click "Add Workout" in the sidebar (or press Cmd/Ctrl + I). Upload a .gpx or .tcx file to import a recorded activity — you\'ll see a preview of the numbers before saving — or switch to Manual Entry to type in the details yourself.' },
-  { q: 'Which file formats are supported?', a: 'Activity Lens imports .gpx (universal GPS exchange) and .tcx (Training Center XML) files. Most watches and apps can export one of these.' },
+  { q: 'How do I add a workout?', a: 'Click "Add Workout" in the sidebar (or press Cmd/Ctrl + I). Upload a .fit, .gpx or .tcx file to import a recorded activity — you\'ll see a preview of the numbers before saving — or switch to Manual Entry to type in the details yourself.' },
+  { q: 'Which file formats are supported?', a: 'Activity Lens imports .fit (what watches record natively), .gpx (universal GPS exchange) and .tcx (Training Center XML). A .fit file is worth preferring where you have the choice: it is the original recording, and it carries things the other two drop — power and temperature among them, which appear as extra charts on the workout. Zipped and gzipped exports from Strava and Garmin are unpacked for you.' },
   { q: 'How are calories estimated?', a: 'When an imported file doesn\'t include calories, they are estimated for you. Under Settings → Calorie Estimation you can choose a heart-rate based method (which uses your sex, age, and weight from the About You section) or a distance-only method.' },
   { q: 'What do the small icons next to some numbers mean?', a: 'A Σ icon means the value was calculated or derived from the recorded data. A pencil icon means you entered that value manually. Recalculating a workout replaces manual values with derived ones.' },
   { q: 'How do heart-rate metrics work?', a: 'Where a workout records heart rate, its zones are shown directly. For workouts without their own max HR, your Max HR from Settings → Heart Rate & Performance is used instead.' },
@@ -69,8 +69,9 @@ export default function Help() {
           </h3>
           <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6, marginTop: 8 }}>
             Add your first workout with the <strong>Add Workout</strong> button in the sidebar. Import a
+            <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}> .fit</code>,
             <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}> .gpx</code> or
-            <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}> .tcx</code> file exported from
+            <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}> .tcx</code> file from
             your watch or app, or enter a workout manually. Once added, it appears across the Dashboard,
             Workouts, Analysis, and Consistency pages.
           </p>

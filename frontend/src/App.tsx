@@ -1,4 +1,5 @@
 import { useIsMobile } from './lib/useIsMobile'
+import { lazyChunk } from './lib/lazyChunk'
 import NotificationBanner, { type BannerNotification } from './components/NotificationBanner'
 import { consumeOpenedParam, markNotificationOpened, PUSH_EVENT, READ_NOTIFICATION_EVENT } from './lib/notifications'
 import UpdateToast from './components/UpdateToast'
@@ -29,10 +30,10 @@ import Help from './pages/Help'
  * ever opened — and it made WorkoutDetail's lazy import of RouteMap pointless,
  * since the library was already loaded by then.
  */
-const MapPage = lazy(() => import('./pages/MapPage'))
+const MapPage = lazy(lazyChunk(() => import('./pages/MapPage')))
 // Lazy for the same reason: the editor and the runner are a page most sessions
 // never open, and they are only ever reached by navigating to them.
-const PlansPage = lazy(() => import('./pages/plans/PlansPage'))
+const PlansPage = lazy(lazyChunk(() => import('./pages/plans/PlansPage')))
 import Settings from './pages/settings'
 import Admin from './pages/admin'
 import Login from './pages/Login'
@@ -718,6 +719,12 @@ export default function App() {
           <Dashboard
             onSelect={selectWorkout}
             onResumeSession={id => openSection('plans', 'session', id)}
+            onImport={() => setShowImport(true)}
+            // Through openLink, which is how every other "go here and do this"
+            // in the app travels: the query string is what the page reads to
+            // know it should open its own creation flow. See Equipment and
+            // PlansPage, where that is picked up.
+            onCreate={what => openLink(what === 'equipment' ? '/equipment?new=1' : '/plans?new=1')}
           />
         ) : page === 'workouts' ? (
           <Workouts onSelect={selectWorkout} onImport={() => setShowImport(true)} />

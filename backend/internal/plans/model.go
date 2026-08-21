@@ -28,8 +28,11 @@ type Plan struct {
 	// Days is populated by Get, and left nil by List — the list page shows
 	// names and counts, and loading every exercise of every plan to render
 	// them would be several hundred rows for a screen that draws a dozen.
-	Days      []Day  `json:"days,omitempty"`
-	DayCount  int    `json:"dayCount"`
+	Days     []Day `json:"days,omitempty"`
+	DayCount int   `json:"dayCount"`
+	// SetCount is how many sets a run through every day of this plan would
+	// tick off, counting the options a session picks by default. See planCols.
+	SetCount  int    `json:"setCount"`
 	CreatedAt string `json:"createdAt"`
 	UpdatedAt string `json:"updatedAt"`
 	// LastSessionAt is when a day of this plan was last run, if ever.

@@ -1,5 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { api } from '../lib/api'
+import {
+  clearSessionNotice, repostSessionNotice, sessionNoticeClaimed, showSessionNotice,
+} from '../lib/native/sessionNotice'
 import { useAuth } from './AuthContext'
 import type { PlanSession } from '../data/plans'
 
@@ -45,6 +48,54 @@ export function ActiveSessionProvider({ children }: { children: React.ReactNode 
     if (!user) { setActive(null); return }
     void refresh()
   }, [user, refresh])
+
+  /*
+   * The ongoing notification, kept alive from wherever you are in the app.
+   *
+   * The runner posts a far better one — what you are on, what is next, the rest
+   * counting down — but it is only mounted while the session is on screen, and
+   * the notification has to survive being swiped away and the app being opened
+   * on some other page. So this is the floor: if a session is running and
+   * nothing has posted a notice, post a plain one; whenever the app comes back
+   * to the foreground, put whatever is remembered back up.
+   *
+   * There is no event for a notification being dismissed and no way to ask
+   * whether one is still showing, so re-posting on every return is the only
+   * thing that can be relied on. Posting an identical notification under the
+   * same id is free when it is already there.
+   */
+  useEffect(() => {
+    if (!active) {
+      // Nothing running: anything left in the shade is stale. This is also
+      // what clears it after a session was finished on another device.
+      void clearSessionNotice()
+      return
+    }
+    const post = () => {
+      if (document.visibilityState !== 'visible') return
+      // The runner is on screen and its notice is the better one; anything
+      // built here would be a worse copy of what it already posted.
+      if (sessionNoticeClaimed()) { void repostSessionNotice(); return }
+      void showSessionNotice({
+        sessionId: active.id,
+        // The same shape the runner posts, with the little this knows to fill
+        // it with: it has the day and the tally, and not the exercise.
+        title: active.dayName,
+        body: `${active.doneSets}/${active.totalSets} sets`,
+        done: active.doneSets,
+        total: active.totalSets,
+        subText: active.planName,
+        startedAt: active.startedAt,
+      })
+    }
+    post()
+    document.addEventListener('visibilitychange', post)
+    window.addEventListener('focus', post)
+    return () => {
+      document.removeEventListener('visibilitychange', post)
+      window.removeEventListener('focus', post)
+    }
+  }, [active])
 
   const value = useMemo(() => ({ active, refresh, set: setActive }), [active, refresh])
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

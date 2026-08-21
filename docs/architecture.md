@@ -22,7 +22,7 @@ backend/
     equipment/          gear
     notify/             notifications + Web Push
     settings/           app settings and per-user preferences
-    ingest/             .gpx / .tcx parsing
+    ingest/             .fit / .gpx / .tcx parsing
     imageutil/          avatar processing, identicon generation
     store/              database connection + migrations
     web/                go:embed of the built frontend
@@ -216,10 +216,11 @@ which is precisely when it matters.
 
 ### Archives are unpacked in the browser
 
-A Strava export is a `.zip` of `activities/*.gpx.gz`, so both layers come off
-before there is anything the parser recognises. `lib/importQueue.ts` does that
-client-side with `fflate`: it avoids uploading a multi-hundred-megabyte archive,
-and it keeps zip-bomb handling out of the backend entirely. Expansion is bounded
-on entry count and total bytes, and anything it cannot use — the `activities.csv`,
-a `.fit` this build cannot parse yet — is *reported* rather than dropped, so
-every file the user selected is accounted for in the counts they see.
+A Strava export is a `.zip` of `activities/*.gpx.gz` and raw `.fit`, so both
+layers come off before there is anything the parser recognises.
+`lib/importQueue.ts` does that client-side with `fflate`: it avoids uploading a
+multi-hundred-megabyte archive, and it keeps zip-bomb handling out of the
+backend entirely. Expansion is bounded on entry count and total bytes, and
+anything it cannot use — the `activities.csv`, a stray photo — is *reported*
+rather than dropped, so every file the user selected is accounted for in the
+counts they see.

@@ -106,6 +106,7 @@
   --z-map-ui: 400;       /* controls drawn over a map canvas */
   --z-map-panel: 500;    /* the maximize button */
   --z-map-picker: 1000;  /* a picker opened from a map control, over both */
+  --z-dial: 1090;        /* an open speed dial — over the frame, under a dialog */
   --z-overlay: 1100;     /* the dimming behind a dialog */
   --z-dialog: 1101;      /* dialogs, sheets, panels: the overlay's content */
   --z-banner: 1150;      /* a push arriving over a dialog */
@@ -336,11 +337,16 @@ body {
 .switch input:checked + .switch-track::after { transform: translateX(14px); background: var(--primary); }
 .switch input:focus-visible + .switch-track { outline: 2px solid var(--primary); outline-offset: 2px; }
 
+/* The box nearly everything on a page sits in.
+ *
+ * Fourteen rather than sixteen: the page gutter around it is deliberately
+ * narrow on a phone, and the two paddings add up — every pixel here is one the
+ * content inside does not get, twice over on a screen 390px wide. */
 .card {
   background: var(--bg-2);
   border: 1px solid var(--border);
   border-radius: calc(var(--radius) * 1.5);
-  padding: 16px;
+  padding: 14px;
 }
 
 /* ── Settings & admin ───────────────────────────────────────────────────
@@ -425,7 +431,7 @@ body {
   background: var(--bg-2);
   border: 1px solid var(--border);
   border-radius: calc(var(--radius) * 1.5);
-  padding: 16px;
+  padding: 14px;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -2354,7 +2360,13 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 20px var(--primary-glow);
+  /* Its own glow, and a shadow under it. The glow says which colour the
+     button is; the shadow is what lifts it off whatever it happens to be
+     floating over. Deep and wide, because in the dark theme the page behind
+     it is nearly black already — a polite shadow there is invisible, and the
+     only thing it has to separate from is the cards, which are lighter.
+     A shadow is painted, never hit-tested, so it costs no tap and no swipe. */
+  box-shadow: 0 4px 20px var(--primary-glow), 0 10px 30px rgba(0, 0, 0, 0.75), 0 2px 8px rgba(0, 0, 0, 0.55);
   z-index: var(--z-fab);
   transition: transform 0.2s, box-shadow 0.2s;
 }
@@ -2366,8 +2378,121 @@ body {
    `:has` is not load-bearing — where it is unsupported the FAB simply stays
    where it was. */
 body:has(.overlay) .fab { display: none; }
-.fab:hover { transform: scale(1.08); box-shadow: 0 6px 28px var(--primary-glow); }
+.fab:hover { transform: scale(1.08); box-shadow: 0 6px 28px var(--primary-glow), 0 14px 36px rgba(0, 0, 0, 0.75), 0 2px 8px rgba(0, 0, 0, 0.55); }
 .fab:active { transform: scale(0.96); }
+/* ── Speed dial ──
+   The dashboard's floating button, which makes one of several things. The
+   closed button is the same .fab every other page draws, in the same corner —
+   only what happens when it is pressed differs. */
+.dial {
+  position: fixed;
+  /* The column is as tall as its actions even while they are folded away, and
+     an invisible strip up the side of the screen that swallowed scrolls is the
+     kind of fault nobody can see to report. Only what is actually pressable
+     takes input. */
+  pointer-events: none;
+  bottom: calc(24px + var(--bottombar-h));
+  right: 24px;
+  z-index: var(--z-fab);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+}
+/* The toggle drops the .fab's own fixed position and sits in the column. */
+.dial .fab { position: static; pointer-events: auto; }
+.dial.open .dial-actions { pointer-events: auto; }
+/* Blurred rather than transparent: three circles over a dashboard full of
+   numbers and charts had nothing to sit against, and pushing the page back is
+   what makes them read as the only thing on screen. */
+.dial-scrim {
+  position: fixed;
+  inset: 0;
+  /* Above the app frame, like a dialog's overlay and for the same reason. At
+     the FAB's level it sat *under* the top and bottom bars, so they stayed
+     sharp above a blurred page — which does not read as a blur, it reads as
+     the effect not working. Same declarations as .overlay, one step below it. */
+  z-index: var(--z-dial);
+  /* Dimming only. The blur is applied to the page underneath. */
+  background: rgba(0, 0, 0, 0.45);
+  animation: scrimIn 0.16s ease-out;
+}
+/* The buttons themselves have to come with it, or they end up behind the
+   scrim that is there to set them off. Only while open: closed, this is an
+   ordinary floating button and belongs under the frame with the rest. */
+.dial.open { z-index: calc(var(--z-dial) + 1); }
+/* The blur itself is done to the page rather than by the scrim: see SpeedDial.
+   Everything the app draws lives in #root; the dial does not, because it is
+   portalled to the body precisely so it can stay sharp over a blurred page. */
+body.dial-open > #root {
+  filter: blur(8px);
+  /* Nothing under here can be reached anyway — the scrim is over it — and
+     leaving it interactive means a blurred button can still be pressed. */
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dial-scrim { animation: none; }
+}
+@keyframes scrimIn { from { opacity: 0; } to { opacity: 1; } }
+body:has(.overlay) .dial { display: none; }
+
+.dial-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+}
+.dial-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  /* Closed, they are folded into the button and cannot be pressed. Opacity and
+     transform rather than display, so both directions animate. */
+  opacity: 0;
+  transform: translateY(12px) scale(0.9);
+  pointer-events: none;
+  transition: opacity 0.16s ease, transform 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.dial.open .dial-action { opacity: 1; transform: none; pointer-events: auto; }
+@media (prefers-reduced-motion: reduce) {
+  .dial-action { transition: none; }
+}
+/* The name to the left of its circle, on the surface a tooltip would use: the
+   icons are a bicycle and a clipboard, and which of those means "plan" is not
+   a guess to make people make. */
+.dial-label {
+  padding: 6px 11px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--text);
+  background: var(--bg-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.7);
+}
+.dial-glyph {
+  width: 50px;
+  height: 50px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--primary);
+  background: var(--bg-2);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.75), 0 2px 8px rgba(0, 0, 0, 0.55);
+  transition: transform 0.12s, border-color 0.12s;
+}
+.dial-action:hover .dial-glyph { border-color: var(--primary); transform: scale(1.06); }
+.dial-action:active .dial-glyph { transform: scale(0.96); }
+
 /* Room to scroll past a floating button. The FAB is fixed to the viewport, so
    it covers whatever happens to be at the bottom of the screen — which was
    fine until a page put a control there. A plan's comment box sat under it,
@@ -3237,6 +3362,12 @@ body:has(.overlay) .fab { display: none; }
   font-size: 10px;
 }
 .maplibregl-ctrl-attrib a { color: var(--text-2) !important; }
+/* Before MapLibre has measured itself it has not yet decided to be compact,
+   and in that window its own stylesheet shows the full credit line — which is
+   the wide bar that appears while a map is loading and vanishes once it has.
+   Hidden until the control is compact; from there MapLibre's own rules and
+   keepAttributionCompact() take over. */
+.maplibregl-ctrl-attrib:not(.maplibregl-compact) .maplibregl-ctrl-attrib-inner { display: none; }
 /* The control glyphs are dark artwork meant for a light map, so they are
    inverted for the dark theme and left alone for the light one. */
 :root { --map-ctrl-invert: 1; }
@@ -3828,6 +3959,41 @@ body:has(.overlay) .fab { display: none; }
   /* Ring in the bar's own colour so it reads as sitting on the avatar. */
   box-shadow: 0 0 0 2px var(--bg-2);
   pointer-events: none;
+}
+
+/* ── Toast ──
+   A brief "that worked" near the top edge. Positioned like the banner below,
+   because they are the same kind of interruption at two sizes — but it is not
+   a notification: no icon well, no body, nothing to tap. */
+.toast {
+  position: fixed;
+  top: calc(var(--topbar-h) + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-banner);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 24px);
+  padding: 9px 14px;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 99px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+  animation: toastIn 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  /* It says something and then leaves; there is nothing here to press, and
+     catching a tap meant for what is underneath would be a bug. */
+  pointer-events: none;
+}
+.toast svg { color: var(--primary); flex: 0 0 auto; }
+@keyframes toastIn {
+  from { transform: translate(-50%, -10px); opacity: 0; }
+  to { transform: translate(-50%, 0); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast { animation: none; }
 }
 
 /* ── In-app notification banner ──
@@ -4472,8 +4638,11 @@ body:has(.overlay) .fab { display: none; }
    the one separating the row from the tabs under it, which nothing else
    provides. Adding both left the row hanging off the header with the tabs
    pressed against its underside. */
-.ping-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.ping-row { position: relative; display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
 .ping-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+/* The button and whatever hangs off it — the held tooltip — so the tip is
+   positioned against its own icon rather than against the row. */
+.ping-slot { position: relative; display: inline-flex; }
 .ping-btn {
   width: 38px;
   height: 38px;
@@ -4487,6 +4656,7 @@ body:has(.overlay) .fab { display: none; }
   cursor: pointer;
   transition: all 0.15s;
 }
+.ping-btn { position: relative; }
 .ping-btn:hover:not(:disabled) { background: var(--bg-3); color: var(--text); transform: translateY(-1px); }
 .ping-btn:disabled { opacity: 0.4; cursor: default; }
 /* The receipt for the one just sent. It stays lit for the whole cooldown, so it
@@ -4495,8 +4665,61 @@ body:has(.overlay) .fab { display: none; }
 .ping-btn.sent {
   opacity: 1;
   color: var(--primary);
-  border-color: var(--primary);
+  /* The ring is the edge now, and two circles a pixel apart read as a mistake. */
+  border-color: transparent;
   background: var(--primary-dim);
+}
+/* The cooldown, drawn around the tick. Rotated so it starts at twelve
+   o'clock, which is the only place a clock may start. */
+.ping-ring {
+  position: absolute;
+  inset: -1px;
+  width: calc(100% + 2px);
+  height: calc(100% + 2px);
+  transform: rotate(-90deg);
+  fill: none;
+  pointer-events: none;
+}
+.ping-ring circle {
+  stroke: var(--primary);
+  stroke-width: 2;
+  stroke-linecap: round;
+  /* Full circle to none over exactly the cooldown, whose length the element
+     supplies. The clock is the animation; nothing re-sets it as it runs. */
+  stroke-dashoffset: 0;
+  animation: pingRing linear forwards;
+}
+@keyframes pingRing {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: 100; }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Left whole rather than stepped down each second: this is a countdown, and
+     a ring that jumps is worse than one that just marks "still waiting". */
+  .ping-ring circle { animation: none; }
+}
+
+/* What the icon actually says, on a press and hold. Above the button, because
+   a row of nudges sits under a name and a tagline and there is nothing below
+   it but the tabs. */
+.ping-tip {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-chrome);
+  max-width: min(90vw, 320px);
+  width: max-content;
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text);
+  background: var(--bg-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  animation: toastIn 0.14s ease-out;
 }
 .ping-err { font-size: 11px; color: var(--danger); }
 @media (max-width: 768px) {
@@ -4665,7 +4888,6 @@ body:has(.overlay) .fab { display: none; }
      the FAB's offset both clear the real bar rather than its visible part. */
   :root { --bottombar-h: calc(64px + var(--safe-bottom)); }
 
-  .card-export-btn { display: none; }
 
   /* No visible scrollbar on mobile: touch scrolling doesn't need one, and a
      persistent thumb reads as a leftover desktop affordance in an installed
@@ -4769,8 +4991,16 @@ body:has(.overlay) .fab { display: none; }
     grid-column: 1 / -1;
   }
 
-  .page-content { padding: 16px; }
-  .page-header { padding: 16px; }
+  /* A narrow gutter for the body, because the cards inside carry their own
+     padding and the two add up: 8 + 14 puts the first word 22px in, which is
+     where a phone wants it.
+
+     The header is not inside that box and has no card of its own, so the same
+     8px would start its title 14px to the left of every word beneath it. It
+     takes the sum instead — the title and the card text share one left edge,
+     which is the line the eye actually follows down the page. */
+  .page-content { padding: 16px 8px; }
+  .page-header { padding: 16px 22px; }
   /* Controls take the full width below the title rather than competing with it
      for a phone's worth of room. Scoped to the component's own row, so the
      pages that hand-roll this header keep the layout they had. */
@@ -4828,7 +5058,11 @@ body:has(.overlay) .fab { display: none; }
   }
   .bottom-bar-item { padding: 8px 2px; min-width: 0; }
 
-  .fab { bottom: calc(64px + var(--safe-bottom) + 18px); }
+  /* The dial is the same button in the same corner and has to be lifted with
+     it — it draws its own .fab unpositioned, so this rule alone never reached
+     the dashboard's and left one button sitting lower than every other. */
+  .fab,
+  .dial { bottom: calc(64px + var(--safe-bottom) + 18px); }
 }
 
 @media (min-width: 769px) {
@@ -5870,30 +6104,132 @@ body:has(.overlay) .fab { display: none; }
 /* --- The list --- */
 
 .plan-list { display: flex; flex-direction: column; gap: 9px; margin-top: 14px; }
-/* The same rows as cards: two or three to a row, each one taller, with the
-   figures under the name instead of pushed to the far end. Same components and
-   the same classes — only the direction changes, so there is one row to keep
-   right rather than two. */
+
+/* The same rows as cards: a mark, the name under it, the figures at the foot.
+   Same components and the same classes as the list — only the direction
+   changes, so there is one row to keep right rather than two.
+
+   Two to a line on a phone, always. auto-fill with a 230px minimum meant a
+   390px screen could not fit two, so the card view quietly became the list
+   view with taller rows — the same content, more scrolling, and no reason to
+   have switched. The minimum only governs the desktop track. */
 .plan-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 10px;
   margin-top: 14px;
 }
 .plan-grid .plan-card {
   flex-direction: column;
   align-items: stretch;
-  gap: 10px;
-  min-height: 104px;
+  justify-content: flex-start;
+  gap: 9px;
+  min-height: 118px;
 }
-.plan-grid .plan-card-row { position: relative; }
-/* Padded on all four sides here — in a row the card's own right edge belongs
-   to the start button, in a card that button is in the corner below. */
-.plan-grid .plan-card-open { flex-direction: column; align-items: stretch; gap: 10px; padding: 13px 15px 40px; }
-.plan-grid .plan-card-figures { justify-content: space-between; gap: 8px; }
-.plan-grid .plan-card-main { flex: 1; }
-/* The start button has no row to sit at the end of, so it takes the corner. */
-.plan-grid .plan-card-start { position: absolute; right: 10px; bottom: 10px; }
+/*
+ * A card is a small two-column grid, not a stack.
+ *
+ * The mark takes the first column and the name sits beside it, so a tile opens
+ * with something to read rather than with an icon alone on a line. Everything
+ * below spans both columns. Stacking them put the icon on its own row, the
+ * figures right-aligned under it and the play button adrift in the space that
+ * left — three things arranged by what was left over rather than by what they
+ * are.
+ */
+.plan-grid .plan-card-open,
+.plan-grid .plan-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 8px;
+  /* Head at the top, foot at the bottom, whatever is between them in the
+     middle — which is what makes a line of tiles agree on where their figures
+     sit. `margin-top: auto` does not do this in a grid the way it does in a
+     column of flex items. */
+  align-content: space-between;
+}
+/* A plan's card is two controls, so the card itself is a plain box and the
+   button inside it is the grid — and that button has to fill the box, or the
+   foot stops at the end of the text. */
+.plan-grid .plan-card-row { display: block; position: relative; }
+.plan-grid .plan-card-row .plan-card-open { height: 100%; }
+.plan-grid .plan-card-open { padding: 12px 13px; }
+.plan-grid .plan-card-head { grid-column: 1; }
+.plan-grid .plan-card-main { grid-column: 2; align-self: center; }
+/* The name has the room a card gives it: two lines before it gives up, rather
+   than one ending in an ellipsis on the tile whose whole job is to be
+   recognised. */
+.plan-grid .plan-card-name {
+  font-size: 14px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* The foot spans the card and keeps its left edge, so figures read as figures
+   rather than as something pushed into a corner. It is the last row, so tiles
+   in a line agree on where their numbers sit whatever the names above did.
+   The right-hand gap is the play button's. */
+.plan-grid .plan-card-figures {
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+  gap: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--border);
+}
+.plan-grid .plan-card-row .plan-card-figures { padding-right: 34px; }
+/* The play button has no row to sit at the end of, so it takes the corner —
+   on the same line as the figures rather than below them. */
+.plan-grid .plan-card-start { position: absolute; right: 8px; bottom: 7px; }
+
+/* Two to a line on a phone, whatever the width: it cannot fit two of the
+   desktop tracks and would otherwise fall back to one, which is the list view
+   again with taller rows.
+
+   This block sits with the rules it overrides rather than in the responsive
+   section at the top of the file. Both selectors have the same specificity, so
+   the one further down wins — and from up there, the unconditional
+   `.plan-grid` below was quietly beating the media query on every phone. */
+@media (max-width: 768px) {
+  .plan-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .plan-grid .plan-card { min-height: 112px; }
+  .plan-grid .plan-card-open { padding: 11px 11px; column-gap: 8px; }
+  .plan-grid .plan-card-name { font-size: 13.5px; }
+  .plan-grid .plan-card-meta { font-size: 11px; }
+  .plan-grid .plan-card-figures { font-size: 11px; gap: 8px; }
+  .plan-grid .plan-card-mark { width: 26px; height: 26px; border-radius: 8px; }
+}
+
+/* The mark: what this tile is, before the name is read. A plan and a session
+   appear in the same lists and wear this feature's two colours, which is the
+   distinction the eye can make from across a card. */
+.plan-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.plan-card-mark {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: var(--plan);
+  background: color-mix(in srgb, var(--plan) 14%, transparent);
+}
+.plan-card-mark.session {
+  color: var(--session);
+  background: color-mix(in srgb, var(--session) 14%, transparent);
+}
+/* In a row the mark is smaller and the head is just the mark: the name sits
+   beside it rather than under it, and a 30px tile would push the row's height
+   up for nothing. */
+.plan-list .plan-card-mark { width: 26px; height: 26px; border-radius: 8px; }
 .plan-card {
   display: flex;
   align-items: center;
@@ -6817,40 +7153,65 @@ body:has(.overlay) .fab { display: none; }
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 16px;
+  padding: 10px 14px;
 }
-/* The percentage is the one figure worth seeing at a glance, so it is the
-   biggest thing on the bar; the elapsed clock sits beside it in its own
-   column, legible without being the headline; sets ticked stays small
-   underneath it, the detail you check rather than glance at. */
-.plan-player-figures { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; }
-.plan-player-pct { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; line-height: 1; }
-.plan-player-pct .unit { font-size: 14px; font-weight: 600; margin-left: 1px; }
-.plan-player-col { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.plan-player-time { font-size: 15px; font-weight: 650; color: var(--text); line-height: 1.2; }
+/*
+ * Three groups across the bar: how far in, how long you have been here, and
+ * the controls. The outer two share the leftover room equally so the clocks
+ * sit in the middle of the bar rather than wherever the group to their left
+ * happened to end — which is what left a hole in it.
+ */
+.plan-player-figures {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+.plan-player-clocks {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+.plan-player-actions { flex: 1; display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+/* Both columns are a figure over its own label, at the same two sizes, so the
+   bar reads as two clocks rather than four unrelated numbers. */
+.plan-player-pct { font-size: 26px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
+.plan-player-pct .unit { font-size: 13px; font-weight: 600; margin-left: 1px; color: var(--text-3); }
+/* The session's own clock, and the headline of the row: "how long have I been
+   here" is the question a bar pinned above a workout exists to answer. */
+.plan-player-elapsed {
+  font-size: 22px;
+  font-weight: 750;
+  color: var(--text);
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.plan-player-time { font-size: 11px; color: var(--text-3); line-height: 1.2; }
 .plan-player-meta {
   font-size: 11px;
   color: var(--text-3);
+  line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* The session's own clock, between the two clusters of the player row. It is
-   the one figure that belongs to the session rather than to a control, so it
-   sits where nothing else competes with it. */
-.plan-player-elapsed {
-  flex: 0 0 auto;
-  font-size: 15px;
-  font-weight: 650;
-  color: var(--text-2);
-  line-height: 1;
+/* On the narrowest phones the wall clock goes rather than the elapsed one: a
+   watch, a lock screen and the status bar all still have the time of day. */
+@media (max-width: 360px) {
+  .plan-player-time { display: none; }
+  .plan-player-row { padding: 10px 10px; gap: 8px; }
 }
-@media (max-width: 380px) { .plan-player-elapsed { display: none; } }
 
 .plan-player-stop { color: var(--danger); }
 .plan-player-stop:hover { background: var(--danger-dim); color: var(--danger); }
 .plan-player-finish { flex: 0 0 auto; }
-.plan-player-end { flex: 0 0 auto; color: var(--danger); }
+/* Larger than the icon buttons beside it. It is the one control on the bar
+   that ends the thing the bar is about, and it was the smallest mark on it. */
+.plan-player-end { flex: 0 0 auto; width: 40px; height: 40px; color: var(--danger); }
 .plan-player-end:hover { background: var(--danger-dim); color: var(--danger); }
 
 /* --- A block's top row --- */
@@ -6926,14 +7287,17 @@ body:has(.overlay) .fab { display: none; }
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 16px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--warning) 8%, var(--bg-2));
 }
 .plan-timer-bar .btn { padding: 5px 11px; font-size: 12px; }
 .plan-timer-now {
   flex: 1;
-  min-width: 0;
+  /* Wide enough for "5:00" under its label at the size below: the middle of
+     this row is what the row is for, and four buttons either side had been
+     squeezing it to the width of the digits themselves. */
+  min-width: 86px;
   /* The name of what is counting sits above the figure: beside it, "1:30"
      read as the whole message and the word next to it as decoration. */
   display: flex;
@@ -6946,16 +7310,17 @@ body:has(.overlay) .fab { display: none; }
   color: var(--warning);
 }
 .plan-timer-now.up { color: var(--success); }
-/* The clock is the point of this row, so it is the biggest thing on it. */
-.plan-timer-digits { font-size: 20px; font-weight: 700; line-height: 1; }
+/* The clock is the point of this row, so it is the biggest thing on it — and
+   by a clear step, or the label above it reads as the same size shrunk. */
+.plan-timer-digits { font-size: 25px; font-weight: 750; line-height: 1; letter-spacing: -0.02em; }
 .plan-timer-what {
   display: inline-flex;
   align-items: center;
   line-height: 1;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 10.5px;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   color: var(--text-3);
   gap: 4px;
 }
@@ -7032,9 +7397,11 @@ body.session-full .plan-player { bottom: 0; padding-bottom: var(--safe-bottom); 
 .plan-nudge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   flex: 0 0 auto;
-  min-width: 56px;
+  /* Two of these a side, on a 360px phone, either side of the clock: every
+     pixel here is one the clock does not get. Still a 40px-tall target. */
+  min-width: 50px;
   height: 40px;
   justify-content: center;
   padding: 0 10px;

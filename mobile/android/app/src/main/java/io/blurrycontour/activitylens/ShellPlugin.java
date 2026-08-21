@@ -3,13 +3,18 @@ package io.blurrycontour.activitylens;
 import android.Manifest;
 import android.content.ContentResolver;
 import android.content.ContentValues;
+import android.content.Context;
 import android.content.Intent;
 import android.media.MediaScannerConnection;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
+import android.os.VibratorManager;
 import android.provider.MediaStore;
 import android.util.Base64;
+import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
@@ -22,11 +27,12 @@ import androidx.core.content.FileProvider;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.OutputStream;
+import java.util.List;
 
 /**
  * The things a WebView cannot do for itself.
  *
- * Right now that is saving a file. In a browser the app builds a Blob, points an
+ * Saving a file, and vibrating. In a browser the app builds a Blob, points an
  * anchor at it and clicks it; in an Android WebView that does nothing at all —
  * `blob:` URLs are explicitly not handed to the system (see Bridge.launchIntent)
  * and the download attribute is not implemented. The export buttons therefore
@@ -58,6 +64,80 @@ public class ShellPlugin extends Plugin {
      * here. A file that lands silently in a folder the user cannot see is
      * indistinguishable from one that failed, so Android's toast stands in.
      */
+    /**
+     * Vibrates, with a pattern.
+     *
+     * `navigator.vibrate` exists in the WebView and is the obvious way to do
+     * this, but it has now failed twice in ways that report nothing: without
+     * the VIBRATE permission it is silently ignored while still returning
+     * true, and Chrome drops the call outright whenever the page is not
+     * visible — which, during a rest with the phone in a pocket, is exactly
+     * when the buzz is the whole point. The system Vibrator has neither
+     * problem and says so when it is not there.
+     *
+     * The pattern is the same shape the web API takes: milliseconds on, off,
+     * on, and so forth.
+     */
+    @PluginMethod
+    public void vibrate(PluginCall call) {
+        JSArray raw = call.getArray("pattern");
+        long[] pattern;
+        try {
+            List<Object> values = raw == null ? null : raw.toList();
+            if (values == null || values.isEmpty()) {
+                call.reject("pattern is required");
+                return;
+            }
+            pattern = new long[values.size() + 1];
+            // A waveform alternates off/on and starts with off, where the web
+            // API's first number is already an on. One leading zero makes the
+            // two the same list.
+            pattern[0] = 0;
+            for (int i = 0; i < values.size(); i++) {
+                pattern[i + 1] = Math.max(0, Math.min(5000, ((Number) values.get(i)).longValue()));
+            }
+        } catch (Exception e) {
+            call.reject("pattern must be a list of milliseconds");
+            return;
+        }
+
+        Vibrator vibrator;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            VibratorManager manager = (VibratorManager) getContext().getSystemService(Context.VIBRATOR_MANAGER_SERVICE);
+            vibrator = manager == null ? null : manager.getDefaultVibrator();
+        } else {
+            vibrator = (Vibrator) getContext().getSystemService(Context.VIBRATOR_SERVICE);
+        }
+        if (vibrator == null || !vibrator.hasVibrator()) {
+            // A tablet with no motor. Reported rather than swallowed, so the
+            // caller can stop offering something this device cannot do.
+            call.reject("no vibrator");
+            return;
+        }
+        /*
+         * A single pulse is a one-shot, not a waveform of one.
+         *
+         * This is the difference between the buzz that ends a session and the
+         * buzz that throws one away: identical code, identical moment, and the
+         * only thing that is not the same is that discard's pattern has one
+         * entry and finish's has five. A one-entry pattern becomes the
+         * waveform {0, n} -- wait nothing, then buzz -- which is a legal thing
+         * to ask for and which some devices decline to render at all. The
+         * platform has an API for exactly this case, and it is the one that
+         * works. Every pattern with a real rhythm still goes the waveform way.
+         *
+         * -1 is "do not repeat": a pattern that loops has to be cancelled by
+         * someone, and nothing here would be alive to do it.
+         */
+        // createOneShot refuses a zero-length buzz, which a hand-edited or
+        // future pattern could ask for; a waveform simply does nothing for it.
+        VibrationEffect effect = pattern.length == 2 && pattern[1] > 0
+            ? VibrationEffect.createOneShot(pattern[1], VibrationEffect.DEFAULT_AMPLITUDE)
+            : VibrationEffect.createWaveform(pattern, -1);
+        vibrator.vibrate(effect);
+        call.resolve();
+    }
+
     @PluginMethod
     public void toast(PluginCall call) {
         String message = call.getString("message");

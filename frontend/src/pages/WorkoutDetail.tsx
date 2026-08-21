@@ -6,12 +6,14 @@ import SportDropdown from '../components/SportDropdown'
 import Dropdown from '../components/Dropdown'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ReferenceDot, ReferenceArea, BarChart, Bar } from 'recharts'
 import {
-  ArrowLeft, Heart, Mountain, Zap, Clock, TrendingUp, Navigation, Download, Pencil, Trash2, Gauge,
-  Check, X as XIcon, Play, Pause as PauseIcon, LoaderCircle, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, AlertTriangle, Activity, Share2, Lock, FileDown, Plus, Image as ImageIcon, NotebookPen, Images, MessageSquare, ClipboardList, Watch, Undo2, ChevronDown } from 'lucide-react'
+  ArrowLeft, Heart, Mountain, Zap, Clock, TrendingUp, Navigation, Pencil, Trash2, Gauge,
+  Check, X as XIcon, Play, Pause as PauseIcon, LoaderCircle, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, AlertTriangle, Activity, Share2, Lock, FileDown, Plus, Image as ImageIcon, NotebookPen, Images, MessageSquare, ClipboardList, Watch, Undo2, ChevronDown, Thermometer, LineChart } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
-import { downloadWorkoutGPX, downloadWorkoutOriginal, reportSaveFailure } from '../lib/download'
+import { downloadWorkoutOriginal } from '../lib/download'
+import { extraSeriesMeta, extraSeriesStats, type ExtraSeriesMeta } from '../lib/extraSeries'
+import { lazyChunk } from '../lib/lazyChunk'
 import { useLocalStorage } from '../lib/useLocalStorage'
 import { DEFAULT_HR_ZONE_CHART, HR_ZONE_CHART_KEY, type HRZoneChart } from '../lib/dashboardConfig'
 import InfoTip from '../components/InfoTip'
@@ -34,14 +36,14 @@ import type { Shading } from '../components/RouteMap'
  * the map arrives a beat later behind its own placeholder, which is a far
  * better trade than a slower first paint on every page in the app.
  */
-const RouteMap = lazy(() => import('../components/RouteMap'))
+const RouteMap = lazy(lazyChunk(() => import('../components/RouteMap')))
 import ExpandModal from '../components/ExpandModal'
 import TabStrip, { type TabStripItem } from '../components/TabStrip'
 import ShareBadge from '../components/ShareBadge'
 import { useRefreshHandler } from '../context/RefreshContext'
 import { inlineTicks } from '../lib/chartTicks'
-const WorkoutGallery = lazy(() => import('../components/WorkoutGallery'))
-const WorkoutSocial = lazy(() => import('../components/WorkoutSocial'))
+const WorkoutGallery = lazy(lazyChunk(() => import('../components/WorkoutGallery')))
+const WorkoutSocial = lazy(lazyChunk(() => import('../components/WorkoutSocial')))
 
 /** The sections under the charts. */
 type DetailTab = 'notes' | 'gallery' | 'social'
@@ -98,7 +100,7 @@ function StatChip({ icon, label, value, calculated, manual }: { icon?: React.Rea
   )
 }
 
-function OptionsMenu({ onEdit, onExport, onDownloadOriginal, onRestore, onShare, onShareCard, onRecalculate, onDelete, deleting }: { onEdit: () => void; onExport: () => void; onDownloadOriginal?: () => void; onRestore?: () => void; onShare?: () => void; onShareCard: () => void; onRecalculate: () => void; onDelete: () => void; deleting: boolean }) {
+function OptionsMenu({ onEdit, onDownloadOriginal, onRestore, onShare, onShareCard, onRecalculate, onDelete, deleting }: { onEdit: () => void; onDownloadOriginal?: () => void; onRestore?: () => void; onShare?: () => void; onShareCard: () => void; onRecalculate: () => void; onDelete: () => void; deleting: boolean }) {
   return (
     <MenuButton icon={<MoreVertical size={18} />} label="Workout options">
       <button className="options-menu-item" onClick={onEdit}>
@@ -118,11 +120,12 @@ function OptionsMenu({ onEdit, onExport, onDownloadOriginal, onRestore, onShare,
       <button className="options-menu-item" onClick={onShareCard}>
         <ImageIcon size={14} /> Share card
       </button>
-      <button className="options-menu-item" onClick={onExport}>
-        <Download size={14} /> Export GPX
-      </button>
-      {/* Only when an original was actually archived. "Export GPX" above is
-          rebuilt from the parsed data; this is the file as imported. */}
+      {/* The file as it was imported, when the instance archived it. There is
+          no rebuilt-GPX export beside it any more: it was assembled from the
+          parsed route, so a treadmill run or an indoor ride — which have no
+          route at all — exported an empty document that looked like a working
+          feature until somebody opened it. A FIT import makes that worse, not
+          better: what it would throw away now includes power. */}
       {onDownloadOriginal && (
         <button className="options-menu-item" onClick={onDownloadOriginal}>
           <FileDown size={14} /> Download original
@@ -239,9 +242,38 @@ function NotesPanel({ workout: w, onSaved }: { workout: Workout; onSaved: (w: Wo
   )
 }
 
-type Metric = 'hr' | 'pace' | 'speed' | 'elevation' | 'cadence'
+/*
+ * Which charts a workout can show.
+ *
+ * Five fixed, plus one per named series the file happened to carry. The extras
+ * are prefixed rather than bare so a future series called "pace" cannot collide
+ * with the real one, and so a stored selection can always be told apart from a
+ * metric this build no longer has.
+ */
+type Metric = 'hr' | 'pace' | 'speed' | 'elevation' | 'cadence' | `extra:${string}`
 
 const CADENCE_COLOR = '#ec4899'
+
+/**
+ * The mark for a named series.
+ *
+ * By name, with a fallback, for the same reason the labels are: the server can
+ * send a series this build has never heard of, and a missing icon should be a
+ * generic one rather than a hole in the panel header.
+ */
+function ExtraSeriesIcon({ name, color }: { name: string; color: string }) {
+  if (name === 'power') return <Zap size={14} color={color} />
+  if (name === 'temperature') return <Thermometer size={14} color={color} />
+  return <LineChart size={14} color={color} />
+}
+
+/** Min, average and max under a named series' chart, in its own unit. */
+function ExtraStats({ points, meta }: { points: { v: number }[]; meta: ExtraSeriesMeta }) {
+  const stats = extraSeriesStats(points)
+  if (!stats) return null
+  const n = (v: number) => v.toFixed(meta.decimals)
+  return <>Min {n(stats.min)} · Avg {n(stats.avg)} · Max {n(stats.max)} {meta.unit}</>
+}
 
 /** Cadence means steps per minute on foot and crank revolutions on a bike. */
 function cadenceUnit(type: WorkoutType): string {
@@ -672,6 +704,21 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
   function toggleMetric(m: Metric) {
     setSelectedMetrics(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m])
   }
+  /*
+   * Which extra series have been switched off, rather than which are on.
+   *
+   * The five fixed metrics are a stored selection, which works because the set
+   * never changes. These come from the file, so a stored list of "on" would
+   * mean every series the app meets for the first time is invisible until
+   * somebody finds the toggle — the exact bug that made cadence look missing
+   * and cost a storage-key bump to fix. Stored by name, so switching power off
+   * on one ride switches it off on the next.
+   */
+  const [hiddenExtras, setHiddenExtras] = useLocalStorage<string[]>('al_wd_extras_off', [])
+  const extraOn = (key: string) => !hiddenExtras.includes(key)
+  function toggleExtra(key: string) {
+    setHiddenExtras(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key])
+  }
   const [yFromZero, setYFromZero] = useLocalStorage<boolean>('al_y0', false)
   const [showPauses, setShowPauses] = useLocalStorage<boolean>('al_show_pauses', true)
   const [hrZoneStyle] = useLocalStorage<HRZoneChart>(HR_ZONE_CHART_KEY, DEFAULT_HR_ZONE_CHART)
@@ -741,6 +788,27 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
    * whose owner has not set one — and whose watch did not report one — drops to
    * the standing panel rather than colouring the whole band Zone 1.
    */
+  /*
+   * The named series this workout carries, in a stable order.
+   *
+   * Sorted by name rather than left in the object's own order: a map from JSON
+   * has whatever order the server serialised, and charts that swap places
+   * between two loads of the same page look like a bug.
+   */
+  const extraSeries = useMemo(() => {
+    const out: Array<{ key: string; meta: ReturnType<typeof extraSeriesMeta>; points: Array<{ t: number; v: number }> }> = []
+    for (const [key, points] of Object.entries(w.extraSeries ?? {})) {
+      if (!points || points.length === 0) continue
+      out.push({ key, meta: extraSeriesMeta(key), points })
+    }
+    return out.sort((a, b) => a.meta.label.localeCompare(b.meta.label))
+  }, [w.extraSeries])
+
+  const extraPlots = useMemo(
+    () => Object.fromEntries(extraSeries.map(e => [e.key, preparePlot(e.points, 'v')])),
+    [extraSeries],
+  )
+
   /**
    * Whether there is anything for the playhead to drive.
    *
@@ -753,7 +821,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
    */
   const hasSeries =
     w.hrTimeline.length > 0 || w.paceTimeline.length > 0 || speedTimeline.length > 0
-    || w.elevTimeline.length > 0 || cadenceTimeline.length > 0
+    || w.elevTimeline.length > 0 || cadenceTimeline.length > 0 || extraSeries.length > 0
   const playable = w.route.length >= 2 || hasSeries || hydrating
 
   /** Where this workout stands among the others of its sport. See standing.ts. */
@@ -1247,6 +1315,29 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
     return areaChart({ series: plots.cad, dataKey: 'cad', stroke: CADENCE_COLOR, gradId: 'cadGrad', unit: cadenceUnit(w.type), height })
   }
 
+  /**
+   * One named series, drawn with the same machinery as the five above.
+   *
+   * The gradient id is derived from the series name, which is also why names
+   * are restricted to something id-safe: two charts sharing a gradient id take
+   * whichever definition the browser saw last, and the second one is drawn in
+   * the first one's colour.
+   */
+  function extraChart(key: string, height: number) {
+    const plot = extraPlots[key]
+    const meta = extraSeriesMeta(key)
+    if (!plot) return null
+    return areaChart({
+      series: plot,
+      dataKey: 'v',
+      stroke: meta.color,
+      gradId: `extraGrad_${key.replace(/[^a-zA-Z0-9_-]/g, '')}`,
+      unit: meta.unit,
+      height,
+      valueFormatter: value => value.toFixed(meta.decimals),
+    })
+  }
+
   function hrZoneChart(height: number) {
     if (hrZoneStyle === 'histogram') {
       return (
@@ -1549,16 +1640,9 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             )}
           </div>
           <div style={{ marginLeft: 'auto', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
-            {readOnly ? (
-              // Export stays available even on someone else's workout: it is a
-              // purely client-side render of data already on screen.
-              <button className="btn-icon" title="Export as GPX" onClick={() => void downloadWorkoutGPX(w).catch(reportSaveFailure)}>
-                <Download size={16} />
-              </button>
-            ) : (
+            {readOnly ? null : (
               <OptionsMenu
                 onEdit={startEdit}
-                onExport={() => void downloadWorkoutGPX(w).catch(reportSaveFailure)}
                 onDownloadOriginal={w.hasOriginal ? downloadOriginal : undefined}
                 onRestore={w.hasOriginal ? () => setConfirmRestore(true) : undefined}
                 onShare={() => setSharing(true)}
@@ -1740,24 +1824,31 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
         {hasSeries && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
           {([
-            { id: 'hr' as Metric, label: 'Heart Rate', color: 'var(--danger)', available: w.hrTimeline.length > 0 },
-            { id: 'pace' as Metric, label: 'Pace', color: color, available: w.paceTimeline.length > 0 },
-            { id: 'speed' as Metric, label: 'Speed', color: 'var(--blue)', available: speedTimeline.length > 0 },
-            { id: 'elevation' as Metric, label: 'Elevation', color: 'var(--hike)', available: w.elevTimeline.length > 0 },
-            { id: 'cadence' as Metric, label: 'Cadence', color: CADENCE_COLOR, available: cadenceTimeline.length > 0 },
+            { id: 'hr', label: 'Heart Rate', color: 'var(--danger)', available: w.hrTimeline.length > 0, on: selectedMetrics.includes('hr'), toggle: () => toggleMetric('hr') },
+            { id: 'pace', label: 'Pace', color: color, available: w.paceTimeline.length > 0, on: selectedMetrics.includes('pace'), toggle: () => toggleMetric('pace') },
+            { id: 'speed', label: 'Speed', color: 'var(--blue)', available: speedTimeline.length > 0, on: selectedMetrics.includes('speed'), toggle: () => toggleMetric('speed') },
+            { id: 'elevation', label: 'Elevation', color: 'var(--hike)', available: w.elevTimeline.length > 0, on: selectedMetrics.includes('elevation'), toggle: () => toggleMetric('elevation') },
+            { id: 'cadence', label: 'Cadence', color: CADENCE_COLOR, available: cadenceTimeline.length > 0, on: selectedMetrics.includes('cadence'), toggle: () => toggleMetric('cadence') },
+            // Whatever else the file recorded. These only ever appear on a
+            // workout that has them, so the row grows for a FIT import and
+            // looks exactly as it did before for everything else.
+            ...extraSeries.map(e => ({
+              id: e.key, label: e.meta.label, color: e.meta.color, available: true,
+              on: extraOn(e.key), toggle: () => toggleExtra(e.key),
+            })),
           ]).filter(m => m.available).map(m => (
             <button
               key={m.id}
-              onClick={() => toggleMetric(m.id)}
+              onClick={m.toggle}
               className="btn"
               style={{
                 display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 8, fontSize: 12,
-                border: `1px solid ${selectedMetrics.includes(m.id) ? m.color : 'var(--border)'}`,
-                background: selectedMetrics.includes(m.id) ? `${m.color}18` : 'transparent',
-                color: selectedMetrics.includes(m.id) ? m.color : 'var(--text-3)',
+                border: `1px solid ${m.on ? m.color : 'var(--border)'}`,
+                background: m.on ? `${m.color}18` : 'transparent',
+                color: m.on ? m.color : 'var(--text-3)',
               }}
             >
-              <div style={{ width: 8, height: 8, borderRadius: '50%', background: m.color, opacity: selectedMetrics.includes(m.id) ? 1 : 0.3 }} />
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: m.color, opacity: m.on ? 1 : 0.3 }} />
               {m.label}
             </button>
           ))}
@@ -1861,6 +1952,23 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
               {cadenceChart(180)}
             </MetricPanel>
           )}
+
+          {/* Everything else the file measured. Nothing here is compared
+              across workouts — not every workout has them — so this is the
+              only page they appear on, and the panel is the same one the
+              charted five use rather than a second kind of card. */}
+          {extraSeries.map(e => extraOn(e.key) && (
+            <MetricPanel
+              key={e.key}
+              icon={<ExtraSeriesIcon name={e.key} color={e.meta.color} />}
+              title={e.meta.label}
+              info={e.meta.info}
+              stats={<ExtraStats points={e.points} meta={e.meta} />}
+              onExpand={() => setExpanded(`extra:${e.key}`)}
+            >
+              {extraChart(e.key, 180)}
+            </MetricPanel>
+          ))}
         </div>
 
         {/* Conditions. Rendered in every state, including "you have this
@@ -2111,6 +2219,17 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
       {expanded === 'cadence' && (
         <ExpandModal title="Cadence" onClose={() => setExpanded(null)}>
           {cadenceChart(400)}
+          <div style={{ marginTop: 12 }}>
+            <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onEnd={handleEnd} onScrub={handleScrub} />
+          </div>
+        </ExpandModal>
+      )}
+      {typeof expanded === 'string' && expanded.startsWith('extra:') && (
+        <ExpandModal
+          title={extraSeriesMeta(expanded.slice(6)).label}
+          onClose={() => setExpanded(null)}
+        >
+          {extraChart(expanded.slice(6), 400)}
           <div style={{ marginTop: 12 }}>
             <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onEnd={handleEnd} onScrub={handleScrub} />
           </div>

@@ -7,17 +7,20 @@ import PageHeader from '../../components/PageHeader'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import Modal from '../../components/Modal'
 import { api } from '../../lib/api'
+import { LOCATION_EVENT } from '../../App'
 import {
   blockComplete, blockLabel, blockProgress, chosenExercises, clockLabel, currentBlockId,
-  currentExercise, doneSetsFor, durationShort, effectivePicks, elapsedSec, exerciseComplete,
+  currentExercise, doneSetsFor, durationShort, effectivePicks, elapsedSec, exerciseComplete, nextExercise,
   isBareSection, leadingDone, sectionExercise, sectionLabel, sessionTally, setState, setTappable, setsFor,
   targetLabel, trimNum,
   type BlockProgress, type PlanBlock, type PlanExercise, type PlanSession, type SessionProgress,
   type SetLog, type SetState,
 } from '../../data/plans'
 import { cacheProgress, clearCachedProgress, readCachedProgress } from './sessionCache'
-import { clearSessionNotice, showSessionNotice } from '../../lib/native/sessionNotice'
-import { haptic, longTimerSec } from '../../lib/haptics'
+import {
+  claimSessionNotice, clearSessionNotice, repostSessionNotice, showSessionNotice,
+} from '../../lib/native/sessionNotice'
+import { longTimerSec, primeSound, signal } from '../../lib/sessionFeedback'
 
 interface Props {
   session: PlanSession
@@ -150,25 +153,104 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
   // are and what you are on, not just that something is running. A no-op
   // anywhere but the Android app.
   const heading = currentExercise(session, progress)
-  // Glyphs rather than a bare percentage: the shade shows two lines at a
-  // glance, and "🏋 Lat pulldown · 6/15" is read without being parsed, where
-  // "40% · Lat pulldown" repeated what the progress bar underneath already
-  // said. The percentage stays, as the bar.
-  const notice = resting
-    ? `☕ Resting · ${tally.done}/${tally.total} sets`
-    : heading
-      ? `🏋 ${heading} · ${tally.done}/${tally.total} sets`
-      : `✅ ${tally.done}/${tally.total} sets done`
+  const upNext = nextExercise(session, progress)
+  /*
+   * What the shade says, and where each part of it goes.
+   *
+   * Collapsed is how a notification is read nine times out of ten -- glanced
+   * at on a lock screen between sets, with a bar in one hand. So: the exercise
+   * on the first line, in the largest text the shade has; the clock and the
+   * tally on the second, side by side; how far in as a ring where every other
+   * app puts a photograph. What comes next waits until the thing is opened,
+   * which is the question opening it asks.
+   *
+   * No glyphs in any of it. They were meant to make the line skimmable and
+   * instead made it look like a chat message, and they cost characters in the
+   * one place there are not many.
+   */
+  const noticeTitle = resting ? 'Resting' : heading || 'Every set done'
+  const notice = `${tally.done}/${tally.total} sets`
+  // No 'Next:' in front of it — the arrow beside it already says that.
+  const nextUp = upNext || ''
+  // Only while one is actually counting: Android draws the countdown itself
+  // from this, and a stale timestamp would leave a clock ticking down in the
+  // shade for a rest that ended.
+  const restEndsAt = resting && running && running.endsAt > Date.now() ? String(running.endsAt) : ''
   useEffect(() => {
     void showSessionNotice({
       sessionId: session.id,
-      title: session.dayName,
+      title: noticeTitle,
       body: notice,
+      done: tally.done,
+      total: tally.total,
+      /*
+       * The plan's name, and only that.
+       *
+       * The header line is app name, this, and nothing else fits — putting the
+       * day beside the plan there truncated all three, so the line read
+       * "Activity Le… · Day 1 · Next p…" and named none of them. Of the two,
+       * the plan is the one you would recognise: "Day 1" is a position within
+       * something you have to already know.
+       */
       subText: session.planName,
       startedAt: session.startedAt,
-      percent: pct,
+      nextUp,
+      restEndsAt,
     })
-  }, [session.id, session.dayName, session.planName, session.startedAt, notice, pct])
+  }, [session.id, session.dayName, session.planName, session.startedAt, noticeTitle, notice, nextUp, tally.done, tally.total, restEndsAt])
+
+  /*
+   * Put back whenever the app returns to the foreground.
+   *
+   * An ongoing notification can still be swiped away on Android 14, and once
+   * it is gone nothing tells us so — there is no event, and no way to ask. The
+   * moment the app is opened is the moment we can be sure again, and re-posting
+   * an identical notification that is already showing costs nothing.
+   */
+  // While this page is on screen, the shade says what this page says.
+  useEffect(() => claimSessionNotice(), [])
+
+  /*
+   * "Finish" or "Discard", tapped on the notification.
+   *
+   * Those actions cannot end a session themselves: doing it means sending the
+   * sets to the server, and the credentials for that live in the WebView. So
+   * they open the app on this page carrying what was asked for, and this is
+   * where it is carried out.
+   *
+   * Both ask, through the same dialogs the buttons on this page use. Finish
+   * destroys nothing, so acting on it outright was defensible — but it made
+   * the two actions behave differently for no reason a reader could see, and
+   * the dialog is worth having anyway: it says how many sets are ticked, which
+   * is the one thing you cannot check from a notification shade.
+   *
+   * The instruction is stripped from the URL as it is taken, so a reload does
+   * not end the session a second time. Bound to the location event too,
+   * because the app may already be open on this very page when the tap lands.
+   */
+  useEffect(() => {
+    const take = () => {
+      const url = new URL(window.location.href)
+      const what = url.searchParams.get('do')
+      if (what !== 'finish' && what !== 'discard') return
+      url.searchParams.delete('do')
+      window.history.replaceState(window.history.state, '', url.pathname + url.search)
+      if (what === 'finish') setConfirmFinish(true)
+      else setConfirmDiscard(true)
+    }
+    take()
+    window.addEventListener(LOCATION_EVENT, take)
+    return () => window.removeEventListener(LOCATION_EVENT, take)
+  }, [session.id])
+  useEffect(() => {
+    const onShow = () => { if (document.visibilityState === 'visible') void repostSessionNotice() }
+    document.addEventListener('visibilitychange', onShow)
+    window.addEventListener('focus', onShow)
+    return () => {
+      document.removeEventListener('visibilitychange', onShow)
+      window.removeEventListener('focus', onShow)
+    }
+  }, [])
 
   // --- persistence -------------------------------------------------------
   //
@@ -247,9 +329,9 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
        cannot answer. Three weights for three sizes of event — a set, the
        exercise it belonged to, and the session as a whole. */
     const whole = sessionTally({ ...session, progress: latest.current })
-    if (whole.done >= whole.total) haptic('complete')
-    else if (exDone) haptic('exercise')
-    else haptic('set')
+    if (whole.done >= whole.total) signal('complete')
+    else if (exDone) signal('exercise')
+    else signal('set')
     if (block.restSec > 0 && !isLast && blockDone) {
       setRunning({ kind: 'break', blockId: block.id, exerciseId: '', endsAt: Date.now() + block.restSec * 1000, totalSec: block.restSec })
     } else if (exDone && ex.breakSec > 0 && !blockDone) {
@@ -303,16 +385,20 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
   }
 
   /**
-   * A long rest running out, buzzed exactly once.
+   * A rest running out, announced exactly once.
+   *
+   * Both ways at once — see sessionFeedback: a buzz reaches you through a
+   * pocket and a sound reaches you across a room, and which arrives depends on
+   * where the phone ended up rather than on anything the app can know.
    *
    * Edge-triggered on the timer's identity rather than on `left` reaching
    * zero: the tick keeps firing while the clock sits at 0:00 waiting to be
-   * dismissed, so a plain `left <= 0` would vibrate twice a second until it
-   * was. The ref holds which timer has already been announced.
+   * dismissed, so a plain `left <= 0` would fire twice a second until it was.
+   * The ref holds which timer has already been announced.
    *
-   * Only rests, and only long ones — a set's own clock ends with you standing
-   * over it, and see longTimerSec for why a short rest is not worth a
-   * buzz you are already watching for.
+   * Only rests, and only ones past the threshold — a set's own clock ends with
+   * you standing over it, and see longTimerSec for why a short rest is not
+   * worth interrupting a room for.
    */
   const buzzed = useRef<string | null>(null)
   useEffect(() => {
@@ -322,7 +408,7 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
     if (buzzed.current === id) return
     if (Date.now() < running.endsAt) return
     buzzed.current = id
-    haptic('timer')
+    signal('timer')
   })
 
   /**
@@ -389,13 +475,24 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
   // --- finishing ---------------------------------------------------------
 
   async function finish() {
+    /*
+     * Announced on the press, not on the answer.
+     *
+     * Twice now the buzz that ends a session has failed to arrive while the
+     * one that starts it works, and the two are the same call — the only thing
+     * that differs is what surrounds it: a network round trip, a notification
+     * being taken down, and a navigation, all in the same breath. Rather than
+     * keep guessing which of those swallows it, this happens first, in the tap
+     * that asked for it, with nothing else in flight. It costs a buzz for an
+     * ending that then fails to save, and the error says so when it does.
+     */
+    signal('finish')
     setBusy(true)
     setError('')
     try {
       const done = await api.finishPlanSession(session.id, progress)
       clearCachedProgress(session.id)
       void clearSessionNotice()
-      haptic('finish')
       onFinished(done)
     } catch {
       setError('Could not finish the session. Your sets are saved — try again.')
@@ -405,12 +502,13 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
   }
 
   async function discard() {
+    // On the press, for the same reason as finish above.
+    signal('discard')
     setBusy(true)
     try {
       await api.deletePlanSession(session.id)
       clearCachedProgress(session.id)
       void clearSessionNotice()
-      haptic('discard')
       onDiscarded()
     } catch {
       setError('Could not discard the session.')
@@ -444,7 +542,13 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
         }
       />
 
-      <div className={`page-content plan-run-page${running ? ' has-timer' : ''}`}>
+      {/* Any tap in a running session opens the audio device, because a
+          browser will only let one open in response to one — and a rest timer
+          ends minutes later with nobody touching anything. See primeChime. */}
+      <div
+        className={`page-content plan-run-page${running ? ' has-timer' : ''}`}
+        onPointerDown={primeSound}
+      >
         {error && <div className="status-msg err" role="alert">{error}</div>}
 
         <div className="plan-rows">
@@ -541,21 +645,28 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
         <div className="plan-player-bar" aria-hidden>
           <span className="plan-player-fill" style={{ width: `${pct}%` }} />
         </div>
+        {/* Three groups: how far in, how long you have been here, and the two
+            controls. Each is a column of a big figure over its own small one,
+            so the row reads as two clocks rather than as four numbers spread
+            across a bar with a hole in the middle of it. */}
         <div className="plan-player-row">
           <div className="plan-player-figures">
             <span className="plan-player-pct plan-num">{pct}<span className="unit">%</span></span>
-            <div className="plan-player-col">
-              {/* The wall clock, because the question in a gym is as often
-                  "how late is it" as "how long have I been here" — and the
-                  answer to the second one is on the bar between the two
-                  clusters, where it reads as the session's own figure. */}
-              <span className="plan-player-time plan-num">{timeOfDay()}</span>
-              <span className="plan-player-meta plan-num">{tally.done}/{tally.total} sets</span>
-            </div>
+            <span className="plan-player-meta plan-num">{tally.done}/{tally.total} sets</span>
           </div>
-          <span className="plan-player-elapsed plan-num" title="Time since the session started">
-            {clockLabel(elapsedSec(session.startedAt))}
-          </span>
+          <div className="plan-player-clocks">
+            {/* The session's own clock is the headline. It used to be the
+                smallest thing on the row while the wall clock was the biggest,
+                so the bar answered "what time is it" in the size that should
+                have answered "how long have I been here". */}
+            <span className="plan-player-elapsed plan-num" title="Time since the session started">
+              {clockLabel(elapsedSec(session.startedAt))}
+            </span>
+            {/* Still worth having: the question in a gym is as often "how late
+                is it" as "how long have I been here". */}
+            <span className="plan-player-time plan-num">{timeOfDay()}</span>
+          </div>
+          <div className="plan-player-actions">
           <button
             className="btn-icon"
             onClick={toggleFull}
@@ -575,8 +686,9 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
             title="End session"
             aria-label="End session"
           >
-            <Square size={16} fill="currentColor" />
+            <Square size={19} fill="currentColor" />
           </button>
+          </div>
         </div>
       </div>
 

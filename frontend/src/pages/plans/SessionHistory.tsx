@@ -180,20 +180,28 @@ function SessionRow({ session: s, selecting, picked, canSelect, onOpen, onToggle
       aria-pressed={selecting && canSelect ? picked : undefined}
       title={inert ? 'Finish or stop this session before deleting it' : undefined}
     >
-      {selecting && (
-        <span className="plan-pick" aria-hidden>{picked && <CheckCheck size={14} />}</span>
-      )}
+      {/* Same head as a plan card, in this feature's other colour: a plan is
+          the intent and a session is the record, and the two appear in one
+          list. */}
+      <span className="plan-card-head">
+        {selecting
+          ? <span className="plan-pick" aria-hidden>{picked && <CheckCheck size={14} />}</span>
+          : <span className="plan-card-mark session"><History size={15} /></span>}
+      </span>
       <div className="plan-card-main">
         <strong className="plan-card-name">
           {s.dayName}
           {!finished && <span className="plan-badge running">In progress</span>}
         </strong>
+        {/* Three lines, narrowing: which day, which plan, when. They were two,
+            with the plan name tacked onto the end of the date, where the one
+            thing that identifies the session among a page of "Day 1" rows sat
+            at the far end of a line of digits. */}
+        <span className="plan-card-meta">{s.planName}</span>
         {/* Weekday and time, not just a date: "Sunday morning" is how
             people remember a session, and it is what makes two
             sessions on one day tell themselves apart. */}
-        <span className="plan-card-meta plan-num">
-          {sessionWhen(s.startedAt)} · {s.planName}
-        </span>
+        <span className="plan-card-meta plan-num">{sessionWhen(s.startedAt)}</span>
       </div>
       <div className="plan-card-figures plan-num">
         <span>{s.doneSets}/{s.totalSets} sets</span>

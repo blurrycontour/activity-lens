@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"mime"
 	"net/http"
+	"path"
 	"strings"
 )
 
@@ -52,6 +53,24 @@ func Handler() (http.Handler, error) {
 		// offline support down with it — so serve the shell directly instead.
 		if p == "" || p == "index.html" {
 			serveIndex(w, index)
+			return
+		}
+		// A missing file with an extension is a missing file, not a route.
+		//
+		// Falling back to the shell for those is what turns "this build no
+		// longer has that chunk" into "Failed to load module script: the
+		// server responded with a non-JavaScript MIME type of text/html" —
+		// which is a browser describing our index.html, several steps removed
+		// from the thing that actually went wrong. It happens the moment a
+		// client holding yesterday's HTML asks for yesterday's hashed asset,
+		// and the page it breaks is whichever one loads that chunk.
+		//
+		// The app's own routes never contain a dot: they are /workouts/{id},
+		// /users/{id}, /admin/users/{id}, and every id it mints is
+		// alphanumeric. So a dot in the last segment means a file was asked
+		// for, and the honest answer for one we do not have is 404.
+		if _, err := assets.Open(p); err != nil && strings.Contains(path.Base(p), ".") {
+			http.NotFound(w, r)
 			return
 		}
 		if f, err := assets.Open(p); err == nil {

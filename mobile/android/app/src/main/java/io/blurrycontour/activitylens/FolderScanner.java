@@ -47,11 +47,14 @@ final class FolderScanner {
     private static final String TAG = "FolderSync";
 
     /**
-     * What the backend can actually parse. `.fit` is deliberately absent — the
-     * server has no parser for it, so importing one would fail per file, every
-     * scan, forever. Counted as skipped instead.
+     * What the backend can actually parse. A watched folder is usually a
+     * sync app's output directory full of other things, so this list is the
+     * filter: anything else is counted as skipped rather than uploaded and
+     * refused once per scan, forever.
      */
-    private static final String[] EXTENSIONS = { ".gpx", ".tcx", ".gpx.gz", ".tcx.gz" };
+    private static final String[] EXTENSIONS = {
+        ".gpx", ".tcx", ".fit", ".gpx.gz", ".tcx.gz", ".fit.gz",
+    };
 
     /** Refuses to read anything absurd into memory in a background job. */
     private static final int MAX_FILE_BYTES = 25 * 1024 * 1024;

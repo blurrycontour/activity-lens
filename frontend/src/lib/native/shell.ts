@@ -6,6 +6,7 @@ interface ShellPlugin {
   saveFile(options: { filename: string; mime: string; base64: string }): Promise<{ path: string }>
   shareFile(options: { filename: string; mime: string; base64: string; title?: string; text?: string }): Promise<void>
   toast(options: { message: string }): Promise<void>
+  vibrate(options: { pattern: number[] }): Promise<void>
 }
 
 const Shell = registerPlugin<ShellPlugin>('Shell')
@@ -41,6 +42,29 @@ function toBase64(blob: Blob): Promise<string> {
  * that saved silently to somewhere unnamed is barely better than one that did
  * not save at all.
  */
+/**
+ * Vibrates through the system Vibrator rather than the WebView.
+ *
+ * `navigator.vibrate` is the obvious way and it has failed twice in ways that
+ * report nothing: it needs a manifest permission it does not tell you about,
+ * and Chrome drops the call whenever the page is hidden — which during a rest,
+ * with the phone in a pocket, is exactly when the buzz is the point. This has
+ * neither problem.
+ *
+ * Resolves false when it did not happen, so the caller can fall back rather
+ * than assume it worked.
+ */
+export async function vibrateNative(pattern: number[]): Promise<boolean> {
+  if (!isNative()) return false
+  try {
+    await Shell.vibrate({ pattern })
+    return true
+  } catch {
+    // A device with no motor, or an app build older than the plugin method.
+    return false
+  }
+}
+
 export async function nativeToast(message: string): Promise<void> {
   if (!isNative()) return
   await Shell.toast({ message }).catch(() => {})

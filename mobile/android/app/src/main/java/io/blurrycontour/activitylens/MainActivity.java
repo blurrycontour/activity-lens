@@ -103,11 +103,17 @@ public class MainActivity extends BridgeActivity {
      * Asked once. Android silently refuses a third request anyway, and nagging
      * on every cold start would be worse than not having push.
      *
-     * Two other permissions are declared and neither can be requested like this.
-     * INTERNET is granted at install with no prompt. REQUEST_INSTALL_PACKAGES is
-     * special access rather than a runtime permission: it is granted from a
-     * system settings screen, which the updater opens at the point it is needed
-     * rather than sending a new user there for a reason they have not met yet.
+     * It is also the only one there is to ask for. The rest are declared and
+     * none can be requested like this:
+     *
+     *   INTERNET and VIBRATE are normal permissions, granted at install with no
+     *   prompt — which is also why a build that forgot to declare VIBRATE gave
+     *   no sign of it, and every buzz was dropped in silence.
+     *
+     *   REQUEST_INSTALL_PACKAGES is special access rather than a runtime
+     *   permission: it is granted from a system settings screen, which the
+     *   updater opens at the point it is needed rather than sending a new user
+     *   there for a reason they have not met yet.
      */
     private void askForNotifications() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {

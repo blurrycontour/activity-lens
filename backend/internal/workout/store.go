@@ -229,7 +229,10 @@ const weatherCols = `weather_status, weather_temp_c, weather_apparent_c,
 // intervals themselves are only ever drawn on one workout's charts, and a blob
 // per row is exactly what the summary set exists to avoid.
 const (
-	selectCols = workoutCols + `, visibility, raw_filename, created_at, ` + weatherCols + `, moving_time, pauses`
+	// extra_series last, and only on the detail set: it is another blob, and
+	// the summary set exists to not carry blobs. Appended, like every column
+	// added since — the scanners read by position.
+	selectCols = workoutCols + `, visibility, raw_filename, created_at, ` + weatherCols + `, moving_time, pauses, extra_series`
 	// track_points last, and only on the summary set: the detail response
 	// carries the route itself, so only a list has to be told whether there is
 	// one. Appended, like every column added since — the scanners read by
@@ -258,11 +261,15 @@ func (r *SQLiteRepository) Create(ctx context.Context, w *Workout) error {
 	if err != nil {
 		return err
 	}
+	extra, err := marshalExtraSeries(w.ExtraSeries)
+	if err != nil {
+		return err
+	}
 	_, err = r.db.ExecContext(ctx, `INSERT INTO workouts (`+insertCols+`, created_at, updated_at,
 		start_lat, start_lon, weather_status,
 		track, track_points, bbox_min_lat, bbox_max_lat, bbox_min_lon, bbox_max_lon,
-		cadence_points, moving_time, pauses)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		cadence_points, moving_time, pauses, extra_series)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		w.ID, w.UserID, w.Name, string(w.Type), w.StartTime.UTC().Format(time.RFC3339),
 		w.Duration, w.Distance, w.AvgHR, w.MaxHR, w.ElevationGain, w.Calories, w.Steps,
 		w.AvgPace, w.AvgSpeed, s.route, s.hr, s.pace, s.elev, s.cadence, w.Notes,
@@ -271,7 +278,7 @@ func (r *SQLiteRepository) Create(ctx context.Context, w *Workout) error {
 		lat, lon, string(weatherStatus),
 		track.blob, track.points, box.MinLat, box.MaxLat, box.MinLon, box.MaxLon,
 		len(w.CadenceTimeline),
-		w.MovingTime, pauses)
+		w.MovingTime, pauses, extra)
 	if err != nil {
 		if isUniqueViolation(err) {
 			return ErrDuplicate
@@ -343,11 +350,18 @@ func (r *SQLiteRepository) Update(ctx context.Context, w *Workout) error {
 	if err != nil {
 		return err
 	}
+	// Written here, unlike the weather columns: these are recorded data, and a
+	// trim that rebased every other series while leaving this one on the
+	// original clock would draw power against the wrong seconds.
+	extra, err := marshalExtraSeries(w.ExtraSeries)
+	if err != nil {
+		return err
+	}
 	res, err := r.db.ExecContext(ctx, `UPDATE workouts SET name=?, type=?, start_time=?, duration=?,
 		distance=?, avg_hr=?, max_hr=?, elevation_gain=?, calories=?, steps=?, avg_pace=?, avg_speed=?,
 		route=?, hr_timeline=?, pace_timeline=?, elev_timeline=?, cadence_timeline=?, notes=?,
 		calories_manual=?, calories_reported=?, steps_manual=?, moving_time=?, pauses=?,
-		cadence_points=?, updated_at=?
+		cadence_points=?, extra_series=?, updated_at=?
 		WHERE id=? AND user_id=?`,
 		w.Name, string(w.Type), w.StartTime.UTC().Format(time.RFC3339), w.Duration, w.Distance,
 		w.AvgHR, w.MaxHR, w.ElevationGain, w.Calories, w.Steps, w.AvgPace, w.AvgSpeed,
@@ -358,7 +372,7 @@ func (r *SQLiteRepository) Update(ctx context.Context, w *Workout) error {
 		w.MovingTime, pauses,
 		// Recounted here, so dropping the series in a reshape is visible to the
 		// list filter immediately rather than at the next backfill.
-		len(w.CadenceTimeline),
+		len(w.CadenceTimeline), extra,
 		time.Now().UTC().Format(time.RFC3339), w.ID, w.UserID)
 	if err != nil {
 		return fmt.Errorf("update workout: %w", err)
@@ -824,6 +838,32 @@ func marshalSeries(w *Workout) (seriesBlobs, error) {
 	return s, nil
 }
 
+/*
+marshalExtraSeries encodes the named metrics, or nothing at all.
+
+nil for an empty map rather than a gzipped "{}", which is the one place this
+differs from the timelines beside it. Every workout in the library predates this
+column and every GPX and TCX import will always have nothing to put in it, so
+the common case is worth storing as a NULL rather than as twenty bytes of
+compressed emptiness on every row.
+
+Keys are sorted so the same workout encodes to the same bytes twice — a map's
+iteration order is deliberately random, and without this a re-save rewrites the
+blob and the content hash of a backup for no reason.
+*/
+func marshalExtraSeries(series map[string][]ExtraPoint) ([]byte, error) {
+	if len(series) == 0 {
+		return nil, nil
+	}
+	// json.Marshal already sorts map keys; this is here to say that it is
+	// depended upon rather than incidental.
+	data, err := json.Marshal(series)
+	if err != nil {
+		return nil, fmt.Errorf("marshal extra series: %w", err)
+	}
+	return gzipBytes(data)
+}
+
 // marshalPauses encodes the pause list the same way the timelines are encoded,
 // so one decoder reads all of them. Nil becomes an empty list rather than a
 // NULL: a NULL blob and an empty one both mean "no pauses", and having only one
@@ -991,16 +1031,20 @@ func scanWorkout(row interface{ Scan(...any) error }) (*Workout, error) {
 		createdAt   string
 		wx          weatherScan
 		pauses      []byte
+		extra       []byte
 	)
 	if err := row.Scan(&w.ID, &w.UserID, &w.Name, &typ, &startTime, &w.Duration, &w.Distance,
 		&w.AvgHR, &w.MaxHR, &w.ElevationGain, &w.Calories, &w.Steps, &w.AvgPace, &w.AvgSpeed,
 		&s.route, &s.hr, &s.pace, &s.elev, &s.cadence, &w.Notes,
 		&calManual, &calReported, &stepManual, &source, &visibility, &w.RawFilename, &createdAt,
 		&wx.status, &wx.temp, &wx.apparent, &wx.humidity, &wx.wind, &wx.precip, &wx.code,
-		&w.MovingTime, &pauses); err != nil {
+		&w.MovingTime, &pauses, &extra); err != nil {
 		return nil, err
 	}
 	if err := unmarshalInto(pauses, &w.Pauses); err != nil {
+		return nil, err
+	}
+	if err := unmarshalInto(extra, &w.ExtraSeries); err != nil {
 		return nil, err
 	}
 	wx.applyTo(&w)

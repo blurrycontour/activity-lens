@@ -145,7 +145,11 @@ export default function TrainingSessionsChart({ rangeDays }: { rangeDays: number
                 )
               }}
             />
-            {/* One band per session in the week, stacked. All the same colour:
+            {/* One band per session in the week, stacked. The accent, not the
+                strength colour it used to wear: a session is training in
+                general — a plan of pull-ups and planks is not a Strength
+                workout — and every other chart on this page follows the colour
+                the user chose. All the same colour, because
                 they are not different things, they are the same thing counted
                 — the separation is the 2px of surface between them, which is
                 what makes them countable without a legend nobody could read.
@@ -158,7 +162,7 @@ export default function TrainingSessionsChart({ rangeDays }: { rangeDays: number
                 stackId="sets"
                 maxBarSize={44}
                 isAnimationActive={false}
-                fill="var(--strength)"
+                fill="var(--primary)"
                 fillOpacity={0.85}
                 stroke="var(--bg-2)"
                 strokeWidth={2}

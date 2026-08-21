@@ -101,6 +101,14 @@ export interface TrainingPlan {
   /** Present on the single-plan fetch; the list omits it. */
   days?: PlanDay[]
   dayCount: number
+  /**
+   * How many sets a run through every day of this plan would tick off.
+   *
+   * Counts the options a session picks by default, so a block offering "2 of
+   * these 3" contributes two rather than three — the card and the runner have
+   * to agree about the same workout. Absent from a server older than the field.
+   */
+  setCount?: number
   createdAt: string
   updatedAt: string
   lastSessionAt?: string
@@ -358,6 +366,26 @@ export function currentExercise(session: PlanSession, progress: SessionProgress)
     const p = blockProgress(progress, b.id)
     for (const ex of chosenExercises(b, p)) {
       if (!exerciseComplete(ex, setsFor(p, ex.id))) return ex.name
+    }
+  }
+  return ''
+}
+
+/**
+ * The exercise after the one being done, or "" when this is the last.
+ *
+ * For the notification's expanded view, which has room for one more line than
+ * the shade's collapsed one — and "next: Lat pulldown" is the line worth
+ * having while resting, since it is the thing you are resting *for*.
+ */
+export function nextExercise(session: PlanSession, progress: SessionProgress): string {
+  let seenCurrent = false
+  for (const b of session.snapshot.blocks) {
+    const p = blockProgress(progress, b.id)
+    for (const ex of chosenExercises(b, p)) {
+      if (exerciseComplete(ex, setsFor(p, ex.id))) continue
+      if (seenCurrent) return ex.name
+      seenCurrent = true
     }
   }
   return ''

@@ -7,6 +7,8 @@ import {
   RadialBarChart, RadialBar,
 } from 'recharts'
 import { TrendingUp, Zap, Flame, Clock, Mountain, Heart, Trophy, Target, Activity, Footprints, ChartColumnBig, Play } from 'lucide-react'
+import SpeedDial from '../components/SpeedDial'
+import { PAGE_META } from '../components/Sidebar'
 import Confetti from '../components/Confetti'
 import GoalSportMark, { goalColor } from '../components/GoalSportMark'
 import { useLocalStorage } from '../lib/useLocalStorage'
@@ -612,10 +614,21 @@ function CompareRow({ label, value, average, format }: {
   )
 }
 
-export default function Dashboard({ onSelect, onResumeSession }: {
+export default function Dashboard({ onSelect, onResumeSession, onImport, onCreate }: {
   onSelect: (w: Workout) => void
   /** Opens the training session that is currently running. */
   onResumeSession: (id: string) => void
+  /** Opens the import window, the same one the library's own button opens. */
+  onImport: () => void
+  /**
+   * Starts making something on the page that owns it.
+   *
+   * The dashboard offers the actions; it does not implement them. Equipment
+   * and plans each have a creation flow of their own — a form, a name dialog,
+   * and what happens after saving — and a second copy here would be a second
+   * thing to keep right. The page is opened with the flow already running.
+   */
+  onCreate: (what: 'equipment' | 'plan') => void
 }) {
   const { workouts, loading } = useWorkouts()
   const [cfg] = useLocalStorage<DashboardConfig>(DASHBOARD_CFG_KEY, defaultDashboardConfig())
@@ -776,7 +789,23 @@ export default function Dashboard({ onSelect, onResumeSession }: {
         </div>
       </div>
 
-      <div className="page-content">
+      {/* The one page that is about everything, so its button has to ask what.
+          Workouts land in the import window, which has its own way of ending —
+          a batch has no single thing to open — while the other two hand over
+          to the page that owns them and end up on what they just made. */}
+      <SpeedDial
+        label="Add"
+        actions={[
+          /* The same marks the navigation uses for the three pages these
+             land on, read from the one place that owns them. A plus here was
+             the toggle's own icon repeated, which named nothing. */
+          { id: 'workout', label: 'Workout', icon: PAGE_META.workouts?.icon(19), onSelect: onImport },
+          { id: 'equipment', label: 'Equipment', icon: PAGE_META.equipment?.icon(19), onSelect: () => onCreate('equipment') },
+          { id: 'plan', label: 'Plan', icon: PAGE_META.plans?.icon(19), onSelect: () => onCreate('plan') },
+        ]}
+      />
+
+      <div className="page-content with-fab">
         {/* Above everything, including the empty state: a session in progress
             is the only thing on this page that is happening right now. */}
         {running && (

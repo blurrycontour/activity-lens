@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { LOCATION_EVENT } from '../../App'
 import {
   CheckCheck, ClipboardList, History, Loader2, Play, Plus, X,
 } from 'lucide-react'
@@ -28,7 +29,7 @@ import {
   applyItemFilters, asPlanItem, NO_NARROWING, type ItemNarrowing,
 } from '../../lib/itemFilters'
 import useTicker from '../../lib/useTicker'
-import { haptic } from '../../lib/haptics'
+import { primeSound, signal } from '../../lib/sessionFeedback'
 
 /** "12 plans · 48 sessions", and the halves it has while they load. */
 function countLine(plans: TrainingPlan[] | null, sessions: PlanSession[] | null): string {
@@ -154,6 +155,27 @@ export default function PlansPage({ section, detail, onOpen, onOpenUser }: Props
    * It used to create a plan called "New plan" the moment the button was
    * tapped, which left one behind for every accidental press.
    */
+  /*
+   * "New plan", asked for from the dashboard.
+   *
+   * Same arrangement as Equipment: the button that offers it lives on another
+   * page, the flow lives here, and the request travels in the URL. Creating
+   * one already opens it ready to be written, which is where somebody who just
+   * named a plan wants to be.
+   */
+  useEffect(() => {
+    const take = () => {
+      const url = new URL(window.location.href)
+      if (url.searchParams.get('new') !== '1') return
+      url.searchParams.delete('new')
+      window.history.replaceState(window.history.state, '', url.pathname + url.search)
+      setNaming(true)
+    }
+    take()
+    window.addEventListener(LOCATION_EVENT, take)
+    return () => window.removeEventListener(LOCATION_EVENT, take)
+  }, [])
+
   async function createPlan(name: string) {
     setCreating(true)
     try {
@@ -220,9 +242,9 @@ export default function PlansPage({ section, detail, onOpen, onOpenUser }: Props
         return
       }
       setActive(s)
-      // The countdown ends and the session is real: a buzz says so without
-      // asking you to look, which is the point of the three seconds.
-      haptic('start')
+      // The countdown ends and the session is real: a buzz and a note say so
+      // without asking you to look, which is the point of the three seconds.
+      signal('start')
       enterSession(s)
     } catch (e) {
       setCounting(false)
@@ -428,7 +450,10 @@ export default function PlansPage({ section, detail, onOpen, onOpenUser }: Props
         }
       />
 
-      <div className="page-content">
+      {/* Opens the audio device on the way past, because the tap that starts
+          a session is the last gesture before a countdown that ends without
+          one — and a browser will only open it in response to a gesture. */}
+      <div className="page-content" onPointerDown={primeSound}>
         {error && <div className="status-msg err" role="alert">{error}</div>}
 
         {active && (
@@ -528,7 +553,7 @@ export default function PlansPage({ section, detail, onOpen, onOpenUser }: Props
           you already did, nor while choosing what to throw away. */}
       {tab === 'plans' && !sel.selecting && (
         <button className="fab" onClick={() => setNaming(true)} title="New plan" aria-label="New plan">
-          <Plus size={22} />
+          <Plus size={24} />
         </button>
       )}
 
@@ -590,17 +615,32 @@ function PlanRow({ plan, selecting, picked, onOpen, onStart, onToggle, onLongPre
         {...press.handlers}
         aria-pressed={selecting ? picked : undefined}
       >
-        {selecting && (
-          <span className="plan-pick" aria-hidden>{picked && <CheckCheck size={14} />}</span>
-        )}
+        {/* The mark alone, so that as a card the name can sit beside it and
+            the tile opens with something to read rather than an icon on a line
+            of its own. */}
+        <span className="plan-card-head">
+          {selecting
+            ? <span className="plan-pick" aria-hidden>{picked && <CheckCheck size={14} />}</span>
+            : <span className="plan-card-mark"><ClipboardList size={15} /></span>}
+        </span>
         <div className="plan-card-main">
-          <strong className="plan-card-name">{plan.name}</strong>
+          <strong className="plan-card-name">
+            {plan.name}
+            {plan.archived && <span className="plan-badge">Archived</span>}
+          </strong>
+          {/* What the plan holds, under its name: the two numbers that say how
+              big a thing you are about to start. */}
           <span className="plan-card-meta plan-num">
             {plan.dayCount} day{plan.dayCount === 1 ? '' : 's'}
-            {plan.lastSessionAt && ` · last run ${relativeDay(plan.lastSessionAt)}`}
+            {plan.setCount ? ` · ${plan.setCount} set${plan.setCount === 1 ? '' : 's'}` : ''}
           </span>
         </div>
-        {plan.archived && <span className="plan-badge">Archived</span>}
+        {/* When it was last run, at the far end of a row and along the foot of
+            a card. The one fact here that is about you rather than about the
+            plan, which is why it is the one kept apart from the name. */}
+        <div className="plan-card-figures plan-num">
+          {plan.lastSessionAt && <span>{relativeDay(plan.lastSessionAt)}</span>}
+        </div>
       </button>
       {/* Straight into training, without opening the plan first: the common
           case is the same day you did last week. */}

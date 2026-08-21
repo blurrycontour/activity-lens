@@ -10,4 +10,8 @@
     <string name="notification_channel_description">Shared workouts, gear wear and training goals.</string>
     <string name="session_channel_name">Training session</string>
     <string name="session_channel_description">A quiet, ongoing note while a training session is running.</string>
+    <!-- The two ways a session ends, offered as notification actions. Both
+         open the app on the session; see SessionNoticePlugin. -->
+    <string name="session_action_finish">Finish</string>
+    <string name="session_action_discard">Discard</string>
 </resources>

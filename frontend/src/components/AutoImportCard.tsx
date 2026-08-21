@@ -263,7 +263,7 @@ export default function AutoImportCard() {
       )}
 
       <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 14, lineHeight: 1.5 }}>
-        Reads <code>.gpx</code> and <code>.tcx</code>, including <code>.gz</code>, at the top level
+        Reads <code>.fit</code>, <code>.gpx</code> and <code>.tcx</code>, including <code>.gz</code>, at the top level
         of each folder. A file already in your library is never imported twice; a{' '}
         <strong>full rescan</strong> offers every file again, which is how a workout you deleted
         comes back.

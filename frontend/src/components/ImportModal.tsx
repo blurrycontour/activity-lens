@@ -23,7 +23,7 @@ interface ImportModalProps {
 
 type Tab = 'file' | 'manual'
 
-const SUPPORTED = ['gpx', 'tcx']
+const SUPPORTED = ['gpx', 'tcx', 'fit']
 
 /**
  * What the file picker offers. Archives are unpacked in the browser.
@@ -37,7 +37,7 @@ const SUPPORTED = ['gpx', 'tcx']
  * afterwards, the same as a dropped or shared file, which never passed through
  * `accept` in the first place.
  */
-const ACCEPT_ATTR = isNative() ? '' : '.gpx,.tcx,.zip,.gz'
+const ACCEPT_ATTR = isNative() ? '' : '.gpx,.tcx,.fit,.zip,.gz'
 
 /** Where a batch is in its lifecycle. `null` items means single-file mode. */
 type BatchPhase = 'expanding' | 'preflight' | 'review' | 'importing' | 'done'
@@ -274,13 +274,29 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
     : !form.name.trim()
   const submitDisabled = busy || notReady
 
-  // Fetch a non-persisted preview of the derived numbers once a supported file
-  // is selected, so the user can review them before saving.
+  /*
+   * Fetch a non-persisted preview of the derived numbers once a supported file
+   * is selected, so the user can review them before saving.
+   *
+   * Keyed on the file and nothing else. It used to depend on the open tab too,
+   * which meant a look at Manual Entry and back threw the preview away and
+   * parsed the file again — a second upload of the whole thing, and a wait, to
+   * arrive at the numbers already on screen a moment earlier. Which tab is
+   * showing is a question about what to draw, not about what is known.
+   */
+  const previewedFile = useRef<File | null>(null)
   useEffect(() => {
-    if (tab !== 'file' || !file || !fileSupported) {
+    if (!file || !fileSupported) {
+      previewedFile.current = null
       setPreview(null)
       return
     }
+    // Already asked about this exact file: either the answer is on screen or it
+    // is on its way. A File is identity-compared on purpose — re-picking the
+    // same path hands back a new object, which is the one case where asking
+    // again is right.
+    if (previewedFile.current === file) return
+    previewedFile.current = file
     let active = true
     setPreviewBusy(true)
     setPreview(null)
@@ -294,7 +310,7 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
       .catch(err => { if (active) setError(err instanceof ApiError ? err.message : 'Could not read file') })
       .finally(() => { if (active) setPreviewBusy(false) })
     return () => { active = false }
-  }, [file, fileSupported, tab])
+  }, [file, fileSupported])
 
   return (
     <Modal onClose={onClose} label="Add workout">
@@ -413,7 +429,7 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
                       <Upload size={32} color={dragging ? 'var(--primary)' : 'var(--text-3)'} style={{ margin: '0 auto 12px' }} />
                       <p style={{ fontWeight: 600, fontSize: 14 }}>Drop your files here</p>
                       <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>or click to browse — several at once is fine</p>
-                      <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8, fontFamily: 'var(--font-mono)' }}>.gpx · .tcx · .zip</p>
+                      <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8, fontFamily: 'var(--font-mono)' }}>.fit · .gpx · .tcx · .zip</p>
                       <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 6 }}>
                         A Strava or Garmin export .zip can be dropped in whole.
                       </p>
@@ -442,7 +458,7 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
                         </div>
                       ) : (
                         <div style={{ display: 'flex', gap: 6, marginTop: 12, alignItems: 'center', color: 'var(--danger)', fontSize: 12 }}>
-                          <AlertCircle size={14} /> Unsupported format. Use .gpx or .tcx
+                          <AlertCircle size={14} /> Unsupported format. Use .fit, .gpx or .tcx
                         </div>
                       )}
                       {fileSupported && (previewBusy || preview) && (

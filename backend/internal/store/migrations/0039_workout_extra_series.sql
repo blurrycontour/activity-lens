@@ -1,0 +1,13 @@
+-- Metrics a source file recorded that this app has no first-class column for:
+-- power, temperature, and whatever the next format brings.
+--
+-- One blob of named series rather than a column per metric. The four charted
+-- series each earn their column by being queried, ranked, filtered or counted;
+-- these are none of those things. They are drawn on one workout's own page and
+-- read nowhere else, so what they need is storage, not schema — and a column
+-- per metric would mean a migration, two positional scanner slots and a
+-- marshal/unmarshal entry every time a watch starts recording something new.
+--
+-- Encoded exactly like the timelines beside it: JSON, gzipped. NULL and an
+-- empty object both mean "nothing extra", and the reader treats them alike.
+ALTER TABLE workouts ADD COLUMN extra_series BLOB;

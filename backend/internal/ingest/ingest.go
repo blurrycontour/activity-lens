@@ -1,5 +1,7 @@
-// Package ingest parses activity files (GPX, TCX) into a workout.Input. Only
-// standard-library XML parsing is used; no third-party format dependencies.
+// Package ingest parses activity files (GPX, TCX, FIT) into a workout.Input.
+// Everything is decoded with the standard library — XML for the first two, and
+// a decoder for FIT's binary records in fit.go; no third-party format
+// dependencies.
 package ingest
 
 import (
@@ -82,6 +84,8 @@ func Parse(filename string, data []byte, defaultType workout.Type) (workout.Inpu
 		return parseGPX(data, defaultType)
 	case ".tcx":
 		return parseTCX(data, defaultType)
+	case ".fit":
+		return parseFIT(data, defaultType)
 	default:
 		return workout.Input{}, ErrUnsupported
 	}

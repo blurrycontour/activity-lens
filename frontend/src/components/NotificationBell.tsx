@@ -5,6 +5,7 @@ import { dismissOSNotification, enablePush, maybePromptForPush, pushState, syncP
 import { maybeEnrolNativePush, syncNativePush, watchNativeEndpoint } from '../lib/native/unifiedPush'
 import { PUSH_EVENT, READ_NOTIFICATION_EVENT } from '../lib/notifications'
 import { useIsMobile } from '../lib/useIsMobile'
+import ConfirmDialog from './ConfirmDialog'
 import Modal from './Modal'
 
 /** How often to re-check the unread count while the app is open. */
@@ -62,6 +63,8 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
    */
   const [reading, setReading] = useState<AppNotification | null>(null)
   const [items, setItems] = useState<AppNotification[]>([])
+  /** Whether "clear all" is waiting to be confirmed. */
+  const [clearing, setClearing] = useState(false)
   const [unread, setUnread] = useState(0)
   const [loaded, setLoaded] = useState(false)
   const [push, setPush] = useState<PushState>('unsupported')
@@ -175,6 +178,10 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
   }, [open])
 
   function toggle() {
+    // A question about the list goes with the list: leaving it pending would
+    // put "clear all notifications?" in front of someone who has closed the
+    // panel and moved on.
+    setClearing(false)
     setOpen(o => {
       // Refresh on open so the list is current even between polls.
       if (!o) void load()
@@ -212,6 +219,7 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
   }
 
   async function clearAll() {
+    setClearing(false)
     setItems([])
     setUnread(0)
     await api.clearNotifications().catch(() => {})
@@ -263,7 +271,7 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
               </button>
             )}
             {items.length > 0 && (
-              <button className="notif-action" onClick={() => void clearAll()} title="Clear all">
+              <button className="notif-action" onClick={() => setClearing(true)} title="Clear all">
                 <Trash2 size={13} />
               </button>
             )}
@@ -321,6 +329,22 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
           </div>
         </div>
         </Modal>
+      )}
+
+      {/* Emptying the list is one tap next to "mark all read", and unlike that
+          one it cannot be undone — the rows are deleted on the server. The
+          panel stays open underneath: the answer to "clear everything?" is
+          often "no", and closing the thing being cleared to ask about it would
+          leave nothing to come back to. */}
+      {clearing && (
+        <ConfirmDialog
+          title="Clear all notifications?"
+          message={`All ${items.length} will be deleted, including any you have not read. This cannot be undone.`}
+          confirmLabel="Clear all"
+          danger
+          onConfirm={() => void clearAll()}
+          onCancel={() => setClearing(false)}
+        />
       )}
 
       {reading && (

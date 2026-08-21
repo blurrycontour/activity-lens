@@ -59,18 +59,48 @@
                  types would miss most of them. IncomingFiles then drops
                  anything whose name is not a workout file, so the cost of
                  being offered a file we cannot use is a message, not an
-                 import. -->
+                 import.
+
+                 Two things about this list are not obvious and are worth
+                 writing down, because they decide whether the app appears in
+                 one file manager's share sheet and not another's:
+
+                 An intent whose own type is `*/*` matches any filter that
+                 declares at least one type — IntentFilter.findMimeType says so
+                 explicitly — so the "shared as anything" case needs nothing
+                 here. `application/*` likewise matches every `application/…`
+                 below.
+
+                 The aliases do need declaring. `.zip` and `.gz` have one
+                 registered type each and several in circulation, and a manager
+                 that hands out `application/x-gzip` matches nothing above no
+                 matter how close it is. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <action android:name="android.intent.action.SEND_MULTIPLE" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="application/gpx+xml" />
                 <data android:mimeType="application/vnd.garmin.tcx+xml" />
+                <data android:mimeType="application/vnd.ant.fit" />
                 <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip-compressed" />
                 <data android:mimeType="application/gzip" />
+                <data android:mimeType="application/x-gzip" />
                 <data android:mimeType="application/xml" />
                 <data android:mimeType="text/xml" />
                 <data android:mimeType="application/octet-stream" />
+            </intent-filter>
+
+            <!-- The same share, from an app that set no type at all.
+                 A filter that declares a type cannot match an intent without
+                 one, so this genuinely needs to be its own filter — and it can
+                 only ever match a typeless share, which is why it is safe to
+                 leave open. Sharing text or a photo always carries a type, so
+                 this does not put Activity Lens in those share sheets. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
 
             <!-- "Open with" on a workout file, the native equivalent of the web
@@ -87,12 +117,15 @@
                 <data android:scheme="file" />
                 <data android:mimeType="application/gpx+xml" />
                 <data android:mimeType="application/vnd.garmin.tcx+xml" />
+                <data android:mimeType="application/vnd.ant.fit" />
                 <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip-compressed" />
                 <data android:mimeType="application/gzip" />
+                <data android:mimeType="application/x-gzip" />
             </intent-filter>
 
-            <!-- `.gpx` and `.tcx`, which the filter above cannot catch.
-                 Neither extension is in Android's MimeTypeMap, so nothing ever
+            <!-- `.gpx`, `.tcx` and `.fit`, which the filter above cannot catch.
+                 None of the three is in Android's MimeTypeMap, so nothing ever
                  sends application/gpx+xml: a file manager asks the platform for
                  the type, gets null, and falls back to application/octet-stream
                  or */*. Matching on the *name* is the only thing that works,
@@ -127,6 +160,11 @@
                 <data android:pathPattern=".*\\..*\\..*\\.tcx" />
                 <data android:pathPattern=".*\\..*\\..*\\..*\\.tcx" />
                 <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.tcx" />
+                <data android:pathPattern=".*\\.fit" />
+                <data android:pathPattern=".*\\..*\\.fit" />
+                <data android:pathPattern=".*\\..*\\..*\\.fit" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.fit" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.fit" />
             </intent-filter>
 
             <!-- The same names again, for an intent that carries no type at all.
@@ -150,6 +188,11 @@
                 <data android:pathPattern=".*\\..*\\..*\\.tcx" />
                 <data android:pathPattern=".*\\..*\\..*\\..*\\.tcx" />
                 <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.tcx" />
+                <data android:pathPattern=".*\\.fit" />
+                <data android:pathPattern=".*\\..*\\.fit" />
+                <data android:pathPattern=".*\\..*\\..*\\.fit" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.fit" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.fit" />
             </intent-filter>
 
         </activity>
@@ -193,6 +236,14 @@
     <!-- Required from Android 13 to show a notification at all. Requested at the
          moment the user enables push, not at launch. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- What makes navigator.vibrate() do anything at all inside the WebView.
+         Without it the function still exists and still returns true, and every
+         call is silently ignored — so a training session that buzzes on the
+         web and in a browser on the same phone did nothing whatsoever in the
+         installed app, with no error anywhere to say why. Granted at install:
+         VIBRATE is a normal permission, so there is no prompt. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <!-- Lets Settings offer the "always allow in the background" prompt for
          auto-import directly, instead of sending the user to find this app in a

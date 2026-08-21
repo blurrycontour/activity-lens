@@ -21,6 +21,8 @@ public class IncomingFilesTest {
         assertTrue(IncomingFiles.isWorkoutFile("ride.tcx"));
         assertTrue(IncomingFiles.isWorkoutFile("export.zip"));
         assertTrue(IncomingFiles.isWorkoutFile("activity.gpx.gz"));
+        // What a watch actually records, and what its companion app shares.
+        assertTrue(IncomingFiles.isWorkoutFile("2026-04-12-063000.fit"));
     }
 
     @Test
@@ -28,6 +30,7 @@ public class IncomingFilesTest {
         // Exporters are inconsistent about this, and Android does not normalise.
         assertTrue(IncomingFiles.isWorkoutFile("RUN.GPX"));
         assertTrue(IncomingFiles.isWorkoutFile("Ride.Tcx"));
+        assertTrue(IncomingFiles.isWorkoutFile("ACTIVITY.FIT"));
     }
 
     @Test

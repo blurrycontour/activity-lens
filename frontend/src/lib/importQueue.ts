@@ -22,7 +22,7 @@ import { api, ApiError } from './api'
 import { type Workout, type WorkoutType } from '../data/workouts'
 
 /** Extensions the importer can parse. Anything else is reported, not silently dropped. */
-export const WORKOUT_EXTENSIONS = ['gpx', 'tcx'] as const
+export const WORKOUT_EXTENSIONS = ['gpx', 'tcx', 'fit'] as const
 
 /** Archive wrappers that are unpacked before looking at what is inside. */
 const ARCHIVE_EXTENSIONS = ['zip', 'gz'] as const
@@ -86,9 +86,8 @@ function withoutGz(name: string): string {
  * handling out of the backend entirely.
  *
  * Plain workout files pass through untouched. Anything else — the `activities.csv`
- * in a Strava export, a `.fit` this build cannot parse yet — is returned in
- * `skipped` rather than dropped, so the UI can account for every file the user
- * selected.
+ * in a Strava export, a stray photo — is returned in `skipped` rather than
+ * dropped, so the UI can account for every file the user selected.
  */
 export async function expand(input: File[]): Promise<ExpandResult> {
   const files: File[] = []

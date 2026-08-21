@@ -175,8 +175,10 @@ regenerated.
 | `AndroidManifest.xml` | `VIEW` intent filter on `${applicationId}://auth` | Where the browser returns a finished SSO sign-in. `${applicationId}` so a local build claims a different scheme than the published app. |
 | `java/.../NativeAuthPlugin.java` | new | Opens SSO in a Custom Tab and collects the code the deep link brings back. |
 | `AndroidManifest.xml` | `SEND` / `SEND_MULTIPLE` intent filter | Puts the app in the share sheet for workout files. Android does not honour the web manifest's `share_target` for an installed PWA, so without this the APK is the one install that cannot receive a share. |
-| `AndroidManifest.xml` | `VIEW` intent filters for `.gpx` / `.tcx` / `.zip` / `.gz` | "Open with" on a workout file, the native equivalent of the manifest's `file_handlers`. Archives match on MIME type; `.gpx` and `.tcx` have none registered on Android and must match on the file name. See below. |
+| `AndroidManifest.xml` | `VIEW` intent filters for `.fit` / `.gpx` / `.tcx` / `.zip` / `.gz` | "Open with" on a workout file, the native equivalent of the manifest's `file_handlers`. Archives match on MIME type; `.fit`, `.gpx` and `.tcx` have none registered on Android and must match on the file name. See below. |
 | `java/.../IncomingFiles.java`, `java/.../IncomingFilesPlugin.java` | new | Copies a shared file out of its `content://` URI while the read grant is still valid, and hands the page a path. See below. |
+| `java/.../SessionNoticePlugin.java` | new | The ongoing notification for a training session: a progress bar, a chronometer that counts the rest down and the session up, and Finish / Discard actions that open the app on the session. Both actions route through the same `EXTRA_LINK` extra a tapped push uses, so a cold start and a running app are handled by one path. |
+| `AndroidManifest.xml` | `VIBRATE` | What makes `navigator.vibrate()` do anything inside the WebView. Without it the call is silently ignored — the function exists and still returns true — so a session that buzzed in the phone's browser did nothing whatsoever in the installed app. |
 
 ## Distribution and updating
 
@@ -536,12 +538,29 @@ sides of the bridge, where this costs none.
 Exporters routinely share a `.gpx` as `application/octet-stream`, or with no type
 at all, so a filter that accepted only the correct MIME types would miss most
 real shares. `IncomingFiles.isWorkoutFile` then drops anything whose name is not
-`.gpx`, `.tcx`, `.zip` or `.gz`. Being offered a file the app cannot use costs a
+`.fit`, `.gpx`, `.tcx`, `.zip` or `.gz`. Being offered a file the app cannot use costs a
 message; not being offered one it can costs the feature.
+
+Three rules decide whether a given file manager offers the app at all, and only
+the last one needs anything from us:
+
+- An intent whose own type is `*/*` matches a filter that declares **any** type.
+  `IntentFilter.findMimeType` special-cases it. Nothing to do.
+- `application/*` matches every `application/…` in the list, for the same reason.
+- An intent with **no type at all** matches no typed filter, however broad. That
+  is its own, otherwise identical `SEND` filter with no `<data>` — which can only
+  match a typeless share, so it does not put the app in the sheet for text or
+  photos.
+
+The remaining gap was aliases: `.zip` and `.gz` each have one registered type and
+several in circulation, and a manager handing out `application/x-gzip` matched
+nothing. Both aliases are now declared alongside the registered types. `.fit`
+brings nothing new here — like `.gpx` and `.tcx` it is unregistered on Android, so
+it arrives as `application/octet-stream` or `*/*`, both of which already match.
 
 #### Why "open with" needs four filters and ten path patterns
 
-**`.gpx` and `.tcx` are not in Android's `MimeTypeMap`.** Nothing on the platform
+**`.fit`, `.gpx` and `.tcx` are not in Android's `MimeTypeMap`.** Nothing on the platform
 will ever hand you `application/gpx+xml`: a file manager asks for the type, gets
 null, and sends `application/octet-stream` or `*/*`. Matching those two
 extensions on type cannot work, so they match on the file name instead. Archives

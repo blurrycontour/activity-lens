@@ -5,7 +5,7 @@ import SportDropdown from './SportDropdown'
 
 /** Human wording for why a file will not be imported. */
 const SKIP_TEXT: Record<SkipReason, string> = {
-  unsupported: 'Not a .gpx or .tcx file',
+  unsupported: 'Not a .fit, .gpx or .tcx file',
   empty: 'File is empty',
   'too-many': 'Skipped — too many files in this archive',
   'too-large': 'Skipped — archive too large',
