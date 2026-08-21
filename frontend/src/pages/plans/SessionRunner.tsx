@@ -20,7 +20,7 @@ import { cacheProgress, clearCachedProgress, readCachedProgress } from './sessio
 import {
   claimSessionNotice, clearSessionNotice, repostSessionNotice, showSessionNotice,
 } from '../../lib/native/sessionNotice'
-import { longTimerSec, primeSound, signal, signalNow } from '../../lib/sessionFeedback'
+import { longTimerSec, primeSound, signal } from '../../lib/sessionFeedback'
 
 interface Props {
   session: PlanSession
@@ -467,13 +467,24 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
   // --- finishing ---------------------------------------------------------
 
   async function finish() {
+    /*
+     * Announced on the press, not on the answer.
+     *
+     * Twice now the buzz that ends a session has failed to arrive while the
+     * one that starts it works, and the two are the same call — the only thing
+     * that differs is what surrounds it: a network round trip, a notification
+     * being taken down, and a navigation, all in the same breath. Rather than
+     * keep guessing which of those swallows it, this happens first, in the tap
+     * that asked for it, with nothing else in flight. It costs a buzz for an
+     * ending that then fails to save, and the error says so when it does.
+     */
+    signal('finish')
     setBusy(true)
     setError('')
     try {
       const done = await api.finishPlanSession(session.id, progress)
       clearCachedProgress(session.id)
       void clearSessionNotice()
-      await signalNow('finish')
       onFinished(done)
     } catch {
       setError('Could not finish the session. Your sets are saved — try again.')
@@ -483,12 +494,13 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
   }
 
   async function discard() {
+    // On the press, for the same reason as finish above.
+    signal('discard')
     setBusy(true)
     try {
       await api.deletePlanSession(session.id)
       clearCachedProgress(session.id)
       void clearSessionNotice()
-      await signalNow('discard')
       onDiscarded()
     } catch {
       setError('Could not discard the session.')

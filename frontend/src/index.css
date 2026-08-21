@@ -106,6 +106,7 @@
   --z-map-ui: 400;       /* controls drawn over a map canvas */
   --z-map-panel: 500;    /* the maximize button */
   --z-map-picker: 1000;  /* a picker opened from a map control, over both */
+  --z-dial: 1090;        /* an open speed dial — over the frame, under a dialog */
   --z-overlay: 1100;     /* the dimming behind a dialog */
   --z-dialog: 1101;      /* dialogs, sheets, panels: the overlay's content */
   --z-banner: 1150;      /* a push arriving over a dialog */
@@ -2359,7 +2360,11 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 20px var(--primary-glow);
+  /* Its own glow, and a shadow under it. The glow says which colour the
+     button is; the shadow is what lifts it off whatever it happens to be
+     floating over, which on a list of cards is otherwise nothing at all. A
+     shadow is painted, never hit-tested, so it costs no tap and no swipe. */
+  box-shadow: 0 4px 20px var(--primary-glow), 0 8px 22px rgba(0, 0, 0, 0.4);
   z-index: var(--z-fab);
   transition: transform 0.2s, box-shadow 0.2s;
 }
@@ -2371,7 +2376,7 @@ body {
    `:has` is not load-bearing — where it is unsupported the FAB simply stays
    where it was. */
 body:has(.overlay) .fab { display: none; }
-.fab:hover { transform: scale(1.08); box-shadow: 0 6px 28px var(--primary-glow); }
+.fab:hover { transform: scale(1.08); box-shadow: 0 6px 28px var(--primary-glow), 0 10px 28px rgba(0, 0, 0, 0.45); }
 .fab:active { transform: scale(0.96); }
 /* ── Speed dial ──
    The dashboard's floating button, which makes one of several things. The
@@ -2401,12 +2406,20 @@ body:has(.overlay) .fab { display: none; }
 .dial-scrim {
   position: fixed;
   inset: 0;
-  z-index: calc(var(--z-fab) - 1);
+  /* Above the app frame, like a dialog's overlay and for the same reason. At
+     the FAB's level it sat *under* the top and bottom bars, so they stayed
+     sharp above a blurred page — which does not read as a blur, it reads as
+     the effect not working. Same declarations as .overlay, one step below it. */
+  z-index: var(--z-dial);
   background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(18px) saturate(70%);
-  -webkit-backdrop-filter: blur(18px) saturate(70%);
+  backdrop-filter: blur(16px) saturate(80%);
+  -webkit-backdrop-filter: blur(16px) saturate(80%);
   animation: scrimIn 0.16s ease-out;
 }
+/* The buttons themselves have to come with it, or they end up behind the
+   scrim that is there to set them off. Only while open: closed, this is an
+   ordinary floating button and belongs under the frame with the rest. */
+.dial.open { z-index: calc(var(--z-dial) + 1); }
 /* As strongly as a dialog's overlay. A dashboard is charts and numbers edge to
    edge, and a light blur over it left three labels competing with everything
    they were sitting on. Same fallback as the overlay: where the blur does
@@ -2468,7 +2481,7 @@ body:has(.overlay) .dial { display: none; }
   color: var(--primary);
   background: var(--bg-2);
   border: 1px solid var(--border-strong);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
   transition: transform 0.12s, border-color 0.12s;
 }
 .dial-action:hover .dial-glyph { border-color: var(--primary); transform: scale(1.06); }

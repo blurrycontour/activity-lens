@@ -264,17 +264,4 @@ export function signal(kind: Signal): void {
   sound(kind)
 }
 
-/**
- * The same, but waits for the buzz to have actually been asked for.
- *
- * For the two signals that are the last thing to happen on a screen. A buzz in
- * the native app is a message across the Capacitor bridge, and finishing a
- * session navigates away in the same tick that sends it — the tone survives
- * that, because it is already scheduled on an audio device that outlives the
- * page, and the message does not. Everywhere else the fire-and-forget `signal`
- * is right: nothing is racing it.
- */
-export async function signalNow(kind: Signal): Promise<void> {
-  sound(kind)
-  await buzz(kind)
-}
+
