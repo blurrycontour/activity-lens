@@ -2373,6 +2373,82 @@ body {
 body:has(.overlay) .fab { display: none; }
 .fab:hover { transform: scale(1.08); box-shadow: 0 6px 28px var(--primary-glow); }
 .fab:active { transform: scale(0.96); }
+/* ── Speed dial ──
+   The dashboard's floating button, which makes one of several things. The
+   closed button is the same .fab every other page draws, in the same corner —
+   only what happens when it is pressed differs. */
+.dial {
+  position: fixed;
+  bottom: calc(24px + var(--bottombar-h));
+  right: 24px;
+  z-index: var(--z-fab);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+}
+/* The toggle drops the .fab's own fixed position and sits in the column. */
+.dial .fab { position: static; }
+.dial-scrim { position: fixed; inset: 0; z-index: calc(var(--z-fab) - 1); }
+body:has(.overlay) .dial { display: none; }
+
+.dial-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+}
+.dial-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  /* Closed, they are folded into the button and cannot be pressed. Opacity and
+     transform rather than display, so both directions animate. */
+  opacity: 0;
+  transform: translateY(12px) scale(0.9);
+  pointer-events: none;
+  transition: opacity 0.16s ease, transform 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.dial.open .dial-action { opacity: 1; transform: none; pointer-events: auto; }
+@media (prefers-reduced-motion: reduce) {
+  .dial-action { transition: none; }
+}
+/* The name to the left of its circle, on the surface a tooltip would use: the
+   icons are a bicycle and a clipboard, and which of those means "plan" is not
+   a guess to make people make. */
+.dial-label {
+  padding: 5px 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--text);
+  background: var(--bg-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+.dial-glyph {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--primary);
+  background: var(--bg-2);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  transition: transform 0.12s, border-color 0.12s;
+}
+.dial-action:hover .dial-glyph { border-color: var(--primary); transform: scale(1.06); }
+.dial-action:active .dial-glyph { transform: scale(0.96); }
+
 /* Room to scroll past a floating button. The FAB is fixed to the viewport, so
    it covers whatever happens to be at the bottom of the screen — which was
    fine until a page put a control there. A plan's comment box sat under it,

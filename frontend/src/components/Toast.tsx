@@ -1,8 +1,8 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 
-/** How long it stays. Long enough to read six words, short enough not to nag. */
-const AUTO_DISMISS_MS = 2600
+/** How long it stays. Long enough to read four words, short enough not to nag. */
+const AUTO_DISMISS_MS = 1500
 
 /**
  * A brief message near the top of the screen, for something that just worked.
@@ -16,16 +16,29 @@ const AUTO_DISMISS_MS = 2600
  * Portalled and positioned like the banner it borrows its manners from, so
  * whatever is on screen underneath cannot bound it or paint over it.
  */
-export default function Toast({ message, icon, onDone }: {
+export default function Toast({ message, icon, duration = AUTO_DISMISS_MS, onDone }: {
   message: string
   /** A small mark before the text; the tick, an avatar, nothing at all. */
   icon?: React.ReactNode
+  /** Milliseconds on screen. */
+  duration?: number
   onDone: () => void
 }) {
+  /*
+   * The callback through a ref, and the timer started once.
+   *
+   * Callers write `onDone={() => setX(null)}`, which is a new function on every
+   * render — and a timer effect that depends on it restarts on every render of
+   * the parent. The ping row re-renders once a second while a cooldown runs, so
+   * the toast's dismissal was pushed back a second, every second, and it stayed
+   * until the cooldown ended.
+   */
+  const done = useRef(onDone)
+  done.current = onDone
   useEffect(() => {
-    const id = setTimeout(onDone, AUTO_DISMISS_MS)
+    const id = setTimeout(() => done.current(), duration)
     return () => clearTimeout(id)
-  }, [onDone])
+  }, [duration])
 
   return createPortal(
     // Polite rather than assertive: this reports something the user just did

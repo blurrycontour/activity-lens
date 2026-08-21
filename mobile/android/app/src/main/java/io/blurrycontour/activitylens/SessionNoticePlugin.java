@@ -122,10 +122,11 @@ public class SessionNoticePlugin extends Plugin {
          * a second copy of the login, held somewhere a notification action can
          * read it.
          *
-         * What it costs is a screen unlock; what it buys is that Finish lands
-         * on the session's summary, which is where somebody who just finished
-         * training wants to be anyway, and Discard asks before throwing the
-         * session away instead of losing it to a mis-tap in a pocket.
+         * What it costs is a screen unlock. What it buys is that both end up
+         * in front of the same confirmation the buttons in the app use, which
+         * says how many sets are ticked -- the one thing that cannot be
+         * checked from a notification shade, and the thing worth knowing
+         * before ending a session either way.
          */
         builder.addAction(actionFor(context, sessionId, "finish", R.string.session_action_finish, 1));
         builder.addAction(actionFor(context, sessionId, "discard", R.string.session_action_discard, 2));

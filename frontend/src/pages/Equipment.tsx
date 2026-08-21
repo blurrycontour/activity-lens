@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { LOCATION_EVENT } from '../App'
 import {
   Plus, Watch, Bike, Shirt, Package, SportShoe, Pencil, Trash2, X, ChevronRight,
   ArrowLeft, AlertTriangle, SlidersHorizontal, ArrowUpDown, Layers,
@@ -102,6 +103,31 @@ export default function EquipmentPage({ onSelectWorkout, detail, onOpenDetail }:
   const [items, setItems] = useState<Equipment[]>([])
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState<Equipment | 'new' | null>(null)
+  /*
+   * "Add equipment", asked for from somewhere else.
+   *
+   * The dashboard's button offers making a piece of gear but does not own the
+   * form, the save or what happens after it — this page does. So it sends the
+   * request in the URL and this picks it up, which means one creation flow
+   * rather than two that drift.
+   *
+   * The flag is stripped as it is read, or a refresh would reopen the form,
+   * and the location event covers the case where this page is already the one
+   * on screen.
+   */
+  useEffect(() => {
+    const take = () => {
+      const url = new URL(window.location.href)
+      if (url.searchParams.get('new') !== '1') return
+      url.searchParams.delete('new')
+      window.history.replaceState(window.history.state, '', url.pathname + url.search)
+      setEditing('new')
+    }
+    take()
+    window.addEventListener(LOCATION_EVENT, take)
+    return () => window.removeEventListener(LOCATION_EVENT, take)
+  }, [])
+
   /**
    * Incremented on every save, to tell an open detail view its row changed.
    *
@@ -336,7 +362,16 @@ export default function EquipmentPage({ onSelectWorkout, detail, onOpenDetail }:
         <EquipmentForm
           initial={editing === 'new' ? null : editing}
           onClose={() => setEditing(null)}
-          onSaved={() => { setEditing(null); setSavedAt(n => n + 1); void load() }}
+          onSaved={saved => {
+            setEditing(null)
+            setSavedAt(n => n + 1)
+            void load()
+            // A brand-new piece of gear opens on itself. Nothing is linked to
+            // it yet, so the list row it would land in says nothing — and
+            // adding gear is nearly always the first half of putting workouts
+            // against it, which is what the detail view is for.
+            if (editing === 'new' && saved) onOpenDetail(saved.id)
+          }}
         />
       )}
     </div>
@@ -667,7 +702,8 @@ function EquipmentDetail({ id, reloadToken, onBack, onSelectWorkout, onEdit, onD
 function EquipmentForm({ initial, onClose, onSaved }: {
   initial: Equipment | null
   onClose: () => void
-  onSaved: () => void
+  /** Hands back what was saved, so a caller can open it. */
+  onSaved: (saved?: Equipment) => void
 }) {
   const [form, setForm] = useState<EquipmentInput>(initial
     ? { name: initial.name, type: initial.type, brand: initial.brand, model: initial.model, notes: initial.notes, retired: initial.retired, retireAtKm: initial.retireAtKm ?? 0 }
@@ -680,9 +716,10 @@ function EquipmentForm({ initial, onClose, onSaved }: {
     setSaving(true)
     setError('')
     try {
-      if (initial) await api.patchEquipment(initial.id, form)
-      else await api.createEquipment(form)
-      onSaved()
+      const saved = initial
+        ? await api.patchEquipment(initial.id, form)
+        : await api.createEquipment(form)
+      onSaved(saved)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save')
       setSaving(false)

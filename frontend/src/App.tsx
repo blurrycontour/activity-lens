@@ -719,6 +719,12 @@ export default function App() {
           <Dashboard
             onSelect={selectWorkout}
             onResumeSession={id => openSection('plans', 'session', id)}
+            onImport={() => setShowImport(true)}
+            // Through openLink, which is how every other "go here and do this"
+            // in the app travels: the query string is what the page reads to
+            // know it should open its own creation flow. See Equipment and
+            // PlansPage, where that is picked up.
+            onCreate={what => openLink(what === 'equipment' ? '/equipment?new=1' : '/plans?new=1')}
           />
         ) : page === 'workouts' ? (
           <Workouts onSelect={selectWorkout} onImport={() => setShowImport(true)} />

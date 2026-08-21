@@ -210,10 +210,11 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
    * they open the app on this page carrying what was asked for, and this is
    * where it is carried out.
    *
-   * Finish goes through, since it destroys nothing and lands on the summary —
-   * which is where somebody who just tapped Finish wants to be. Discard opens
-   * its confirmation instead: throwing a session away on the strength of one
-   * tap in a notification shade is not a thing to do without asking.
+   * Both ask, through the same dialogs the buttons on this page use. Finish
+   * destroys nothing, so acting on it outright was defensible — but it made
+   * the two actions behave differently for no reason a reader could see, and
+   * the dialog is worth having anyway: it says how many sets are ticked, which
+   * is the one thing you cannot check from a notification shade.
    *
    * The instruction is stripped from the URL as it is taken, so a reload does
    * not end the session a second time. Bound to the location event too,
@@ -226,15 +227,12 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
       if (what !== 'finish' && what !== 'discard') return
       url.searchParams.delete('do')
       window.history.replaceState(window.history.state, '', url.pathname + url.search)
-      if (what === 'finish') void finish()
+      if (what === 'finish') setConfirmFinish(true)
       else setConfirmDiscard(true)
     }
     take()
     window.addEventListener(LOCATION_EVENT, take)
     return () => window.removeEventListener(LOCATION_EVENT, take)
-    // finish() is stable enough for this: it closes over the session and the
-    // progress ref, both of which are current whenever it runs.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.id])
   useEffect(() => {
     const onShow = () => { if (document.visibilityState === 'visible') void repostSessionNotice() }

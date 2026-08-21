@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { LOCATION_EVENT } from '../../App'
 import {
   CheckCheck, ClipboardList, History, Loader2, Play, Plus, X,
 } from 'lucide-react'
@@ -154,6 +155,27 @@ export default function PlansPage({ section, detail, onOpen, onOpenUser }: Props
    * It used to create a plan called "New plan" the moment the button was
    * tapped, which left one behind for every accidental press.
    */
+  /*
+   * "New plan", asked for from the dashboard.
+   *
+   * Same arrangement as Equipment: the button that offers it lives on another
+   * page, the flow lives here, and the request travels in the URL. Creating
+   * one already opens it ready to be written, which is where somebody who just
+   * named a plan wants to be.
+   */
+  useEffect(() => {
+    const take = () => {
+      const url = new URL(window.location.href)
+      if (url.searchParams.get('new') !== '1') return
+      url.searchParams.delete('new')
+      window.history.replaceState(window.history.state, '', url.pathname + url.search)
+      setNaming(true)
+    }
+    take()
+    window.addEventListener(LOCATION_EVENT, take)
+    return () => window.removeEventListener(LOCATION_EVENT, take)
+  }, [])
+
   async function createPlan(name: string) {
     setCreating(true)
     try {

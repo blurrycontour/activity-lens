@@ -32,6 +32,23 @@ const SPORT: Record<string, WorkoutType> = {
  * receipt, and it stays there for as long as the cooldown does — so what was
  * sent, and that nothing more can be sent yet, are one mark rather than two.
  */
+/**
+ * How much of the cooldown ring to draw, one second from now.
+ *
+ * A second ahead, not the current value, because the ring is drawn with a
+ * one-second linear transition: setting where it should be *now* means it
+ * spends every second animating towards a position the clock has already left,
+ * and it was still a tick short of empty when the cooldown ended and the ring
+ * disappeared. Setting where it will be when the transition lands keeps the
+ * two in step.
+ *
+ * Returns a fraction of the circle, 0 to 1.
+ */
+export function ringRemaining(wait: number, cooldown: number): number {
+  if (cooldown <= 0) return 0
+  return Math.max(0, Math.min(1, (wait - 1) / cooldown))
+}
+
 export default function PingRow({ userId, name, info }: {
   userId: number
   /** Who is being nudged, for the button labels. */
@@ -94,10 +111,10 @@ export default function PingRow({ userId, name, info }: {
             name={name}
             sent={sent === m.id}
             disabled={wait > 0 || busy !== null}
-            /* How much of the cooldown is left, as a fraction. The ring is
-               drawn from it, so it is only meaningful on the one that was
-               pressed — the others are simply disabled. */
-            remaining={info.cooldownSeconds > 0 ? wait / info.cooldownSeconds : 0}
+            /* Where the ring should be when its transition lands; see
+               ringRemaining. Only meaningful on the one that was pressed —
+               the others are simply disabled. */
+            remaining={ringRemaining(wait, info.cooldownSeconds)}
             showTip={tip === m.id}
             onTip={open => setTip(open ? m.id : null)}
             onSend={() => void send(m.id)}
@@ -137,14 +154,47 @@ function PingButton({ message: m, name, sent, disabled, remaining, showTip, onTi
 }) {
   const press = useLongPress(() => onTip(true))
   const hide = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /*
+   * The callback through a ref.
+   *
+   * The parent re-renders once a second while a cooldown runs and hands down a
+   * fresh arrow each time, so an effect depending on it re-runs every second —
+   * which restarts the auto-hide timer every second, and it never fires. Same
+   * trap the toast fell into.
+   */
+  const tipRef = useRef(onTip)
+  tipRef.current = onTip
 
-  // The tip closes itself, because the gesture that opened it has no matching
-  // "un-hold" on a phone: a finger lifts and nothing else happens.
+  /*
+   * The tip closes on the next touch anywhere, and on its own if there is
+   * none.
+   *
+   * Both are needed. The gesture that opened it has no matching "un-hold" on a
+   * phone — a finger lifts and nothing else happens — so without the timeout it
+   * would sit there; and without the outside tap, dismissing it meant waiting
+   * out a timer while the thing you actually pressed did nothing.
+   *
+   * Listening on pointerdown in the capture phase, so the tap that dismisses is
+   * seen before anything under it decides what to do about it.
+   */
   useEffect(() => {
     if (!showTip) return
-    hide.current = setTimeout(() => onTip(false), 2200)
-    return () => { if (hide.current) clearTimeout(hide.current) }
-  }, [showTip, onTip])
+    const close = () => tipRef.current(false)
+    hide.current = setTimeout(close, 2200)
+    // Deferred a tick: the pointerdown that *opened* this is still being
+    // dispatched, and a listener added during it would catch the same event
+    // and close the tip before it was ever seen.
+    const armed = setTimeout(() => {
+      document.addEventListener('pointerdown', close, true)
+      window.addEventListener('scroll', close, true)
+    }, 0)
+    return () => {
+      if (hide.current) clearTimeout(hide.current)
+      clearTimeout(armed)
+      document.removeEventListener('pointerdown', close, true)
+      window.removeEventListener('scroll', close, true)
+    }
+  }, [showTip])
 
   const sport = SPORT[m.id]
   return (
