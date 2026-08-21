@@ -58,18 +58,31 @@ export type Signal =
    */
   | 'ping'
 
-/** Vibration patterns, in milliseconds: buzz, pause, buzz… */
-const PATTERNS: Record<Signal, number[]> = {
-  set: [18],
+/**
+ * Vibration patterns, in milliseconds: buzz, pause, buzz…
+ *
+ * Never a lone pulse, and that is a rule rather than a style. Every signal
+ * with a rhythm arrives on the phone this was built against and every signal
+ * that was a single buzz does not — the one that ends a session is felt, the
+ * one that throws it away is not, and the code either side of them is the
+ * same. The platform is asked for a one-shot rather than a waveform in that
+ * case and it makes no difference, so whatever declines to render it is below
+ * where this app can see. A pattern is cheap; the fix is to have one. There is
+ * a test that says so, because this is exactly the kind of rule a future edit
+ * would undo by writing the obvious thing.
+ */
+export const PATTERNS: Record<Signal, number[]> = {
+  /** Two light taps rather than one, for the reason above. */
+  set: [14, 45, 14],
   exercise: [28, 45, 28],
   start: [40, 70, 40],
   finish: [55, 70, 55, 70, 110],
   complete: [40, 60, 40, 60, 40, 60, 140],
-  /** One flat pulse: nothing to celebrate. */
-  discard: [140],
+  /** Flat and falling — long after short. There is nothing to celebrate. */
+  discard: [45, 70, 165],
   timer: [180, 90, 180],
   /** Barely there: this is a receipt, not an event. */
-  ping: [14],
+  ping: [12, 45, 12],
 }
 
 /**
