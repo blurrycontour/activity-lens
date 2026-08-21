@@ -112,6 +112,25 @@ public class SessionNoticePlugin extends Plugin {
         }
 
         /*
+         * Ending the session from the shade.
+         *
+         * Both actions open the app on the session rather than acting from
+         * here, and that is deliberate rather than a shortcut. Finishing a
+         * session means sending its sets to the server, and the credentials
+         * for that live in the WebView's cookie jar — reachable from the app
+         * and from nowhere else. A broadcast receiver could not do it without
+         * a second copy of the login, held somewhere a notification action can
+         * read it.
+         *
+         * What it costs is a screen unlock; what it buys is that Finish lands
+         * on the session's summary, which is where somebody who just finished
+         * training wants to be anyway, and Discard asks before throwing the
+         * session away instead of losing it to a mis-tap in a pocket.
+         */
+        builder.addAction(actionFor(context, sessionId, "finish", R.string.session_action_finish, 1));
+        builder.addAction(actionFor(context, sessionId, "discard", R.string.session_action_discard, 2));
+
+        /*
          * The clock in the header, which Android draws for free and keeps
          * ticking with the app closed -- the one part of this that stays true
          * without being re-posted.
@@ -141,6 +160,35 @@ public class SessionNoticePlugin extends Plugin {
             Log.w(TAG, "not allowed to post notifications");
         }
         call.resolve();
+    }
+
+    /**
+     * One action button: opens the app on this session, carrying what to do.
+     *
+     * A request code of its own per action, because two PendingIntents that
+     * match on everything but their extras are the *same* PendingIntent as far
+     * as the system is concerned — with FLAG_UPDATE_CURRENT the second would
+     * quietly rewrite the first, and both buttons would do whatever was built
+     * last.
+     */
+    private static NotificationCompat.Action actionFor(
+        Context context, String sessionId, String what, int labelRes, int requestOffset
+    ) {
+        Intent intent = new Intent(context, MainActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        intent.putExtra(UnifiedPushReceiver.EXTRA_LINK, "/plans/session/" + sessionId + "?do=" + what);
+        PendingIntent pending = PendingIntent.getActivity(
+            context,
+            NOTIFICATION_ID + requestOffset,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
+        // The icon is passed but never drawn: from Android 7 the standard
+        // template shows action labels only. It is here so the notification is
+        // still well-formed on anything older.
+        return new NotificationCompat.Action.Builder(
+            R.drawable.ic_stat_notify, context.getString(labelRes), pending
+        ).build();
     }
 
     @PluginMethod

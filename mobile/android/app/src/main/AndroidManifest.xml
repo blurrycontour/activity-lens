@@ -237,6 +237,14 @@
          moment the user enables push, not at launch. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- What makes navigator.vibrate() do anything at all inside the WebView.
+         Without it the function still exists and still returns true, and every
+         call is silently ignored — so a training session that buzzes on the
+         web and in a browser on the same phone did nothing whatsoever in the
+         installed app, with no error anywhere to say why. Granted at install:
+         VIBRATE is a normal permission, so there is no prompt. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
     <!-- Lets Settings offer the "always allow in the background" prompt for
          auto-import directly, instead of sending the user to find this app in a
          list of every app on the phone. Only declared so the system dialog can

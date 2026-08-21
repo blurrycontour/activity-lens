@@ -28,7 +28,7 @@ import {
   applyItemFilters, asPlanItem, NO_NARROWING, type ItemNarrowing,
 } from '../../lib/itemFilters'
 import useTicker from '../../lib/useTicker'
-import { haptic } from '../../lib/haptics'
+import { primeSound, signal } from '../../lib/sessionFeedback'
 
 /** "12 plans · 48 sessions", and the halves it has while they load. */
 function countLine(plans: TrainingPlan[] | null, sessions: PlanSession[] | null): string {
@@ -220,9 +220,9 @@ export default function PlansPage({ section, detail, onOpen, onOpenUser }: Props
         return
       }
       setActive(s)
-      // The countdown ends and the session is real: a buzz says so without
-      // asking you to look, which is the point of the three seconds.
-      haptic('start')
+      // The countdown ends and the session is real: a buzz and a note say so
+      // without asking you to look, which is the point of the three seconds.
+      signal('start')
       enterSession(s)
     } catch (e) {
       setCounting(false)
@@ -428,7 +428,10 @@ export default function PlansPage({ section, detail, onOpen, onOpenUser }: Props
         }
       />
 
-      <div className="page-content">
+      {/* Opens the audio device on the way past, because the tap that starts
+          a session is the last gesture before a countdown that ends without
+          one — and a browser will only open it in response to a gesture. */}
+      <div className="page-content" onPointerDown={primeSound}>
         {error && <div className="status-msg err" role="alert">{error}</div>}
 
         {active && (

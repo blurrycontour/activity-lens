@@ -7,6 +7,7 @@ import PageHeader from '../../components/PageHeader'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import Modal from '../../components/Modal'
 import { api } from '../../lib/api'
+import { LOCATION_EVENT } from '../../App'
 import {
   blockComplete, blockLabel, blockProgress, chosenExercises, clockLabel, currentBlockId,
   currentExercise, doneSetsFor, durationShort, effectivePicks, elapsedSec, exerciseComplete, nextExercise,
@@ -19,8 +20,7 @@ import { cacheProgress, clearCachedProgress, readCachedProgress } from './sessio
 import {
   claimSessionNotice, clearSessionNotice, repostSessionNotice, showSessionNotice,
 } from '../../lib/native/sessionNotice'
-import { chime, primeChime } from '../../lib/chime'
-import { haptic, longTimerSec } from '../../lib/haptics'
+import { longTimerSec, primeSound, signal } from '../../lib/sessionFeedback'
 
 interface Props {
   session: PlanSession
@@ -201,6 +201,41 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
    */
   // While this page is on screen, the shade says what this page says.
   useEffect(() => claimSessionNotice(), [])
+
+  /*
+   * "Finish" or "Discard", tapped on the notification.
+   *
+   * Those actions cannot end a session themselves: doing it means sending the
+   * sets to the server, and the credentials for that live in the WebView. So
+   * they open the app on this page carrying what was asked for, and this is
+   * where it is carried out.
+   *
+   * Finish goes through, since it destroys nothing and lands on the summary —
+   * which is where somebody who just tapped Finish wants to be. Discard opens
+   * its confirmation instead: throwing a session away on the strength of one
+   * tap in a notification shade is not a thing to do without asking.
+   *
+   * The instruction is stripped from the URL as it is taken, so a reload does
+   * not end the session a second time. Bound to the location event too,
+   * because the app may already be open on this very page when the tap lands.
+   */
+  useEffect(() => {
+    const take = () => {
+      const url = new URL(window.location.href)
+      const what = url.searchParams.get('do')
+      if (what !== 'finish' && what !== 'discard') return
+      url.searchParams.delete('do')
+      window.history.replaceState(window.history.state, '', url.pathname + url.search)
+      if (what === 'finish') void finish()
+      else setConfirmDiscard(true)
+    }
+    take()
+    window.addEventListener(LOCATION_EVENT, take)
+    return () => window.removeEventListener(LOCATION_EVENT, take)
+    // finish() is stable enough for this: it closes over the session and the
+    // progress ref, both of which are current whenever it runs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.id])
   useEffect(() => {
     const onShow = () => { if (document.visibilityState === 'visible') void repostSessionNotice() }
     document.addEventListener('visibilitychange', onShow)
@@ -288,9 +323,9 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
        cannot answer. Three weights for three sizes of event — a set, the
        exercise it belonged to, and the session as a whole. */
     const whole = sessionTally({ ...session, progress: latest.current })
-    if (whole.done >= whole.total) haptic('complete')
-    else if (exDone) haptic('exercise')
-    else haptic('set')
+    if (whole.done >= whole.total) signal('complete')
+    else if (exDone) signal('exercise')
+    else signal('set')
     if (block.restSec > 0 && !isLast && blockDone) {
       setRunning({ kind: 'break', blockId: block.id, exerciseId: '', endsAt: Date.now() + block.restSec * 1000, totalSec: block.restSec })
     } else if (exDone && ex.breakSec > 0 && !blockDone) {
@@ -346,9 +381,9 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
   /**
    * A rest running out, announced exactly once.
    *
-   * Both ways at once: a buzz reaches you through a pocket and a chime reaches
-   * you across a room, and which of the two arrives depends on where the phone
-   * ended up rather than on anything the app can know. Each has its own switch.
+   * Both ways at once — see sessionFeedback: a buzz reaches you through a
+   * pocket and a sound reaches you across a room, and which arrives depends on
+   * where the phone ended up rather than on anything the app can know.
    *
    * Edge-triggered on the timer's identity rather than on `left` reaching
    * zero: the tick keeps firing while the clock sits at 0:00 waiting to be
@@ -367,8 +402,7 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
     if (buzzed.current === id) return
     if (Date.now() < running.endsAt) return
     buzzed.current = id
-    haptic('timer')
-    chime()
+    signal('timer')
   })
 
   /**
@@ -441,7 +475,7 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
       const done = await api.finishPlanSession(session.id, progress)
       clearCachedProgress(session.id)
       void clearSessionNotice()
-      haptic('finish')
+      signal('finish')
       onFinished(done)
     } catch {
       setError('Could not finish the session. Your sets are saved — try again.')
@@ -456,7 +490,7 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
       await api.deletePlanSession(session.id)
       clearCachedProgress(session.id)
       void clearSessionNotice()
-      haptic('discard')
+      signal('discard')
       onDiscarded()
     } catch {
       setError('Could not discard the session.')
@@ -495,7 +529,7 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
           ends minutes later with nobody touching anything. See primeChime. */}
       <div
         className={`page-content plan-run-page${running ? ' has-timer' : ''}`}
-        onPointerDown={primeChime}
+        onPointerDown={primeSound}
       >
         {error && <div className="status-msg err" role="alert">{error}</div>}
 
