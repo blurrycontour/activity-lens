@@ -4665,6 +4665,13 @@ body:has(.overlay) .fab { display: none; }
      the FAB's offset both clear the real bar rather than its visible part. */
   :root { --bottombar-h: calc(64px + var(--safe-bottom)); }
 
+  /* Two to a line, whatever the screen is: a phone cannot fit two 220px tracks
+     and would otherwise fall back to one, which is the list view again. */
+  .plan-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .plan-grid .plan-card { min-height: 124px; }
+  .plan-grid .plan-card-open { padding: 12px 12px 42px; }
+  .plan-grid .plan-card-figures { font-size: 11px; gap: 6px; }
+
   /* No visible scrollbar on mobile: touch scrolling doesn't need one, and a
      persistent thumb reads as a leftover desktop affordance in an installed
      PWA. Mobile Chrome otherwise renders a permanent thin thumb (rather than
@@ -5868,30 +5875,84 @@ body:has(.overlay) .fab { display: none; }
 /* --- The list --- */
 
 .plan-list { display: flex; flex-direction: column; gap: 9px; margin-top: 14px; }
-/* The same rows as cards: two or three to a row, each one taller, with the
-   figures under the name instead of pushed to the far end. Same components and
-   the same classes — only the direction changes, so there is one row to keep
-   right rather than two. */
+
+/* The same rows as cards: a mark, the name under it, the figures at the foot.
+   Same components and the same classes as the list — only the direction
+   changes, so there is one row to keep right rather than two.
+
+   Two to a line on a phone, always. auto-fill with a 230px minimum meant a
+   390px screen could not fit two, so the card view quietly became the list
+   view with taller rows — the same content, more scrolling, and no reason to
+   have switched. The minimum only governs the desktop track. */
 .plan-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 10px;
   margin-top: 14px;
 }
 .plan-grid .plan-card {
   flex-direction: column;
   align-items: stretch;
-  gap: 10px;
-  min-height: 104px;
+  justify-content: flex-start;
+  gap: 9px;
+  min-height: 132px;
 }
 .plan-grid .plan-card-row { position: relative; }
 /* Padded on all four sides here — in a row the card's own right edge belongs
    to the start button, in a card that button is in the corner below. */
-.plan-grid .plan-card-open { flex-direction: column; align-items: stretch; gap: 10px; padding: 13px 15px 40px; }
-.plan-grid .plan-card-figures { justify-content: space-between; gap: 8px; }
+.plan-grid .plan-card-open { flex-direction: column; align-items: stretch; gap: 9px; padding: 13px 14px 44px; }
+/* The name gets the room a card has and a row does not: two lines before it
+   gives up, rather than one line ending in an ellipsis on the tile whose whole
+   job is to be recognised. */
+.plan-grid .plan-card-name {
+  font-size: 14.5px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .plan-grid .plan-card-main { flex: 1; }
+/* Pushed to the foot and separated, so every tile in a row lines its figures
+   up whatever the name above them did. */
+.plan-grid .plan-card-figures {
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 9px;
+  border-top: 1px solid var(--border);
+}
 /* The start button has no row to sit at the end of, so it takes the corner. */
-.plan-grid .plan-card-start { position: absolute; right: 10px; bottom: 10px; }
+.plan-grid .plan-card-start { position: absolute; right: 9px; bottom: 9px; }
+
+/* The mark: what this tile is, before the name is read. A plan and a session
+   appear in the same lists and wear this feature's two colours, which is the
+   distinction the eye can make from across a card. */
+.plan-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.plan-card-mark {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: var(--plan);
+  background: color-mix(in srgb, var(--plan) 14%, transparent);
+}
+.plan-card-mark.session {
+  color: var(--session);
+  background: color-mix(in srgb, var(--session) 14%, transparent);
+}
+/* In a row the mark is smaller and the head is just the mark: the name sits
+   beside it rather than under it, and a 30px tile would push the row's height
+   up for nothing. */
+.plan-list .plan-card-mark { width: 26px; height: 26px; border-radius: 8px; }
 .plan-card {
   display: flex;
   align-items: center;

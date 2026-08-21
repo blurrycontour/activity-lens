@@ -590,17 +590,27 @@ function PlanRow({ plan, selecting, picked, onOpen, onStart, onToggle, onLongPre
         {...press.handlers}
         aria-pressed={selecting ? picked : undefined}
       >
-        {selecting && (
-          <span className="plan-pick" aria-hidden>{picked && <CheckCheck size={14} />}</span>
-        )}
+        {/* The mark and the badge share a line so that as a card — where the
+            rest of the content is stacked — the top of every tile reads the
+            same, whether or not it carries a badge. In a row they simply sit
+            at the two ends, as they always did. */}
+        <span className="plan-card-head">
+          {selecting
+            ? <span className="plan-pick" aria-hidden>{picked && <CheckCheck size={14} />}</span>
+            : <span className="plan-card-mark"><ClipboardList size={15} /></span>}
+          {plan.archived && <span className="plan-badge">Archived</span>}
+        </span>
         <div className="plan-card-main">
           <strong className="plan-card-name">{plan.name}</strong>
-          <span className="plan-card-meta plan-num">
-            {plan.dayCount} day{plan.dayCount === 1 ? '' : 's'}
-            {plan.lastSessionAt && ` · last run ${relativeDay(plan.lastSessionAt)}`}
-          </span>
         </div>
-        {plan.archived && <span className="plan-badge">Archived</span>}
+        {/* The same footer a session card has, rather than a second line under
+            the name: as a tile it gives every plan a foot that lines up with
+            its neighbours whatever the name above it did, and as a row it is
+            simply the figures at the far end. */}
+        <div className="plan-card-figures plan-num">
+          <span>{plan.dayCount} day{plan.dayCount === 1 ? '' : 's'}</span>
+          {plan.lastSessionAt && <span>{relativeDay(plan.lastSessionAt)}</span>}
+        </div>
       </button>
       {/* Straight into training, without opening the plan first: the common
           case is the same day you did last week. */}
