@@ -539,6 +539,23 @@ real shares. `IncomingFiles.isWorkoutFile` then drops anything whose name is not
 `.fit`, `.gpx`, `.tcx`, `.zip` or `.gz`. Being offered a file the app cannot use costs a
 message; not being offered one it can costs the feature.
 
+Three rules decide whether a given file manager offers the app at all, and only
+the last one needs anything from us:
+
+- An intent whose own type is `*/*` matches a filter that declares **any** type.
+  `IntentFilter.findMimeType` special-cases it. Nothing to do.
+- `application/*` matches every `application/…` in the list, for the same reason.
+- An intent with **no type at all** matches no typed filter, however broad. That
+  is its own, otherwise identical `SEND` filter with no `<data>` — which can only
+  match a typeless share, so it does not put the app in the sheet for text or
+  photos.
+
+The remaining gap was aliases: `.zip` and `.gz` each have one registered type and
+several in circulation, and a manager handing out `application/x-gzip` matched
+nothing. Both aliases are now declared alongside the registered types. `.fit`
+brings nothing new here — like `.gpx` and `.tcx` it is unregistered on Android, so
+it arrives as `application/octet-stream` or `*/*`, both of which already match.
+
 #### Why "open with" needs four filters and ten path patterns
 
 **`.fit`, `.gpx` and `.tcx` are not in Android's `MimeTypeMap`.** Nothing on the platform

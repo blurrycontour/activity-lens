@@ -59,7 +59,22 @@
                  types would miss most of them. IncomingFiles then drops
                  anything whose name is not a workout file, so the cost of
                  being offered a file we cannot use is a message, not an
-                 import. -->
+                 import.
+
+                 Two things about this list are not obvious and are worth
+                 writing down, because they decide whether the app appears in
+                 one file manager's share sheet and not another's:
+
+                 An intent whose own type is `*/*` matches any filter that
+                 declares at least one type — IntentFilter.findMimeType says so
+                 explicitly — so the "shared as anything" case needs nothing
+                 here. `application/*` likewise matches every `application/…`
+                 below.
+
+                 The aliases do need declaring. `.zip` and `.gz` have one
+                 registered type each and several in circulation, and a manager
+                 that hands out `application/x-gzip` matches nothing above no
+                 matter how close it is. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <action android:name="android.intent.action.SEND_MULTIPLE" />
@@ -68,10 +83,24 @@
                 <data android:mimeType="application/vnd.garmin.tcx+xml" />
                 <data android:mimeType="application/vnd.ant.fit" />
                 <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip-compressed" />
                 <data android:mimeType="application/gzip" />
+                <data android:mimeType="application/x-gzip" />
                 <data android:mimeType="application/xml" />
                 <data android:mimeType="text/xml" />
                 <data android:mimeType="application/octet-stream" />
+            </intent-filter>
+
+            <!-- The same share, from an app that set no type at all.
+                 A filter that declares a type cannot match an intent without
+                 one, so this genuinely needs to be its own filter — and it can
+                 only ever match a typeless share, which is why it is safe to
+                 leave open. Sharing text or a photo always carries a type, so
+                 this does not put Activity Lens in those share sheets. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
 
             <!-- "Open with" on a workout file, the native equivalent of the web
@@ -90,7 +119,9 @@
                 <data android:mimeType="application/vnd.garmin.tcx+xml" />
                 <data android:mimeType="application/vnd.ant.fit" />
                 <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip-compressed" />
                 <data android:mimeType="application/gzip" />
+                <data android:mimeType="application/x-gzip" />
             </intent-filter>
 
             <!-- `.gpx`, `.tcx` and `.fit`, which the filter above cannot catch.

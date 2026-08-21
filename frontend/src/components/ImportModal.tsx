@@ -274,13 +274,29 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
     : !form.name.trim()
   const submitDisabled = busy || notReady
 
-  // Fetch a non-persisted preview of the derived numbers once a supported file
-  // is selected, so the user can review them before saving.
+  /*
+   * Fetch a non-persisted preview of the derived numbers once a supported file
+   * is selected, so the user can review them before saving.
+   *
+   * Keyed on the file and nothing else. It used to depend on the open tab too,
+   * which meant a look at Manual Entry and back threw the preview away and
+   * parsed the file again — a second upload of the whole thing, and a wait, to
+   * arrive at the numbers already on screen a moment earlier. Which tab is
+   * showing is a question about what to draw, not about what is known.
+   */
+  const previewedFile = useRef<File | null>(null)
   useEffect(() => {
-    if (tab !== 'file' || !file || !fileSupported) {
+    if (!file || !fileSupported) {
+      previewedFile.current = null
       setPreview(null)
       return
     }
+    // Already asked about this exact file: either the answer is on screen or it
+    // is on its way. A File is identity-compared on purpose — re-picking the
+    // same path hands back a new object, which is the one case where asking
+    // again is right.
+    if (previewedFile.current === file) return
+    previewedFile.current = file
     let active = true
     setPreviewBusy(true)
     setPreview(null)
@@ -294,7 +310,7 @@ export default function ImportModal({ onClose, onViewWorkout, initialFiles }: Im
       .catch(err => { if (active) setError(err instanceof ApiError ? err.message : 'Could not read file') })
       .finally(() => { if (active) setPreviewBusy(false) })
     return () => { active = false }
-  }, [file, fileSupported, tab])
+  }, [file, fileSupported])
 
   return (
     <Modal onClose={onClose} label="Add workout">

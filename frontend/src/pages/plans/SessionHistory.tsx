@@ -193,12 +193,15 @@ function SessionRow({ session: s, selecting, picked, canSelect, onOpen, onToggle
         <strong className="plan-card-name">
           {s.dayName}
         </strong>
+        {/* Three lines, narrowing: which day, which plan, when. They were two,
+            with the plan name tacked onto the end of the date, where the one
+            thing that identifies the session among a page of "Day 1" rows sat
+            at the far end of a line of digits. */}
+        <span className="plan-card-meta">{s.planName}</span>
         {/* Weekday and time, not just a date: "Sunday morning" is how
             people remember a session, and it is what makes two
             sessions on one day tell themselves apart. */}
-        <span className="plan-card-meta plan-num">
-          {sessionWhen(s.startedAt)} · {s.planName}
-        </span>
+        <span className="plan-card-meta plan-num">{sessionWhen(s.startedAt)}</span>
       </div>
       <div className="plan-card-figures plan-num">
         <span>{s.doneSets}/{s.totalSets} sets</span>

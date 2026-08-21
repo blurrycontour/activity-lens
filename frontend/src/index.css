@@ -4665,12 +4665,6 @@ body:has(.overlay) .fab { display: none; }
      the FAB's offset both clear the real bar rather than its visible part. */
   :root { --bottombar-h: calc(64px + var(--safe-bottom)); }
 
-  /* Two to a line, whatever the screen is: a phone cannot fit two 220px tracks
-     and would otherwise fall back to one, which is the list view again. */
-  .plan-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-  .plan-grid .plan-card { min-height: 124px; }
-  .plan-grid .plan-card-open { padding: 12px 12px 42px; }
-  .plan-grid .plan-card-figures { font-size: 11px; gap: 6px; }
 
   /* No visible scrollbar on mobile: touch scrolling doesn't need one, and a
      persistent thumb reads as a leftover desktop affordance in an installed
@@ -4774,8 +4768,14 @@ body:has(.overlay) .fab { display: none; }
     grid-column: 1 / -1;
   }
 
-  .page-content { padding: 16px; }
-  .page-header { padding: 16px; }
+  /* Narrower gutters than the vertical rhythm, which is the opposite of the
+     desktop's even box. A phone has 390px to work with and the cards inside
+     carry their own padding, so 16px of page plus 13px of card put 29px of
+     nothing between the screen edge and the first word. Twelve still reads as
+     a margin rather than a bleed, and it is the same on the header so the two
+     boxes keep a single left edge. */
+  .page-content { padding: 16px 12px; }
+  .page-header { padding: 16px 12px; }
   /* Controls take the full width below the title rather than competing with it
      for a phone's worth of room. Scoped to the component's own row, so the
      pages that hand-roll this header keep the layout they had. */
@@ -5886,7 +5886,7 @@ body:has(.overlay) .fab { display: none; }
    have switched. The minimum only governs the desktop track. */
 .plan-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 10px;
   margin-top: 14px;
 }
@@ -5924,6 +5924,24 @@ body:has(.overlay) .fab { display: none; }
 }
 /* The start button has no row to sit at the end of, so it takes the corner. */
 .plan-grid .plan-card-start { position: absolute; right: 9px; bottom: 9px; }
+
+/* Two to a line on a phone, whatever the width: it cannot fit two of the
+   desktop tracks and would otherwise fall back to one, which is the list view
+   again with taller rows.
+
+   This block sits with the rules it overrides rather than in the responsive
+   section at the top of the file. Both selectors have the same specificity, so
+   the one further down wins — and from up there, the unconditional
+   `.plan-grid` below was quietly beating the media query on every phone. */
+@media (max-width: 768px) {
+  .plan-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .plan-grid .plan-card { min-height: 124px; }
+  .plan-grid .plan-card-open { padding: 12px 11px 40px; }
+  .plan-grid .plan-card-name { font-size: 13.5px; }
+  .plan-grid .plan-card-meta { font-size: 11px; }
+  .plan-grid .plan-card-figures { font-size: 11px; gap: 6px; }
+  .plan-grid .plan-card-start { right: 6px; bottom: 6px; }
+}
 
 /* The mark: what this tile is, before the name is read. A plan and a session
    appear in the same lists and wear this feature's two colours, which is the
