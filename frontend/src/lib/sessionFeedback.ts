@@ -224,16 +224,16 @@ export function sound(kind: Signal): void {
  * is hidden, which during a rest is most of the time. The native path has
  * neither problem, and the browser path is what every other device uses.
  */
-export function buzz(kind: Signal): void {
-  if (!buzzEnabled()) return
+export function buzz(kind: Signal): Promise<void> {
+  if (!buzzEnabled()) return Promise.resolve()
   const pattern = PATTERNS[kind]
   if (isNative()) {
-    void vibrateNative(pattern).then(done => {
+    return vibrateNative(pattern).then(done => {
       if (!done) webVibrate(pattern)
     })
-    return
   }
   webVibrate(pattern)
+  return Promise.resolve()
 }
 
 function webVibrate(pattern: number[]) {
@@ -249,6 +249,21 @@ function webVibrate(pattern: number[]) {
  * set, and a device that will not buzz is not a reason to interrupt that.
  */
 export function signal(kind: Signal): void {
-  buzz(kind)
+  void buzz(kind)
   sound(kind)
+}
+
+/**
+ * The same, but waits for the buzz to have actually been asked for.
+ *
+ * For the two signals that are the last thing to happen on a screen. A buzz in
+ * the native app is a message across the Capacitor bridge, and finishing a
+ * session navigates away in the same tick that sends it — the tone survives
+ * that, because it is already scheduled on an audio device that outlives the
+ * page, and the message does not. Everywhere else the fire-and-forget `signal`
+ * is right: nothing is racing it.
+ */
+export async function signalNow(kind: Signal): Promise<void> {
+  sound(kind)
+  await buzz(kind)
 }

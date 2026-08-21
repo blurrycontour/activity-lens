@@ -2379,6 +2379,11 @@ body:has(.overlay) .fab { display: none; }
    only what happens when it is pressed differs. */
 .dial {
   position: fixed;
+  /* The column is as tall as its actions even while they are folded away, and
+     an invisible strip up the side of the screen that swallowed scrolls is the
+     kind of fault nobody can see to report. Only what is actually pressable
+     takes input. */
+  pointer-events: none;
   bottom: calc(24px + var(--bottombar-h));
   right: 24px;
   z-index: var(--z-fab);
@@ -2388,8 +2393,28 @@ body:has(.overlay) .fab { display: none; }
   gap: 12px;
 }
 /* The toggle drops the .fab's own fixed position and sits in the column. */
-.dial .fab { position: static; }
-.dial-scrim { position: fixed; inset: 0; z-index: calc(var(--z-fab) - 1); }
+.dial .fab { position: static; pointer-events: auto; }
+.dial.open .dial-actions { pointer-events: auto; }
+/* Blurred rather than transparent: three circles over a dashboard full of
+   numbers and charts had nothing to sit against, and pushing the page back is
+   what makes them read as the only thing on screen. */
+.dial-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-fab) - 1);
+  background: rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(5px) saturate(85%);
+  -webkit-backdrop-filter: blur(5px) saturate(85%);
+  animation: scrimIn 0.16s ease-out;
+}
+/* Lighter than a dialog's overlay by design — this pushes the page back far
+   enough to read the three circles against, and no further; the dashboard
+   underneath is still where you are. Same fallback as the overlay: where the
+   blur does nothing, the dimming has to carry it alone. */
+@supports not (backdrop-filter: blur(1px)) {
+  .dial-scrim { background: rgba(0, 0, 0, 0.6); }
+}
+@keyframes scrimIn { from { opacity: 0; } to { opacity: 1; } }
 body:has(.overlay) .dial { display: none; }
 
 .dial-actions {
@@ -2423,8 +2448,8 @@ body:has(.overlay) .dial { display: none; }
    icons are a bicycle and a clipboard, and which of those means "plan" is not
    a guess to make people make. */
 .dial-label {
-  padding: 5px 10px;
-  font-size: 12.5px;
+  padding: 6px 11px;
+  font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
   color: var(--text);
@@ -2434,8 +2459,8 @@ body:has(.overlay) .dial { display: none; }
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
 }
 .dial-glyph {
-  width: 44px;
-  height: 44px;
+  width: 50px;
+  height: 50px;
   flex: 0 0 auto;
   display: grid;
   place-items: center;
@@ -4594,7 +4619,7 @@ body:has(.overlay) .dial { display: none; }
    the one separating the row from the tabs under it, which nothing else
    provides. Adding both left the row hanging off the header with the tabs
    pressed against its underside. */
-.ping-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.ping-row { position: relative; display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
 .ping-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
 /* The button and whatever hangs off it — the held tooltip — so the tip is
    positioned against its own icon rather than against the row. */
@@ -4640,11 +4665,19 @@ body:has(.overlay) .dial { display: none; }
   stroke: var(--primary);
   stroke-width: 2;
   stroke-linecap: round;
-  /* One second per tick, moved linearly, so it slides rather than steps. */
-  transition: stroke-dashoffset 1s linear;
+  /* Full circle to none over exactly the cooldown, whose length the element
+     supplies. The clock is the animation; nothing re-sets it as it runs. */
+  stroke-dashoffset: 0;
+  animation: pingRing linear forwards;
+}
+@keyframes pingRing {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: 100; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ping-ring circle { transition: none; }
+  /* Left whole rather than stepped down each second: this is a countdown, and
+     a ring that jumps is worse than one that just marks "still waiting". */
+  .ping-ring circle { animation: none; }
 }
 
 /* What the icon actually says, on a press and hold. Above the button, because
@@ -4652,11 +4685,11 @@ body:has(.overlay) .dial { display: none; }
    it but the tabs. */
 .ping-tip {
   position: absolute;
-  bottom: calc(100% + 8px);
+  bottom: calc(100% + 4px);
   left: 50%;
   transform: translateX(-50%);
   z-index: var(--z-chrome);
-  max-width: 60vw;
+  max-width: min(90vw, 320px);
   width: max-content;
   padding: 6px 10px;
   font-size: 12px;
@@ -5006,7 +5039,11 @@ body:has(.overlay) .dial { display: none; }
   }
   .bottom-bar-item { padding: 8px 2px; min-width: 0; }
 
-  .fab { bottom: calc(64px + var(--safe-bottom) + 18px); }
+  /* The dial is the same button in the same corner and has to be lifted with
+     it — it draws its own .fab unpositioned, so this rule alone never reached
+     the dashboard's and left one button sitting lower than every other. */
+  .fab,
+  .dial { bottom: calc(64px + var(--safe-bottom) + 18px); }
 }
 
 @media (min-width: 769px) {

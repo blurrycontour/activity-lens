@@ -39,9 +39,9 @@ export default function SpeedDial({ actions, label }: {
 
   return (
     <>
-      {/* A tap anywhere else closes it. Transparent rather than dimming: this
-          is a menu of three, not a dialog, and darkening the page for it would
-          claim more attention than it deserves. */}
+      {/* A tap anywhere else closes it, over a page pushed back far enough to
+          read three circles against — a dashboard is charts and numbers edge
+          to edge, and unblurred there was nothing for them to sit on. */}
       {open && <div className="dial-scrim" onClick={() => setOpen(false)} aria-hidden />}
 
       <div className={`dial${open ? ' open' : ''}`}>
@@ -74,7 +74,10 @@ export default function SpeedDial({ actions, label }: {
           aria-label={open ? 'Close' : label}
           aria-expanded={open}
         >
-          {open ? <X size={22} /> : <Plus size={24} />}
+          {/* The same mark at the same weight as every other page's button:
+              a plus a half-weight lighter than the one on Workouts is not a
+              different icon, it is the same icon looking slightly wrong. */}
+          {open ? <X size={24} strokeWidth={2.5} /> : <Plus size={24} strokeWidth={2.5} />}
         </button>
       </div>
     </>

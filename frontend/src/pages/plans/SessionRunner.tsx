@@ -20,7 +20,7 @@ import { cacheProgress, clearCachedProgress, readCachedProgress } from './sessio
 import {
   claimSessionNotice, clearSessionNotice, repostSessionNotice, showSessionNotice,
 } from '../../lib/native/sessionNotice'
-import { longTimerSec, primeSound, signal } from '../../lib/sessionFeedback'
+import { longTimerSec, primeSound, signal, signalNow } from '../../lib/sessionFeedback'
 
 interface Props {
   session: PlanSession
@@ -473,7 +473,7 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
       const done = await api.finishPlanSession(session.id, progress)
       clearCachedProgress(session.id)
       void clearSessionNotice()
-      signal('finish')
+      await signalNow('finish')
       onFinished(done)
     } catch {
       setError('Could not finish the session. Your sets are saved — try again.')
@@ -488,7 +488,7 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
       await api.deletePlanSession(session.id)
       clearCachedProgress(session.id)
       void clearSessionNotice()
-      signal('discard')
+      await signalNow('discard')
       onDiscarded()
     } catch {
       setError('Could not discard the session.')

@@ -32,23 +32,6 @@ const SPORT: Record<string, WorkoutType> = {
  * receipt, and it stays there for as long as the cooldown does — so what was
  * sent, and that nothing more can be sent yet, are one mark rather than two.
  */
-/**
- * How much of the cooldown ring to draw, one second from now.
- *
- * A second ahead, not the current value, because the ring is drawn with a
- * one-second linear transition: setting where it should be *now* means it
- * spends every second animating towards a position the clock has already left,
- * and it was still a tick short of empty when the cooldown ended and the ring
- * disappeared. Setting where it will be when the transition lands keeps the
- * two in step.
- *
- * Returns a fraction of the circle, 0 to 1.
- */
-export function ringRemaining(wait: number, cooldown: number): number {
-  if (cooldown <= 0) return 0
-  return Math.max(0, Math.min(1, (wait - 1) / cooldown))
-}
-
 export default function PingRow({ userId, name, info }: {
   userId: number
   /** Who is being nudged, for the button labels. */
@@ -101,6 +84,8 @@ export default function PingRow({ userId, name, info }: {
     } finally { setBusy(null) }
   }
 
+  const tipText = info.messages.find(m => m.id === tip)?.text ?? null
+
   return (
     <div className="ping-row">
       <div className="ping-buttons">
@@ -111,16 +96,19 @@ export default function PingRow({ userId, name, info }: {
             name={name}
             sent={sent === m.id}
             disabled={wait > 0 || busy !== null}
-            /* Where the ring should be when its transition lands; see
-               ringRemaining. Only meaningful on the one that was pressed —
-               the others are simply disabled. */
-            remaining={ringRemaining(wait, info.cooldownSeconds)}
+            cooldown={info.cooldownSeconds}
             showTip={tip === m.id}
             onTip={open => setTip(open ? m.id : null)}
             onSend={() => void send(m.id)}
           />
         ))}
       </div>
+      {/* The held text, centred over the whole row rather than over the icon
+          it belongs to. Anchored to a button, the tip for the first or last
+          one ran off the side of a phone; anchored to the row — which is as
+          wide as the page — it cannot, and it is still directly above the
+          finger holding it. */}
+      {tipText && <span className="ping-tip" role="status">{tipText}</span>}
       {/* The only text, and only when something went wrong. */}
       {err && <span className="ping-err">{err}</span>}
       {toast && (
@@ -142,12 +130,13 @@ export default function PingRow({ userId, name, info }: {
  * circles — the icons say which sport, and holding one says exactly what the
  * other person will read, which is the part you cannot guess from a bicycle.
  */
-function PingButton({ message: m, name, sent, disabled, remaining, showTip, onTip, onSend }: {
+function PingButton({ message: m, name, sent, disabled, cooldown, showTip, onTip, onSend }: {
   message: { id: string; text: string }
   name: string
   sent: boolean
   disabled: boolean
-  remaining: number
+  /** How long the wait it just started is, in seconds — the ring's duration. */
+  cooldown: number
   showTip: boolean
   onTip: (open: boolean) => void
   onSend: () => void
@@ -218,19 +207,25 @@ function PingButton({ message: m, name, sent, disabled, remaining, showTip, onTi
         {/* The cooldown, drawn around the tick: the row already says "you
             cannot send another one yet" by being disabled, and this says how
             much longer without a number nobody would watch. Stroked from the
-            top and clockwise, and it empties as the wait runs out. */}
-        {sent && remaining > 0 && (
+            top and clockwise, and it empties as the wait runs out.
+
+            Emptied by one CSS animation of exactly the cooldown's length,
+            started when the ring appears, rather than by a value re-set every
+            second. A per-second value has to be animated to look like a clock
+            and then permanently disagrees with one by however long that
+            animation takes — it either lagged a second behind or, corrected,
+            started a second short. An animation is simply the right length. */}
+        {sent && cooldown > 0 && (
           <svg className="ping-ring" viewBox="0 0 40 40" aria-hidden>
             <circle
               cx="20" cy="20" r="18"
               pathLength={100}
               strokeDasharray="100"
-              strokeDashoffset={100 - Math.max(0, Math.min(100, remaining * 100))}
+              style={{ animationDuration: `${cooldown}s` }}
             />
           </svg>
         )}
       </button>
-      {showTip && <span className="ping-tip" role="status">{m.text}</span>}
     </span>
   )
 }
