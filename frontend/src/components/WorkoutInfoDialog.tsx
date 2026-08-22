@@ -1,7 +1,7 @@
-import { X } from 'lucide-react'
+import { Info, X } from 'lucide-react'
 import Modal from './Modal'
 import { extraSeriesMeta } from '../lib/extraSeries'
-import { fmtDuration, type Workout } from '../data/workouts'
+import type { Workout } from '../data/workouts'
 
 /**
  * Where a workout came from and what arrived with it.
@@ -29,10 +29,6 @@ export default function WorkoutInfoDialog({ workout: w, onClose }: {
     // rather than as a setting that was off when this was imported.
     ['Original file', w.hasOriginal ? 'Kept on the server' : ''],
     ['Started', fmtStamp(w.startTime ?? w.date)],
-    ['Elapsed', fmtDuration(w.duration)],
-    // Only when they differ — on a workout that never paused, the same number
-    // twice invites the reader to look for a difference that is not there.
-    ['Moving', w.movingTime && w.movingTime !== w.duration ? fmtDuration(w.movingTime) : ''],
     ['Pauses', w.pauses?.length ? String(w.pauses.length) : ''],
     ['Track', w.route?.length ? `${w.route.length.toLocaleString()} points` : ''],
     ['Recorded', recorded(w)],
@@ -41,15 +37,10 @@ export default function WorkoutInfoDialog({ workout: w, onClose }: {
   return (
     <Modal onClose={onClose} label="Workout details">
       <div className="modal-box about-box">
-        <button
-          className="btn-icon"
-          onClick={onClose}
-          aria-label="Close"
-          style={{ position: 'absolute', top: 14, right: 14 }}
-        >
-          <X size={16} />
-        </button>
-        <h3 className="dialog-title" style={{ marginBottom: 4 }}>Details</h3>
+        <div className="dialog-head">
+          <h3 className="dialog-title"><Info size={15} /> Details</h3>
+          <button className="btn-icon" onClick={onClose} aria-label="Close"><X size={16} /></button>
+        </div>
         <p className="field-hint" style={{ marginBottom: 0 }}>
           Where this workout came from and what its file carried.
         </p>

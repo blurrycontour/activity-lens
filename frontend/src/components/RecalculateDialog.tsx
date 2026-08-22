@@ -73,7 +73,7 @@ export default function RecalculateDialog({ parts, onChange, busy, error, onClos
     <Modal onClose={onClose} dismissable={!busy} label="Recalculate workout">
         <div className="modal-box recalc-modal">
           <div className="dialog-head">
-            <h3 className="recalc-title"><RotateCcw size={16} /> Recalculate</h3>
+            <h3 className="dialog-title"><RotateCcw size={16} /> Recalculate</h3>
             <button className="btn-icon" onClick={onClose} disabled={busy} aria-label="Close"><X size={16} /></button>
           </div>
           <p className="recalc-note">

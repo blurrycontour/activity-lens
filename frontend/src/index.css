@@ -1908,7 +1908,16 @@ body {
 .dup-modal > .dialog-head,
 .recalc-modal > .dialog-head,
 .share-card-modal > .dialog-head { margin-bottom: 0; }
-.share-card-title { font-size: 15px; font-weight: 600; }
+/* Every dialog's heading, at one size. There were two classes saying almost
+   the same thing and a third dialog that named a class nobody had written, so
+   its title fell back to the browser's own h3 and was half again too big. */
+.dialog-title {
+  font-size: 15px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .share-card-preview {
   display: flex;
   align-items: center;
@@ -1987,7 +1996,6 @@ body {
   gap: 14px;
   max-height: 82vh;
 }
-.recalc-title { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
 .recalc-note { font-size: 12.5px; color: var(--text-2); line-height: 1.6; }
 .recalc-parts {
   display: flex;
