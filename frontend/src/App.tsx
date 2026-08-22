@@ -535,7 +535,7 @@ export default function App() {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return
       if (gPressed) {
         gPressed = false
-        const map: Record<string, Page> = { d: 'dashboard', w: 'workouts', a: 'analysis', c: 'consistency', m: 'map', e: 'equipment', p: 'discover' }
+        const map: Record<string, Page> = { d: 'dashboard', w: 'workouts', a: 'analysis', c: 'consistency', m: 'map', e: 'equipment', p: 'discover', t: 'plans' }
         if (map[e.key]) { navigate(map[e.key]); return }
       }
       if (e.key === 'g') { gPressed = true; setTimeout(() => { gPressed = false }, 1000); return }

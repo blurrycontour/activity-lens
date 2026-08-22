@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import {
-  ChevronDown, Upload, LayoutDashboard, Activity, CalendarCheck,
+  ChevronDown, Upload, LayoutDashboard, Activity, CalendarCheck, ClipboardList,
   Watch, LineChart, Settings as SettingsIcon, Keyboard, HelpCircle, Users,
 } from 'lucide-react'
 
 const features = [
   { icon: LayoutDashboard, title: 'Dashboard', text: 'Your at-a-glance view: totals with period-on-period change, goal streaks, this week against your usual week, training load, and gear wear.' },
   { icon: Activity, title: 'Workouts', text: 'Your own library, in list or grid view. Open one for charts, splits, and its route on the map.' },
-  { icon: Users, title: 'Discover', text: 'Everyone else on this server: the people, what they have shared with you, and what they have made public. Opening a person shows their profile and the workouts you can see of theirs.' },
+  { icon: ClipboardList, title: 'Plans', text: 'Training plans — days, exercises, sets and weights — and the sessions you have run from them. Start one and the runner walks you through it, timing the rests.' },
+  { icon: Users, title: 'Discover', text: 'Everyone else on this server: the people, and the workouts, plans and sessions they have shared with you or made public. Opening a person shows their profile.' },
   { icon: LineChart, title: 'Analysis', text: 'Everything about how you are performing, split into four tabs: Records, Trends, Efficiency and Load. One time range and sport filter drives them all.' },
   { icon: CalendarCheck, title: 'Consistency', text: 'Everything about whether you are showing up: a calendar heatmap, day-of-week habits, year-over-year comparisons and cumulative distance.' },
   { icon: Watch, title: 'Equipment', text: 'Track gear like shoes, watches and bikes, and see the workouts logged against each.' },
@@ -16,6 +17,7 @@ const features = [
 const shortcuts = [
   { key: 'G then D', action: 'Go to Dashboard' },
   { key: 'G then W', action: 'Go to Workouts' },
+  { key: 'G then T', action: 'Go to Plans (training)' },
   { key: 'G then P', action: 'Go to Discover (people)' },
   { key: 'G then A', action: 'Go to Analysis' },
   { key: 'G then C', action: 'Go to Consistency' },
@@ -33,12 +35,15 @@ const faqs = [
   { q: 'What is the row of icons on someone\'s profile?', a: 'Pings — a nudge you send by tapping one: a sport to suggest it, or the couch to admit you are doing nothing today. There is nothing to type; the message is the icon, and the person gets a notification with your picture that opens your profile. You have to wait a short while before nudging the same person again (an administrator sets how long, under Admin → Social), and anyone who would rather not receive them can switch pings off in Settings → Notifications.' },
   { q: 'What can other people see?', a: 'Everything you see on the workout page — the route, map, heart rate, pace, cadence and splits — except your private notes and your equipment. They cannot edit, delete, recalculate or change anything.' },
   { q: 'If I make a workout private again, does that unshare it?', a: 'No. The public toggle and direct shares are independent, so switching back to private removes it from the Public tab on Discover but the people you shared it with keep access. Remove them individually in the share dialog, or use "Remove everyone".' },
+  { q: 'Can I share a plan or a session?', a: 'Yes, the same way as a workout, and independently of each other: sharing a plan does not expose the sessions run from it. Only a finished session can be shared. A plan you receive carries a Clone button, which copies it into your own library to edit and start; workouts and sessions stay read-only.' },
+  { q: 'What is the Notes and Discussion at the bottom of a plan or session?', a: 'Two different things. Notes are yours and stay private, whoever you share with. Discussion is the reactions and comments other people leave once it is shared — the same pair a workout has.' },
+  { q: 'Can the app buzz or beep during a session?', a: 'Settings → Plans → Signals turns on a vibration, a sound, or both for a set ticked, an exercise finished, a rest ending, and a session starting or ending. "Announce a rest from" sets how long a rest must be to get its own signal. These are kept on the device you set them on.' },
   { q: 'How do I add a workout?', a: 'Click "Add Workout" in the sidebar (or press Cmd/Ctrl + I). Upload a .fit, .gpx or .tcx file to import a recorded activity — you\'ll see a preview of the numbers before saving — or switch to Manual Entry to type in the details yourself.' },
   { q: 'Which file formats are supported?', a: 'Activity Lens imports .fit (what watches record natively), .gpx (universal GPS exchange) and .tcx (Training Center XML). A .fit file is worth preferring where you have the choice: it is the original recording, and it carries things the other two drop — power and temperature among them, which appear as extra charts on the workout. Zipped and gzipped exports from Strava and Garmin are unpacked for you.' },
   { q: 'How are calories estimated?', a: 'When an imported file doesn\'t include calories, they are estimated for you. Under Settings → Calorie Estimation you can choose a heart-rate based method (which uses your sex, age, and weight from the About You section) or a distance-only method.' },
   { q: 'What do the small icons next to some numbers mean?', a: 'A Σ icon means the value was calculated or derived from the recorded data. A pencil icon means you entered that value manually. Recalculating a workout replaces manual values with derived ones.' },
   { q: 'How do heart-rate metrics work?', a: 'Where a workout records heart rate, its zones are shown directly. For workouts without their own max HR, your Max HR from Settings → Heart Rate & Performance is used instead.' },
-  { q: 'How do training goals and streaks work?', a: 'Add as many goals as you like under Settings → Training Goals. A goal can count activities ("two runs of at least 5 km a week"), total distance ("40 km of hiking a month") or total time ("30 hours of running a month"), over a window of one or more weeks or months. Reorder them with the arrows — the dashboard shows them in that order. Each is tracked separately with its own streak of windows that met the target, a progress bar for the window in hand, and a trophy once it is done. In the history row a filled bar is a window you met and a + marks one you beat; Settings → Training goals picks how the card is drawn — Standard, Rings, Ledger or Today’s move, which names the one thing that would keep you on track — and whether those bars carry week or month labels. Every style shows the same numbers, and each goal is marked with its sport\u2019s colour and icon. Meet every goal at once and the dashboard says so, once per app launch. The window in progress extends a streak once you hit it, but never breaks one, so a quiet Monday costs you nothing. Windows longer than a single week or month run back to back from a fixed anchor rather than counting back from today, so they never overlap. Either minimum — distance or duration — filters which activities count at all, rather than trimming the total. Distance minimums are matched against the figure shown on the workout, so a run listed as 5.0 km counts toward a 5 km goal even though its recorded distance is 4,983 m.' },
+  { q: 'How do training goals and streaks work?', a: 'Add as many as you like under Settings → Training goals. A goal counts activities ("two runs of at least 5 km a week"), distance or time, over a window of one or more weeks or months. Each is tracked on its own: a streak of windows that met the target, a progress bar for the window in hand, and a trophy once it is done. The window in progress can extend a streak but never breaks one, so a quiet Monday costs you nothing. Four card styles are available — Standard, Rings, Ledger and Today\u2019s move — all showing the same numbers.' },
   { q: 'What is the Training Load tile telling me?', a: 'It compares your average daily effort over the last 7 days against the last 28. Around 1.0 means this week matches what your body is used to, higher means you are building, lower means you are easing off. It only appears once you have six weeks of history and at least a dozen activities with heart rate, because below that a single session swings it wildly. Treat it as a description of your load rather than a medical verdict — the injury-risk thresholds this metric is known for are debated in the research.' },
   { q: 'When does gear tell me to replace it?', a: 'Each piece of equipment has a replacement distance you can set when editing it; shoes default to 600 km. Once total linked distance passes 80% of that, the dashboard surfaces the most worn item. Gear types with no distance-based wear, like watches, are never nudged about.' },
   { q: 'What does the info icon next to a chart title do?', a: 'It opens a longer explanation of what that chart measures and how to read it — including the caveats worth knowing before you act on it. Hover it on desktop, tap it on mobile.' },
@@ -153,6 +158,14 @@ export default function Help() {
             ))}
           </div>
         </section>
+
+        {/* The long form lives on the docs site; this page is the short one. */}
+        <p style={{ fontSize: 12.5, color: 'var(--text-3)', textAlign: 'center' }}>
+          More detail — deployment, configuration and the rest — in the{' '}
+          <a href="https://blurrycontour.github.io/activity-lens" target="_blank" rel="noreferrer noopener">
+            documentation
+          </a>.
+        </p>
       </div>
     </>
   )
