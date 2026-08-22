@@ -45,6 +45,13 @@ needs `AL_SECURE_COOKIES=false`, or sign-in silently drops the cookie — see
 
 ## The pattern
 
+The credentials come from the environment, so nothing is written down:
+
+```bash
+set -a && . .env && set +a
+AL_USER="$AL_ADMIN_USER" AL_PASS="$AL_ADMIN_PASS" node check.mjs
+```
+
 ```js
 import { open, tree, close, BASE, DESKTOP } from '<repo>/scripts/visual/session.mjs'
 

@@ -45,7 +45,7 @@ let browser = null
  * Two accounts is two calls — `open()` and `open({ user: 'bob', pass: … })` —
  * each with its own context, in one script rather than two runs.
  */
-export async function open({ user = 'admin', pass = process.env.AL_PASS ?? 'devpassword', viewport = PHONE } = {}) {
+export async function open({ user = process.env.AL_USER ?? 'admin', pass = process.env.AL_PASS, viewport = PHONE } = {}) {
   // Resolved from the caller's directory, not this file's: playwright-core is
   // deliberately not a dependency of this repo, it is installed in whatever
   // scratch directory the check is being run from.
@@ -61,13 +61,27 @@ export async function open({ user = 'admin', pass = process.env.AL_PASS ?? 'devp
   const page = await ctx.newPage()
 
   await page.goto(BASE + '/')
+  // The app boots behind a service worker and an /api/auth/me round trip, so
+  // "is the login form there" is only a real answer once one of the two has
+  // arrived. Checking too early logs nobody in and fails much later, somewhere
+  // unrelated.
+  const form = page.locator('input[name="identifier"]')
+  await Promise.race([
+    form.waitFor({ timeout: 20000 }).catch(() => {}),
+    page.locator('.page-header, .app-shell').first().waitFor({ timeout: 20000 }).catch(() => {}),
+  ])
+
   // A saved session that has expired lands back on the login form, so the
   // check is what is on screen rather than whether the file existed.
-  if (await page.locator('input[name="identifier"]').isVisible().catch(() => false)) {
-    await page.fill('input[name="identifier"]', user)
+  if (await form.isVisible().catch(() => false)) {
+    if (!pass) throw new Error('no password: pass { pass } or set AL_PASS')
+    await form.fill(user)
     await page.fill('input[name="password"]', pass)
-    await page.click('button[type="submit"]')
-    await page.waitForSelector('input[name="identifier"]', { state: 'detached', timeout: 15000 })
+    await Promise.all([
+      page.waitForResponse(r => r.url().includes('/api/auth/') && r.request().method() === 'POST', { timeout: 20000 }),
+      page.click('button[type="submit"]'),
+    ])
+    await form.waitFor({ state: 'detached', timeout: 20000 })
     await ctx.storageState({ path: statePath })
   }
   return { ctx, page }
