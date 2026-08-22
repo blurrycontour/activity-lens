@@ -44,7 +44,7 @@ app's version, size and checksum; the commit and toolchain stay behind
 `/api/build`.
 
 Images built without an APK (`mobile/dist/` empty) report `available: false` and
-serve 404. See [mobile/README.md](../mobile/README.md) for building one.
+serve 404. See [the Android app guide](../dev/android.md) for building one.
 
 ### CORS
 
@@ -106,7 +106,7 @@ installed, that is what the screen says.
 
 Worth knowing before you enable it: the notification's title and text pass
 through the distributor, so it can read them. Full reasoning, and what is
-deliberately never sent, in `mobile/README.md`.
+deliberately never sent, in the [Android app guide](../dev/android.md).
 
 ## Single sign-on (OIDC)
 
@@ -160,8 +160,18 @@ Only needed for account-deletion confirmation codes. Also settable from
   **Download original**. Archives are deleted with their workout, and with their
   owner's account.
 
+- **Ping cooldown** (Admin → Social) — how long one person must wait before
+  nudging the same person again. Zero uses the default; a negative value turns
+  pings off for the whole instance.
+
 ## Per-user preferences
 
 These belong to each account and live under **Settings**, not in the environment:
 body metrics, calorie-estimation method, heart-rate zones, training goals,
-dashboard layout, chart preferences, theme and accent, and notification switches.
+dashboard layout, chart preferences, theme and accent, notification switches, and
+whether finished training sessions are also recorded as workouts.
+
+A few settings are per **device** rather than per account, because a phone in a
+gym and a laptop at home want different answers: the list/card layout of each
+list, and the vibration and sound a running session makes. They live in the
+browser's local storage and are never synced.

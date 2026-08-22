@@ -4,69 +4,22 @@
 
 **A self-hosted haven for your training history.**
 
-Import runs, rides, hikes and swims from `.fit`, `.gpx` or `.tcx` files, then see what the
-numbers actually say — trends, consistency, training load, gear wear and personal
-bests. Your data stays on your own server.
+Import runs, rides, hikes and swims from `.fit`, `.gpx` or `.tcx` files, plan and
+run gym sessions, and see what the numbers actually say. One container, one
+SQLite file, no external services — your data stays on your own server.
 
 [![CI](https://github.com/blurrycontour/activity-lens/actions/workflows/ci.yml/badge.svg)](https://github.com/blurrycontour/activity-lens/actions/workflows/ci.yml)
 [![Docker](https://github.com/blurrycontour/activity-lens/actions/workflows/docker.yml/badge.svg)](https://github.com/blurrycontour/activity-lens/actions/workflows/docker.yml)
 [![CodeQL](https://github.com/blurrycontour/activity-lens/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/blurrycontour/activity-lens/actions/workflows/github-code-scanning/codeql)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
+**[Documentation](https://blurrycontour.github.io/activity-lens/)** ·
+[Deployment](https://blurrycontour.github.io/activity-lens/admin/deployment/) ·
+[Configuration](https://blurrycontour.github.io/activity-lens/admin/configuration/)
+
 </div>
 
 ---
-
-## Why
-
-Most training analysis lives in someone else's cloud, tied to a watch brand, and
-shows you charts you cannot change. Activity Lens is a single container you run
-yourself: one Go binary with the frontend embedded, one SQLite file, no external
-services. It is built for a handful of people using it for years, not for scale.
-
-## Features
-
-**Track**
-- Import `.fit`, `.gpx` and `.tcx` files — one at a time, hundreds at once, or a
-  whole Strava/Garmin export `.zip` dropped in as it came. A `.fit` is what your
-  watch actually recorded, and carries what the other two drop: power and
-  temperature arrive as extra charts on the workout. Re-importing the same file
-  is a no-op: imports are content-addressed, so a repeated share from a tracker
-  app updates nothing instead of creating a duplicate.
-- Before a batch commits you see exactly what will happen — how many are new,
-  how many you already have, and which could not be read — and a corrupt file
-  never costs you the rest of the import. Or enter a workout by hand.
-- Route map with playback, plus heart-rate, pace, elevation and cadence charts
-  and splits. Track shading by pace, heart rate, elevation or cadence.
-- Calories and steps are taken from the file when it states them, and estimated
-  otherwise (heart-rate or distance based, your choice).
-- Private notes on any workout.
-- When the server is set to keep originals, download the exact file a workout
-  was imported from, byte for byte. Your data stays yours to take.
-
-**Understand**
-- **Dashboard** — stat cards with period-over-period deltas and sparklines,
-  weekly trend, training goals with streaks, personal bests, and gear nudges.
-- **Analysis** — records, trends, efficiency factor, and acute:chronic training
-  load, all under one time filter.
-- **Consistency** — calendar heatmap, day-of-week distribution, year-over-year
-  and week-over-week comparisons, cumulative distance.
-- **Equipment** — track gear, mileage and wear against a replace-at distance.
-
-**Share**
-- Make a workout visible to everyone signed in to your instance, or share it
-  with specific people. Nothing is ever readable without an account.
-- Browse what others have shared from the Workouts page. Shared workouts open in
-  full read-only detail — minus the owner's private notes and equipment.
-
-**Live with**
-- Installable PWA with an offline shell, pull-to-refresh, and Android
-  share-sheet import — several files at once. On desktop it also registers as
-  an "Open with" handler for `.fit`, `.gpx` and `.tcx`.
-- Web Push notifications for shares, gear wear and training goals — including
-  when the app is closed.
-- Light and dark themes with a choice of accent colours.
-- Optional OIDC/SSO, SMTP for account emails, and an admin panel for users.
 
 ## Quick start
 
@@ -81,30 +34,46 @@ AL_ADMIN_PASS='pick-something-better' docker compose up -d
 Open <http://localhost:9090> and sign in as `admin`.
 
 > [!IMPORTANT]
-> `AL_SECURE_COOKIES` defaults to `true`, which means session cookies are only
-> sent over HTTPS. For a plain-HTTP test on localhost, start with
-> `AL_SECURE_COOKIES=false` — otherwise sign-in appears to succeed and then
-> bounces you straight back to the login screen.
+> `AL_SECURE_COOKIES` defaults to `true`, so session cookies are only sent over
+> HTTPS. For a plain-HTTP test on localhost, start with
+> `AL_SECURE_COOKIES=false` — otherwise sign-in appears to succeed and bounces
+> you straight back to the login screen.
 
-See [docs/deployment.md](docs/deployment.md) for reverse proxies, HTTPS, backups
-and upgrades, and [docs/configuration.md](docs/configuration.md) for every
-environment variable.
+A prebuilt image is published to GHCR, so `docker compose up -d` without a
+clone works too — see [Deployment](docs/admin/deployment.md) for that, plus
+reverse proxies, HTTPS, backups and upgrades. Every environment variable is in
+[Configuration](docs/admin/configuration.md).
+
+## What you get
+
+- **Import** `.fit`, `.gpx` and `.tcx` — one file, hundreds, or a whole
+  Strava/Garmin export `.zip` dropped in as it came. Content-addressed, so a
+  re-import is a no-op rather than a duplicate, and a corrupt file never costs
+  you the rest of the batch.
+- **Read** a workout with its route map and playback, heart-rate, pace,
+  elevation, cadence and power charts, splits and zones.
+- **Understand** it across four pages: dashboard with goals and streaks,
+  analysis (records, trends, efficiency, load), consistency (heatmap, habits,
+  year-over-year) and equipment wear.
+- **Plan** gym training — days, supersets, sections — and run sessions with a
+  timer that survives a locked phone, then see them in your history and totals.
+- **Share** any workout, plan or session with named people or with everyone on
+  your instance. A shared plan can be cloned; nothing is readable without an
+  account, and there are no public links.
+- **Live with it**: installable PWA with an offline shell, an Android build with
+  share-sheet import, Web Push notifications, light/dark themes with a choice of
+  accents, optional OIDC/SSO and SMTP, and an admin panel.
 
 ## Documentation
 
+The full docs are at **<https://blurrycontour.github.io/activity-lens/>**, and
+the Markdown behind them is in [`docs/`](docs/):
+
 | | |
 |---|---|
-| [Configuration](docs/configuration.md) | Every environment variable, and what is settable from the admin UI instead |
-| [Deployment](docs/deployment.md) | Reverse proxy, HTTPS, backups, upgrades, PWA install |
-| [Architecture](docs/architecture.md) | How it fits together, and the decisions worth knowing before changing it |
-| [Development](docs/development.md) | Running locally, tests, migrations, project layout |
-| [UI design](docs/ui-design.md) | Tokens, layout and chart conventions — read before changing any UI |
-| [Android app](mobile/README.md) | Building an APK, signing it, and how the native app differs |
-
-## Screenshots
-
-<!-- Add screenshots here. The dashboard, a workout detail with the map, and the
-     consistency heatmap tend to be the three that show it best. -->
+| [Using it](docs/user/getting-started.md) | Getting started, workouts, training plans, insights, sharing |
+| [Running it](docs/admin/deployment.md) | Deployment, reverse proxies, backups, upgrades, every setting |
+| [Building it](docs/dev/setup.md) | Local setup, architecture, UI conventions, the Android app |
 
 ## Stack
 
@@ -118,15 +87,15 @@ environment variable.
 | Auth | [go-authkit](https://github.com/blurrycontour/go-authkit) | Sessions, OIDC, account management |
 | Push | Web Push (VAPID) | Standard, no third-party service |
 
-The SQL is kept portable so a Postgres backend can be added without touching
-business logic — see [docs/architecture.md](docs/architecture.md).
+Built for a handful of people using it for years rather than for scale. The SQL
+is kept portable so a Postgres backend can be added without touching business
+logic — see [Architecture](docs/dev/architecture.md).
 
 ## Contributing
 
-Issues and pull requests are welcome.
-[docs/development.md](docs/development.md) covers the layout and how to run
-things. CI runs `go vet`, `gofmt`, `go test`, a TypeScript typecheck, Vitest and
-a production build on every push.
+Issues and pull requests are welcome. [Local setup](docs/dev/setup.md) covers
+the layout and how to run things; CI runs `go vet`, `gofmt`, `go test`, a
+TypeScript typecheck, Vitest and a production build on every push.
 
 ## License
 

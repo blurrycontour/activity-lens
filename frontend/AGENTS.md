@@ -15,7 +15,7 @@ toolchain file. Config code runs as native ESM, so use `import.meta.dirname`, ne
 
 ## Styling
 
-**Read [`docs/ui-design.md`](../docs/ui-design.md) before writing or changing any UI.** It is the
+**Read [`docs/dev/ui-design.md`](../docs/dev/ui-design.md) before writing or changing any UI.** It is the
 single source for tokens, the accent/theme matrix, layout, reuse and chart conventions — kept in
 one place so it cannot drift from a second copy here.
 

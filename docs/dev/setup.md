@@ -1,4 +1,4 @@
-# Development
+# Local setup
 
 ## Prerequisites
 
@@ -66,6 +66,28 @@ Frontend tests are Vitest and cover pure logic in `src/lib` and `src/components`
 — there is no DOM-rendering suite. Note that Vitest does **not** typecheck; run
 `pnpm typecheck` too.
 
+## Checking a change in a browser
+
+Logic is covered by the tests above. For a layout, something that floats over
+the page, or a two-account flow, drive the real app instead — see
+[Browser checks](visual-verification.md). Sign-in and session caching already
+exist in `scripts/visual/session.mjs`; nothing else is installed in this repo.
+
+## Documentation
+
+The docs in `docs/` are the site published to GitHub Pages by
+`.github/workflows/docs.yml`, which runs only when `docs/**` or `mkdocs.yml`
+changes. To preview locally:
+
+```bash
+pip install mkdocs-material==9.7.7
+mkdocs serve                     # http://localhost:8000
+```
+
+The build runs with `--strict`, so a link to a page that has been renamed fails
+CI rather than rotting. `docs/user` is for people using the app, `docs/admin`
+for whoever runs the server, `docs/dev` for this.
+
 ## Adding a migration
 
 1. Create `backend/internal/store/migrations/00NN_description.sql`.
@@ -113,4 +135,6 @@ Rules, because every file runs on every start:
 | `Dockerfile.android` | Pinned JDK + Android SDK + Node, so an APK can be built without installing any of them |
 | `scripts/apk.sh` | The APK build itself; used by the container, CI, and a local SDK alike. Writes `mobile/dist/` |
 | `scripts/deploy.sh` | Build the APK, then build and start the server image that bundles it |
-| `mobile/` | Capacitor Android shell — see [mobile/README.md](../mobile/README.md) |
+| `mobile/` | Capacitor Android shell — see [Android app](android.md) |
+| `mkdocs.yml`, `.github/workflows/docs.yml` | The docs site and the job that publishes it |
+| `scripts/visual/session.mjs` | A signed-in browser for occasional visual checks |

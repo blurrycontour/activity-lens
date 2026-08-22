@@ -93,7 +93,10 @@ Check `src/components/` first — the common cases already exist:
 `PageHeader` · `ChartCard` · `SettingsCard` / `SettingsRow` · `Field` ·
 `Dropdown` (the app's picker — not a native `<select>`) · `PasswordInput` ·
 `SearchInput` · `MenuButton` · `StatusMsg` · `TabStrip` · `ConfirmDialog` ·
-`InfoTip` · `FilterSheet` · `TypeIcon` / `TypeLegend` · `Sparkline` · `EmptyPlot`
+`InfoTip` · `FilterSheet` · `TypeIcon` / `TypeLegend` · `Sparkline` · `EmptyPlot` ·
+`ViewSwitcher` (list/card toggle, with its per-device remembering) ·
+`ItemFilterBar` (search, per-kind filters and sorting for workouts, plans and
+sessions) · `ShareDialog` / `ShareBadge` · `NotesAndSocial` · `UserAvatar`
 
 If something is used twice, it becomes a component or a class. A near-copy of
 an existing component is a bug — it will drift.

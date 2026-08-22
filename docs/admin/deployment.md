@@ -26,7 +26,7 @@ scripts/deploy.sh --no-apk     # reuse whatever is already in mobile/dist/
 `docker compose up -d --build` still works on its own. It bundles whatever APK is
 in `mobile/dist/` at the time, or none — in which case the server reports no app
 available, which is a perfectly valid way to run it. See
-[mobile/README.md](../mobile/README.md).
+[the Android app guide](../dev/android.md).
 
 `docker-compose.yml` bind-mounts `./.data` to `/data` and runs as `1000:1000`,
 so that directory must be writable by uid 1000 on the host. If your user has a
@@ -142,7 +142,7 @@ Open browsers do not reload themselves. The next time someone opens the app they
 get an **"Update available"** prompt; the new version applies when they tap
 Reload, or on the next full app restart. That is deliberate — silently reloading
 can discard a half-written note. See
-[architecture.md](architecture.md#service-worker-and-updates).
+[Architecture](../dev/architecture.md#service-worker-and-updates).
 
 ## Installing the PWA
 

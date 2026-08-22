@@ -13,8 +13,9 @@ Always keep in mind that UI components should be reusable and should work well b
 
 For a layout change, a floating element or a two-account flow, check it in a
 real browser rather than only in tests — see
-[docs/visual-verification.md](docs/visual-verification.md) for the Playwright
-setup and, importantly, how to keep the token cost of it down.
+[docs/dev/visual-verification.md](docs/dev/visual-verification.md). Sign-in is
+already written: `scripts/visual/session.mjs`. Ask the accessibility tree
+before reaching for a screenshot.
 
 ### Backend
 Stack: Golang

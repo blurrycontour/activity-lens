@@ -56,3 +56,6 @@ AGENTS.md
 
 .claude/sessions/
 .claude/transcripts/
+
+# Built docs site (mkdocs)
+/site/

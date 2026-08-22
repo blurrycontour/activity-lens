@@ -19,6 +19,7 @@ backend/
   internal/
     httpapi/            HTTP handlers, routing, middleware
     workout/            workouts + sharing: model, store, service
+    plans/              training plans, sessions, and their sharing
     equipment/          gear
     notify/             notifications + Web Push
     settings/           app settings and per-user preferences
@@ -89,8 +90,9 @@ them and never joins to them:
 
 Because nothing keys to `users`, removing an account cleans up nothing on its
 own. `httpapi.purgeUserData` is the single list of what a user owns — workouts
-and their archived uploads, gear, shares in both directions, notifications and
-push subscriptions, preferences, last-login, and the avatar file — and both
+and their archived uploads, training plans and sessions, gear, shares in both
+directions, comments and reactions, notifications and push subscriptions,
+preferences, last-login, and the avatar file — and both
 deletion paths (admin, and self-service from Settings) go through it.
 
 Two things make this easy to get wrong, so both are pinned by tests:
@@ -111,10 +113,34 @@ request, so a browser navigating away mid-delete cannot cancel it half-finished.
 ### Sharing: public means "signed in here"
 
 There are no share tokens and no unauthenticated read path. `visibility` is a
-column on the workout (`private` | `public`); direct shares are a separate table.
-They are **orthogonal**: making a workout private again does not revoke direct
+column on the subject (`private` | `public`); direct shares are a separate table.
+They are **orthogonal**: making something private again does not revoke direct
 shares. There is deliberately no `shared` visibility value, which would duplicate
-what `workout_shares` already records.
+what the share table already records.
+
+Workouts, training plans and finished sessions each carry their own visibility
+column and their own share table — `workout_shares`, `plan_shares`,
+`plan_session_shares` — rather than one polymorphic table. A single
+`(kind, item_id, user_id)` table cannot have a real foreign key against three
+parents, so every delete path would need to hand-clean orphaned rows; three
+small tables with real cascades is less that can go wrong than one table plus
+four cleanup sites. Sharing a plan never exposes its sessions, or the reverse.
+
+Only a **finished** session can be shared: one still running is being written
+to, and has nothing to show. Only a **plan** can be cloned — a copy of someone
+else's plan, with fresh ids and no visibility carried over, in your own library.
+
+### Comments and reactions have one subject, three parents
+
+`comments` and `reactions` each hold three nullable foreign keys —
+`workout_id`, `plan_id`, `session_id` — with a portable `CASE`-based CHECK
+constraint that exactly one is set, and partial unique indexes for "one
+reaction each". The alternative, a `(subject_kind, subject_id)` pair, was
+rejected for the same reason as above: it cannot cascade.
+
+The handlers do not know which kind they are serving. A `socialResolver`
+function resolves the subject, its owner and its link once, and the five
+handlers are written against that.
 
 ### Notifications are best-effort by construction
 
