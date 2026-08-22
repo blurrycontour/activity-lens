@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import {
-  CloudOff, CloudRain, CloudSun, Droplets, Pencil, RotateCcw,
+  CloudOff, CloudRain, CloudSun, Droplets, RotateCcw,
   Thermometer, ThermometerSun, Wind,
 } from 'lucide-react'
 import { type Weather, type Workout } from '../data/workouts'
@@ -78,13 +78,16 @@ export default function WeatherCard({ workout, isOwner, enabled, onSaved, onOpen
               <RotateCcw size={14} />
             </button>
           )}
+          {/* Words, like the notes and equipment cards beside it. A bare
+              pencil here was the one card on the page whose heading opened
+              with an icon, which read as a different kind of control rather
+              than as the same one drawn smaller. */}
           <button
-            className="btn-icon"
+            className="btn btn-ghost btn-section"
             title={w ? 'Edit these conditions' : 'Enter conditions by hand'}
-            aria-label="Edit weather"
             onClick={() => setEditing(true)}
           >
-            <Pencil size={14} />
+            {w ? 'Edit' : 'Add'}
           </button>
         </div>
       </div>

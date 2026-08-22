@@ -7,7 +7,7 @@ import Dropdown from '../components/Dropdown'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ReferenceDot, ReferenceArea, BarChart, Bar } from 'recharts'
 import {
   ArrowLeft, Heart, Mountain, Zap, Clock, TrendingUp, Navigation, Pencil, Trash2, Gauge,
-  Check, X as XIcon, Play, Pause as PauseIcon, LoaderCircle, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, AlertTriangle, Activity, Share2, Lock, FileDown, Plus, Image as ImageIcon, NotebookPen, Images, MessageSquare, ClipboardList, Watch, Undo2, ChevronDown, Thermometer, LineChart } from 'lucide-react'
+  Check, X as XIcon, Play, Pause as PauseIcon, LoaderCircle, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, AlertTriangle, Activity, Share2, Lock, FileDown, Plus, Image as ImageIcon, NotebookPen, Images, MessageSquare, ClipboardList, Watch, Undo2, ChevronDown, Thermometer, LineChart, Info } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
@@ -18,6 +18,7 @@ import { useLocalStorage } from '../lib/useLocalStorage'
 import { DEFAULT_HR_ZONE_CHART, HR_ZONE_CHART_KEY, type HRZoneChart } from '../lib/dashboardConfig'
 import InfoTip from '../components/InfoTip'
 import WeatherCard from '../components/WeatherCard'
+import WorkoutInfoDialog from '../components/WorkoutInfoDialog'
 import { usePreferences } from '../context/PreferencesContext'
 import { useIsMobile } from '../lib/useIsMobile'
 import { usePlayhead, useThrottledPlayhead } from '../lib/playhead'
@@ -100,7 +101,7 @@ function StatChip({ icon, label, value, calculated, manual }: { icon?: React.Rea
   )
 }
 
-function OptionsMenu({ onEdit, onDownloadOriginal, onRestore, onShare, onShareCard, onRecalculate, onDelete, deleting }: { onEdit: () => void; onDownloadOriginal?: () => void; onRestore?: () => void; onShare?: () => void; onShareCard: () => void; onRecalculate: () => void; onDelete: () => void; deleting: boolean }) {
+function OptionsMenu({ onEdit, onInfo, onDownloadOriginal, onRestore, onShare, onShareCard, onRecalculate, onDelete, deleting }: { onEdit: () => void; onInfo: () => void; onDownloadOriginal?: () => void; onRestore?: () => void; onShare?: () => void; onShareCard: () => void; onRecalculate: () => void; onDelete: () => void; deleting: boolean }) {
   return (
     <MenuButton icon={<MoreVertical size={18} />} label="Workout options">
       <button className="options-menu-item" onClick={onEdit}>
@@ -108,6 +109,11 @@ function OptionsMenu({ onEdit, onDownloadOriginal, onRestore, onShare, onShareCa
       </button>
       <button className="options-menu-item" onClick={onRecalculate}>
         <RotateCcw size={14} /> Recalculate
+      </button>
+      {/* Below the two that change the workout and above the ones that send it
+          somewhere: this only reads. */}
+      <button className="options-menu-item" onClick={onInfo}>
+        <Info size={14} /> Details
       </button>
       {onShare && (
         <button className="options-menu-item" onClick={onShare}>
@@ -197,7 +203,7 @@ function NotesPanel({ workout: w, onSaved }: { workout: Workout; onSaved: (w: Wo
           <Lock size={10} /> Private
         </span>
         {!editing && (
-          <button className="btn btn-ghost" style={{ fontSize: 12, padding: '4px 10px' }} onClick={start}>
+          <button className="btn btn-ghost btn-section" onClick={start}>
             {hasNotes ? 'Edit' : 'Add note'}
           </button>
         )}
@@ -667,6 +673,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [restoring, setRestoring] = useState(false)
   const [confirmRestore, setConfirmRestore] = useState(false)
+  const [showInfo, setShowInfo] = useState(false)
   const [editName, setEditName] = useState(w.name)
   const [editDate, setEditDate] = useState(w.date)
   const [editType, setEditType] = useState<WorkoutType>(w.type)
@@ -1643,6 +1650,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             {readOnly ? null : (
               <OptionsMenu
                 onEdit={startEdit}
+                onInfo={() => setShowInfo(true)}
                 onDownloadOriginal={w.hasOriginal ? downloadOriginal : undefined}
                 onRestore={w.hasOriginal ? () => setConfirmRestore(true) : undefined}
                 onShare={() => setSharing(true)}
@@ -1988,7 +1996,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
                 gear wherever you meet it. */}
             <h3 className="card-title"><Watch size={15} style={{ color: 'var(--primary)' }} /> Equipment</h3>
             {!editingEquip && !readOnly && (
-              <button className="btn btn-ghost" style={{ fontSize: 12, padding: '4px 10px' }} onClick={startEditEquip}>
+              <button className="btn btn-ghost btn-section" onClick={startEditEquip}>
                 {(w.equipment ?? []).length > 0 ? 'Edit' : 'Add'}
               </button>
             )}
@@ -2145,6 +2153,8 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
       {cardOpen && (
         <ShareCardDialog workout={w} onClose={() => setCardOpen(false)} />
       )}
+
+      {showInfo && <WorkoutInfoDialog workout={w} onClose={() => setShowInfo(false)} />}
 
       {expanded === 'map' && (
         <ExpandModal title="Route" onClose={() => setExpanded(null)} variant="map">

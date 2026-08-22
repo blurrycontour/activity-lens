@@ -90,6 +90,7 @@
         android:visibility="gone">
 
         <ImageView
+            android:id="@+id/notice_next_icon"
             android:layout_width="14dp"
             android:layout_height="14dp"
             android:layout_marginEnd="4dp"

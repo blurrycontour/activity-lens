@@ -1,4 +1,5 @@
 // Accent color palette and applier shared across the app.
+import { setNativeAccent } from './native/shell'
 
 export const ACCENTS: { name: string; value: string; dim: string; glow: string }[] = [
   { name: 'Electric Green', value: '#00e87a', dim: 'rgba(0,232,122,0.15)', glow: 'rgba(0,232,122,0.3)' },
@@ -15,4 +16,15 @@ export function applyAccent(value: string) {
   root.style.setProperty('--primary', a.value)
   root.style.setProperty('--primary-dim', a.dim)
   root.style.setProperty('--primary-glow', a.glow)
+  /*
+   * And the parts of the app that are not the web page.
+   *
+   * On Android the notifications, their glyphs and the session ring are drawn
+   * by native code from a colour compiled into the app, so someone on Rose had
+   * a green notification shade — the one part of the app that never got the
+   * message. Sent on every apply rather than only on a change: this also runs
+   * at startup, which is what keeps the two in step after an app update or a
+   * reinstall, and it is a no-op off the phone.
+   */
+  void setNativeAccent(a.value)
 }

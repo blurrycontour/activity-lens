@@ -94,7 +94,7 @@ export default function AboutDialog({ onClose }: { onClose: () => void }) {
           {/* The server's rows keep their place while they load, so the dialog
               does not grow under the reader once the request lands. A request
               that fails drops them, exactly as before. */}
-          <dl className="about-facts">
+          <dl className="fact-grid">
             {(build?.created || !settled) && (
               <><dt>Built</dt><dd>{build?.created ? fmtBuildDate(build.created) : <Skeleton width={104} />}</dd></>
             )}

@@ -11,7 +11,6 @@ import android.os.Build;
 import android.util.Log;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
-import androidx.core.content.ContextCompat;
 import com.getcapacitor.JSObject;
 import java.nio.charset.StandardCharsets;
 import org.json.JSONException;
@@ -231,7 +230,7 @@ public class UnifiedPushReceiver extends BroadcastReceiver {
             // Tints the small icon and the app name in the shade. The web app has
             // no equivalent knob; this is what keeps the notification recognisably
             // Activity Lens rather than system grey.
-            .setColor(ContextCompat.getColor(context, R.color.app_accent))
+            .setColor(Accent.color(context))
             .setColorized(false)
             .setContentTitle(title)
             .setContentText(body)

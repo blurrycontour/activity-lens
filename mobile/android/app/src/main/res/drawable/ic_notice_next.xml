@@ -1,8 +1,10 @@
 <!-- What comes after the thing you are on. Only the expanded view shows it. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp" android:height="24dp"
-    android:viewportWidth="24" android:viewportHeight="24"
-    android:tint="@color/app_accent">
+    android:viewportWidth="24" android:viewportHeight="24">
+    <!-- No tint here: the accent is a user preference, and a tint baked into
+         the drawable is the compiled-in green everyone used to get whatever
+         they picked. The colour is applied where the view is built. -->
     <path android:fillColor="#FFFFFF"
         android:pathData="M6,18l8.5,-6L6,6v12zM16,6v12h2V6h-2z" />
 </vector>

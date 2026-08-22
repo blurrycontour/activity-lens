@@ -17,7 +17,6 @@ import android.widget.RemoteViews;
 
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
-import androidx.core.content.ContextCompat;
 
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -97,7 +96,7 @@ public class SessionNoticePlugin extends Plugin {
 
         NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_notify)
-            .setColor(ContextCompat.getColor(context, R.color.app_accent))
+            .setColor(Accent.color(context))
             .setContentTitle(title)
             .setContentText(body)
             // The plan's name, beside the app's own in the header line. It is
@@ -223,7 +222,7 @@ public class SessionNoticePlugin extends Plugin {
     private static Bitmap progressRing(Context context, int done, int total) {
         int size = 192;
         float stroke = 18f;
-        int accent = ContextCompat.getColor(context, R.color.app_accent);
+        int accent = Accent.color(context);
         Bitmap bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
 
@@ -303,6 +302,20 @@ public class SessionNoticePlugin extends Plugin {
         if (next != null && !next.isEmpty()) {
             views.setTextViewText(R.id.notice_next, next);
             views.setViewVisibility(R.id.notice_next_row, android.view.View.VISIBLE);
+        }
+
+        /*
+         * The glyphs wear the user's accent, applied here rather than baked
+         * into the drawables: an accent is a preference, and a tint compiled
+         * into a vector is the same green for everybody.
+         *
+         * Last, after the clock's glyph has been chosen, so the filter is set
+         * on whichever drawable ended up there rather than being handed to one
+         * that is then replaced.
+         */
+        int accent = Accent.color(context);
+        for (int id : new int[] { R.id.notice_clock_icon, R.id.notice_sets_icon, R.id.notice_next_icon }) {
+            views.setInt(id, "setColorFilter", accent);
         }
         return views;
     }

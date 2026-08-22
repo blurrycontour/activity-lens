@@ -272,6 +272,11 @@ body {
 .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
 .btn-ghost { background: transparent; color: var(--text-2); border: 1px solid var(--border); }
 .btn-ghost:hover { background: var(--bg-3); color: var(--text); }
+/* The small button that sits in a card's heading, opposite its title: notes,
+   equipment, conditions. It was three copies of the same inline style, which
+   is how they drifted -- one card had ended up with a bare icon where the
+   others had words. */
+.btn-section { font-size: 12px; padding: 4px 10px; }
 /* Between ghost and primary: reads as the action of its section without
    competing with the page's one primary button. Tinted from the accent rather
    than filled by it, so a row of these does not shout. */
@@ -4283,8 +4288,9 @@ body:has(.overlay) .dial { display: none; }
 }
 .active-filter button:hover { opacity: 1; }
 
-/* About dialog fact table: label/value pairs in two columns. */
-.about-facts {
+/* Fact table: label/value pairs in two columns. Shared by the About dialog
+   and a workout's details, which are the same shape of content. */
+.fact-grid {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 8px 16px;
@@ -4292,8 +4298,8 @@ body:has(.overlay) .dial { display: none; }
   border-top: 1px solid var(--border);
   font-size: 12px;
 }
-.about-facts dt { color: var(--text-3); white-space: nowrap; }
-.about-facts dd { color: var(--text-2); text-align: right; min-width: 0; }
+.fact-grid dt { color: var(--text-3); white-space: nowrap; }
+.fact-grid dd { color: var(--text-2); text-align: right; min-width: 0; }
 /* Commit SHAs are long and unbreakable; keep them on one line and let the
    cell scroll rather than forcing the dialog wider. */
 .about-sha { font-family: var(--font-mono); overflow-x: auto; white-space: nowrap; }

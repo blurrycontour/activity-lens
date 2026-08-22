@@ -202,6 +202,12 @@ export interface Workout {
    * keeping originals at the time of the import.
    */
   hasOriginal?: boolean
+  /**
+   * The archived file's format — "FIT", "GPX", "FIT (gzipped)" — and never its
+   * name, which can carry a folder or a personal label. Owner-only, and absent
+   * on anything entered by hand.
+   */
+  originalFormat?: string
 }
 
 /**

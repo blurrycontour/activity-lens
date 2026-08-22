@@ -138,6 +138,23 @@ public class ShellPlugin extends Plugin {
         call.resolve();
     }
 
+    /**
+     * Records the accent the user picked, for the parts of the app Java draws.
+     *
+     * See Accent: notifications are built without a WebView in sight, so the
+     * colour has to be somewhere that outlives the page.
+     */
+    @PluginMethod
+    public void setAccent(PluginCall call) {
+        String color = call.getString("color", "");
+        if (color.isEmpty()) {
+            call.reject("color is required");
+            return;
+        }
+        Accent.set(getContext(), color);
+        call.resolve();
+    }
+
     @PluginMethod
     public void toast(PluginCall call) {
         String message = call.getString("message");

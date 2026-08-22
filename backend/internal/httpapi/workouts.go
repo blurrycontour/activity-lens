@@ -11,6 +11,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -59,6 +60,13 @@ type workoutDetailResponse struct {
 	// sent with the file itself. Owner-only, so Redact clearing RawFilename is
 	// enough to keep it false for everyone else.
 	HasOriginal bool `json:"hasOriginal,omitempty"`
+	// OriginalFormat is the archived file's format — "FIT", "GPX", "TCX" — and
+	// not its name. The name can carry a device's export convention, a folder,
+	// a personal label; the format is a property of the workout's provenance
+	// and nothing else, which is the part worth showing. Owner-only for the
+	// same reason HasOriginal is: Redact clears RawFilename, so this is empty
+	// for anyone else without a second rule to remember.
+	OriginalFormat string `json:"originalFormat,omitempty"`
 	// Shared reports that this workout is visible to someone other than its
 	// owner — public, or shared with at least one person. It is what decides
 	// whether the Social tab is offered, and it has to arrive with the workout
@@ -69,6 +77,27 @@ type workoutDetailResponse struct {
 	// list response, which would turn it into a per-row lookup across the whole
 	// library for something no list shows.
 	Shared bool `json:"shared,omitempty"`
+}
+
+/*
+originalFormat names the archived file's format, in the way a person would.
+
+Two extensions, not one: exporters gzip individual files inside an archive, so
+the name that reaches us is "activity_12345.fit.gz" and the interesting half is
+not the last one. A bare ".gz" with nothing in front of it is all we can say,
+and saying it is better than saying nothing.
+*/
+func originalFormat(name string) string {
+	if name == "" {
+		return ""
+	}
+	ext := strings.TrimPrefix(strings.ToUpper(path.Ext(name)), ".")
+	if ext == "GZ" {
+		if inner := strings.TrimPrefix(strings.ToUpper(path.Ext(strings.TrimSuffix(name, path.Ext(name)))), "."); inner != "" {
+			return inner + " (gzipped)"
+		}
+	}
+	return ext
 }
 
 func (s *Server) handleGetWorkout(w http.ResponseWriter, r *http.Request) {
@@ -105,7 +134,8 @@ func (s *Server) handleGetWorkout(w http.ResponseWriter, r *http.Request) {
 		wk.Owner = owner
 	}
 	writeJSON(w, http.StatusOK, workoutDetailResponse{
-		Workout: wk, IsOwner: isOwner, HasOriginal: wk.RawFilename != "", Shared: shared,
+		Workout: wk, IsOwner: isOwner, HasOriginal: wk.RawFilename != "",
+		OriginalFormat: originalFormat(wk.RawFilename), Shared: shared,
 	})
 }
 

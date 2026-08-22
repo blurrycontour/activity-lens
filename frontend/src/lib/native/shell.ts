@@ -7,6 +7,7 @@ interface ShellPlugin {
   shareFile(options: { filename: string; mime: string; base64: string; title?: string; text?: string }): Promise<void>
   toast(options: { message: string }): Promise<void>
   vibrate(options: { pattern: number[] }): Promise<void>
+  setAccent(options: { color: string }): Promise<void>
 }
 
 const Shell = registerPlugin<ShellPlugin>('Shell')
@@ -62,6 +63,27 @@ export async function vibrateNative(pattern: number[]): Promise<boolean> {
   } catch {
     // A device with no motor, or an app build older than the plugin method.
     return false
+  }
+}
+
+/**
+ * Tells the app's native side which accent the user picked.
+ *
+ * Notifications are built by Java, from resources compiled into the APK, so
+ * they cannot read a CSS variable. The colour is kept on the native side
+ * instead — the shade can show a notification hours after the WebView was last
+ * alive, and it has to be the right colour then too.
+ *
+ * Silent on failure and on the web: an accent that did not reach the
+ * notification tint is a cosmetic difference, not a reason to interrupt
+ * anything.
+ */
+export async function setNativeAccent(color: string): Promise<void> {
+  if (!isNative()) return
+  try {
+    await Shell.setAccent({ color })
+  } catch {
+    // An app build older than the plugin method.
   }
 }
 
