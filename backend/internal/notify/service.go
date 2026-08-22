@@ -93,6 +93,37 @@ func (s *Service) Resolved(ctx context.Context, userID int64, dedupeKey string) 
 	}
 }
 
+/*
+Crossed records the state of a standing condition and reports whether this is
+the moment it became true.
+
+The edge, not the level. "Your goal is complete" is news the moment it becomes
+true and never again while it stays true, and the difference between those two
+cannot be read off the condition itself -- only off what it was last time
+anyone looked. That used to be inferred from whether a notification with a
+matching dedupe key existed, which got it wrong twice over: the marker sat on a
+row the user could delete, so emptying the notification list re-armed
+everything; and a condition that was already true the first time it was ever
+checked looked exactly like one that had just become true, so the first workout
+recorded after a goal was already complete announced three of them at once.
+
+A first sighting is therefore recorded and never announced. For anything scoped
+to a period -- a goal's key carries the week or month -- that costs one silent
+period and rights itself at the next one, which is the correct trade against
+announcing something the dashboard has been showing for days.
+
+False on any error: a database that will not answer is not a reason to send
+somebody a notification that may be wrong.
+*/
+func (s *Service) Crossed(ctx context.Context, userID int64, key string, active bool) bool {
+	crossed, err := s.repo.RecordCondition(ctx, userID, key, active)
+	if err != nil {
+		slog.Warn("could not record condition state", "user_id", userID, "key", key, "error", err)
+		return false
+	}
+	return crossed
+}
+
 // List returns the user's recent notifications, newest first.
 func (s *Service) List(ctx context.Context, userID int64) ([]Notification, error) {
 	return s.repo.List(ctx, userID, listLimit)

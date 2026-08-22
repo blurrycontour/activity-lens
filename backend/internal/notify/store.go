@@ -31,6 +31,11 @@ type Repository interface {
 	// resolved, so it can notify again if it recurs.
 	ClearDedupe(ctx context.Context, userID int64, dedupeKey string) error
 
+	// RecordCondition stores whether a standing condition holds, and reports
+	// whether this call is the one that saw it become true. See Service.Crossed
+	// for what the two answers mean.
+	RecordCondition(ctx context.Context, userID int64, key string, active bool) (crossed bool, err error)
+
 	SaveSubscription(ctx context.Context, s Subscription) error
 	DeleteSubscription(ctx context.Context, endpoint string) error
 	// PruneSubscriptions removes subscriptions no device has confirmed since
@@ -162,6 +167,62 @@ func (r *SQLiteRepository) DeleteAll(ctx context.Context, userID int64) error {
 	return nil
 }
 
+/*
+RecordCondition writes the condition's current state and answers whether it
+just became true.
+
+Three steps rather than a read and a write, because two of them have to be
+atomic and the third tells them apart:
+
+  - The insert is the baseline. It succeeds only the first time this key is
+    ever seen, and a first sighting is never news whatever it says -- that is
+    what stops a goal completed before anyone was watching from being
+    announced by the next unrelated workout.
+  - Becoming true is a conditional update, and the row count is the answer.
+    Two checks running at once (a bulk import and a plan session finishing)
+    both see the same false and both try; exactly one changes a row, so
+    exactly one notifies. A read followed by a write would let both through.
+  - Becoming false just records it, so the next rise is a rise again.
+*/
+func (r *SQLiteRepository) RecordCondition(ctx context.Context, userID int64, key string, active bool) (bool, error) {
+	now := time.Now().UTC().Format(time.RFC3339)
+	res, err := r.db.ExecContext(ctx,
+		`INSERT INTO condition_state (user_id, key, active, updated_at) VALUES (?, ?, ?, ?)
+		 ON CONFLICT (user_id, key) DO NOTHING`,
+		userID, key, boolInt(active), now)
+	if err != nil {
+		return false, fmt.Errorf("record condition: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n > 0 {
+		return false, nil
+	}
+
+	if !active {
+		if _, err := r.db.ExecContext(ctx,
+			`UPDATE condition_state SET active = 0, updated_at = ? WHERE user_id = ? AND key = ? AND active = 1`,
+			now, userID, key); err != nil {
+			return false, fmt.Errorf("record condition: %w", err)
+		}
+		return false, nil
+	}
+
+	res, err = r.db.ExecContext(ctx,
+		`UPDATE condition_state SET active = 1, updated_at = ? WHERE user_id = ? AND key = ? AND active = 0`,
+		now, userID, key)
+	if err != nil {
+		return false, fmt.Errorf("record condition: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+func boolInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
 func (r *SQLiteRepository) ClearDedupe(ctx context.Context, userID int64, dedupeKey string) error {
 	if dedupeKey == "" {
 		return nil
@@ -251,6 +312,7 @@ func (r *SQLiteRepository) DeleteUserData(ctx context.Context, userID int64) err
 	for _, q := range []string{
 		`DELETE FROM notifications WHERE user_id = ?`,
 		`DELETE FROM push_subscriptions WHERE user_id = ?`,
+		`DELETE FROM condition_state WHERE user_id = ?`,
 	} {
 		if _, err := r.db.ExecContext(ctx, q, userID); err != nil {
 			return fmt.Errorf("delete notification data: %w", err)

@@ -180,6 +180,24 @@ func (s *Server) afterWorkoutRecorded(r *http.Request, userID int64) {
 	s.NudgeWeather()
 }
 
+/*
+afterWorkoutRemoved re-reads the same conditions after a workout goes away.
+
+Deleting is as capable of changing whether a goal is met or a shoe is worn out
+as adding, and until now nothing looked. The state would then say a goal was
+met while it was not, and the next time it was genuinely earned -- the same
+file re-imported, or a real ride -- nothing would be said, because as far as
+anything knew it had never stopped being true.
+
+No notification comes out of this in practice: every check here fires on a
+condition becoming true, and removing a workout can only make one false.
+*/
+func (s *Server) afterWorkoutRemoved(r *http.Request, userID int64) {
+	ctx := context.WithoutCancel(r.Context())
+	s.checkGearWear(ctx, userID)
+	s.checkGoals(ctx, userID)
+}
+
 // checkGearWear notifies once per item when it passes its replace-at distance.
 // The dedupe key is the equipment id, so a shoe that stays over the line does
 // not re-notify after every subsequent run.
@@ -216,8 +234,22 @@ func (s *Server) checkGearWear(ctx context.Context, userID int64) {
 	}
 }
 
-// checkGoals notifies when a goal is met for the current period. The dedupe key
-// includes the period, so each new week or month can fire again.
+/*
+checkGoals notifies when a goal is *newly* met for the current period.
+
+Newly is the whole point, and it used to be missing. The check ran on every
+recorded workout, asked "is this goal over its target", and notified if the
+dedupe key had not been used this period -- so a goal completed before anyone
+was watching (history imported first, the goal written afterwards, the switch
+turned on later) was announced by whatever workout happened to run the check
+next. One ride, three notifications, none of them about the ride.
+
+So the answer comes from notify.Crossed, which knows what the goal looked like
+last time and treats a first sighting as a baseline rather than as news. That
+also means the marker is no longer the notification itself: emptying the
+notification list does not re-arm anything, and a goal that drops back under
+target -- a workout deleted -- and is genuinely earned again says so.
+*/
 func (s *Server) checkGoals(ctx context.Context, userID int64) {
 	prefs, err := s.settings.UserPreferences(ctx, userID)
 	if err != nil || len(prefs.Goals) == 0 {
@@ -234,16 +266,22 @@ func (s *Server) checkGoals(ctx context.Context, userID int64) {
 			continue
 		}
 		done := progressTowardGoal(workouts, g, now)
-		if done < g.Target {
+		// The key carries the period, so each week or month is a condition of
+		// its own and starts out false -- which is what makes the first
+		// completion of a new period news again.
+		key := fmt.Sprintf("goal-met:%s:%s", g.ID, g.PeriodKey(now))
+		if !s.notify.Crossed(ctx, userID, key, done >= g.Target) {
 			continue
 		}
 		s.notify.Notify(ctx, notify.Event{
-			UserID:    userID,
-			Kind:      notify.KindGoalMet,
-			Title:     "Goal complete: " + g.Describe(),
-			Body:      fmt.Sprintf("%s of %s done this %s", g.FormatAmount(done), g.FormatAmount(g.Target), g.Period),
-			Link:      "/",
-			DedupeKey: fmt.Sprintf("goal-met:%s:%s", g.ID, g.PeriodKey(now)),
+			UserID: userID,
+			Kind:   notify.KindGoalMet,
+			Title:  "Goal complete: " + g.Describe(),
+			Body:   fmt.Sprintf("%s of %s done this %s", g.FormatAmount(done), g.FormatAmount(g.Target), g.Period),
+			Link:   "/",
+			// No dedupe key: Crossed already answers "once, when it happens",
+			// and a key here would additionally suppress the second time a
+			// goal is genuinely earned inside one period.
 		})
 	}
 }

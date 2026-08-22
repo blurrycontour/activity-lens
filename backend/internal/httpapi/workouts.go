@@ -312,6 +312,7 @@ func (s *Server) handleDeleteWorkout(w http.ResponseWriter, r *http.Request) {
 	// So are its photos. The rows went with the workout through the foreign
 	// key; the files are ours to remove, and the whole directory is one call.
 	s.media.RemoveWorkout(id)
+	s.afterWorkoutRemoved(r, user.ID)
 	slog.Info("workout deleted", "workout_id", id, "user_id", user.ID)
 	w.WriteHeader(http.StatusNoContent)
 }
