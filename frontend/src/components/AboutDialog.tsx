@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
-import { X, ExternalLink, Copy, Check } from 'lucide-react'
+import { X, BookOpen, Copy, Check } from 'lucide-react'
 import { loadAboutInfo, peekAboutInfo } from '../lib/buildInfo'
 import { isNative } from '../lib/serverConfig'
 import Logo from './Logo'
 import Modal from './Modal'
 import Skeleton from './Skeleton'
 
-/** Fallback link when the build carries no source URL of its own. */
-const REPO_URL = 'https://github.com/blurrycontour/activity-lens'
+/** The documentation site, which is what someone in this dialog is after.
+ *  The repository is a click away from there, and is the wrong first stop for
+ *  the far more common question — how does this thing work. */
+const DOCS_URL = 'https://blurrycontour.github.io/activity-lens'
 
 /** Short, readable rendering of an RFC 3339 build timestamp. */
 function fmtBuildDate(iso: string): string {
@@ -41,8 +43,6 @@ export default function AboutDialog({ onClose }: { onClose: () => void }) {
     void loadAboutInfo().then(i => { if (!cancelled) setInfo(i) })
     return () => { cancelled = true }
   }, [info])
-
-  const sourceUrl = build?.source || REPO_URL
 
   /** Copies the facts a bug report needs in one go. */
   async function copyBuild() {
@@ -128,13 +128,13 @@ export default function AboutDialog({ onClose }: { onClose: () => void }) {
               {copied ? <><Check size={15} /> Copied</> : <><Copy size={15} /> Copy build info</>}
             </button>
             <a
-              href={sourceUrl}
+              href={DOCS_URL}
               target="_blank"
               rel="noreferrer noopener"
               className="btn btn-ghost"
               style={{ flex: 1, justifyContent: 'center' }}
             >
-              <ExternalLink size={15} /> Source
+              <BookOpen size={15} /> Docs
             </a>
           </div>
         </div>

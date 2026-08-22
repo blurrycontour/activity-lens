@@ -1,0 +1,40 @@
+/* The app's accent, borrowed for links and hover only.
+   Two steps of it: the bright green the app uses reads well on a dark surface
+   and badly on a white one, so light mode gets a darker step of the same hue
+   rather than the same colour at lower opacity.
+
+   Both the scheme and the primary attribute are named, because that is the
+   specificity Material's own palette rules carry — one attribute short and the
+   link colour silently stays indigo. */
+[data-md-color-scheme="default"][data-md-color-primary="white"] {
+  --al-green: #00834a;
+  --md-accent-fg-color: #00a35a;
+  --md-typeset-a-color: var(--al-green);
+}
+
+[data-md-color-scheme="slate"][data-md-color-primary="black"] {
+  --al-green: #00e87a;
+  --md-accent-fg-color: var(--al-green);
+  --md-typeset-a-color: var(--al-green);
+  /* Material's slate is blue-tinted; a neutral hue sits better under a black
+     header and matches the app's own greys. */
+  --md-hue: 225;
+}
+
+/* A hairline under the header instead of a shadow: with a white bar the
+   default drop shadow is the only thing separating it from the page, and it
+   reads as a smudge. */
+.md-header {
+  box-shadow: none;
+  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+}
+
+/* The cards on the landing page. */
+.md-typeset .grid.cards > ul > li {
+  border-radius: 0.6rem;
+  transition: border-color 120ms, box-shadow 120ms;
+}
+.md-typeset .grid.cards > ul > li:hover {
+  border-color: var(--al-green);
+  box-shadow: none;
+}

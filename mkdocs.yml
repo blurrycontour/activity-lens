@@ -1,4 +1,4 @@
-site_name: Activity Lens
+site_name: Activity Lens Docs
 site_description: Self-hosted training history — import, analyse, plan and share.
 site_url: https://blurrycontour.github.io/activity-lens/
 repo_url: https://github.com/blurrycontour/activity-lens
@@ -42,19 +42,26 @@ theme:
     - content.code.copy
     - content.action.edit
     - search.suggest
+  # A neutral header — white in light, near-black in dark — with the app's
+  # green kept for links and hover only. A green bar behind a green logo made
+  # the mark disappear into it, and a full-width block of accent is the one
+  # thing that dates a docs site fastest.
   palette:
     - media: "(prefers-color-scheme)"
       toggle: { icon: material/brightness-auto, name: Follow system }
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: teal
-      accent: teal
+      primary: white
+      accent: custom
       toggle: { icon: material/brightness-7, name: Dark mode }
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: teal
-      accent: teal
+      primary: black
+      accent: custom
       toggle: { icon: material/brightness-4, name: Light mode }
+
+extra_css:
+  - assets/extra.css
 
 markdown_extensions:
   - admonition
