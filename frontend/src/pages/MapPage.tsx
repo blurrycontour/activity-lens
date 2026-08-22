@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import * as maplibregl from 'maplibre-gl'
+// Not 'maplibre-gl' directly: lib/maplibre is where the worker URL and the
+// tile cache are registered, and a map built from the bare library has
+// neither. This page opening to a blank screen in a fresh app was exactly
+// that — see the comment there.
+import { maplibregl } from '../lib/maplibre'
 import { Flame, Loader2, Maximize2, Route as RouteIcon } from 'lucide-react'
 import { useRefreshHandler } from '../context/RefreshContext'
 import PageHeader from '../components/PageHeader'

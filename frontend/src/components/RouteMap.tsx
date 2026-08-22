@@ -1,19 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import * as maplibregl from 'maplibre-gl'
 // NOTE: maplibre-gl.css is imported in main.tsx, not here — see the comment
 // there. It has to load before index.css, which overrides several of its rules.
-// The worker is a separate module MapLibre fetches at runtime, by a URL it
-// builds from a variable — which Vite cannot follow, so without an import here
-// the file is never emitted, the request falls through to the SPA handler, and
-// the browser refuses the index.html it gets back:
-//
-//   Failed to load module script: ... non-JavaScript MIME type "text/html"
-//
-// `?worker&url` and not `?url`: the plain asset form copies the worker file
-// byte-for-byte, and it opens with `import "./maplibre-gl-shared.mjs"` — a
-// sibling Vite never emits, so the worker booted and immediately 404'd on it.
-// `?worker` builds it as its own entry with that dependency rolled in.
-import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
+// MapLibre itself comes from lib/maplibre, which is the only module allowed to
+// import it: it is where the worker URL and the tile cache are registered, and
+// taking the library directly means getting one that has neither.
+import { maplibregl } from '../lib/maplibre'
 import { Activity, Gauge, Heart, Mountain, Route } from 'lucide-react'
 import Dropdown from './Dropdown'
 import {
@@ -28,13 +19,7 @@ export type { MapLayerId }
 import { HR_ZONE_COLORS, HR_ZONE_SHORT, hrZoneColor } from '../lib/hrZones'
 import { fmtDist, fmtDuration, fmtPace, type Workout } from '../data/workouts'
 import type { Playhead } from '../lib/playhead'
-import { installTileCache } from '../lib/tileCache'
 import { FINISH_FLAG_D, FINISH_POLE_D } from '../lib/mapMarkers'
-
-maplibregl.setWorkerUrl(maplibreWorkerUrl)
-// Registered alongside the worker, before any map is built, because the style
-// URLs below are already addressed to it.
-installTileCache()
 
 function nearestRouteIndex(route: Array<[number, number]>, lat: number, lng: number): number {
   let best = 0
