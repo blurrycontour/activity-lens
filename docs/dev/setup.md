@@ -80,7 +80,7 @@ The docs in `docs/` are the site published to GitHub Pages by
 changes. To preview locally:
 
 ```bash
-pip install mkdocs-material==9.7.7
+pip install -r docs/requirements.txt
 mkdocs serve                     # http://localhost:8000
 ```
 

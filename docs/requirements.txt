@@ -1,0 +1,2 @@
+# Pinned: the docs site must not change on a day nobody touched it.
+mkdocs-material==9.7.7

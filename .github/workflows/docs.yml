@@ -35,9 +35,10 @@ jobs:
         with:
           python-version: '3.13'
           cache: pip
-      # Pinned: an unpinned theme means the site can change on a day nobody
-      # touched it, which is the one thing a docs build should never do.
-      - run: pip install mkdocs-material==9.7.7
+          cache-dependency-path: docs/requirements.txt
+      # Pinned in docs/requirements.txt, which is also what a local preview
+      # installs — one version, named once.
+      - run: pip install -r docs/requirements.txt
       # --strict turns a broken internal link into a failed build.
       - run: mkdocs build --strict
       - uses: actions/upload-pages-artifact@v4
