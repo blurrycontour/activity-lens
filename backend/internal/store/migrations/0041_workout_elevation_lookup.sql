@@ -1,0 +1,11 @@
+-- Whether this workout's elevation came from a terrain model rather than from
+-- the device that recorded it.
+--
+-- A GPS track with no altitude series is ordinary: plenty of watches take
+-- position from satellites and altitude from a barometer they do not have, and
+-- some exporters drop the series on the way out. The route is enough to look
+-- the ground up afterwards, which is offered under Recalculate -- but the
+-- result is a 90-metre terrain grid, not what the device saw, and a climb that
+-- was computed has to say so rather than sit beside measured ones looking the
+-- same.
+ALTER TABLE workouts ADD COLUMN elevation_lookup INTEGER NOT NULL DEFAULT 0;

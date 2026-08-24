@@ -232,7 +232,7 @@ const (
 	// extra_series last, and only on the detail set: it is another blob, and
 	// the summary set exists to not carry blobs. Appended, like every column
 	// added since — the scanners read by position.
-	selectCols = workoutCols + `, visibility, raw_filename, created_at, ` + weatherCols + `, moving_time, pauses, extra_series`
+	selectCols = workoutCols + `, visibility, raw_filename, created_at, ` + weatherCols + `, moving_time, pauses, extra_series, elevation_lookup`
 	// track_points last, and only on the summary set: the detail response
 	// carries the route itself, so only a list has to be told whether there is
 	// one. Appended, like every column added since — the scanners read by
@@ -361,7 +361,7 @@ func (r *SQLiteRepository) Update(ctx context.Context, w *Workout) error {
 		distance=?, avg_hr=?, max_hr=?, elevation_gain=?, calories=?, steps=?, avg_pace=?, avg_speed=?,
 		route=?, hr_timeline=?, pace_timeline=?, elev_timeline=?, cadence_timeline=?, notes=?,
 		calories_manual=?, calories_reported=?, steps_manual=?, moving_time=?, pauses=?,
-		cadence_points=?, extra_series=?, updated_at=?
+		cadence_points=?, extra_series=?, elevation_lookup=?, updated_at=?
 		WHERE id=? AND user_id=?`,
 		w.Name, string(w.Type), w.StartTime.UTC().Format(time.RFC3339), w.Duration, w.Distance,
 		w.AvgHR, w.MaxHR, w.ElevationGain, w.Calories, w.Steps, w.AvgPace, w.AvgSpeed,
@@ -373,6 +373,10 @@ func (r *SQLiteRepository) Update(ctx context.Context, w *Workout) error {
 		// Recounted here, so dropping the series in a reshape is visible to the
 		// list filter immediately rather than at the next backfill.
 		len(w.CadenceTimeline), extra,
+		// Written by Update and not by Create: nothing arrives from an import
+		// with looked-up elevation, and the only thing that sets it is the
+		// Recalculate that does the looking up.
+		boolToInt(w.ElevationLookup),
 		time.Now().UTC().Format(time.RFC3339), w.ID, w.UserID)
 	if err != nil {
 		return fmt.Errorf("update workout: %w", err)
@@ -1032,13 +1036,14 @@ func scanWorkout(row interface{ Scan(...any) error }) (*Workout, error) {
 		wx          weatherScan
 		pauses      []byte
 		extra       []byte
+		elevLookup  int
 	)
 	if err := row.Scan(&w.ID, &w.UserID, &w.Name, &typ, &startTime, &w.Duration, &w.Distance,
 		&w.AvgHR, &w.MaxHR, &w.ElevationGain, &w.Calories, &w.Steps, &w.AvgPace, &w.AvgSpeed,
 		&s.route, &s.hr, &s.pace, &s.elev, &s.cadence, &w.Notes,
 		&calManual, &calReported, &stepManual, &source, &visibility, &w.RawFilename, &createdAt,
 		&wx.status, &wx.temp, &wx.apparent, &wx.humidity, &wx.wind, &wx.precip, &wx.code,
-		&w.MovingTime, &pauses, &extra); err != nil {
+		&w.MovingTime, &pauses, &extra, &elevLookup); err != nil {
 		return nil, err
 	}
 	if err := unmarshalInto(pauses, &w.Pauses); err != nil {
@@ -1048,6 +1053,7 @@ func scanWorkout(row interface{ Scan(...any) error }) (*Workout, error) {
 		return nil, err
 	}
 	wx.applyTo(&w)
+	w.ElevationLookup = elevLookup != 0
 	w.CaloriesManual = calManual != 0
 	w.CaloriesReported = calReported != 0
 	w.StepsManual = stepManual != 0

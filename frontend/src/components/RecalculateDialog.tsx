@@ -19,6 +19,20 @@ interface Part {
   key: keyof RecalcParts
   label: string
   hint: string
+  /**
+   * Ticked when the dialog opens. Everything is, bar one: an elevation lookup
+   * sends this workout's coordinates to a third party, and that is not a thing
+   * to happen because somebody pressed Recalculate without reading the list.
+   */
+  optIn?: boolean
+  /** Pointless to offer when there is nothing for it to work from. */
+  needs?: (w: WorkoutShape) => boolean
+}
+
+/** What this dialog needs to know about the workout it is about to change. */
+interface WorkoutShape {
+  hasRoute: boolean
+  hasElevation: boolean
 }
 
 const PARTS: Part[] = [
@@ -43,6 +57,13 @@ const PARTS: Part[] = [
     hint: 'Re-added from the recorded altitude series.',
   },
   {
+    key: 'elevationLookup',
+    label: 'Look up missing elevation',
+    hint: 'For a route recorded without altitude. Sends this workout\'s coordinates to Open-Meteo and takes the ground height from a terrain model — a 90-metre grid, so it is the shape of the hill rather than of your ride. Replaces the altitude series and marks the chart as computed.',
+    optIn: true,
+    needs: w => w.hasRoute,
+  },
+  {
     key: 'steps',
     label: 'Steps',
     hint: 'From the recorded cadence where there is any, and from your stride length otherwise. Replaces a figure you entered by hand.',
@@ -54,15 +75,22 @@ const PARTS: Part[] = [
   },
 ]
 
-export default function RecalculateDialog({ parts, onChange, busy, error, onClose, onConfirm }: {
+/** Which boxes are ticked when the dialog opens. */
+export function defaultRecalcParts(): RecalcParts {
+  return Object.fromEntries(PARTS.filter(p => !p.optIn).map(p => [p.key, true]))
+}
+
+export default function RecalculateDialog({ parts, workout, onChange, busy, error, onClose, onConfirm }: {
   parts: RecalcParts
+  workout: WorkoutShape
   onChange: (next: RecalcParts) => void
   busy: boolean
   error: string | null
   onClose: () => void
   onConfirm: () => void
 }) {
-  const chosen = PARTS.filter(p => parts[p.key]).length
+  const offered = PARTS.filter(p => !p.needs || p.needs(workout))
+  const chosen = offered.filter(p => parts[p.key]).length
 
   // Portalled to the body, and not merely fixed-positioned. Pages render inside
   // the swipe pager, which is `position: relative; z-index: 1` — a stacking
@@ -83,7 +111,7 @@ export default function RecalculateDialog({ parts, onChange, busy, error, onClos
           </p>
 
           <div className="recalc-parts">
-            {PARTS.map(p => (
+            {offered.map(p => (
               <label className="recalc-part" key={p.key}>
                 <input
                   type="checkbox"
@@ -105,11 +133,11 @@ export default function RecalculateDialog({ parts, onChange, busy, error, onClos
             <button
               className="btn btn-ghost"
               disabled={busy}
-              onClick={() => onChange(chosen === PARTS.length
+              onClick={() => onChange(chosen === offered.length
                 ? {}
-                : Object.fromEntries(PARTS.map(p => [p.key, true])))}
+                : Object.fromEntries(offered.map(p => [p.key, true])))}
             >
-              {chosen === PARTS.length ? 'Clear all' : 'Select all'}
+              {chosen === offered.length ? 'Deselect all' : 'Select all'}
             </button>
             <span style={{ flex: 1 }} />
             <button className="btn btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>

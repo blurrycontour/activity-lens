@@ -132,6 +132,9 @@ var workoutExtraSeriesSchema string
 //go:embed migrations/0040_condition_state.sql
 var conditionStateSchema string
 
+//go:embed migrations/0041_workout_elevation_lookup.sql
+var workoutElevationLookupSchema string
+
 // maxOpenConns is how many connections the pool will open.
 //
 // It was 1, which made every request in the process queue behind every other
@@ -246,6 +249,7 @@ func MigrateApp(ctx context.Context, db *sql.DB) error {
 		{"social subjects", socialSubjectsSchema},
 		{"workout extra series", workoutExtraSeriesSchema},
 		{"condition state", conditionStateSchema},
+		{"workout elevation lookup", workoutElevationLookupSchema},
 	} {
 		if err := applyAlters(ctx, db, m.schema); err != nil {
 			return fmt.Errorf("apply %s schema: %w", m.name, err)

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/blurrycontour/activity-lens/backend/internal/config"
+	"github.com/blurrycontour/activity-lens/backend/internal/elevation"
 	"github.com/blurrycontour/activity-lens/backend/internal/equipment"
 	"github.com/blurrycontour/activity-lens/backend/internal/feedback"
 	"github.com/blurrycontour/activity-lens/backend/internal/httpapi"
@@ -94,6 +95,10 @@ func run() error {
 	}
 
 	workoutSvc := workout.NewService(workout.NewSQLiteRepository(db))
+	// Ground height from coordinates, for a GPS track that recorded no
+	// altitude. Only ever called from a recalculation that explicitly asks for
+	// it — see workout.RecalcParts.
+	workoutSvc.UseElevation(elevation.New().At)
 	equipmentSvc := equipment.NewService(equipment.NewSQLiteRepository(db))
 	settingsStore := settings.New(db)
 	rawUploads := workout.NewRawUploadStore(cfg.DataDir)

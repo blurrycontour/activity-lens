@@ -248,12 +248,35 @@ export default function Analysis() {
 
   // ── Weather ──────────────────────────────────────────────────────────────
   //
-  // Restricted to one activity type, and that is not a nicety: a Run and a Ride
-  // report pace in the same units and mean nothing like the same thing, so a
-  // mixed chart plots the ratio of rides to runs at each temperature rather
-  // than anything about temperature. When the page filter is 'All' this falls
-  // back to Run, which is what most libraries have most of.
-  const weatherType: WorkoutType = typeFilter === 'All' ? 'Run' : typeFilter
+  /*
+   * Restricted to one activity type, and that is not a nicety: a Run and a
+   * Ride report pace in the same units and mean nothing like the same thing,
+   * so a mixed chart plots the ratio of rides to runs at each temperature
+   * rather than anything about temperature.
+   *
+   * So "All types" cannot be honoured here — but it used to be answered by
+   * quietly charting Runs, which reads as a broken filter rather than as a
+   * restriction, and reads as an empty page to anyone who does not run. The
+   * restriction now has a control of its own: the card picks the type with the
+   * most usable weather to begin with, and says which one it is in a dropdown
+   * you can change. A specific page filter still wins outright — a card that
+   * ignored the filter above it would be the same fault in the other
+   * direction.
+   */
+  const [weatherPick, setWeatherPick] = useLocalStorage<WorkoutType | ''>('al_an_wx_type', '')
+  const weatherCandidates = useMemo(() => {
+    const counts = new Map<WorkoutType, number>()
+    for (const w of inRange) {
+      if (hasUsableWeather(w, weatherMetric)) counts.set(w.type, (counts.get(w.type) ?? 0) + 1)
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([type]) => type)
+  }, [inRange, weatherMetric])
+  const weatherType: WorkoutType = typeFilter !== 'All'
+    ? typeFilter
+    // The stored pick, while it is still one of the types on offer: a choice
+    // made last month against a library that has since been filtered down to
+    // a different date range would otherwise pin the card to an empty chart.
+    : (weatherPick && weatherCandidates.includes(weatherPick) ? weatherPick : weatherCandidates[0] ?? 'Run')
   const weatherPool = useMemo(
     () => inRange.filter(w => w.type === weatherType && hasUsableWeather(w, weatherMetric)),
     [inRange, weatherType, weatherMetric],
@@ -1074,14 +1097,27 @@ export default function Analysis() {
           <ChartCard
             title={`Temperature vs ${weatherMetric === 'pace' ? 'Pace' : 'Heart Rate'}`}
             icon={<CloudSun size={14} color="var(--primary)" />}
-            description={`${weatherType} workouts, grouped into ${binWidth} °C bands.`}
+            description={`${weatherType} workouts only — pace and heart rate are not comparable across sports. Grouped into ${binWidth} °C bands.`}
             info="Each point on the line is the average across every workout in that temperature band, with the individual workouts shown faintly behind it. The band width adapts to the range of temperatures you actually train in, so a mild climate is still resolved finely. Bands with fewer than three workouts are left out — one workout is not an average, though it stays visible as a dot. This is observational: distance, terrain, sleep and training phase all move with the seasons too, so treat it as a tendency rather than a cause."
             actions={
-              <Segmented
-                value={weatherMetric}
-                onChange={setWeatherMetric}
-                options={[{ id: 'pace', label: 'Pace' }, { id: 'hr', label: 'HR' }]}
-              />
+              <>
+                {/* Only when the page filter cannot answer it. With a specific
+                    type selected above, a second type control would be two
+                    places to say one thing. */}
+                {typeFilter === 'All' && weatherCandidates.length > 1 && (
+                  <Dropdown
+                    value={weatherType}
+                    options={weatherCandidates.map(t => ({ value: t, label: t }))}
+                    onChange={setWeatherPick}
+                    ariaLabel="Activity type for the weather chart"
+                  />
+                )}
+                <Segmented
+                  value={weatherMetric}
+                  onChange={setWeatherMetric}
+                  options={[{ id: 'pace', label: 'Pace' }, { id: 'hr', label: 'HR' }]}
+                />
+              </>
             }
           >
             {/* Three distinct empty states, because they have three different

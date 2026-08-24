@@ -8,20 +8,39 @@ import (
 	"fmt"
 	"math"
 	"sort"
+
 	"strings"
 	"time"
+
+	"github.com/blurrycontour/activity-lens/backend/internal/elevation"
 )
 
 // ErrInvalid is returned for validation failures on caller-supplied input.
 var ErrInvalid = errors.New("workout: invalid input")
 
+// ErrUnavailable is returned when something outside this app was needed and
+// could not be reached. Held apart from ErrInvalid because nothing about the
+// request was wrong and trying again later may well work — which is what the
+// API layer turns into a 502 rather than a 400.
+var ErrUnavailable = errors.New("workout: service unavailable")
+
 // Service holds workout business rules on top of a Repository.
 type Service struct {
 	repo Repository
+	// elevation looks up ground height from coordinates, and is nil unless the
+	// server wired one in — the same shape as the weather fetcher, and for the
+	// same reason: a test builds a Service with one argument and gets one that
+	// simply declines the feature rather than one that reaches the internet.
+	elevation elevation.Fetcher
 }
 
 // NewService builds a workout service.
 func NewService(repo Repository) *Service { return &Service{repo: repo} }
+
+// UseElevation wires in the terrain-height provider. Without it, a
+// recalculation that asks for an elevation lookup is refused rather than
+// silently doing nothing.
+func (s *Service) UseElevation(f elevation.Fetcher) { s.elevation = f }
 
 // Create validates input, derives metrics, persists and returns the workout.
 // It always inserts; callers importing from a file or a sync source should use
@@ -230,17 +249,30 @@ type RecalcParts struct {
 	PaceSpeed bool
 	Steps     bool
 	Calories  bool
+	// ElevationLookup replaces the altitude series with one looked up from the
+	// route's coordinates. Distinct from Elevation, which re-adds the gain from
+	// whatever series is already there: this one goes and gets a series, from
+	// somewhere outside the app, for a workout that has none. Off unless it is
+	// asked for — it is the only part of a recalculation that leaves the
+	// machine, and the only one whose answer is not derived from what the
+	// device recorded.
+	ElevationLookup bool
 }
 
 // AllRecalcParts is every part, which is what a request that names none gets —
 // the behaviour before this was selectable.
 func AllRecalcParts() RecalcParts {
+	// ElevationLookup is deliberately absent. "Everything" here means every
+	// derivation this app can do from what it already has, which is what a
+	// reshape wants and what a client naming nothing meant before parts were
+	// selectable. Reaching out to a third party is not something to be opted
+	// into by omission.
 	return RecalcParts{HeartRate: true, Elevation: true, Pauses: true, PaceSpeed: true, Steps: true, Calories: true}
 }
 
 // Any reports whether there is anything to do.
 func (p RecalcParts) Any() bool {
-	return p.HeartRate || p.Elevation || p.Pauses || p.PaceSpeed || p.Steps || p.Calories
+	return p.HeartRate || p.Elevation || p.Pauses || p.PaceSpeed || p.Steps || p.Calories || p.ElevationLookup
 }
 
 // CalorieProfile is the body data the calorie estimate needs, gathered into one
@@ -263,6 +295,15 @@ func (s *Service) Recalculate(ctx context.Context, userID int64, id string, part
 	}
 	if !parts.Any() {
 		return nil, fmt.Errorf("%w: nothing selected to recalculate", ErrInvalid)
+	}
+	if parts.ElevationLookup {
+		if err := s.lookUpElevation(ctx, w); err != nil {
+			return nil, err
+		}
+		// The gain comes with it whether or not it was ticked: a fresh series
+		// under a gain computed from the old one is two answers to one
+		// question, and the wrong one is the one on display.
+		parts.Elevation = true
 	}
 	recalcInto(w, parts, profile)
 	if err := s.repo.Update(ctx, w); err != nil {
@@ -325,6 +366,69 @@ func recalcInto(w *Workout, parts RecalcParts, profile CalorieProfile) {
 		w.CaloriesManual = false
 		w.CaloriesReported = false
 	}
+}
+
+/*
+lookUpElevation replaces the workout's altitude series with the ground under
+its route.
+
+Sampled rather than point-for-point. The model behind this has one value per 90
+metres and a long ride has tens of thousands of points, so asking for all of
+them would spend hundreds of requests to be told the same number repeatedly.
+The sample is spread evenly along the route, which is also how the rest of the
+app relates a route index to a moment in time -- the map's scrubber does the
+same arithmetic -- so the series lands on the same time axis as every other
+chart on the page.
+
+The old series is replaced rather than merged. A workout that already had
+altitude and asks for this is saying the recorded one is wrong, and a series
+that is half barometer and half terrain model would be neither.
+*/
+func (s *Service) lookUpElevation(ctx context.Context, w *Workout) error {
+	if s.elevation == nil {
+		return fmt.Errorf("%w: elevation lookup is not configured on this server", ErrInvalid)
+	}
+	if len(w.Route) < 2 {
+		return fmt.Errorf("%w: this workout has no route to look elevation up from", ErrInvalid)
+	}
+	idx := sampleIndexes(len(w.Route), elevation.MaxPoints())
+	points := make([]elevation.Point, len(idx))
+	for i, at := range idx {
+		points[i] = elevation.Point{Lat: w.Route[at][0], Lon: w.Route[at][1]}
+	}
+	metres, err := s.elevation(ctx, points)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrUnavailable, err)
+	}
+	series := make([]ElevPoint, len(idx))
+	last := float64(len(w.Route) - 1)
+	for i, at := range idx {
+		series[i] = ElevPoint{
+			T:    int(math.Round(float64(at) / last * float64(w.Duration))),
+			Elev: int(math.Round(metres[i])),
+		}
+	}
+	w.ElevTimeline = series
+	w.ElevationLookup = true
+	return nil
+}
+
+// sampleIndexes picks at most `max` evenly spread indexes from [0, n), always
+// including the first and the last: a route's start and finish are where a
+// profile is read from, and dropping either shortens the climb.
+func sampleIndexes(n, max int) []int {
+	if n <= max {
+		out := make([]int, n)
+		for i := range out {
+			out[i] = i
+		}
+		return out
+	}
+	out := make([]int, max)
+	for i := range out {
+		out[i] = int(math.Round(float64(i) / float64(max-1) * float64(n-1)))
+	}
+	return out
 }
 
 // Delete removes a workout the user owns.

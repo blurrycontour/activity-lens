@@ -17,7 +17,7 @@ import { useLongPress } from '../lib/useLongPress'
  */
 export type WorkoutCardData = Pick<
   Workout,
-  'name' | 'type' | 'date' | 'distance' | 'duration' | 'elevationGain' | 'calories' | 'avgPace' | 'avgSpeed' | 'source'
+  'name' | 'type' | 'date' | 'startTime' | 'distance' | 'duration' | 'elevationGain' | 'calories' | 'avgPace' | 'avgSpeed' | 'source'
 >
 
 /**
@@ -77,7 +77,22 @@ export default function WorkoutCard({
   const selectionStyle: React.CSSProperties = selected
     ? { outline: '2px solid var(--primary)', outlineOffset: -2 }
     : {}
-  const dateLabel = new Date(w.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  /*
+   * The date, and the time of day when the workout knows it.
+   *
+   * Two of the same distance on the same day are told apart by when they
+   * started, and a library sorted by date otherwise offers nothing to tell
+   * them apart by. The clock follows the reader's locale rather than the
+   * date's fixed en-US, because 18:40 and 6:40 PM are the same fact and only
+   * one of them is readable to any given person.
+   *
+   * Absent on hand-entered workouts and on anything imported before start
+   * times were stored, which is why it is appended rather than assumed.
+   */
+  const dateLabel = [
+    new Date(w.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+    w.startTime && new Date(w.startTime).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }),
+  ].filter(Boolean).join(' · ')
   const rate = fmtRate(w)
 
   if (variant === 'grid') {

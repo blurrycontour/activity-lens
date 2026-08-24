@@ -34,6 +34,12 @@ export interface RecalcParts {
   paceSpeed?: boolean
   steps?: boolean
   calories?: boolean
+  /**
+   * Fetch the altitude from a terrain model, for a route that recorded none.
+   * The only part of a recalculation that leaves the server, which is why it
+   * is the only one not ticked when the dialog opens.
+   */
+  elevationLookup?: boolean
 }
 
 /** Conditions over the span of a workout. See backend/internal/weather. */
@@ -208,6 +214,12 @@ export interface Workout {
    * on anything entered by hand.
    */
   originalFormat?: string
+  /**
+   * Whether the elevation series came from a terrain model rather than from
+   * the device — see the Recalculate dialog. It is what puts the Σ on the
+   * elevation chart.
+   */
+  elevationLookup?: boolean
 }
 
 /**

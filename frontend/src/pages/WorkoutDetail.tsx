@@ -51,7 +51,7 @@ type DetailTab = 'notes' | 'gallery' | 'social'
 import SessionProfile, { canProfile, type Tint } from '../components/SessionProfile'
 import SessionContext from '../components/SessionContext'
 import { sessionStanding } from '../lib/standing'
-import RecalculateDialog from '../components/RecalculateDialog'
+import RecalculateDialog, { defaultRecalcParts } from '../components/RecalculateDialog'
 import UserAvatar, { avatarUrl, userLabel } from '../components/UserAvatar'
 import ConfirmDialog from '../components/ConfirmDialog'
 import MenuButton from '../components/MenuButton'
@@ -72,9 +72,9 @@ interface WorkoutDetailProps {
 
 /** Small marker shown next to stat values that are derived from recorded
  * samples rather than reported directly by the imported source. */
-function CalcIcon() {
+function CalcIcon({ title = 'Calculated from recorded data' }: { title?: string } = {}) {
   return (
-    <span title="Calculated from recorded data" style={{ display: 'inline-flex', opacity: 0.55 }}>
+    <span title={title} style={{ display: 'inline-flex', opacity: 0.55 }}>
       <Sigma size={10} />
     </span>
   )
@@ -691,14 +691,14 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
   /*
    * What a recalculation will replace.
    *
-   * Everything by default, which is what it always did — but each one is now
-   * refusable, because the operation overwrites hand-entered figures and there
-   * was no way to ask for the pauses on an old workout without also losing a
-   * corrected calorie count.
+   * Everything the app can derive on its own, which is what it always did —
+   * but each one is now refusable, because the operation overwrites
+   * hand-entered figures and there was no way to ask for the pauses on an old
+   * workout without also losing a corrected calorie count. The one part that
+   * fetches from outside is the exception and starts unticked; the dialog owns
+   * that rule, since it owns the list.
    */
-  const [recalcParts, setRecalcParts] = useState<RecalcParts>(() => ({
-    heartRate: true, elevation: true, pauses: true, paceSpeed: true, steps: true, calories: true,
-  }))
+  const [recalcParts, setRecalcParts] = useState<RecalcParts>(defaultRecalcParts)
   const [recalculating, setRecalculating] = useState(false)
   const [recalcErr, setRecalcErr] = useState<string | null>(null)
   const [originalErr, setOriginalErr] = useState<string | null>(null)
@@ -1460,6 +1460,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
       {confirmRecalc && (
         <RecalculateDialog
           parts={recalcParts}
+          workout={{ hasRoute: w.route.length > 1, hasElevation: w.elevTimeline.length > 0 }}
           onChange={setRecalcParts}
           busy={recalculating}
           error={recalcErr}
@@ -1941,7 +1942,14 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             <MetricPanel
               icon={<Mountain size={14} color="var(--hike)" />}
               title="Elevation"
-              info="Altitude recorded at each track point. Total gain sums only the upward steps between consecutive samples, so barometric noise on a flat route can inflate it slightly. Compare the shape against the heart-rate chart to see what the climbs actually cost you."
+              /* Only when it was looked up. A device's own altitude is a
+                 measurement and wants no mark; this one is the ground under
+                 the route, and the difference is the whole reason the mark
+                 exists. */
+              badge={w.elevationLookup ? <CalcIcon title="Looked up from the route's coordinates, not recorded by the device" /> : undefined}
+              info={w.elevationLookup
+                ? "This workout recorded a route but no altitude, so the elevation here is the ground under that route, from a terrain model — that is what the Σ marks. The model has one height per 90 metres, which is wider than most trails, so read it as the shape of the hill rather than the shape of your ride. Total gain sums only the upward steps between consecutive samples."
+                : "Altitude recorded at each track point. Total gain sums only the upward steps between consecutive samples, so barometric noise on a flat route can inflate it slightly. Compare the shape against the heart-rate chart to see what the climbs actually cost you."}
               stats={<>+{w.elevationGain} m gain · {derived.elevLoss} m loss</>}
               onExpand={() => setExpanded('elevation')}
             >

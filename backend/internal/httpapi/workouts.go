@@ -693,6 +693,10 @@ func recalcPartsFrom(r *http.Request) (workout.RecalcParts, error) {
 		PaceSpeed *bool `json:"paceSpeed"`
 		Steps     *bool `json:"steps"`
 		Calories  *bool `json:"calories"`
+		// The only part that reaches outside this server. Absent means off,
+		// like the rest — but unlike the rest, that is also what a bare
+		// "recalculate" means, since AllRecalcParts leaves it out.
+		ElevationLookup *bool `json:"elevationLookup"`
 	}
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
@@ -710,6 +714,8 @@ func recalcPartsFrom(r *http.Request) (workout.RecalcParts, error) {
 		PaceSpeed: on(body.PaceSpeed),
 		Steps:     on(body.Steps),
 		Calories:  on(body.Calories),
+
+		ElevationLookup: on(body.ElevationLookup),
 	}
 	if !parts.Any() {
 		return workout.RecalcParts{}, errors.New("select at least one value to recalculate")
@@ -909,6 +915,12 @@ func (s *Server) writeWorkoutError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusNotFound, "workout not found")
 	case errors.Is(err, workout.ErrInvalid):
 		writeError(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, workout.ErrUnavailable):
+		// The request was fine and something we depend on was not, which the
+		// client can act on — by trying again — in a way a 500 does not
+		// suggest. The message carries which service, because "try again" is
+		// poor advice if the answer is that the server has none configured.
+		writeError(w, http.StatusBadGateway, err.Error())
 	default:
 		writeError(w, http.StatusInternalServerError, "internal error")
 	}

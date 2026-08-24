@@ -202,6 +202,11 @@ type Workout struct {
 	// ContentHash is the SHA-256 of the original uploaded bytes, when there
 	// were any. Not exposed to clients.
 	ContentHash string `json:"-"`
+	// ElevationLookup says the elevation series came from a terrain model
+	// rather than from the device — see package elevation. It is what lets the
+	// chart mark itself computed, which matters because a 90-metre grid is the
+	// shape of the hill and not the shape of the ride.
+	ElevationLookup bool `json:"elevationLookup,omitempty"`
 	// Equipment is populated by the API layer for single-workout responses.
 	Equipment []EquipmentTag `json:"equipment,omitempty"`
 	// RawFilename is the name of the file this workout was imported from, when
