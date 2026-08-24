@@ -1052,7 +1052,12 @@ func (s *Server) writeOwnedWorkout(w http.ResponseWriter, r *http.Request, wk *w
 		shared = shared || len(ids) > 0
 	}
 	writeJSON(w, http.StatusOK, workoutDetailResponse{
-		Workout: wk, IsOwner: true, HasOriginal: wk.RawFilename != "", Shared: shared,
+		// OriginalFormat alongside HasOriginal, not just on the GET: the page
+		// replaces what it is showing with this response, so a field only the
+		// GET sets is a row that disappears from the details dialog the moment
+		// anything else is edited.
+		Workout: wk, IsOwner: true, HasOriginal: wk.RawFilename != "",
+		OriginalFormat: originalFormat(wk.RawFilename), Shared: shared,
 	})
 }
 

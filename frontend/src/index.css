@@ -2186,6 +2186,21 @@ body {
   gap: 6px;
   flex-wrap: wrap;
 }
+/* The caption under a weather chart: which sport each colour is, how many
+   workouts it has, and how tightly they follow. Replaces a sentence, which
+   only worked while there was one sport to write it about. */
+.wx-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.wx-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.wx-legend-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+.wx-legend-num { color: var(--text-3); font-family: var(--font-mono); font-size: 11px; }
+
 .explore-vs {
   font-size: 11px;
   font-family: var(--font-mono);

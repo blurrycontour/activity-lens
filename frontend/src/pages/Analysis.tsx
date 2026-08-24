@@ -249,79 +249,94 @@ export default function Analysis() {
   // ── Weather ──────────────────────────────────────────────────────────────
   //
   /*
-   * Restricted to one activity type, and that is not a nicety: a Run and a
-   * Ride report pace in the same units and mean nothing like the same thing,
-   * so a mixed chart plots the ratio of rides to runs at each temperature
-   * rather than anything about temperature.
+   * One series per activity type, never one series across them.
    *
-   * So "All types" cannot be honoured here — but it used to be answered by
-   * quietly charting Runs, which reads as a broken filter rather than as a
-   * restriction, and reads as an empty page to anyone who does not run. The
-   * restriction now has a control of its own: the card picks the type with the
-   * most usable weather to begin with, and says which one it is in a dropdown
-   * you can change. A specific page filter still wins outright — a card that
-   * ignored the filter above it would be the same fault in the other
-   * direction.
+   * A run and a ride report pace in the same units and mean nothing like the
+   * same thing, so a single line over both plots the ratio of one to the other
+   * at each temperature rather than anything about temperature. That much has
+   * always been true; what was wrong was the answer to it. "All types" used to
+   * quietly chart runs, which reads as a broken filter, and as an empty page to
+   * anyone who does not run.
+   *
+   * So everything is drawn, split by type and coloured by it — the same colours
+   * the badges and the rest of the app use, so no legend has to teach them. A
+   * ride's dots and a run's dots share an axis and never share a line, which is
+   * the distinction that actually matters: you can see all of your training at
+   * once without any two sports being averaged together.
+   *
+   * A specific page filter still narrows it to one group, so this is one code
+   * path rather than a special case bolted onto a general one.
    */
-  const [weatherPick, setWeatherPick] = useLocalStorage<WorkoutType | ''>('al_an_wx_type', '')
-  const weatherCandidates = useMemo(() => {
+  const weatherTypes = useMemo(() => {
     const counts = new Map<WorkoutType, number>()
     for (const w of inRange) {
+      if (typeFilter !== 'All' && w.type !== typeFilter) continue
       if (hasUsableWeather(w, weatherMetric)) counts.set(w.type, (counts.get(w.type) ?? 0) + 1)
     }
+    // Busiest first, so the type most of the library is made of is the one the
+    // eye lands on and the first colour in the caption.
     return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([type]) => type)
-  }, [inRange, weatherMetric])
-  const weatherType: WorkoutType = typeFilter !== 'All'
-    ? typeFilter
-    // The stored pick, while it is still one of the types on offer: a choice
-    // made last month against a library that has since been filtered down to
-    // a different date range would otherwise pin the card to an empty chart.
-    : (weatherPick && weatherCandidates.includes(weatherPick) ? weatherPick : weatherCandidates[0] ?? 'Run')
+  }, [inRange, typeFilter, weatherMetric])
+
   const weatherPool = useMemo(
-    () => inRange.filter(w => w.type === weatherType && hasUsableWeather(w, weatherMetric)),
-    [inRange, weatherType, weatherMetric],
+    () => inRange.filter(w => weatherTypes.includes(w.type) && hasUsableWeather(w, weatherMetric)),
+    [inRange, weatherTypes, weatherMetric],
   )
   // Band width follows the spread actually present: a mild climate that never
   // leaves 18–28 °C would get two bands at a fixed 5 °C, which is not a chart.
+  // Taken over everything rather than per type, so the bands line up across
+  // the groups and two lines can be read against each other.
   const binWidth = useMemo(
     () => binWidthFor(weatherPool, weatherMetric),
     [weatherPool, weatherMetric],
   )
-  const tempBins = useMemo(
-    () => binByTemperature(weatherPool, weatherMetric, binWidth),
-    [weatherPool, weatherMetric, binWidth],
-  )
-  const tempScatter = useMemo(
-    () => weatherPool.map(w => ({
-      temp: w.weather!.tempC,
-      value: weatherMetric === 'pace' ? w.avgPace : w.avgHR,
-      name: w.name,
-    })),
-    [weatherPool, weatherMetric],
-  )
-  const tempR = useMemo(
-    () => temperatureCorrelation(weatherPool, weatherMetric),
-    [weatherPool, weatherMetric],
+  /** Everything each type contributes to the temperature chart. */
+  const weatherGroups = useMemo(
+    () => weatherTypes.map(type => {
+      const pool = weatherPool.filter(w => w.type === type)
+      return {
+        type,
+        color: TYPE_COLOR[type],
+        count: pool.length,
+        bins: binByTemperature(pool, weatherMetric, binWidth).map(b => ({
+          temp: (b.from + b.to) / 2, value: b[weatherMetric], from: b.from, to: b.to, count: b.count, type,
+        })),
+        scatter: pool.map(w => ({
+          temp: w.weather!.tempC,
+          value: weatherMetric === 'pace' ? w.avgPace : w.avgHR,
+          name: w.name,
+          type,
+        })),
+        r: temperatureCorrelation(pool, weatherMetric),
+      }
+    }),
+    [weatherTypes, weatherPool, weatherMetric, binWidth],
   )
   // ── Free-choice comparison ───────────────────────────────────────────────
   //
-  // Same activity-type restriction as above, and for the same reason, but no
-  // binning: across fifteen combinations most buckets would hold one workout,
-  // and a line through those states far more than the data does.
+  // Split by type for the same reason and no binning: across fifteen
+  // combinations most buckets would hold one workout, and a line through those
+  // states far more than the data does.
   const exploreField = WEATHER_FIELDS.find(f => f.key === exploreX) ?? WEATHER_FIELDS[0]
   const exploreMetric = PERF_METRICS.find(m => m.key === exploreY) ?? PERF_METRICS[0]
-  const explorePool = useMemo(
-    () => inRange.filter(w => w.type === weatherType),
-    [inRange, weatherType],
+  const exploreGroups = useMemo(
+    () => weatherTypes.map(type => {
+      const points = weatherScatter(
+        inRange.filter(w => w.type === type), exploreField.key, exploreMetric,
+      ).map(p => ({ ...p, type }))
+      return {
+        type,
+        color: TYPE_COLOR[type],
+        points,
+        fit: linearFit(points),
+        r: pearson(points.map(p => p.x), points.map(p => p.y)),
+      }
+    }).filter(g => g.points.length > 0),
+    [weatherTypes, inRange, exploreField, exploreMetric],
   )
   const explorePoints = useMemo(
-    () => weatherScatter(explorePool, exploreField.key, exploreMetric),
-    [explorePool, exploreField, exploreMetric],
-  )
-  const exploreFit = useMemo(() => linearFit(explorePoints), [explorePoints])
-  const exploreR = useMemo(
-    () => pearson(explorePoints.map(p => p.x), explorePoints.map(p => p.y)),
-    [explorePoints],
+    () => exploreGroups.flatMap(g => g.points),
+    [exploreGroups],
   )
 
   // Anything at all, regardless of the current filters — the difference between
@@ -1097,27 +1112,16 @@ export default function Analysis() {
           <ChartCard
             title={`Temperature vs ${weatherMetric === 'pace' ? 'Pace' : 'Heart Rate'}`}
             icon={<CloudSun size={14} color="var(--primary)" />}
-            description={`${weatherType} workouts only — pace and heart rate are not comparable across sports. Grouped into ${binWidth} °C bands.`}
+            description={weatherGroups.length > 1
+              ? `One line per sport, in ${binWidth} °C bands — a run and a ride are never averaged together, because their pace means different things.`
+              : `Grouped into ${binWidth} °C bands.`}
             info="Each point on the line is the average across every workout in that temperature band, with the individual workouts shown faintly behind it. The band width adapts to the range of temperatures you actually train in, so a mild climate is still resolved finely. Bands with fewer than three workouts are left out — one workout is not an average, though it stays visible as a dot. This is observational: distance, terrain, sleep and training phase all move with the seasons too, so treat it as a tendency rather than a cause."
             actions={
-              <>
-                {/* Only when the page filter cannot answer it. With a specific
-                    type selected above, a second type control would be two
-                    places to say one thing. */}
-                {typeFilter === 'All' && weatherCandidates.length > 1 && (
-                  <Dropdown
-                    value={weatherType}
-                    options={weatherCandidates.map(t => ({ value: t, label: t }))}
-                    onChange={setWeatherPick}
-                    ariaLabel="Activity type for the weather chart"
-                  />
-                )}
-                <Segmented
-                  value={weatherMetric}
-                  onChange={setWeatherMetric}
-                  options={[{ id: 'pace', label: 'Pace' }, { id: 'hr', label: 'HR' }]}
-                />
-              </>
+              <Segmented
+                value={weatherMetric}
+                onChange={setWeatherMetric}
+                options={[{ id: 'pace', label: 'Pace' }, { id: 'hr', label: 'HR' }]}
+              />
             }
           >
             {/* Three distinct empty states, because they have three different
@@ -1135,8 +1139,8 @@ export default function Analysis() {
               </EmptyPlot>
             ) : weatherPool.length === 0 ? (
               <EmptyPlot height={260}>
-                No {weatherType.toLowerCase()} workouts with weather in this period.
-                Widen the range, or pick another activity.
+                No workouts with weather in this period. Widen the range, or
+                pick another activity.
               </EmptyPlot>
             ) : (
               <>
@@ -1164,37 +1168,62 @@ export default function Analysis() {
                         return (
                           <div className="custom-tooltip">
                             <div>{d.name ?? `${d.from}–${d.to} °C`}</div>
+                            {/* Which sport, in its own colour: with several
+                                lines on one chart the number alone does not
+                                say whose it is. */}
+                            {d.type && <div style={{ color: TYPE_COLOR[d.type as WorkoutType] }}>{d.type}</div>}
                             <div style={{ color: 'var(--primary)' }}>{value}{weatherMetric === 'hr' ? ' bpm' : ''}</div>
                             {d.count != null && <div style={{ color: 'var(--text-3)' }}>{d.count} workouts</div>}
                           </div>
                         )
                       }}
                     />
-                    {/* The individual workouts, faint. The line alone would read
-                        as a law; the spread behind it is the honest part. */}
-                    <Scatter data={tempScatter} dataKey="value" fill="var(--text-3)" opacity={0.45} isAnimationActive={false} />
-                    {/* Only once there are bands to draw. Below that the dots
-                        are the whole chart, which is the honest picture of a
-                        handful of workouts — better than no chart at all. */}
-                    {tempBins.length > 0 && (
+                    {/* The individual workouts, faint and in their sport's
+                        colour. The line alone would read as a law; the spread
+                        behind it is the honest part. */}
+                    {weatherGroups.map(g => (
+                      <Scatter key={`dots-${g.type}`} data={g.scatter} dataKey="value" fill={g.color} opacity={0.4} isAnimationActive={false} />
+                    ))}
+                    {/* One line per sport, and only once that sport has bands
+                        to draw. Below that its dots are the whole story, which
+                        is the honest picture of a handful of workouts. */}
+                    {weatherGroups.map(g => g.bins.length > 0 && (
                       <Line
-                        data={tempBins.map(b => ({ temp: (b.from + b.to) / 2, value: b[weatherMetric], from: b.from, to: b.to, count: b.count }))}
+                        key={`line-${g.type}`}
+                        data={g.bins}
                         type="monotone" dataKey="value"
-                        stroke="var(--primary)" strokeWidth={2}
-                        dot={{ r: 3, fill: 'var(--primary)' }}
+                        stroke={g.color} strokeWidth={2}
+                        dot={{ r: 3, fill: g.color }}
                         isAnimationActive={false}
                       />
-                    )}
+                    ))}
                   </ComposedChart>
                 </ResponsiveContainer>
-                <p style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 10, lineHeight: 1.55 }}>
-                  {describeCorrelation(tempR, weatherMetric)}
-                  {' '}
-                  <span style={{ color: 'var(--text-3)' }}>
-                    ({weatherPool.length} workout{weatherPool.length === 1 ? '' : 's'}
-                    {tempR !== null && `, r = ${tempR.toFixed(2)}`})
-                  </span>
-                </p>
+                {/* One sport: the sentence. Several: a line each, because
+                    five paragraphs saying the same thing about different
+                    sports is not five times as useful. */}
+                {weatherGroups.length === 1 ? (
+                  <p style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 10, lineHeight: 1.55 }}>
+                    {describeCorrelation(weatherGroups[0].r, weatherMetric)}
+                    {' '}
+                    <span style={{ color: 'var(--text-3)' }}>
+                      ({weatherGroups[0].count} workout{weatherGroups[0].count === 1 ? '' : 's'}
+                      {weatherGroups[0].r !== null && `, r = ${weatherGroups[0].r.toFixed(2)}`})
+                    </span>
+                  </p>
+                ) : (
+                  <div className="wx-legend">
+                    {weatherGroups.map(g => (
+                      <span key={g.type} className="wx-legend-item">
+                        <span className="wx-legend-dot" style={{ background: g.color }} aria-hidden />
+                        {g.type}
+                        <span className="wx-legend-num">
+                          {g.count}{g.r !== null && ` · r ${g.r.toFixed(2)}`}
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </>
             )}
           </ChartCard>
@@ -1203,7 +1232,9 @@ export default function Analysis() {
           <ChartCard
             title={`${exploreField.label} vs ${exploreMetric.label}`}
             icon={<Sparkles size={14} color="var(--primary)" />}
-            description={`Every ${weatherType.toLowerCase()} workout in this period, one dot each.`}
+            description={exploreGroups.length > 1
+              ? 'Every workout in this period, one dot each, coloured by sport — and a fitted line for each, never one through all of them.'
+              : 'Every workout in this period, one dot each.'}
             info="Pick any weather value and any figure from your workouts and see whether they move together. Unbinned on purpose: with this many combinations most temperature bands would hold a single workout, and a line drawn through those would state far more than the data does. The fitted line is least squares over the dots, and r is how tightly they follow it — a value near 0 means no relationship in this data, not that there is none. Everything here is observational, and the seasons move distance, terrain and training phase along with the weather."
             actions={
               <div className="explore-picks">
@@ -1225,7 +1256,7 @@ export default function Analysis() {
           >
             {explorePoints.length === 0 ? (
               <EmptyPlot height={260}>
-                No {weatherType.toLowerCase()} workouts in this period record both
+                No workouts in this period record both
                 {' '}{exploreField.label.toLowerCase()} and {exploreMetric.label.toLowerCase()}.
                 Widen the range, or pick another pair.
               </EmptyPlot>
@@ -1268,24 +1299,36 @@ export default function Analysis() {
                         )
                       }}
                     />
-                    <Scatter data={explorePoints} dataKey="y" fill="var(--primary)" opacity={0.6} isAnimationActive={false} />
-                    {exploreFit && (
+                    {exploreGroups.map(g => (
+                      <Scatter key={`dots-${g.type}`} data={g.points} dataKey="y" fill={g.color} opacity={0.6} isAnimationActive={false} />
+                    ))}
+                    {/* A fit each. One line through every sport at once would
+                        be a trend in the mix of sports, not in the weather. */}
+                    {exploreGroups.map(g => g.fit && (
                       <Line
-                        data={exploreFit} dataKey="y" type="linear"
-                        stroke="var(--text-3)" strokeWidth={2} strokeDasharray="5 4"
+                        key={`fit-${g.type}`}
+                        data={g.fit} dataKey="y" type="linear"
+                        stroke={g.color} strokeWidth={2} strokeDasharray="5 4"
                         dot={false} isAnimationActive={false} legendType="none"
                       />
-                    )}
+                    ))}
                   </ComposedChart>
                 </ResponsiveContainer>
-                <p style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 10, lineHeight: 1.55 }}>
-                  {exploreR === null
+                <div className="wx-legend">
+                  {exploreGroups.map(g => (
+                    <span key={g.type} className="wx-legend-item">
+                      <span className="wx-legend-dot" style={{ background: g.color }} aria-hidden />
+                      {g.type}
+                      <span className="wx-legend-num">
+                        {g.points.length}{g.r !== null && ` · r ${g.r.toFixed(2)}`}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+                <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 8, lineHeight: 1.55 }}>
+                  {exploreGroups.every(g => g.r === null)
                     ? 'Not enough spread to fit a line — every workout sits at much the same value.'
-                    : `r = ${exploreR.toFixed(2)} across ${explorePoints.length} workout${explorePoints.length === 1 ? '' : 's'}.`}
-                  {' '}
-                  <span style={{ color: 'var(--text-3)' }}>
-                    This is a correlation, not a cause.
-                  </span>
+                    : 'This is a correlation, not a cause.'}
                 </p>
               </>
             )}

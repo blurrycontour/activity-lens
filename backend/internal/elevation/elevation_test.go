@@ -75,6 +75,25 @@ func TestShortBatchIsRefused(t *testing.T) {
 	}
 }
 
+// Resolution follows the route's length, so a short walk and a long ride are
+// both sampled at the model's own spacing rather than at the same count.
+func TestSampleCountFollowsDistance(t *testing.T) {
+	for _, tc := range []struct {
+		distanceM float64
+		want      int
+	}{
+		{0, minPoints},      // a workout with no distance still gets a floor
+		{1000, minPoints},   // a park run: 11 cells, floored
+		{18000, 200},        // an 18 km ride: one point per 90 m
+		{45000, 500},        //
+		{200000, maxPoints}, // an audax: capped at ten requests
+	} {
+		if got := SampleCount(tc.distanceM); got != tc.want {
+			t.Errorf("SampleCount(%v) = %d, want %d", tc.distanceM, got, tc.want)
+		}
+	}
+}
+
 func TestRefusesMoreThanItCanAsk(t *testing.T) {
 	c := New()
 	if _, err := c.At(context.Background(), make([]Point, maxPoints+1)); err == nil {

@@ -45,13 +45,24 @@ const batchSize = 100
 // told it failed than watch it for a quarter of a minute.
 const fetchTimeout = 10 * time.Second
 
-// maxPoints caps one lookup, at four requests' worth.
-//
-// A long ride is tens of thousands of points and the model has one value per 90
-// metres, so asking for every point would buy nothing but requests: hundreds of
-// them, most returning the number their neighbour already returned. The caller
-// samples down to this and interpolates the rest.
-const maxPoints = 400
+/*
+Resolution, and the bounds on it.
+
+The model has one height per 90 metres, so that is the interval worth sampling
+at: closer together and neighbouring points come back with the same number,
+which is what a stepped, blocky profile is made of; further apart and a hill is
+drawn as a straight line between two points partway up it.
+
+So the count follows the distance rather than being a flat number. A flat 400
+was both at once — every five metres on a park run, every quarter kilometre on
+a long ride, and only right in between. The floor keeps a short walk from being
+three points; the ceiling keeps a a hundred-kilometre ride to ten requests.
+*/
+const (
+	metresPerSample = 90
+	minPoints       = 60
+	maxPoints       = 1000
+)
 
 // ErrUnavailable means the lookup could not be done — the service refused, or
 // could not be reached. Every failure here is this one: unlike the weather
@@ -81,6 +92,13 @@ func New() *Client {
 
 // MaxPoints is how many coordinates one call may carry.
 func MaxPoints() int { return maxPoints }
+
+// SampleCount is how many points to ask for along a route of this length in
+// metres — one per cell of the model behind it, within bounds.
+func SampleCount(distanceM float64) int {
+	n := int(distanceM / metresPerSample)
+	return max(minPoints, min(maxPoints, n))
+}
 
 type elevationResponse struct {
 	Error     bool      `json:"error"`

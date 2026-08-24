@@ -1162,8 +1162,21 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
     setRecalculating(true)
     setRecalcErr(null)
     try {
-      const updated = await api.recalcWorkout(w.id, recalcParts)
-      setW(updated)
+      await api.recalcWorkout(w.id, recalcParts)
+      /*
+       * Re-read rather than take the answer.
+       *
+       * A recalculation can add a whole series the page did not have — an
+       * elevation lookup is exactly that — and after it the page was still
+       * drawing the old workout until you left and came back. The response
+       * carries the new series (there is a test on the server saying so), so
+       * something between there and here was not making it onto the page, and
+       * re-reading is the version with one source instead of two: the page
+       * hydrates through getWorkout, and now it refreshes through the same
+       * call. One request, after an action that has already been to the
+       * network and back.
+       */
+      setW(await api.getWorkout(w.id))
       setConfirmRecalc(false)
     } catch (err) {
       setRecalcErr(err instanceof Error ? err.message : 'Failed to recalculate')

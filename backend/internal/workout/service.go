@@ -372,9 +372,13 @@ func recalcInto(w *Workout, parts RecalcParts, profile CalorieProfile) {
 lookUpElevation replaces the workout's altitude series with the ground under
 its route.
 
-Sampled rather than point-for-point. The model behind this has one value per 90
-metres and a long ride has tens of thousands of points, so asking for all of
-them would spend hundreds of requests to be told the same number repeatedly.
+Sampled rather than point-for-point, at roughly one point per cell of the model
+behind it: closer together and neighbouring samples come back with the same
+number, which is a blocky staircase rather than a profile, and it spends
+requests to produce it. How many that is follows the route's length, so a park
+run and a hundred-kilometre ride are both resolved to the same real distance
+rather than to the same count.
+
 The sample is spread evenly along the route, which is also how the rest of the
 app relates a route index to a moment in time -- the map's scrubber does the
 same arithmetic -- so the series lands on the same time axis as every other
@@ -391,7 +395,10 @@ func (s *Service) lookUpElevation(ctx context.Context, w *Workout) error {
 	if len(w.Route) < 2 {
 		return fmt.Errorf("%w: this workout has no route to look elevation up from", ErrInvalid)
 	}
-	idx := sampleIndexes(len(w.Route), elevation.MaxPoints())
+	// How many samples, by distance rather than a flat number: the model has
+	// one height per 90 metres, and asking for points closer together than that
+	// returns the same number twice and draws a staircase.
+	idx := sampleIndexes(len(w.Route), elevation.SampleCount(w.Distance))
 	points := make([]elevation.Point, len(idx))
 	for i, at := range idx {
 		points[i] = elevation.Point{Lat: w.Route[at][0], Lon: w.Route[at][1]}
