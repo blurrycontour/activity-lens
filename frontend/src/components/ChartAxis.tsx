@@ -35,6 +35,16 @@ export function denseXAxis(fontSize = 10) {
 }
 
 /**
+ * A y axis measuring a count of things, which cannot be fractional.
+ *
+ * Recharts allows decimals by default, and picks its ticks from the data range,
+ * so a chart topping out at two activities was labelled 0, 0.5, 1, 1.5, 2 — and
+ * half an activity is not a quantity anyone has ever done. It only shows up on
+ * the small ranges, which is exactly where a new account lives.
+ */
+export const WHOLE_NUMBERS = { allowDecimals: false } as const
+
+/**
  * Horizontal room for the plot itself.
  *
  * A phone has ~360px to spend and the axis furniture was taking 76px of it, so

@@ -244,6 +244,103 @@ so it is the one-line decision the doc says it is.
 - Chart headings on WorkoutDetail absorb the InfoTip into their accessible name (`heading "Heart Rate About Heart Rate"`); `ChartCard` elsewhere keeps them separate.
 - The login page has no `<h1>`.
 
+## The charts on Analysis and Consistency
+
+Looked at separately, tab by tab, at 390px. The chart *system* is in good order —
+`denseXAxis` measures real label widths, `width="auto"` sizes the y axis, margins
+come from `useChartSpace`, every card has an `InfoTip` saying what it means, and
+the "correlation, not a cause" line under the weather scatter is the kind of
+honesty most fitness apps skip. These are the places the individual charts fall
+short of that system.
+
+### 33. The Efficiency charts plot time as if it were evenly spaced · M · high
+
+`Efficiency Factor` and `Pace at Fixed HR` put one point per activity on a
+categorical axis labelled **"Activity date"**. Six activities across four weeks
+are therefore drawn six equal steps apart: Jul 30 → Aug 7 is eight days, Aug 7 →
+Aug 8 is one, and both are the same width on screen.
+
+The shape of the line is what these charts are *for* — "falling is improving",
+says the caption — and that shape is an artefact of the spacing. The dramatic
+spike between Aug 7 and Aug 8 is one day of data given eight days of width.
+Either the axis becomes a real time scale (`type="number"`, `scale="time"`), or
+the caption stops describing the curve as a trend.
+
+Same root cause, visible symptom: **the axis repeats labels**, reading
+`Jul 30 · Jul 30 · Aug 7 · Aug 8 · Aug 23 · Aug 23`, because two activities on
+one day are two categories with one name and nothing distinguishes them.
+
+### 34. Fitted lines and an `r` on two and three points · S · high
+
+The weather scatter prints `Run 3 · r -0.48` beside `Hike 2`. `pearson` guards
+at `n < 3`, which lets a three-point correlation through — and a correlation
+coefficient on three points is near-guaranteed to be large whatever the data.
+The legend also lists a two-point group as though it were a fitted series.
+
+`lib/weather.ts` already reasons carefully about the degenerate case ("zero
+means measured and unrelated, which is a real finding"). The threshold is just
+set below the point where the number carries information. Raising it — five is
+the usual floor, eight is defensible — is a judgement about statistics rather
+than a defect with one right answer, which is why it is recorded rather than
+changed.
+
+Related: `Temperature vs Pace` describes itself as "one line per sport, in 2 °C
+bands" and renders five disconnected dots, because no band holds enough points
+to make a line. The caption promises a chart the data cannot produce.
+
+### 35. Rotated y-axis labels are clipped at phone width · S · med
+
+"Adjusted pace (min/km)" renders as "usted pace (min/km)". The DOM box is
+correct — a rotated SVG label is 12px wide and extends visually beyond it, past
+`margin.left: 0` (which `useChartSpace` sets on mobile) and into the card's
+padding, where it is cut. It affects every chart with a y-axis label on a phone;
+it only *shows* when the label is long enough to reach the edge.
+
+### 36. Charts are exposed to screen readers three different ways · S · low
+
+Recharts' default `role="application"` on Analysis and Consistency, `role="img"`
+on WorkoutDetail, and the calendar heatmap as a bare run of text. `application`
+is the worst of the three — it puts a screen reader into forms mode for a
+picture. A `role="img"` with an `aria-label` summarising the trend in a sentence
+would serve better than any of them, and the data for that sentence is already
+computed for the captions.
+
+### 37. Series colours borrow the status palette · S · med
+
+`Efficiency Factor` draws its only series in `--danger`, and `Max HR` in
+`Analysis.tsx` is a hardcoded `#f97316`. `ui-design.md` reserves the status
+colours ("never reuse `--danger` as series 2") for exactly this reason: a red
+line reads as a warning, and this one is just a measurement. `SERIES_COLORS`
+exists.
+
+### 38. Legends are built two ways · S · low
+
+Consistency's year and week comparisons render their legend as bare text nodes
+(`2024`, `2025`, `2026`), while the Dashboard's weekly trend builds a real
+`<ul>` with swatch images. Same information, same page family, two
+implementations — and only one of them pairs the colour with anything a screen
+reader can use.
+
+### 39. Fractional counts on a count axis · S · med — *fixed*
+
+"Week over Week" measured in activities was labelled `0 · 0.5 · 1 · 1.5 · 2`.
+Recharts allows decimals by default and picks ticks from the range, so this only
+appears on small numbers — which is where a new account lives. `WHOLE_NUMBERS`
+in `ChartAxis.tsx` now covers the count axes, and the monthly and yearly
+breakdowns stop saying "1 activities".
+
+### 40. The tabs are uneven, and nothing says what is behind them · S · low
+
+Records has two blocks, Trends one, Efficiency four, Load two, Weather two. A
+reader on a phone sees one tab strip with the fifth item off the edge (the fade
+is there and works) and no sense of what the tabs hold or which is worth the
+scroll. Consistency has the same shape with three.
+
+Worth considering whether Efficiency's four charts are four questions or one
+question asked four ways — `HR vs Pace` and `Distance vs Pace` are the same
+scatter with a different x — and whether Records, which is a table rather than a
+chart, belongs in a tab strip of charts at all.
+
 ## Missing features and ideas
 
 ### 24. No password reset · M · high

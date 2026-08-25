@@ -11,7 +11,7 @@ import { recentWeekStarts, weekdayMatrix } from '../lib/insights'
 import ChartCard, { EmptyPlot } from '../components/ChartCard'
 import TrainingSessionsChart from '../components/TrainingSessionsChart'
 import InfoTip from '../components/InfoTip'
-import { useChartSpace } from '../components/ChartAxis'
+import { useChartSpace, WHOLE_NUMBERS } from '../components/ChartAxis'
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid, Legend, Cell,
@@ -388,7 +388,7 @@ export default function Consistency() {
             <BarChart data={dayOfWeek} margin={space.margin(18, 4)}>
               <CartesianGrid {...GRID_PROPS} />
               <XAxis dataKey="label" tick={{ ...AXIS_TICK, fontSize: 11 }} axisLine={false} tickLine={false} label={xLabel('Day of week')} />
-              <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" unit={m.axisLabel || undefined} label={yLabel(measure === 'count' ? 'Activities' : 'Duration (hours)')} />
+              <YAxis {...(measure === 'count' ? WHOLE_NUMBERS : {})} tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" unit={m.axisLabel || undefined} label={yLabel(measure === 'count' ? 'Activities' : 'Duration (hours)')} />
               <Tooltip
                 cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
                 content={({ active, payload, label }) => {
@@ -396,7 +396,7 @@ export default function Consistency() {
                   return (
                     <div className="custom-tooltip">
                       <div style={{ fontWeight: 600, marginBottom: 2 }}>{label}</div>
-                      <div>{m.format(payload[0].payload.value)}{measure === 'count' ? ' activities' : ''}</div>
+                      <div>{m.format(payload[0].payload.value)}{measure === 'count' ? (payload[0].payload.value === 1 ? ' activity' : ' activities') : ''}</div>
                     </div>
                   )
                 }}
@@ -433,7 +433,7 @@ export default function Consistency() {
               <BarChart data={yoyData} margin={space.margin(18)} barCategoryGap="18%" barGap={2}>
                 <CartesianGrid {...GRID_PROPS} />
                 <XAxis dataKey="month" tick={AXIS_TICK} axisLine={false} tickLine={false} label={xLabel('Month')} />
-                <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" unit={m.axisLabel || undefined} label={yLabel(measure === 'count' ? 'Activities' : 'Duration (hours)')} />
+                <YAxis {...(measure === 'count' ? WHOLE_NUMBERS : {})} tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" unit={m.axisLabel || undefined} label={yLabel(measure === 'count' ? 'Activities' : 'Duration (hours)')} />
                 <Tooltip
                   cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
                   content={({ active, payload, label }) => {
@@ -473,7 +473,7 @@ export default function Consistency() {
               <BarChart data={wowData} margin={space.margin(18)} barCategoryGap="18%" barGap={2}>
                 <CartesianGrid {...GRID_PROPS} />
                 <XAxis dataKey="day" tick={AXIS_TICK} axisLine={false} tickLine={false} label={xLabel('Day of week')} />
-                <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" label={yLabel(measure === 'count' ? 'Activities' : 'Duration (hours)')} />
+                <YAxis {...(measure === 'count' ? WHOLE_NUMBERS : {})} tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" label={yLabel(measure === 'count' ? 'Activities' : 'Duration (hours)')} />
                 <Tooltip
                   cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
                   content={({ active, payload, label }) => {
@@ -642,7 +642,7 @@ function BreakdownGrid({ title, info, stats, label, measure, statValue, format }
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <span style={{ fontWeight: 600, fontSize: 13 }}>{label(key)}</span>
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--primary)', fontWeight: 700 }}>
-                {measure === 'count' ? `${s.count} activities` : format(s.duration)}
+                {measure === 'count' ? `${s.count} ${s.count === 1 ? 'activity' : 'activities'}` : format(s.duration)}
               </span>
             </div>
             <div style={{ background: 'var(--bg-3)', borderRadius: 99, height: 4, marginBottom: 8 }}>
