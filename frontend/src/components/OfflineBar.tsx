@@ -52,6 +52,14 @@ export default function OfflineBar({ floating = false }: OfflineBarProps) {
       // Kept mounted and collapsed so both directions animate; the height
       // transition is what makes it push the content down rather than overlap.
       data-visible={visible ? 'true' : 'false'}
+      /*
+       * Zero height is not hidden. Collapsed, this element stayed in the
+       * accessibility tree on every page of the app, so "Offline — showing
+       * saved data" was in every aria snapshot and a screen reader announced
+       * it on arrival at each screen, online or not. aria-hidden takes it out;
+       * the CSS pairs it with visibility so the two agree.
+       */
+      aria-hidden={visible ? undefined : true}
       style={{
         // Neutral greys pulled from the theme variables, so this follows the
         // light/dark switch instead of being a fixed colour. Only the brief

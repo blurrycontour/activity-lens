@@ -4,7 +4,7 @@ import TypeIcon from '../components/TypeIcon'
 import ShareBadge from '../components/ShareBadge'
 import ViewSwitcher, { readView, writeView, type ListView } from '../components/ViewSwitcher'
 import { useWorkouts } from '../context/WorkoutsContext'
-import { Search, Plus, Share2, FilterX, SlidersHorizontal, X, LoaderCircle, Layers, Image as ImageIcon, MoreVertical, Copy } from 'lucide-react'
+import { Search, Plus, Share2, FilterX, SlidersHorizontal, X, LoaderCircle, Layers, Image as ImageIcon, MoreVertical, Copy, CloudOff } from 'lucide-react'
 import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
 import SortDropdown, { SORT_OPTIONS, type SortKey } from '../components/SortDropdown'
@@ -19,6 +19,7 @@ import DuplicatesDialog from '../components/DuplicatesDialog'
 import { RANGE_OPTIONS } from '../lib/range'
 import { api } from '../lib/api'
 import { useIsMobile } from '../lib/useIsMobile'
+import { useOnlineStatus } from '../lib/network'
 import { LOCATION_EVENT } from '../App'
 import { useSessionState } from '../lib/useSessionState'
 import SearchInput from '../components/SearchInput'
@@ -326,6 +327,13 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
 
   const source = workouts
   const busy = loading
+  /*
+   * An empty library while the backend is unreachable is not an empty library.
+   * The service worker can answer a cold cache with nothing at all, so the
+   * failure arrives as a successful fetch of zero rows rather than as an error —
+   * which is why this asks the network rather than trusting `listError`.
+   */
+  const unreachable = !useOnlineStatus() && source.length === 0
 
   const filtered = useMemo(
     // Scope pinned rather than read from the stored filters: a session that
@@ -484,13 +492,21 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
           <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-3)' }}>
             {busy
               ? <LoaderCircle size={32} strokeWidth={1.5} className="spin" style={{ margin: '0 auto 12px' }} aria-hidden />
-              : <Search size={32} strokeWidth={1.5} style={{ margin: '0 auto 12px' }} aria-hidden />}
+              : unreachable
+                ? <CloudOff size={32} strokeWidth={1.5} style={{ margin: '0 auto 12px' }} aria-hidden />
+                : <Search size={32} strokeWidth={1.5} style={{ margin: '0 auto 12px' }} aria-hidden />}
             <p style={{ fontSize: 14 }}>
               {busy
                 ? 'Loading workouts…'
                 : activeFilters.length > 0 || search
                   ? 'No workouts match these filters'
-                  : 'No workouts found'}
+                  : unreachable
+                    /* Not "No workouts found". An empty library and a library
+                       we could not fetch look identical from here, and saying
+                       the first when it is the second is the app telling
+                       someone their training is gone. */
+                    ? 'Your workouts can’t be loaded while you are offline.'
+                    : 'No workouts found'}
             </p>
             {/* The way out, where the problem is. A desktop had no reset at
                 all, so a filter left on from an earlier visit read as an empty

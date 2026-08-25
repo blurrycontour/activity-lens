@@ -3079,11 +3079,17 @@ body:has(.overlay) .dial { display: none; }
   height: 0;
   overflow: hidden;
   border-bottom-width: 0 !important;
-  transition: height 0.22s ease, border-bottom-width 0.22s ease;
+  /* Paired with aria-hidden on the element: collapsed, the bar is gone for
+     everyone rather than only for people looking at it. Delayed so it does not
+     blank the text halfway through the closing animation. */
+  visibility: hidden;
+  transition: height 0.22s ease, border-bottom-width 0.22s ease, visibility 0s linear 0.22s;
 }
 .offline-bar[data-visible='true'] {
   height: 26px;
   border-bottom-width: 1px !important;
+  visibility: visible;
+  transition-delay: 0s;
 }
 /* Standalone variant for screens with no app layout grid (the login page). */
 .offline-bar.floating {

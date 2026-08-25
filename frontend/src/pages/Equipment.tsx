@@ -18,6 +18,7 @@ import { fmtDist, type Workout } from '../data/workouts'
 import Modal from '../components/Modal'
 import SearchInput from '../components/SearchInput'
 import MissingRecord from '../components/MissingRecord'
+import { useOnlineStatus } from '../lib/network'
 
 interface EquipmentPageProps {
   onSelectWorkout: (id: string) => void
@@ -103,6 +104,7 @@ function wearOf(e: { type: string; totalDistance?: number; retireAtKm?: number }
 export default function EquipmentPage({ onSelectWorkout, detail, onOpenDetail }: EquipmentPageProps) {
   const [items, setItems] = useState<Equipment[]>([])
   const [loading, setLoading] = useState(true)
+  const online = useOnlineStatus()
   const [editing, setEditing] = useState<Equipment | 'new' | null>(null)
   /*
    * "Add equipment", asked for from somewhere else.
@@ -303,7 +305,11 @@ export default function EquipmentPage({ onSelectWorkout, detail, onOpenDetail }:
           <div className="detail-loading">Loading…</div>
         ) : items.length === 0 ? (
           <div className="feed-empty">
-            No equipment yet. Add your shoes, watch, or bike to track their usage.
+            {/* Same distinction the library and the feeds make: an empty
+                inventory and one we could not fetch read identically. */}
+            {online
+              ? 'No equipment yet. Add your shoes, watch, or bike to track their usage.'
+              : 'Your equipment can’t be loaded while you are offline.'}
           </div>
         ) : filtered.length === 0 ? (
           <div className="feed-empty">

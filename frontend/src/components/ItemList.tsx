@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ClipboardList, Clock, FilterX, Ghost, History, LoaderCircle } from 'lucide-react'
+import { ClipboardList, Clock, CloudOff, FilterX, Ghost, History, LoaderCircle } from 'lucide-react'
 import { clockLabel, elapsedSec, sessionWhen, type PlanSession, type TrainingPlan } from '../data/plans'
 import type { Workout } from '../data/workouts'
 import {
@@ -8,6 +8,7 @@ import {
 } from '../lib/itemFilters'
 import { useSessionState } from '../lib/useSessionState'
 import { NO_NARROWING } from '../lib/itemFilters'
+import { useOnlineStatus } from '../lib/network'
 import ItemFilterBar from './ItemFilterBar'
 import WorkoutCard from './WorkoutCard'
 import { Byline } from './WorkoutFilterList'
@@ -93,6 +94,7 @@ export default function ItemList({
   // One funnel, so this is the only place that has to put the list back to the
   // first page when what it shows changes.
   const change = (next: ItemNarrowing) => { setShown(PAGE_SIZE); setNarrow(next) }
+  const unreachable = !useOnlineStatus() && items.length === 0
   const narrowed = narrow.search !== '' || filtered.length !== items.length
 
   return (
@@ -129,6 +131,13 @@ export default function ItemList({
                   </button>
                 </div>
               )}
+            </>
+          ) : unreachable ? (
+            /* An empty feed and a feed we could not fetch look the same from
+               here, and only one of them is the reader's fault to fix. */
+            <>
+              <CloudOff size={28} strokeWidth={1.5} style={{ margin: '0 auto 10px' }} aria-hidden />
+              <div>Nothing can be loaded while you are offline.</div>
             </>
           ) : (
             <>
