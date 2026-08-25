@@ -5,6 +5,7 @@ import UserAvatar, { userLabel } from './UserAvatar'
 import { useAuth } from '../context/AuthContext'
 import { api, ApiError, type ShareKind, type WorkoutComment, type WorkoutSocial as Social } from '../lib/api'
 import useEscape from '../lib/useEscape'
+import { whenLabel } from '../lib/date'
 
 /**
  * Reactions and comments on a shared workout, training plan or session.
@@ -358,14 +359,3 @@ function CommentBox({ value, onChange, onSubmit, ariaLabel, placeholder }: {
   )
 }
 
-/** A short, local timestamp — the date once it is no longer today's business. */
-function whenLabel(iso: string): string {
-  const then = new Date(iso)
-  if (Number.isNaN(then.getTime())) return ''
-  const mins = Math.round((Date.now() - then.getTime()) / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  if (mins < 60 * 24) return `${Math.round(mins / 60)}h ago`
-  if (mins < 60 * 24 * 7) return `${Math.round(mins / (60 * 24))}d ago`
-  return then.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
-}

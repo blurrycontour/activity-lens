@@ -16,6 +16,7 @@ import SessionRunner from './SessionRunner'
 import SessionHistory from './SessionHistory'
 import FinishedSession from './FinishedSession'
 import { api } from '../../lib/api'
+import { relativeDay } from '../../lib/date'
 import {
   clockLabel, durationLabel, elapsedMin, elapsedSec, type PlanSession, type TrainingPlan,
 } from '../../data/plans'
@@ -778,12 +779,3 @@ function Countdown({ onDone, onCancel }: { onDone: () => void; onCancel: () => v
   )
 }
 
-/** "today", "yesterday", or a date — the resolution people actually want. */
-function relativeDay(iso: string): string {
-  const then = new Date(iso)
-  const days = Math.floor((Date.now() - then.getTime()) / 86400000)
-  if (days <= 0) return 'today'
-  if (days === 1) return 'yesterday'
-  if (days < 7) return `${days} days ago`
-  return then.toLocaleDateString()
-}

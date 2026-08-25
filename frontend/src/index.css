@@ -5428,7 +5428,18 @@ body:has(.overlay) .dial { display: none; }
   /* Now the row genuinely has to fit: the two dropdowns share what is left
      after the pill, and their labels ellipsize rather than wrapping the row. */
   .analysis-filters .al-dropdown { min-width: 0; flex: 1 1 auto; }
-  .analysis-filters .al-dropdown-trigger { min-width: 0; width: 100%; }
+  .analysis-filters .al-dropdown-trigger {
+    min-width: 0;
+    width: 100%;
+    /* Tighter than the desktop trigger by eight pixels a side. The default
+       label — "Last 30 days", what both these pages open on — was six pixels
+       wider than the space left for it, so the app's resting state on a phone
+       read "Last 30 day". Chrome is the right place to give that back: the
+       label is the content, the padding is not. */
+    gap: 6px;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
 }
 
 /* ── Analysis: trend summary tiles ──────────────────────────────────
