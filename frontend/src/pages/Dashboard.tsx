@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useWorkouts } from '../context/WorkoutsContext'
-import { fmtDuration, fmtDist, fmtRate, TYPE_COLOR, type Workout, type WorkoutType } from '../data/workouts'
+import { fmtDuration, fmtDist, fmtRate, fmtTotal, fmtCompact, TYPE_COLOR, type Workout, type WorkoutType } from '../data/workouts'
 import TypeIcon from '../components/TypeIcon'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
@@ -769,10 +769,10 @@ export default function Dashboard({ onSelect, onResumeSession, onImport, onCreat
     showDeltas && d.before ? deltaPct(pick(d.now), pick(d.before)) : undefined
 
   const allCards: Record<StatCardId, React.ReactNode> = {
-    distance: <StatCard key="distance" icon={<TrendingUp size={14} />} label="Total Distance" value={(d.now.distance / 1000).toFixed(0)} unit="km" sub={caption} delta={delta(t => t.distance)} spark={spark(w => w.distance)} />,
+    distance: <StatCard key="distance" icon={<TrendingUp size={14} />} label="Total Distance" {...fmtTotal(d.now.distance)} sub={caption} delta={delta(t => t.distance)} spark={spark(w => w.distance)} />,
     time: <StatCard key="time" icon={<Clock size={14} />} label="Total Time" value={Math.floor(d.now.duration / 3600).toString()} unit="hrs" sub={caption} delta={delta(t => t.duration)} spark={spark(w => w.duration)} color="var(--purple)" />,
-    elevation: <StatCard key="elevation" icon={<Mountain size={14} />} label="Elevation" value={(d.now.elevation / 1000).toFixed(1)} unit="km" sub={`total gain · ${caption}`} delta={delta(t => t.elevation)} spark={spark(w => w.elevationGain)} color="var(--hike)" />,
-    calories: <StatCard key="calories" icon={<Flame size={14} />} label="Calories" value={(d.now.calories / 1000).toFixed(1)} unit="kcal ×1k" sub={`energy expended · ${caption}`} delta={delta(t => t.calories)} spark={spark(w => w.calories)} color="var(--accent)" />,
+    elevation: <StatCard key="elevation" icon={<Mountain size={14} />} label="Elevation" {...fmtTotal(d.now.elevation)} sub={`total gain · ${caption}`} delta={delta(t => t.elevation)} spark={spark(w => w.elevationGain)} color="var(--hike)" />,
+    calories: <StatCard key="calories" icon={<Flame size={14} />} label="Calories" value={fmtCompact(d.now.calories)} unit="kcal" sub={`energy expended · ${caption}`} delta={delta(t => t.calories)} spark={spark(w => w.calories)} color="var(--accent)" />,
     avgHr: <StatCard key="avgHr" icon={<Heart size={14} />} label="Avg Heart Rate" value={d.now.avgHR.toString()} unit="bpm" sub={caption} delta={delta(t => t.avgHR)} spark={sparkAvg(w => w.avgHR)} color="var(--danger)" />,
     activities: <StatCard key="activities" icon={<Zap size={14} />} label="Activities" value={d.now.count.toString()} unit="" sub={`${Object.keys(d.typeCount).length} sport types · ${caption}`} delta={delta(t => t.count)} spark={spark(() => 1)} color="var(--blue)" />,
   }
@@ -846,8 +846,12 @@ export default function Dashboard({ onSelect, onResumeSession, onImport, onCreat
                   <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary)' }}>
                     {bests.length === 1 ? 'New personal best' : `${bests.length} new personal bests`}
                   </div>
+                  {/* The sport, beside the name. Each tile below already names
+                      it, but the headline says "personal best" without one, and
+                      the scope of the claim should be settled before the reader
+                      gets to the numbers. */}
                   <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>
-                    {bests[0].workout.name} · {new Date(`${bests[0].workout.date}T00:00:00`).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
+                    {bests[0].workout.name} · {bests[0].workout.type} · {new Date(`${bests[0].workout.date}T00:00:00`).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>

@@ -522,10 +522,25 @@ export interface PersonalBest {
  * Records set by the most recent workout, judged against every other activity
  * of the same type. Requires a few prior activities of that type — being the
  * "longest ever" out of two is not an achievement worth a banner.
+ *
+ * Every label names the sport, and that is not decoration. Judging against the
+ * same type is the right call — a hike is not slow for being slower than a run —
+ * but an unqualified "Fastest pace" beside a hiking pace reads as a claim about
+ * all your training, and anyone who has run faster that month knows it is
+ * false. The scope has to appear wherever the number does.
  */
 export function recentPersonalBests(workouts: Workout[], minSameType = 3, maxAgeDays = 14, now = new Date()): PersonalBest[] {
   if (workouts.length === 0) return []
-  const sorted = [...workouts].sort((a, b) => b.date.localeCompare(a.date))
+  /*
+   * `date` is a day, not an instant, so on any day with two workouts it sorts
+   * them equal and "the most recent" became whichever the API happened to
+   * return first. A morning run and an evening hike would then be judged in
+   * arbitrary order, and the one that actually happened last could be skipped
+   * entirely. `startTime` carries the time of day and breaks the tie; workouts
+   * old enough to predate that field fall back to the day, as before.
+   */
+  const sorted = [...workouts].sort((a, b) =>
+    b.date.localeCompare(a.date) || (b.startTime ?? '').localeCompare(a.startTime ?? ''))
   const latest = sorted[0]
   const cutoff = new Date(now)
   cutoff.setDate(cutoff.getDate() - maxAgeDays)
@@ -539,16 +554,16 @@ export function recentPersonalBests(workouts: Workout[], minSameType = 3, maxAge
     out.push({ workout: latest, kind: 'distance', label: 'Longest ' + latest.type, value: `${(latest.distance / 1000).toFixed(1)} km` })
   }
   if (latest.duration > 0 && peers.every(w => latest.duration > w.duration)) {
-    out.push({ workout: latest, kind: 'duration', label: 'Longest time', value: `${Math.floor(latest.duration / 3600)}h ${Math.round((latest.duration % 3600) / 60)}m` })
+    out.push({ workout: latest, kind: 'duration', label: `Longest ${latest.type} time`, value: `${Math.floor(latest.duration / 3600)}h ${Math.round((latest.duration % 3600) / 60)}m` })
   }
   const paced = peers.filter(w => w.avgPace > 0)
   if (latest.avgPace > 0 && paced.length >= minSameType && paced.every(w => latest.avgPace < w.avgPace)) {
     const mins = Math.floor(latest.avgPace / 60)
     const secs = Math.round(latest.avgPace % 60)
-    out.push({ workout: latest, kind: 'pace', label: 'Fastest pace', value: `${mins}:${String(secs).padStart(2, '0')} /km` })
+    out.push({ workout: latest, kind: 'pace', label: `Fastest ${latest.type} pace`, value: `${mins}:${String(secs).padStart(2, '0')} /km` })
   }
   if (latest.elevationGain > 100 && peers.every(w => latest.elevationGain > w.elevationGain)) {
-    out.push({ workout: latest, kind: 'elevation', label: 'Most climbing', value: `${Math.round(latest.elevationGain)} m` })
+    out.push({ workout: latest, kind: 'elevation', label: `Most ${latest.type} climbing`, value: `${Math.round(latest.elevationGain)} m` })
   }
   return out
 }

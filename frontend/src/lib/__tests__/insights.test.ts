@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  goalProgress, newGoal, parseDateKey, periodKeyOf, periodLabel, sparkAverages, weekStartKey, type Goal,
+  goalProgress, newGoal, parseDateKey, periodKeyOf, periodLabel, recentPersonalBests, sparkAverages,
+  weekStartKey, type Goal,
 } from '../insights'
 import type { Workout } from '../../data/workouts'
 
@@ -249,5 +250,61 @@ describe('sparkAverages', () => {
     // with no monitor reports 0, which is "not measured" rather than a value.
     expect(sparkAverages([hrWorkout('2026-07-28', 150)], 8, 4, w => w.avgHR, now)).toEqual([])
     expect(sparkAverages([hrWorkout('2026-07-22', 0), hrWorkout('2026-07-28', 0)], 8, 4, w => w.avgHR, now)).toEqual([])
+  })
+})
+
+describe('recentPersonalBests', () => {
+  const NOW = new Date('2026-08-25T12:00:00Z')
+
+  /** A workout with a pace and an optional start time, for the tie-break case. */
+  function paced(date: string, type: Workout['type'], avgPace: number, startTime?: string): Workout {
+    return { ...workout(date, 5000, type), id: date + type + avgPace, avgPace, startTime }
+  }
+
+  // Judging a hike against hikes is right — a hike is not slow for being slower
+  // than a run — but the label has to say so. Unqualified, "Fastest pace" beside
+  // a hiking pace is a claim about all your training, and a reader who ran
+  // faster last week knows it is false.
+  it('names the sport in every label', () => {
+    const hikes = [
+      paced('2026-08-24', 'Hike', 850),
+      paced('2026-08-08', 'Hike', 954),
+      paced('2026-01-03', 'Hike', 972),
+      paced('2025-12-28', 'Hike', 1020),
+    ]
+    const bests = recentPersonalBests(hikes, 3, 14, NOW)
+    const pace = bests.find(b => b.kind === 'pace')
+    expect(pace?.label).toBe('Fastest Hike pace')
+    for (const b of bests) expect(b.label).toContain('Hike')
+  })
+
+  // A faster run of another sport must not suppress a genuine hiking record,
+  // and must not be borrowed to claim one either.
+  it('judges against the same sport only', () => {
+    const mixed = [
+      paced('2026-08-24', 'Hike', 850),
+      paced('2026-08-08', 'Hike', 954),
+      paced('2026-01-03', 'Hike', 972),
+      paced('2025-12-28', 'Hike', 1020),
+      paced('2026-06-10', 'Run', 420),
+    ]
+    expect(recentPersonalBests(mixed, 3, 14, NOW).find(b => b.kind === 'pace')?.value).toBe('14:10 /km')
+  })
+
+  // `date` is a day, so two workouts on one day sort equal and "the most recent"
+  // used to be whichever the API returned first. The evening hike is the latest
+  // workout whatever order the list arrives in.
+  it('breaks a same-day tie on the start time', () => {
+    const sameDay = [
+      paced('2026-08-24', 'Run', 494, '2026-08-24T08:41:00Z'),
+      paced('2026-08-24', 'Hike', 850, '2026-08-24T16:52:00Z'),
+      paced('2026-08-08', 'Hike', 954),
+      paced('2026-01-03', 'Hike', 972),
+      paced('2025-12-28', 'Hike', 1020),
+    ]
+    const forwards = recentPersonalBests(sameDay, 3, 14, NOW)
+    const backwards = recentPersonalBests([...sameDay].reverse(), 3, 14, NOW)
+    expect(forwards.find(b => b.kind === 'pace')?.label).toBe('Fastest Hike pace')
+    expect(backwards).toEqual(forwards)
   })
 })
