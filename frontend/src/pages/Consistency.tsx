@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { type Workout, type WorkoutType } from '../data/workouts'
 import { useWorkouts } from '../context/WorkoutsContext'
 import TypeDropdown from '../components/TypeDropdown'
@@ -70,6 +70,16 @@ const MEASURES: Record<Measure, { label: string; axisLabel: string; value: (w: W
 export default function Consistency() {
   const { workouts } = useWorkouts()
   const [hoveredDay, setHoveredDay] = useState<{ date: string; count: number; duration: number; x: number; y: number } | null>(null)
+  /*
+   * The calendar opens on today, not on last September.
+   *
+   * A year of columns is twice a phone's width, and it was landing at
+   * scrollLeft 0 — the oldest end — so the reader arrived at the months they
+   * are least interested in and had to scroll right to reach the only ones a
+   * consistency view is opened for. Re-run when the range or the measure
+   * changes, because either can change how wide the grid is.
+   */
+  const calendarRef = useRef<HTMLDivElement | null>(null)
   const [typeFilter, setTypeFilter] = useState<WorkoutType | 'All'>('All')
   const [rangeDays, setRangeDays] = useLocalStorage<number>('al_hm_range', 365)
   const [measure, setMeasure] = useLocalStorage<Measure>('al_hm_measure', 'count')
@@ -131,6 +141,14 @@ export default function Consistency() {
     const values = Object.values(activityMap).map(v => measure === 'count' ? v.count : v.duration)
     return { grid: weeks, months: monthLabels, maxValue: Math.max(...values, 1) }
   }, [filteredWorkouts, rangeDays, measure])
+
+  // Before paint, so the calendar is never seen at the wrong end and then
+  // jumping. Keyed on `grid` rather than on the filters, because it is the
+  // grid's width that has to have settled for scrollWidth to mean anything.
+  useLayoutEffect(() => {
+    const el = calendarRef.current
+    if (el) el.scrollLeft = el.scrollWidth
+  }, [grid])
 
   function cellValue(day: { count: number; duration: number }): number {
     return measure === 'count' ? day.count : day.duration
@@ -260,7 +278,7 @@ export default function Consistency() {
         {/* Heatmap grid: cells stretch to fill the available width, so on
             wide screens each day becomes a rectangle rather than a fixed
             11x11 square. */}
-        <div className="card" style={{ padding: '20px', overflowX: 'auto' }}>
+        <div className="card" style={{ padding: '20px' }}>
           <div className="chart-card-head">
             <h3 className="chart-card-title">Activity Calendar</h3>
             <InfoTip
@@ -269,7 +287,11 @@ export default function Consistency() {
             />
           </div>
           <p className="chart-card-desc">Daily activity across the {rangeLabel(rangeDays)}, shaded by {m.label.toLowerCase()}.</p>
-          <div style={{ display: 'flex', gap: 6 }}>
+          {/* The scroll belongs to the grid, not to the card. On the card it
+              carried the title and the Less/More legend off the screen with it,
+              so a phone showed a truncated year under a heading that had
+              scrolled away. */}
+          <div ref={calendarRef} className="heatmap-scroll" style={{ display: 'flex', gap: 6 }}>
             {/* Day labels */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingTop: 16, flexShrink: 0 }}>
               {DAYS.map(d => (

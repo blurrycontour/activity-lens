@@ -1969,6 +1969,14 @@ body {
 /* Placeholder while the full record is still on its way. A long workout is a
    few hundred kilobytes of samples, and the panels' own empty states say "no
    route data" — a statement about the workout rather than about the wait. */
+/* The year calendar's own scroller. Only the grid moves: on the card, the
+   heading and the Less/More legend scrolled off with it. */
+.heatmap-scroll {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.heatmap-scroll::-webkit-scrollbar { display: none; }
+
 /* The panel a page shows when the record it was opened for did not come back.
    Deliberately generous: this is a dead end, and the way out has to be the most
    obvious thing on the screen rather than a link tucked under an error string. */

@@ -95,12 +95,20 @@ Measured `scrollWidth 79` in a `clientWidth 73` trigger at 390px. It is the
 *default* state of the range dropdown on both `/analysis` and `/consistency`, so
 most people meet the app with a truncated word on screen.
 
-### 10. Two different version numbers · S · low
+### 10. The sidebar answers a different version question from About · S · low
 
-The desktop sidebar prints `Version: 2.1.0` from the build-time `__APP_VERSION__`
-constant. About and every update notification say `2.2.1-2-g54496c7`, from the
-backend's `/build`. They are stamped from different places at different times and
-have diverged. `peekAboutInfo()` in `lib/buildInfo.ts` already holds the real one.
+*Corrected after the first draft.* The sidebar prints `Version: 2.1.0` and the
+update notifications say `2.2.1-2-g54496c7`, which looks like drift and is not:
+the first is the **server's** version and the second is the **APK's**, and they
+are genuinely separate artifacts that update on their own schedules. `AboutDialog`
+already gets this right, with a `Version` row and an `App version` row and a
+comment explaining why.
+
+What was actually wrong is smaller. The sidebar read `__APP_VERSION__`, the
+build-time constant, rather than the server's `/build` — so inside the Android
+app it was quietly answering the APK question under a label that means the
+server, three taps from a dialog answering it the other way. On web the two
+coincide, which is why this never looked broken.
 
 ### 11. The notification list is flooded · M · med
 
