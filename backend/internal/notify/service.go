@@ -80,6 +80,17 @@ func (s *Service) Notify(ctx context.Context, e Event) {
 	}
 	slog.Info("notification", "user_id", e.UserID, "kind", e.Kind, "id", n.ID)
 
+	// After the store, not before: if the write failed there is nothing newer
+	// to replace what is already there, and clearing the list first would have
+	// left the user with neither.
+	if e.Supersedes {
+		if n, err := s.repo.Supersede(ctx, e.UserID, e.Kind, n.ID); err != nil {
+			slog.Warn("could not supersede older notifications", "user_id", e.UserID, "kind", e.Kind, "error", err)
+		} else if n > 0 {
+			slog.Info("superseded notifications", "user_id", e.UserID, "kind", e.Kind, "removed", n)
+		}
+	}
+
 	if prefs.Push {
 		s.push(ctx, n)
 	}

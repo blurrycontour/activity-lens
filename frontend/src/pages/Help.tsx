@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
   ChevronDown, Upload, LayoutDashboard, Activity, CalendarCheck, ClipboardList,
-  Watch, LineChart, Settings as SettingsIcon, Keyboard, HelpCircle, Users,
+  Watch, LineChart, Map, Settings as SettingsIcon, Keyboard, HelpCircle, Users,
 } from 'lucide-react'
 
 const features = [
@@ -9,8 +9,9 @@ const features = [
   { icon: Activity, title: 'Workouts', text: 'Your own library, in list or grid view. Open one for charts, splits, and its route on the map.' },
   { icon: ClipboardList, title: 'Plans', text: 'Training plans — days, exercises, sets and weights — and the sessions you have run from them. Start one and the runner walks you through it, timing the rests.' },
   { icon: Users, title: 'Discover', text: 'Everyone else on this server: the people, and the workouts, plans and sessions they have shared with you or made public. Opening a person shows their profile.' },
-  { icon: LineChart, title: 'Analysis', text: 'Everything about how you are performing, split into four tabs: Records, Trends, Efficiency and Load. One time range and sport filter drives them all.' },
+  { icon: LineChart, title: 'Analysis', text: 'Everything about how you are performing, across five tabs: Records, Trends, Efficiency, Load and Weather. One time range and sport filter drives them all.' },
   { icon: CalendarCheck, title: 'Consistency', text: 'Everything about whether you are showing up: a calendar heatmap, day-of-week habits, year-over-year comparisons and cumulative distance.' },
+  { icon: Map, title: 'Map', text: 'Every route you have recorded on one map, as a heatmap of where you go most or as individual tracks. Open a track to jump to its workout.' },
   { icon: Watch, title: 'Equipment', text: 'Track gear like shoes, watches and bikes, and see the workouts logged against each.' },
 ]
 
@@ -38,7 +39,7 @@ const faqs = [
   { q: 'Can I share a plan or a session?', a: 'Yes, the same way as a workout, and independently of each other: sharing a plan does not expose the sessions run from it. Only a finished session can be shared. A plan you receive carries a Clone button, which copies it into your own library to edit and start; workouts and sessions stay read-only.' },
   { q: 'What is the Notes and Discussion at the bottom of a plan or session?', a: 'Two different things. Notes are yours and stay private, whoever you share with. Discussion is the reactions and comments other people leave once it is shared — the same pair a workout has.' },
   { q: 'Can the app buzz or beep during a session?', a: 'Settings → Plans → Signals turns on a vibration, a sound, or both for a set ticked, an exercise finished, a rest ending, and a session starting or ending. "Announce a rest from" sets how long a rest must be to get its own signal. These are kept on the device you set them on.' },
-  { q: 'How do I add a workout?', a: 'Click "Add Workout" in the sidebar (or press Cmd/Ctrl + I). Upload a .fit, .gpx or .tcx file to import a recorded activity — you\'ll see a preview of the numbers before saving — or switch to Manual Entry to type in the details yourself.' },
+  { q: 'How do I add a workout?', a: 'Use "Add Workout" in the sidebar on a desktop, or the + button at the bottom right on a phone (or press Cmd/Ctrl + I). Upload a .fit, .gpx or .tcx file to import a recorded activity — you\'ll see a preview of the numbers before saving — or switch to Manual Entry to type in the details yourself.' },
   { q: 'Which file formats are supported?', a: 'Activity Lens imports .fit (what watches record natively), .gpx (universal GPS exchange) and .tcx (Training Center XML). A .fit file is worth preferring where you have the choice: it is the original recording, and it carries things the other two drop — power and temperature among them, which appear as extra charts on the workout. Zipped and gzipped exports from Strava and Garmin are unpacked for you.' },
   { q: 'How are calories estimated?', a: 'When an imported file doesn\'t include calories, they are estimated for you. Under Settings → Calorie Estimation you can choose a heart-rate based method (which uses your sex, age, and weight from the About You section) or a distance-only method.' },
   { q: 'What do the small icons next to some numbers mean?', a: 'A Σ icon means the value was calculated or derived from the recorded data. A pencil icon means you entered that value manually. Recalculating a workout replaces manual values with derived ones.' },
@@ -73,7 +74,8 @@ export default function Help() {
             <Upload size={16} /> Getting started
           </h3>
           <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6, marginTop: 8 }}>
-            Add your first workout with the <strong>Add Workout</strong> button in the sidebar. Import a
+            Add your first workout with the <strong>Add Workout</strong> button — in the sidebar on a
+            desktop, the <strong>+</strong> at the bottom right on a phone. Import a
             <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}> .fit</code>,
             <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}> .gpx</code> or
             <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}> .tcx</code> file from

@@ -30,6 +30,9 @@ type Repository interface {
 	// ClearDedupe drops the dedupe marker for a condition that has since been
 	// resolved, so it can notify again if it recurs.
 	ClearDedupe(ctx context.Context, userID int64, dedupeKey string) error
+	// Supersede removes a user's notifications of one kind apart from keepID,
+	// for kinds where only the newest is worth acting on. Reports how many went.
+	Supersede(ctx context.Context, userID int64, kind Kind, keepID string) (int64, error)
 
 	// RecordCondition stores whether a standing condition holds, and reports
 	// whether this call is the one that saw it become true. See Service.Crossed
@@ -165,6 +168,30 @@ func (r *SQLiteRepository) DeleteAll(ctx context.Context, userID int64) error {
 		return fmt.Errorf("clear notifications: %w", err)
 	}
 	return nil
+}
+
+// Supersede drops the older notifications of a kind, keeping keepID.
+//
+// For an update notice, everything before the newest is not history — it points
+// at a version that can no longer be installed. Eight releases left eight
+// near-identical rows in the list, seven of them unactionable, each needing its
+// own dismissal. Deleted rather than marked read: an unread badge is the least
+// of it, and a stale row nobody can act on is not worth keeping to scroll past.
+//
+// The dedupe rows go with them, which is deliberate — dedupe is keyed on the
+// version, so a superseded release cannot be re-announced anyway.
+func (r *SQLiteRepository) Supersede(ctx context.Context, userID int64, kind Kind, keepID string) (int64, error) {
+	res, err := r.db.ExecContext(ctx,
+		`DELETE FROM notifications WHERE user_id = ? AND kind = ? AND id <> ?`,
+		userID, string(kind), keepID)
+	if err != nil {
+		return 0, fmt.Errorf("supersede notifications: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("supersede notifications: %w", err)
+	}
+	return n, nil
 }
 
 /*

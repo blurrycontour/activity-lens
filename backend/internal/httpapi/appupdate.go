@@ -88,6 +88,10 @@ func (s *Server) announceAppUpdate(ctx context.Context) {
 			// Keyed on the version, so this is at most one notification per
 			// user per release however many times the server restarts.
 			DedupeKey: "app-update:" + version,
+			// And only the newest release is worth telling anyone about: the
+			// notices before it point at versions that can no longer be
+			// installed.
+			Supersedes: true,
 		})
 		sent++
 	}

@@ -118,6 +118,16 @@ type Event struct {
 	// shoe is re-evaluated after every workout, but the user should hear about
 	// it once, so gear events key on the equipment id. Empty means always new.
 	DedupeKey string
+	// Supersedes retires this user's older notifications of the same kind once
+	// this one is stored.
+	//
+	// For kinds where only the latest can be acted on. An update notice for a
+	// version that is no longer the newest points at something nobody can
+	// install; eight releases left eight near-identical rows, seven of them
+	// dead, each wanting its own dismissal. Distinct from DedupeKey, which
+	// prevents a *repeat* of one event — this retires *different* events that
+	// the newest has made pointless.
+	Supersedes bool
 }
 
 // Prefs holds a user's per-kind switches plus the master push toggle. The zero

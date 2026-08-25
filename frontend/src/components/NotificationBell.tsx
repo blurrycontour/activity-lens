@@ -275,6 +275,14 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
                 <Trash2 size={13} />
               </button>
             )}
+            {/* The app's rule is that every surface which is not a confirmation
+                carries one, and this was the one Modal of seventeen without.
+                Tapping outside works and always did, but on a phone the panel
+                is nearly full width, so "outside" is a sliver — and the only
+                other way out was a gesture. */}
+            <button className="btn-icon" onClick={() => setOpen(false)} aria-label="Close">
+              <X size={15} />
+            </button>
           </div>
 
           {/* Push being off is the difference between hearing about a share
@@ -298,11 +306,20 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
                 {loaded ? 'Nothing new. Shares and nudges will show up here.' : 'Loading…'}
               </p>
             ) : items.map(n => (
-              <button
-                key={n.id}
-                className={`notif-item${n.readAt ? '' : ' unread'}`}
-                onClick={() => void openItem(n)}
-              >
+              /* A div holding two real buttons, not one button holding a
+                 span pretending to be another. A button cannot legally
+                 contain a button, so dismiss used to be a role="button" span
+                 at tabIndex -1: it was unreachable by keyboard, and its label
+                 was swallowed into the row's, which announced as "… 3d ago
+                 Dismiss". The open button is stretched behind the content
+                 instead, which keeps one tap target across the whole row. */
+              <div key={n.id} className={`notif-item${n.readAt ? '' : ' unread'}`}>
+                <button
+                  className="notif-open"
+                  onClick={() => void openItem(n)}
+                >
+                  <span className="sr-only">{n.title}</span>
+                </button>
                 {n.icon
                   /* Through apiURL, like every other avatar: the icon is a
                      server path, and in the app the server is somewhere else —
@@ -315,16 +332,14 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
                   {n.body && <span className="notif-body notif-clamp-2">{n.body}</span>}
                   <span className="notif-time">{ago(n.createdAt)}</span>
                 </span>
-                <span
+                <button
                   className="notif-dismiss"
-                  role="button"
-                  tabIndex={-1}
-                  aria-label="Dismiss"
+                  aria-label={`Dismiss ${n.title}`}
                   onClick={e => void dismiss(e, n)}
                 >
                   <X size={12} />
-                </span>
-              </button>
+                </button>
+              </div>
             ))}
           </div>
         </div>

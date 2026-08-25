@@ -30,7 +30,10 @@ func newTestService(t *testing.T, prefs Prefs) *Service {
 		func(context.Context, int64) (Prefs, error) { return prefs, nil })
 }
 
-const alice int64 = 1
+const (
+	alice int64 = 1
+	bob   int64 = 2
+)
 
 func TestNotifyStoresAndCounts(t *testing.T) {
 	ctx := context.Background()
@@ -219,5 +222,69 @@ func TestIconRoundTrips(t *testing.T) {
 	}
 	if got := byKind[KindGearWorn].Icon; got != "" {
 		t.Fatalf("system Icon = %q, want empty", got)
+	}
+}
+
+// Only the newest update notice can be acted on: the ones before it point at
+// versions that are no longer installable. Eight releases used to leave eight
+// near-identical rows, seven of them dead, each wanting its own dismissal.
+func TestSupersedesRetiresOlderOfTheSameKind(t *testing.T) {
+	ctx := context.Background()
+	svc := newTestService(t, DefaultPrefs())
+
+	for _, v := range []string{"2.2.0", "2.2.1", "2.3.0"} {
+		svc.Notify(ctx, Event{
+			UserID: alice, Kind: KindAppUpdate, Title: "Update " + v + " available",
+			DedupeKey: "app-update:" + v, Supersedes: true,
+		})
+	}
+
+	list, err := svc.List(ctx, alice)
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("got %d update notifications, want only the newest", len(list))
+	}
+	if list[0].Title != "Update 2.3.0 available" {
+		t.Fatalf("kept %q, want the newest", list[0].Title)
+	}
+}
+
+// Superseding is scoped to its own kind. An update must not sweep away a shared
+// workout the user has not read yet.
+func TestSupersedesLeavesOtherKindsAlone(t *testing.T) {
+	ctx := context.Background()
+	svc := newTestService(t, DefaultPrefs())
+
+	svc.Notify(ctx, Event{UserID: alice, Kind: KindWorkoutShared, Title: "Bob shared a workout"})
+	svc.Notify(ctx, Event{UserID: alice, Kind: KindAppUpdate, Title: "Update 2.3.0 available", Supersedes: true})
+
+	list, err := svc.List(ctx, alice)
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(list) != 2 {
+		t.Fatalf("got %d notifications, want both kinds kept", len(list))
+	}
+}
+
+// And to its own user: two people on one instance are told about the same
+// release, and neither fan-out step may clear the other's list.
+func TestSupersedesLeavesOtherUsersAlone(t *testing.T) {
+	ctx := context.Background()
+	svc := newTestService(t, DefaultPrefs())
+
+	svc.Notify(ctx, Event{UserID: alice, Kind: KindAppUpdate, Title: "Update 2.2.0 available", Supersedes: true})
+	svc.Notify(ctx, Event{UserID: bob, Kind: KindAppUpdate, Title: "Update 2.2.0 available", Supersedes: true})
+
+	for _, u := range []int64{alice, bob} {
+		list, err := svc.List(ctx, u)
+		if err != nil {
+			t.Fatalf("List(%d) error = %v", u, err)
+		}
+		if len(list) != 1 {
+			t.Fatalf("user %d has %d notifications, want 1", u, len(list))
+		}
 	}
 }

@@ -3863,6 +3863,27 @@ body:has(.overlay) .dial { display: none; }
   transition: background 0.1s;
 }
 .notif-item:hover { background: var(--bg-3); }
+/* The row's main action, stretched behind its content so the whole row stays
+   one tap target while the dismiss beside it remains a button of its own.
+   Underneath, so the dismiss keeps its clicks. */
+.notif-open {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.notif-open:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+.notif-item > :not(.notif-open) { position: relative; z-index: 1; }
+/* …except that the text must not swallow the clicks meant for the button
+   behind it. Only the dismiss is interactive in its own right. */
+.notif-item > span:not(.notif-dismiss),
+.notif-item > img { pointer-events: none; }
 /* Unread carries an accent rail rather than a filled background, so a list that
    is mostly unread does not become a solid block of colour. */
 .notif-item.unread::before {
@@ -3946,10 +3967,20 @@ body:has(.overlay) .dial { display: none; }
   align-self: flex-start;
   flex-shrink: 0;
   padding: 3px;
+  border: none;
+  background: transparent;
   border-radius: 50%;
   color: var(--text-3);
+  cursor: pointer;
   opacity: 0;
   transition: opacity 0.12s;
+}
+/* A keyboard has no hover either, so focus has to reveal it for the same
+   reason touch does — otherwise it is a control you can tab to and not see. */
+.notif-dismiss:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
 }
 .notif-item:hover .notif-dismiss { opacity: 0.7; }
 .notif-dismiss:hover { opacity: 1 !important; background: var(--bg-2); }
