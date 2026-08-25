@@ -34,6 +34,20 @@ describe('parseLocation', () => {
     expect(parseLocation('/admin/sso')).toMatchObject({ page: 'admin', section: 'sso' })
   })
 
+  // The dashboard is the fallback, but the URL has to say so: rendering the
+  // dashboard while leaving /nonsense in the address bar means a reload, a
+  // bookmark and a shared link all come back to a page that does not exist.
+  it('flags an unrecognised path for rewriting', () => {
+    expect(parseLocation('/nonsense')).toMatchObject({ page: 'dashboard', redirect: true })
+  })
+
+  // The two that genuinely are the dashboard must not be rewritten — there is
+  // nothing to rewrite them to, and doing it anyway pushes a history entry.
+  it('leaves the real dashboard route alone', () => {
+    expect(parseLocation('/').redirect).toBeUndefined()
+    expect(parseLocation('/dashboard').redirect).toBeUndefined()
+  })
+
   // An unknown category must not render a blank page — it falls back to the hub.
   it('drops a category the hub does not have', () => {
     expect(parseLocation('/settings/nonsense')).toMatchObject({ page: 'settings', section: null })

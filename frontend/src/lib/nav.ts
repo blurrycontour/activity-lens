@@ -145,7 +145,8 @@ export interface AppLocation {
    */
   detail: string | null
   workoutId: string | null
-  /** The URL was a legacy form and should be rewritten. */
+  /** The URL is not the one this location owns — a legacy form, or nothing at
+   *  all — and should be rewritten to `pathForPage` of what was resolved. */
   redirect?: boolean
 }
 
@@ -205,7 +206,15 @@ export function parseLocation(pathname = window.location.pathname): AppLocation 
   const legacy = LEGACY_ROUTES[segs[0]]
   if (legacy) return { page: legacy, section: null, detail: null, workoutId: null, redirect: true }
 
-  return { page: 'dashboard', section: null, detail: null, workoutId: null }
+  /*
+   * An unrecognised path falls back to the dashboard, and says so in the URL.
+   *
+   * It used to render the dashboard while leaving `/whatever-you-typed` in the
+   * address bar, so the page and the URL disagreed: a reload, a bookmark or a
+   * shared link all came back to the same wrong address, and the app looked
+   * like it had a page there that it does not.
+   */
+  return { page: 'dashboard', section: null, detail: null, workoutId: null, redirect: true }
 }
 
 /** The page `steps` positions away from `from` in MOBILE_PAGES, wrapping. */

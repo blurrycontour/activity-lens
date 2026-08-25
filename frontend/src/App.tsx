@@ -3,6 +3,7 @@ import { lazyChunk } from './lib/lazyChunk'
 import NotificationBanner, { type BannerNotification } from './components/NotificationBanner'
 import { consumeOpenedParam, markNotificationOpened, PUSH_EVENT, READ_NOTIFICATION_EVENT } from './lib/notifications'
 import UpdateToast from './components/UpdateToast'
+import Toast from './components/Toast'
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, lazy, Suspense } from 'react'
 import TopBar, { type ThemeMode } from './components/TopBar'
 import Sidebar from './components/Sidebar'
@@ -122,6 +123,15 @@ export default function App() {
   if (selectedWorkout) lastWorkout.current = selectedWorkout
   // A push that arrived while the app was on screen, shown as a banner.
   const [banner, setBanner] = useState<BannerNotification | null>(null)
+  /**
+   * Said when a deep-linked workout does not come back.
+   *
+   * Landing on the library is the right recovery — better than a dead end — but
+   * done silently it reads as the link having gone to the wrong page. The three
+   * places that can fail (a cold open, the back gesture, a notification tap)
+   * all end up here so they answer the same way.
+   */
+  const [missingWorkout, setMissingWorkout] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const saved = localStorage.getItem(SIDEBAR_KEY)
@@ -167,7 +177,8 @@ export default function App() {
   }, [sidebarWidth])
 
   // Rewrite retired routes (/timeline, /heatmap, /account) to where they moved,
-  // so the address bar matches the page and a reload doesn't redirect twice.
+  // and unrecognised ones to the dashboard they fall back to, so the address bar
+  // matches the page and a reload doesn't redirect twice.
   useEffect(() => {
     if (initialLocation.redirect) {
       window.history.replaceState(null, '', pathForPage(initialLocation.page, initialLocation.section, initialLocation.detail))
@@ -182,7 +193,11 @@ export default function App() {
       .then(w => { if (!cancelled) setSelectedWorkout(w) })
       // Deleted, or no longer shared with you: fall back to the list rather
       // than leaving a spinner on screen for a workout that is not coming.
-      .catch(() => { if (!cancelled) window.history.replaceState(null, '', pathForPage('workouts')) })
+      .catch(() => {
+        if (cancelled) return
+        window.history.replaceState(null, '', pathForPage('workouts'))
+        setMissingWorkout(true)
+      })
       .finally(() => { if (!cancelled) setOpeningWorkout(false) })
     return () => { cancelled = true }
     // Only run once, when auth resolves.
@@ -328,7 +343,9 @@ export default function App() {
         // got, so going back from a settings page to a workout appeared to land
         // somewhere else and then correct itself.
         if (lastWorkout.current?.id === loc.workoutId) setSelectedWorkout(lastWorkout.current)
-        api.getWorkout(loc.workoutId).then(setSelectedWorkout).catch(() => setSelectedWorkout(null))
+        api.getWorkout(loc.workoutId)
+          .then(setSelectedWorkout)
+          .catch(() => { setSelectedWorkout(null); setMissingWorkout(true) })
       } else {
         setSelectedWorkout(null)
       }
@@ -397,6 +414,7 @@ export default function App() {
           setSection(null)
           setDetail(null)
           window.history.pushState(null, '', pathForPage('workouts'))
+          setMissingWorkout(true)
         })
       return
     }
@@ -681,6 +699,13 @@ export default function App() {
       )}
 
       <UpdateToast />
+
+      {missingWorkout && (
+        <Toast
+          message="That workout is no longer available"
+          onDone={() => setMissingWorkout(false)}
+        />
+      )}
 
       <OfflineBar />
 

@@ -1969,6 +1969,39 @@ body {
 /* Placeholder while the full record is still on its way. A long workout is a
    few hundred kilobytes of samples, and the panels' own empty states say "no
    route data" — a statement about the workout rather than about the wait. */
+/* The panel a page shows when the record it was opened for did not come back.
+   Deliberately generous: this is a dead end, and the way out has to be the most
+   obvious thing on the screen rather than a link tucked under an error string. */
+.missing-record {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 240px;
+  padding: 40px 24px;
+  text-align: center;
+}
+.missing-record > svg { color: var(--text-3); }
+.missing-record h2 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+.missing-record p {
+  font-size: 13px;
+  color: var(--text-3);
+  max-width: 34ch;
+  line-height: 1.5;
+}
+.missing-record-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 6px;
+}
+
 .detail-loading {
   display: flex;
   align-items: center;
