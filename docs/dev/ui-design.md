@@ -158,6 +158,13 @@ Say the thing once, briefly. Long explanations go behind an `InfoTip`, not into
 the page body. Empty states say what is missing *and* why, distinguishing "none
 yet" from "none in this filter".
 
+## Known gaps
+
+Findings from driving the real app — inconsistencies, unreachable states and
+ideas, each with an effort and a priority — live in [ux-audit.md](ux-audit.md).
+Read it before starting UI work: what looks like a free hand may already be
+recorded there as debt with a fix attached.
+
 ## Before calling it done
 
 1. `pnpm typecheck` and `pnpm test` clean.
