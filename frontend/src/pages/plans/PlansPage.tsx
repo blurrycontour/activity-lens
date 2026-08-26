@@ -379,7 +379,7 @@ export default function PlansPage({ section, detail, onOpen, onOpenUser }: Props
         onBack={() => onOpen(null)}
         onOpenUser={onOpenUser}
         // Back to the list, and reload it — the row that was just deleted is
-        // still in the History tab's cache until something refetches.
+        // still in the Sessions tab's cache until something refetches.
         onDeleted={() => { setSession(null); void load(); onOpen(null) }}
         onNotesSaved={saved => setSession(cur => (cur ? { ...cur, notes: saved.notes } : cur))}
       />
@@ -474,7 +474,7 @@ export default function PlansPage({ section, detail, onOpen, onOpenUser }: Props
         <TabStrip
           items={[
             { id: 'plans', label: 'Plans', icon: <ClipboardList size={15} /> },
-            { id: 'history', label: 'History', icon: <History size={15} /> },
+            { id: 'history', label: 'Sessions', icon: <History size={15} /> },
           ]}
           value={tab}
           onChange={setTab}
