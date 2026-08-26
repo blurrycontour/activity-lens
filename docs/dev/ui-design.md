@@ -42,6 +42,11 @@ Three rules that follow from this:
   never signal state with colour alone — pair it with an icon or a label.
 - **Sport colours mean the sport**, everywhere, always. Use `TYPE_COLOR` from
   `src/data/workouts.ts`; never repaint by rank or position.
+- **The palette is checked, not eyeballed.** Every sport, status and item colour
+  must stay ≥20 ΔE from all six accents, from each other, and ≥3:1 against its
+  own background — in both themes. `lib/__tests__/paletteSeparation.test.ts`
+  reads `index.css` and enforces it. Sports had all been *identical* to an
+  accent before that existed. One exemption is documented in the test.
 
 Deriving a tint from a token — an 8% wash behind an error, say — is
 `color-mix(in srgb, var(--danger) 8%, transparent)`, never the token's hex

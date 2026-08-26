@@ -357,7 +357,7 @@ Asked directly: would a new theme improve the experience? The short answer is
 that more accents would not, and that the accent system has a structural problem
 worth fixing before anything is added to it.
 
-### 41. Every accent is the exact hex of a semantic colour · M · high
+### 41. Every accent is the exact hex of a semantic colour · M · high · **✅ fixed**
 
 Not approximately — identically:
 

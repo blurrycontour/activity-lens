@@ -7,7 +7,10 @@ export const ACCENTS: { name: string; value: string; dim: string; glow: string }
   { name: 'Vivid Orange',   value: '#ff6b35', dim: 'rgba(255,107,53,0.15)', glow: 'rgba(255,107,53,0.3)' },
   { name: 'Violet',         value: '#a855f7', dim: 'rgba(168,85,247,0.15)', glow: 'rgba(168,85,247,0.3)' },
   { name: 'Cyan',           value: '#06b6d4', dim: 'rgba(6,182,212,0.15)',  glow: 'rgba(6,182,212,0.3)'  },
-  { name: 'Rose',           value: '#f43f5e', dim: 'rgba(244,63,94,0.15)',  glow: 'rgba(244,63,94,0.3)'  },
+  /* Lifted off #f43f5e, which sat 14.7 ΔE from --danger — close enough that on
+     Rose a delete button and the accent were the same colour, and the one thing
+     the status palette exists to keep separate was not. */
+  { name: 'Rose',           value: '#fb7185', dim: 'rgba(251,113,133,0.15)', glow: 'rgba(251,113,133,0.3)' },
 ]
 
 export function applyAccent(value: string) {

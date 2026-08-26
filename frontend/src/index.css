@@ -45,22 +45,29 @@
   --blue-dim: rgba(59, 130, 246, 0.15);
   --purple: #a855f7;
   --purple-dim: rgba(168, 85, 247, 0.15);
-  --run: #00e87a;
-  --ride: #3b82f6;
-  --hike: #f59e0b;
-  --swim: #06b6d4;
-  --strength: #a855f7;
+  /* Sport colours, chosen against the accent roster rather than beside it.
+     Every one of them used to be the exact hex of one of the six accents —
+     --run was Electric Green, --swim was Cyan, --strength was Violet — so
+     picking an accent made one sport indistinguishable from the interface's own
+     highlight, and on the default accent that sport was running. These are
+     placed for separation from all six accents, from the status colours and
+     from each other; paletteSeparation.test.ts holds the floor. */
+  --run: #bef264;
+  --ride: #60a5fa;
+  --hike: #fdba74;
+  --swim: #5eead4;
+  --strength: #ec4899;
   /* Deliberately the one grey in the sport palette: Other is not a sport, it is
      the absence of one. A workout that reads as unclassified is doing its job. */
-  --other: #94a3b8;
+  --other: #a8a29e;
   /* Training plans and the sessions run against them. Their own two colours
      rather than a borrowed sport one: a plan and a session appear in the same
      mixed list as workouts, and reusing --strength would have said "this is a
      strength workout" about a row that is neither strength nor a workout.
      Kept apart from each other too — a plan is the intent, a session is the
      record, and the feed shows both at once. */
-  --plan: #6366f1;
-  --session: #f43f5e;
+  --plan: #c4b5fd;
+  --session: #fca5a5;
   /* Status colours. Separate from the activity-type palette above even where
      the hex matches (--hike is also amber): those track a sport, these track
      an outcome, and they are free to diverge. Never the accent — the accent is
@@ -132,6 +139,18 @@
   --danger: #dc2626;
   --success: #16a34a;
   --warning: #d97706;
+  /* Sports need the same treatment as the status colours on a white ground, and
+     never had it: --run at #00e87a was 1.6:1 against a card, which is a shape
+     you can see and a colour you cannot read. Same hue family as the dark set,
+     dropped in lightness until each clears 3:1. */
+  --run: #3f6212;
+  --ride: #1e40af;
+  --hike: #854d0e;
+  --swim: #0f766e;
+  --strength: #86198f;
+  --other: #57534e;
+  --plan: #5b21b6;
+  --session: #9f1239;
 }
 
 * {
