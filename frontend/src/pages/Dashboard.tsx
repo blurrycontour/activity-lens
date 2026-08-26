@@ -897,7 +897,6 @@ export default function Dashboard({ onSelect, onResumeSession, onImport, onCreat
                         </span>
                       ))}
                     </div>
-                    <ChevronRight size={16} className="pb-go" aria-hidden />
                   </button>
                 ))}
               </div>
