@@ -180,17 +180,13 @@ function Segmented<T extends string>({ value, onChange, options }: {
   options: { id: T; label: string }[]
 }) {
   return (
-    <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
+    <div className="segmented">
       {options.map(o => (
         <button
           key={o.id}
+          className={value === o.id ? 'active' : undefined}
+          aria-pressed={value === o.id}
           onClick={() => onChange(o.id)}
-          style={{
-            padding: '4px 10px', fontSize: 11, cursor: 'pointer', border: 'none',
-            background: value === o.id ? 'var(--primary-dim)' : 'var(--bg-3)',
-            color: value === o.id ? 'var(--primary)' : 'var(--text-3)',
-            fontWeight: value === o.id ? 600 : 400,
-          }}
         >
           {o.label}
         </button>

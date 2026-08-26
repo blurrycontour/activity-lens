@@ -2011,6 +2011,79 @@ body {
 .display-pref-label { font-size: 13px; font-weight: 500; color: var(--text); }
 .display-pref-hint { font-size: 11px; color: var(--text-3); line-height: 1.45; }
 
+/* Two- or three-option segmented control, e.g. the volume chart's Total/Best.
+   Was a set of inline styles repeated per option; a class both removes the
+   duplication and gives the touch-target rule below something to select. */
+.segmented {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.segmented button {
+  padding: 5px 10px;
+  font-size: 11px;
+  border: none;
+  cursor: pointer;
+  background: var(--bg-3);
+  color: var(--text-3);
+}
+.segmented button.active { background: var(--primary-dim); color: var(--primary); }
+
+/* ── Touch targets ─────────────────────────────────────────────────────
+   Nothing in the mobile chrome reached the 44px every platform's guidelines
+   ask for: the top-bar buttons measured 31×31, the avatar 32, the InfoTip
+   trigger 17×17 — and that last one is the only route to what a chart means.
+
+   The controls are not too small to *see*; they are correctly proportioned for
+   the density around them. So none of them changes size. Each grows an
+   invisible, centred overlay to the minimum instead, which is the difference
+   between a control that looks right and one a thumb can actually land on.
+
+   Coarse pointers only. With a mouse the visible edge is the target, and an
+   invisible 44px box around every icon button would start swallowing hovers
+   meant for its neighbours — and the app's own 768px breakpoint, which is what
+   makes this checkable in the browser harness, where an emulated phone is still
+   a fine pointer. */
+@media (pointer: coarse), (max-width: 768px) {
+  .btn-icon,
+  .btn,
+  .infotip-trigger,
+  .view-switch button,
+  .tab-strip-item,
+  .filter-pill,
+  .notif-dismiss,
+  .page-header-back,
+  .al-dropdown-trigger,
+  .segmented button,
+  .topbar > button,
+  .topbar .avatar-button {
+    position: relative;
+  }
+  .btn-icon::after,
+  .btn::after,
+  .infotip-trigger::after,
+  .view-switch button::after,
+  .tab-strip-item::after,
+  .filter-pill::after,
+  .notif-dismiss::after,
+  .page-header-back::after,
+  .al-dropdown-trigger::after,
+  .segmented button::after,
+  .topbar > button::after,
+  .topbar .avatar-button::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    /* Never smaller than the control, so a wide-but-short pill keeps its width
+       and gains only height. */
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+  }
+}
+
 /* ── Display preferences ───────────────────────────────────────────────
    Two switches that sit alongside the theme rather than inside it, so they
    compose with it: high contrast on light is the outdoor case, pure black on

@@ -188,7 +188,7 @@ stripe and the coloured figure the Workouts list uses, so the two library pages
 do not read as one system despite `FeedRow` deliberately borrowing
 `.workout-row`'s classes to make them.
 
-### 17. Nothing in the mobile chrome reaches a 44px touch target · M · med
+### 17. Nothing in the mobile chrome reaches a 44px touch target · M · med · **✅ fixed**
 
 Measured at 390px:
 
