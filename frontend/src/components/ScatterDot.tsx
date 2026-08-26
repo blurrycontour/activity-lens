@@ -36,11 +36,44 @@ interface ScatterDotProps {
  */
 export default function ScatterDot({ cx, cy, size, fill, opacity }: ScatterDotProps) {
   if (cx == null || cy == null) return null
-  const r = size && size > 0 ? Math.sqrt(size / Math.PI) : DEFAULT_RADIUS
   return (
     <g>
       <circle cx={cx} cy={cy} r={HIT_RADIUS} fill="transparent" />
-      <circle cx={cx} cy={cy} r={r} fill={fill} opacity={opacity} />
+      <circle cx={cx} cy={cy} r={radiusFor(size)} fill={fill} opacity={opacity} />
+    </g>
+  )
+}
+
+/** The drawn radius, from the symbol area a ZAxis expresses its range in. */
+function radiusFor(size?: number): number {
+  return size && size > 0 ? Math.sqrt(size / Math.PI) : DEFAULT_RADIUS
+}
+
+/**
+ * The point the tooltip is currently about.
+ *
+ * Every line chart in the app marks its selected point — that is Recharts'
+ * `activeDot`, and it is on by default. A scatter has no such default, so a tap
+ * raised a card describing "a workout" with nothing on the plot saying which of
+ * forty dots it meant. On a phone, where the finger is over the chart and the
+ * card is beside it, that is most of the answer missing.
+ *
+ * A ring around the dot rather than a larger dot: growing the symbol moves its
+ * own edge, and on a crowded chart a point that changes size reads as a point
+ * that moved. The ring takes the point's colour, so the mark says *which* point
+ * and the tooltip says what it is.
+ *
+ * Deliberately inert to the pointer. It is drawn over the same place as the
+ * hit circle underneath, and a shape that swallowed the pointer would end the
+ * hover it exists to describe.
+ */
+export function ActiveScatterDot({ cx, cy, size, fill }: ScatterDotProps) {
+  if (cx == null || cy == null) return null
+  const r = radiusFor(size)
+  return (
+    <g style={{ pointerEvents: 'none' }}>
+      <circle cx={cx} cy={cy} r={r + 4.5} fill="none" stroke={fill} strokeWidth={1.5} opacity={0.5} />
+      <circle cx={cx} cy={cy} r={r} fill={fill} />
     </g>
   )
 }

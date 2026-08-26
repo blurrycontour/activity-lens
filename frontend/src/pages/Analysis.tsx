@@ -9,7 +9,7 @@ import TabStrip from '../components/TabStrip'
 import InfoTip from '../components/InfoTip'
 import { EDGE_PADDING_Y, END_PADDING, KEEP_EMPTY_ROWS, denseXAxis, useChartSpace, xLabel } from '../components/ChartAxis'
 import TypeLegend from '../components/TypeLegend'
-import ScatterDot from '../components/ScatterDot'
+import ScatterDot, { ActiveScatterDot } from '../components/ScatterDot'
 import Dropdown from '../components/Dropdown'
 import { useLocalStorage } from '../lib/useLocalStorage'
 import { filterByRange, rangeLabel, toDateKey } from '../lib/range'
@@ -1063,7 +1063,7 @@ export default function Analysis() {
                       {/* Coloured per point rather than one series per type: a
                           <Scatter> per type would give each its own z order and
                           tooltip, when all that is wanted is the sport's hue. */}
-                      <Scatter data={hrPaceData} opacity={0.6} shape={<ScatterDot />}>
+                      <Scatter data={hrPaceData} opacity={0.6} shape={<ScatterDot />} activeShape={<ActiveScatterDot />}>
                         {hrPaceData.map((d, i) => <Cell key={i} fill={TYPE_COLOR[d.type]} />)}
                       </Scatter>
                     </ScatterChart>
@@ -1106,7 +1106,7 @@ export default function Analysis() {
                           )
                         }}
                       />
-                      <Scatter data={distPaceData} opacity={0.6} shape={<ScatterDot />}>
+                      <Scatter data={distPaceData} opacity={0.6} shape={<ScatterDot />} activeShape={<ActiveScatterDot />}>
                         {distPaceData.map((d, i) => <Cell key={i} fill={TYPE_COLOR[d.type]} />)}
                       </Scatter>
                     </ScatterChart>
@@ -1274,7 +1274,7 @@ export default function Analysis() {
                         behind it is the honest part. */}
                     {/* One series, coloured per point — see the explore chart
                         below for why five of them could not all be tapped. */}
-                    <Scatter data={weatherDots} dataKey="value" opacity={0.55} isAnimationActive={false} shape={<ScatterDot />}>
+                    <Scatter data={weatherDots} dataKey="value" opacity={0.55} isAnimationActive={false} shape={<ScatterDot />} activeShape={<ActiveScatterDot />}>
                       {weatherDots.map((d, i) => <Cell key={i} fill={TYPE_COLOR[d.type as WorkoutType]} />)}
                     </Scatter>
                     {/* One line per sport, and only once that sport has both
@@ -1410,7 +1410,7 @@ export default function Analysis() {
                         with five of them only one sport's dots ever answered a
                         tap and which one was down to z order — the same trap
                         the two Efficiency scatters avoid by doing this. */}
-                    <Scatter data={explorePoints} dataKey="y" opacity={0.6} isAnimationActive={false} shape={<ScatterDot />}>
+                    <Scatter data={explorePoints} dataKey="y" opacity={0.6} isAnimationActive={false} shape={<ScatterDot />} activeShape={<ActiveScatterDot />}>
                       {explorePoints.map((d, i) => <Cell key={i} fill={TYPE_COLOR[d.type as WorkoutType]} />)}
                     </Scatter>
                     {/* A fit each. One line through every sport at once would
