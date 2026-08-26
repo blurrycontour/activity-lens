@@ -7,8 +7,9 @@ import RangeDropdown from '../components/RangeDropdown'
 import ChartCard, { EmptyPlot } from '../components/ChartCard'
 import TabStrip from '../components/TabStrip'
 import InfoTip from '../components/InfoTip'
-import { denseXAxis, useChartSpace, xLabel } from '../components/ChartAxis'
+import { EDGE_PADDING_Y, END_PADDING, denseXAxis, useChartSpace, xLabel } from '../components/ChartAxis'
 import TypeLegend from '../components/TypeLegend'
+import ScatterDot from '../components/ScatterDot'
 import Dropdown from '../components/Dropdown'
 import { useLocalStorage } from '../lib/useLocalStorage'
 import { filterByRange, rangeLabel, toDateKey } from '../lib/range'
@@ -173,6 +174,25 @@ function withEmptyDays(rows: DatedRow[]): DatedRow[] {
   return filled.map((r, i) => ({ ...r, dateLabel: dayLabel(r.date, marks[i]) }))
 }
 
+/**
+ * The first payload entry that describes a real point rather than a fitted one.
+ *
+ * These charts draw a scatter of workouts and a line fitted through them, and
+ * the fitted line's points carry only coordinates. Reading `payload[0]` blindly
+ * therefore produced a tooltip for the *line* whenever the pointer was nearer
+ * to it than to a dot — and since a fit runs right through the middle of its
+ * own dots, that was most of the time. The tooltip then rendered nothing, which
+ * looks exactly like a tooltip that does not work: the cursor line appears and
+ * no card follows.
+ */
+function realPoint(payload: readonly { payload?: Record<string, unknown> }[]): Record<string, unknown> | null {
+  for (const entry of payload) {
+    const d = entry.payload
+    if (d && (d.name != null || d.from != null)) return d
+  }
+  return null
+}
+
 /** Two-option segmented control used by the volume chart's toggles. */
 function Segmented<T extends string>({ value, onChange, options }: {
   value: T
@@ -321,6 +341,16 @@ export default function Analysis() {
   // states far more than the data does.
   const exploreField = WEATHER_FIELDS.find(f => f.key === exploreX) ?? WEATHER_FIELDS[0]
   const exploreMetric = PERF_METRICS.find(m => m.key === exploreY) ?? PERF_METRICS[0]
+  /*
+   * Every sport's dots in one array.
+   *
+   * The chart draws one Scatter over this rather than one per sport, because
+   * Recharts gives each series its own tooltip and only one of them ever
+   * answered a tap. The colour moves to a Cell per point, which is what the
+   * Efficiency scatters already do.
+   */
+  const weatherDots = useMemo(() => weatherGroups.flatMap(g => g.scatter), [weatherGroups])
+
   const exploreGroups = useMemo(
     () => weatherTypes.map(type => {
       const points = weatherScatter(
@@ -975,8 +1005,8 @@ export default function Analysis() {
                       {/* Units live in the axis labels rather than on every tick:
                           with " bpm" appended to each value the labels grew wide
                           enough to be clipped by the plot area. */}
-                      <XAxis type="number" dataKey="pace" name="Pace" domain={['dataMin - 20', 'dataMax + 20']} tick={AXIS_TICK} axisLine={false} tickLine={false} reversed tickFormatter={v => fmtPace(v)} label={xLabel('Pace (min/km) — faster →')} />
-                      <YAxis type="number" dataKey="hr" name="HR" domain={['dataMin - 5', 'dataMax + 5']} width="auto" tick={AXIS_TICK} axisLine={false} tickLine={false} label={space.yLabel('Avg HR (bpm)')} />
+                      <XAxis type="number" dataKey="pace" name="Pace" domain={['dataMin - 20', 'dataMax + 20']} padding={END_PADDING} tick={AXIS_TICK} axisLine={false} tickLine={false} reversed tickFormatter={v => fmtPace(v)} label={xLabel('Pace (min/km) — faster →')} />
+                      <YAxis type="number" dataKey="hr" name="HR" domain={['dataMin - 5', 'dataMax + 5']} padding={EDGE_PADDING_Y} width="auto" tick={AXIS_TICK} axisLine={false} tickLine={false} label={space.yLabel('Avg HR (bpm)')} />
                       <ZAxis type="number" dataKey="distKm" range={[40, 220]} name="Distance" />
                       <Tooltip
                         cursor={{ strokeDasharray: '3 3', stroke: 'var(--border-strong)' }}
@@ -997,7 +1027,7 @@ export default function Analysis() {
                       {/* Coloured per point rather than one series per type: a
                           <Scatter> per type would give each its own z order and
                           tooltip, when all that is wanted is the sport's hue. */}
-                      <Scatter data={hrPaceData} opacity={0.6}>
+                      <Scatter data={hrPaceData} opacity={0.6} shape={<ScatterDot />}>
                         {hrPaceData.map((d, i) => <Cell key={i} fill={TYPE_COLOR[d.type]} />)}
                       </Scatter>
                     </ScatterChart>
@@ -1018,8 +1048,8 @@ export default function Analysis() {
                   <ResponsiveContainer width="100%" height={240}>
                     <ScatterChart margin={space.margin(18)}>
                       <CartesianGrid {...GRID_PROPS} vertical />
-                      <XAxis type="number" dataKey="km" name="Distance" domain={['dataMin - 1', 'dataMax + 1']} tick={AXIS_TICK} axisLine={false} tickLine={false} label={xLabel('Distance (km)')} />
-                      <YAxis type="number" dataKey="pace" name="Pace" domain={['dataMin - 20', 'dataMax + 20']} width="auto" tick={AXIS_TICK} axisLine={false} tickLine={false} reversed tickFormatter={v => fmtPace(v)} label={space.yLabel('Pace (min/km)')} />
+                      <XAxis type="number" dataKey="km" name="Distance" domain={['dataMin - 1', 'dataMax + 1']} padding={END_PADDING} tick={AXIS_TICK} axisLine={false} tickLine={false} label={xLabel('Distance (km)')} />
+                      <YAxis type="number" dataKey="pace" name="Pace" domain={['dataMin - 20', 'dataMax + 20']} padding={EDGE_PADDING_Y} width="auto" tick={AXIS_TICK} axisLine={false} tickLine={false} reversed tickFormatter={v => fmtPace(v)} label={space.yLabel('Pace (min/km)')} />
                       {/* Elevation can legitimately be 0, so the range starts at
                           a visible minimum rather than collapsing to a dot. */}
                       <ZAxis type="number" dataKey="elev" range={[40, 220]} name="Elevation" />
@@ -1040,7 +1070,7 @@ export default function Analysis() {
                           )
                         }}
                       />
-                      <Scatter data={distPaceData} opacity={0.6}>
+                      <Scatter data={distPaceData} opacity={0.6} shape={<ScatterDot />}>
                         {distPaceData.map((d, i) => <Cell key={i} fill={TYPE_COLOR[d.type]} />)}
                       </Scatter>
                     </ScatterChart>
@@ -1165,20 +1195,30 @@ export default function Analysis() {
                     <XAxis
                       type="number" dataKey="temp" name="Temperature"
                       domain={['dataMin - 2', 'dataMax + 2']}
+                      padding={END_PADDING}
                       tick={AXIS_TICK} axisLine={false} tickLine={false}
                       label={xLabel('Temperature (°C)')}
                     />
                     <YAxis
                       type="number" dataKey="value"
+                      padding={EDGE_PADDING_Y}
                       tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto"
                       tickFormatter={v => weatherMetric === 'pace' ? fmtPace(v) : String(Math.round(v))}
                       label={space.yLabel(weatherMetric === 'pace' ? 'Pace (/km)' : 'Avg HR (bpm)')}
                     />
                     <Tooltip
+                      /* Item-based, not axis-based. A ComposedChart's shared
+                         tooltip resolves by x position across every series at
+                         once, and with a scatter that means a tap answers only
+                         where some series happens to have a value — which is
+                         why four sports' dots were unreachable and the fifth
+                         worked. shared=false asks the mark under the pointer. */
+                      shared={false}
                       cursor={{ stroke: HOVER_FILL }}
                       content={({ active, payload }) => {
                         if (!active || !payload?.length) return null
-                        const d = payload[0].payload
+                        const d = realPoint(payload) as any
+                        if (!d) return null
                         const value = weatherMetric === 'pace' ? fmtPace(d.value ?? d[weatherMetric]) : Math.round(d.value ?? d[weatherMetric])
                         return (
                           <div className="custom-tooltip">
@@ -1196,9 +1236,11 @@ export default function Analysis() {
                     {/* The individual workouts, faint and in their sport's
                         colour. The line alone would read as a law; the spread
                         behind it is the honest part. */}
-                    {weatherGroups.map(g => (
-                      <Scatter key={`dots-${g.type}`} data={g.scatter} dataKey="value" fill={g.color} opacity={0.4} isAnimationActive={false} />
-                    ))}
+                    {/* One series, coloured per point — see the explore chart
+                        below for why five of them could not all be tapped. */}
+                    <Scatter data={weatherDots} dataKey="value" opacity={0.55} isAnimationActive={false} shape={<ScatterDot />}>
+                      {weatherDots.map((d, i) => <Cell key={i} fill={TYPE_COLOR[d.type as WorkoutType]} />)}
+                    </Scatter>
                     {/* One line per sport, and only once that sport has both
                         bands to draw and enough workouts behind them to mean
                         anything. Below that its dots are the whole story, which
@@ -1286,24 +1328,34 @@ export default function Analysis() {
                     <XAxis
                       type="number" dataKey="x" name={exploreField.label}
                       domain={['dataMin', 'dataMax']}
+                      padding={END_PADDING}
                       tick={AXIS_TICK} axisLine={false} tickLine={false}
                       label={xLabel(`${exploreField.label} (${exploreField.unit})`)}
                     />
                     <YAxis
                       type="number" dataKey="y"
+                      padding={EDGE_PADDING_Y}
                       tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto"
                       domain={['dataMin', 'dataMax']}
                       tickFormatter={exploreMetric.format}
                       label={space.yLabel(`${exploreMetric.label} (${exploreMetric.unit})`)}
                     />
                     <Tooltip
+                      /* Item-based, not axis-based. A ComposedChart's shared
+                         tooltip resolves by x position across every series at
+                         once, and with a scatter that means a tap answers only
+                         where some series happens to have a value — which is
+                         why four sports' dots were unreachable and the fifth
+                         worked. shared=false asks the mark under the pointer. */
+                      shared={false}
                       cursor={{ stroke: HOVER_FILL }}
                       content={({ active, payload }) => {
                         if (!active || !payload?.length) return null
-                        const d = payload[0].payload
-                        // The fitted line carries no workout, so hovering it
-                        // would otherwise show a blank card with two numbers.
-                        if (!d.name) return null
+                        // The fitted line carries no workout. Skipping past it
+                        // rather than giving up on the whole payload is what
+                        // lets a dot under a fit still answer.
+                        const d = realPoint(payload) as any
+                        if (!d?.name) return null
                         return (
                           <div className="custom-tooltip">
                             <div>{d.name}</div>
@@ -1317,9 +1369,14 @@ export default function Analysis() {
                         )
                       }}
                     />
-                    {exploreGroups.map(g => (
-                      <Scatter key={`dots-${g.type}`} data={g.points} dataKey="y" fill={g.color} opacity={0.6} isAnimationActive={false} />
-                    ))}
+                    {/* One Scatter with a Cell per point, not one Scatter per
+                        sport. Recharts gives each series its own tooltip, so
+                        with five of them only one sport's dots ever answered a
+                        tap and which one was down to z order — the same trap
+                        the two Efficiency scatters avoid by doing this. */}
+                    <Scatter data={explorePoints} dataKey="y" opacity={0.6} isAnimationActive={false} shape={<ScatterDot />}>
+                      {explorePoints.map((d, i) => <Cell key={i} fill={TYPE_COLOR[d.type as WorkoutType]} />)}
+                    </Scatter>
                     {/* A fit each. One line through every sport at once would
                         be a trend in the mix of sports, not in the weather. */}
                     {/* Only where r survived the floor: linearFit will happily

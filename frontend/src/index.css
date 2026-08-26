@@ -2048,11 +2048,6 @@ body[data-fab-hidden] .fab {
   opacity: 0;
   pointer-events: none;
 }
-.fab { transition: transform 0.22s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.18s ease; }
-@media (prefers-reduced-motion: reduce) {
-  .fab { transition: none; }
-}
-
 /* The heatmap's scale, drawn from the same ramp the map layer uses. */
 .heat-legend {
   display: flex;
@@ -2736,7 +2731,17 @@ body[data-fab-hidden] .fab {
      A shadow is painted, never hit-tested, so it costs no tap and no swipe. */
   box-shadow: 0 4px 20px var(--primary-glow), 0 10px 30px rgba(0, 0, 0, 0.75), 0 2px 8px rgba(0, 0, 0, 0.55);
   z-index: var(--z-fab);
-  transition: transform 0.2s, box-shadow 0.2s;
+  /* One declaration, because a second `transition` anywhere replaces this one
+     rather than adding to it — which is what happened when the hide-on-scroll
+     rule was written separately above: it lost opacity, so the button vanished
+     instantly and only slid back. */
+  transition:
+    transform 0.24s cubic-bezier(0.32, 0.72, 0, 1),
+    opacity 0.2s ease,
+    box-shadow 0.2s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fab { transition: none; }
 }
 /* Out of the way while anything modal is open. The button is `position: fixed`
    inside the page, which the swipe pager makes a stacking context, so it cannot

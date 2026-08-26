@@ -24,6 +24,18 @@ import { useIsMobile } from '../lib/useIsMobile'
  */
 export const END_PADDING = { left: 10, right: 10 } as const
 
+/**
+ * The same room, on a y axis.
+ *
+ * A scatter needs it on both axes for the same reason a line needs it on one:
+ * a point at the extreme of the data lands on the plot boundary, and Recharts
+ * only resolves a tooltip for pointer positions *inside* that boundary. On the
+ * weather chart the two dots at the ends of the range were unreachable, which
+ * read as "tooltips only work for some sports" because which sport owned the
+ * extremes depended on the data.
+ */
+export const EDGE_PADDING_Y = { top: 12, bottom: 12 } as const
+
 export function denseXAxis(fontSize = 10, { bars = false } = {}) {
   return {
     /*
