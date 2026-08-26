@@ -341,6 +341,82 @@ question asked four ways — `HR vs Pace` and `Distance vs Pace` are the same
 scatter with a different x — and whether Records, which is a table rather than a
 chart, belongs in a tab strip of charts at all.
 
+## The accent and theme system, investigated
+
+Asked directly: would a new theme improve the experience? The short answer is
+that more accents would not, and that the accent system has a structural problem
+worth fixing before anything is added to it.
+
+### 41. Every accent is the exact hex of a semantic colour · M · high
+
+Not approximately — identically:
+
+| Accent | Hex | Also means |
+|---|---|---|
+| Electric Green | `#00e87a` | `--run` |
+| Electric Blue | `#3b82f6` | `--ride`, `--blue` |
+| Vivid Orange | `#ff6b35` | `--accent` |
+| Violet | `#a855f7` | `--strength`, `--purple` |
+| Cyan | `#06b6d4` | `--swim` |
+| Rose | `#f43f5e` | `--session` |
+
+`ui-design.md` is emphatic that **sport colours mean the sport, everywhere,
+always** and that **the accent carries no meaning**. Both rules are sound; the
+palette makes them contradict each other. Choosing Cyan means every swim is
+drawn in the interface's own highlight colour. Choosing Violet does it to
+strength work, and to the Duration series on the Trends chart. On the default
+Electric Green, running — the app's most common sport — is permanently
+indistinguishable from chrome, which is a large part of why the default looks so
+coherent and why nobody has noticed.
+
+The fix is not subtle: pick six accent hues that no sport, series or status
+token uses. There is plenty of room — teal, indigo, magenta, lime, slate-blue,
+amber-gold — and nothing else has to change.
+
+### 42. The accent is doing three jobs · M · high
+
+Between this and #14 it carries: **personalisation** (the user's choice),
+**achievement** (`--primary` on the personal-best banner, records, completed
+goals), and, per #41, **a sport**. Those pull in different directions, which is
+why Rose reads as an error state and Cyan swallows swimming.
+
+One job each is the whole fix: accent for chrome and personality, `--success`
+for achievement, sport colours for sport. Doing #41 and #14 together repairs
+five of the six accents in one pass, and neither is much code — it is the
+looking-at-every-screen afterwards that costs.
+
+### 43. Only the accent is themeable, and that is the wrong axis · M · med
+
+Dark and light each have exactly one background (`#0a0b0e` and `#f4f6f9`) and no
+way to change it. So the one thing a user can adjust is the hue of the
+highlights, and the things that actually vary with how the app is used — glare,
+ambient light, a phone held at arm's length mid-set — are fixed.
+
+Two themes would earn their place in a training app, both small:
+
+- **True black.** This is a phone app opened at 6am before a run and at night
+  after one. `--bg` is near-black but not black; on an OLED screen true black
+  costs no power and, in a dark room, no glare. One `[data-theme="black"]` block
+  overriding three surface tokens.
+- **High contrast.** Does properly what #18 does by halves, and it is the answer
+  to reading a screen outdoors in sun — the situation this app is *for*, and the
+  one where the current 11px `--text-3` labels are unreadable.
+
+**More accents would add nothing.** The roster is not short; it is
+mis-specified.
+
+### 44. The idea worth more than any of them: a theme for while you are training
+
+The session runner is the one screen used with a phone propped against a wall,
+sweaty hands, mid-set, glancing. It is currently styled like every other page —
+the same 11px labels, the same tap targets flagged in #17.
+
+A training app can do what a dashboard cannot: change its own presentation when
+the context changes. Large type, maximum contrast, oversized controls and
+screen-wake, entered automatically when a session starts and left when it ends.
+That is not a colour scheme, it is a mode, and it would be more useful than all
+six accents put together.
+
 ## Missing features and ideas
 
 ### 24. No password reset · M · high
