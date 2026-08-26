@@ -9,9 +9,15 @@ import { useCallback, useEffect, useRef, useState } from 'react'
  * breakpoint cannot, because it depends on the content as much as the width,
  * and a desktop window dragged narrower overflows too.
  *
- * Returns the ref to put on the scroller, the class suffix to append, and the
- * measure function to wire to `onScroll`. The caller owns the element and its
- * styling; this owns only the question of which edges are live.
+ * Returns the ref to put on the scroller, the class suffix to append, the
+ * measure function to wire to `onScroll`, and — for a caller that wants to
+ * draw arrows rather than rely on the fade alone — the live edges and a way to
+ * move a screenful. The caller owns the element and its styling; this owns
+ * only the question of which edges are live.
+ *
+ * A fade is a weak signal on a row of outlined controls, where the thing it
+ * fades out is a border that looked like an edge anyway. Anything whose
+ * contents are not obviously continuous wants the arrows too.
  *
  * The fades themselves are a CSS mask, not an overlay — see `.tab-strip` in
  * index.css. A mask works over whatever background the scroller happens to
@@ -45,8 +51,21 @@ export function useEdgeFades<T extends HTMLElement>() {
     return () => obs.disconnect()
   }, [measure])
 
+  /**
+   * Move about a screenful in one direction, for a caller that draws arrows.
+   *
+   * Not the whole width: a page that turns over completely leaves nothing to
+   * anchor against, and the item that was at the edge is the one you were
+   * reading. Four fifths keeps a column of overlap.
+   */
+  const scrollByPage = useCallback((direction: 1 | -1) => {
+    const el = ref.current
+    if (!el) return
+    el.scrollBy({ left: direction * el.clientWidth * 0.8, behavior: 'smooth' })
+  }, [])
+
   const fadeClass = `${edges.start ? ' fade-start' : ''}${edges.end ? ' fade-end' : ''}`
-  return { ref, fadeClass, measure }
+  return { ref, fadeClass, edges, measure, scrollByPage }
 }
 
 /**

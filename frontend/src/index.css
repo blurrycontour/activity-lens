@@ -2118,6 +2118,7 @@ body[data-fab-hidden] .fab {
   .tab-strip-item::after,
   .filter-pill::after,
   .metric-chip::after,
+  .chip-scroll::after,
   .notif-dismiss::after,
   .page-header-back::after,
   .al-dropdown-trigger::after,
@@ -3186,6 +3187,40 @@ body:has(.overlay) .dial { display: none; }
    strip above is one: nine chips are 893px of labels, which wrapped to three
    rows on a phone and put the chart itself below the fold. The fade classes
    come from the same hook. */
+.metric-chips-wrap { position: relative; }
+/* An arrow at each live end. The fade alone was not saying it: what it
+   dissolves is a chip's outline, and an outline is what the end of a row looks
+   like anyway — so four chips and a sliver read as four chips and nothing
+   more. These say it outright, and are pressable.
+   Over the row rather than beside it: two 30px gutters is a sixth of a phone's
+   width, spent on chrome, and the chip underneath is already faded to nothing
+   where the arrow sits. */
+.chip-scroll {
+  position: absolute;
+  top: 50%;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-2);
+  color: var(--text-2);
+  cursor: pointer;
+  padding: 0;
+  z-index: 1;
+  transform: translateY(-50%);
+  transition: opacity 0.18s ease, color 0.15s, border-color 0.15s;
+}
+.chip-scroll.start { left: 0; }
+.chip-scroll.end { right: 0; }
+.chip-scroll:hover { color: var(--text); border-color: var(--text-3); }
+/* Faded rather than unmounted: an arrow appearing under a finger that is
+   already moving is worse than one that is simply not lit. */
+.chip-scroll.off { opacity: 0; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) {
+  .chip-scroll { transition: none; }
+}
 .metric-chips {
   display: flex;
   gap: 6px;

@@ -27,7 +27,7 @@ import {
   ScatterChart, Scatter, XAxis, YAxis, ZAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   BarChart, Bar, Cell, LineChart, Line, ComposedChart, ReferenceArea, ReferenceLine,
 } from 'recharts'
-import { Award, Target, Zap, Activity, Navigation, TrendingUp, Gauge, Flame, CloudSun, Sparkles, CalendarRange } from 'lucide-react'
+import { Award, Target, Zap, Activity, Navigation, TrendingUp, Gauge, Flame, CloudSun, Sparkles, CalendarRange, ChevronLeft, ChevronRight } from 'lucide-react'
 
 type PR = { longest: Workout; longestTime: Workout; fastest: Workout | null; highest: Workout }
 
@@ -304,7 +304,7 @@ function MetricChips({ selected, onToggle }: {
   selected: Metric[]
   onToggle: (id: Metric) => void
 }) {
-  const { ref, fadeClass, measure } = useEdgeFades<HTMLDivElement>()
+  const { ref, fadeClass, edges, measure, scrollByPage } = useEdgeFades<HTMLDivElement>()
 
   // Before paint, so the row never appears scrolled to the wrong place. Only
   // on mount and when the selection changes from elsewhere — not on every
@@ -315,25 +315,52 @@ function MetricChips({ selected, onToggle }: {
   }, [])
 
   return (
-    <div ref={ref} className={`metric-chips${fadeClass}`} onScroll={measure} role="group" aria-label="Measures">
-      {METRICS.map(m => {
-        const on = selected.includes(m.id)
-        return (
-          <button
-            key={m.id}
-            className={`metric-chip${on ? ' on' : ''}`}
-            onClick={() => onToggle(m.id)}
-            aria-pressed={on}
-            /* The measure's own colour, which is the line's colour on the
-               chart below — the one thing here that cannot come from a token,
-               because it is per measure. */
-            style={{ '--chip-hue': m.color } as React.CSSProperties}
-          >
-            <span className="metric-chip-dot" aria-hidden />
-            {m.label}
-          </button>
-        )
-      })}
+    <div className="metric-chips-wrap">
+      <div ref={ref} className={`metric-chips${fadeClass}`} onScroll={measure} role="group" aria-label="Measures">
+        {METRICS.map(m => {
+          const on = selected.includes(m.id)
+          return (
+            <button
+              key={m.id}
+              className={`metric-chip${on ? ' on' : ''}`}
+              onClick={() => onToggle(m.id)}
+              aria-pressed={on}
+              /* The measure's own colour, which is the line's colour on the
+                 chart below — the one thing here that cannot come from a
+                 token, because it is per measure. */
+              style={{ '--chip-hue': m.color } as React.CSSProperties}
+            >
+              <span className="metric-chip-dot" aria-hidden />
+              {m.label}
+            </button>
+          )
+        })}
+      </div>
+      {/* An arrow at each live end, because the fade was not saying it. It
+          dissolves a chip's outline into the background, and an outline is
+          what the end of a row looks like anyway — so four chips and a sliver
+          read as four chips. These say it outright and can be pressed.
+          Always rendered and faded out when there is nothing that way, rather
+          than mounted and unmounted: an arrow appearing under a finger that is
+          already moving is worse than one that is simply not lit. */}
+      <button
+        className={`chip-scroll start${edges.start ? '' : ' off'}`}
+        onClick={() => scrollByPage(-1)}
+        tabIndex={edges.start ? 0 : -1}
+        aria-hidden={!edges.start}
+        aria-label="Show earlier measures"
+      >
+        <ChevronLeft size={15} />
+      </button>
+      <button
+        className={`chip-scroll end${edges.end ? '' : ' off'}`}
+        onClick={() => scrollByPage(1)}
+        tabIndex={edges.end ? 0 : -1}
+        aria-hidden={!edges.end}
+        aria-label="Show more measures"
+      >
+        <ChevronRight size={15} />
+      </button>
     </div>
   )
 }
