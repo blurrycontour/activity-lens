@@ -2044,6 +2044,15 @@ body {
    .with-fab reserves room at the end of the scroll, which solves the last
    screenful and nothing before it, and the button is fixed. */
 body[data-fab-hidden] .fab {
+  /* The mirror of the arrival curve. Both directions were already the same
+     duration, but a curve that leaves fast and lands slow is right for one of
+     them and wrong for the other: arriving it reads as responsive, leaving it
+     spends most of the 240ms already out of sight, which is the "it just
+     vanishes" everyone reports. Reversing the control points for the outward
+     trip makes the two halves feel like one movement.
+     A variable rather than a second `transition`, because a second one would
+     replace the first outright and drop whatever it did not restate. */
+  --fab-ease: cubic-bezier(1, 0, 0.68, 0.28);
   transform: translateY(calc(100% + 24px + var(--bottombar-h)));
   opacity: 0;
   pointer-events: none;
@@ -2739,13 +2748,18 @@ body[data-fab-hidden] .fab {
      A shadow is painted, never hit-tested, so it costs no tap and no swipe. */
   box-shadow: 0 4px 20px var(--primary-glow), 0 10px 30px rgba(0, 0, 0, 0.75), 0 2px 8px rgba(0, 0, 0, 0.55);
   z-index: var(--z-fab);
+  /* The arrival curve: fast off the mark, settling into place. Swapped for its
+     mirror while hidden — see body[data-fab-hidden] .fab. */
+  --fab-ease: cubic-bezier(0.32, 0.72, 0, 1);
   /* One declaration, because a second `transition` anywhere replaces this one
      rather than adding to it — which is what happened when the hide-on-scroll
      rule was written separately above: it lost opacity, so the button vanished
-     instantly and only slid back. */
+     instantly and only slid back. Opacity rides the same curve and the same
+     duration as the transform: fading out in 200ms under `ease` while the
+     travel took 240ms was the other half of the asymmetry. */
   transition:
-    transform 0.24s cubic-bezier(0.32, 0.72, 0, 1),
-    opacity 0.2s ease,
+    transform 0.24s var(--fab-ease),
+    opacity 0.24s var(--fab-ease),
     box-shadow 0.2s;
 }
 @media (prefers-reduced-motion: reduce) {
