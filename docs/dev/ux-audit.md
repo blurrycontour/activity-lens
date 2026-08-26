@@ -482,7 +482,7 @@ Workouts, over a row. `.with-fab` reserves padding at the bottom of the scroll,
 but the button floats above mid-content the whole time. Hiding it on scroll-down
 is the standard behaviour and would cost little.
 
-### 28. Share is the promoted action on every workout row · S · med
+### 28. Share is the promoted action on every workout row · S · med · **✅ fixed**
 
 A rare action, given the only visible affordance on each row, at a 29px target,
 while open, edit and delete live behind a long press. Worth reconsidering what
