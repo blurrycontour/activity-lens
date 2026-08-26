@@ -16,7 +16,7 @@ import { everyDayBetween, everyMonthBetween, everyWeekBetween, fillGaps, keySpan
 import { AXIS_TICK, DATA_LINE, GRID_PROPS, HOVER_FILL, SERIES_COLORS, TREND_LINE } from '../lib/chartColors'
 import {
   PERF_METRICS, WEATHER_FIELDS, binByTemperature, binWidthFor, describeCorrelation,
-  hasUsableWeather, linearFit, pearson, temperatureCorrelation, weatherScatter,
+  MIN_CORRELATION_POINTS, hasUsableWeather, linearFit, pearson, temperatureCorrelation, weatherScatter,
   type PerfKey, type WeatherKey, type WeatherMetric,
 } from '../lib/weather'
 import { usePreferences } from '../context/PreferencesContext'
@@ -1212,10 +1212,13 @@ export default function Analysis() {
                     {weatherGroups.map(g => (
                       <Scatter key={`dots-${g.type}`} data={g.scatter} dataKey="value" fill={g.color} opacity={0.4} isAnimationActive={false} />
                     ))}
-                    {/* One line per sport, and only once that sport has bands
-                        to draw. Below that its dots are the whole story, which
-                        is the honest picture of a handful of workouts. */}
-                    {weatherGroups.map(g => g.bins.length > 0 && (
+                    {/* One line per sport, and only once that sport has both
+                        bands to draw and enough workouts behind them to mean
+                        anything. Below that its dots are the whole story, which
+                        is the honest picture of a handful of workouts — a line
+                        through two bands is a straight segment asserting a
+                        trend that nothing supports. */}
+                    {weatherGroups.map(g => g.bins.length > 0 && g.count >= MIN_CORRELATION_POINTS && (
                       <Line
                         key={`line-${g.type}`}
                         data={g.bins}
@@ -1332,12 +1335,14 @@ export default function Analysis() {
                     ))}
                     {/* A fit each. One line through every sport at once would
                         be a trend in the mix of sports, not in the weather. */}
-                    {exploreGroups.map(g => g.fit && (
+                    {/* Only where r survived the floor: linearFit will happily
+                        draw a slope through two points, and r is the thing that
+                        says whether that slope is worth asserting. */}
+                    {exploreGroups.map(g => g.fit && g.r !== null && (
                       <Line
                         key={`fit-${g.type}`}
                         data={g.fit} dataKey="y" type="linear"
-                        stroke={g.color} strokeWidth={2} strokeDasharray="5 4"
-                        dot={false} isAnimationActive={false} legendType="none"
+                        stroke={g.color} {...TREND_LINE} legendType="none"
                       />
                     ))}
                   </ComposedChart>

@@ -199,6 +199,21 @@ export function binByTemperature(workouts: Workout[], metric: WeatherMetric, wid
 }
 
 /**
+ * The fewest paired observations before a correlation is worth printing.
+ *
+ * The guard used to be three, which let through a coefficient that is very
+ * nearly guaranteed to be large whatever the data: three points almost always
+ * lie close to *some* line, so "r -0.48" on three runs is a statement about
+ * having three runs, not about the weather. Five is the usual floor and is
+ * still generous — it is chosen so a real relationship in a normal month's
+ * training can appear, not so that every scatter gets a number.
+ *
+ * Below it the dots are shown and no coefficient is, which is the honest
+ * picture of a handful of workouts.
+ */
+export const MIN_CORRELATION_POINTS = 5
+
+/**
  * Pearson correlation coefficient, or null when there is not enough to say.
  *
  * Returns null rather than 0 for a degenerate input. Zero means "measured, and
@@ -207,7 +222,7 @@ export function binByTemperature(workouts: Workout[], metric: WeatherMetric, wid
  */
 export function pearson(xs: number[], ys: number[]): number | null {
   const n = Math.min(xs.length, ys.length)
-  if (n < 3) return null
+  if (n < MIN_CORRELATION_POINTS) return null
   let sx = 0, sy = 0
   for (let i = 0; i < n; i++) { sx += xs[i]; sy += ys[i] }
   const mx = sx / n, my = sy / n

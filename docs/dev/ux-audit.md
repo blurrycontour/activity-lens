@@ -285,7 +285,7 @@ Same root cause, visible symptom: **the axis repeats labels**, reading
 `Jul 30 · Jul 30 · Aug 7 · Aug 8 · Aug 23 · Aug 23`, because two activities on
 one day are two categories with one name and nothing distinguishes them.
 
-### 34. Fitted lines and an `r` on two and three points · S · high
+### 34. Fitted lines and an `r` on two and three points · S · high · **✅ fixed**
 
 The weather scatter prints `Run 3 · r -0.48` beside `Hike 2`. `pearson` guards
 at `n < 3`, which lets a three-point correlation through — and a correlation
@@ -296,8 +296,11 @@ The legend also lists a two-point group as though it were a fitted series.
 means measured and unrelated, which is a real finding"). The threshold is just
 set below the point where the number carries information. Raising it — five is
 the usual floor, eight is defensible — is a judgement about statistics rather
-than a defect with one right answer, which is why it is recorded rather than
-changed.
+than a defect with one right answer. **Settled at five**, the usual floor: three
+points almost always lie close to *some* line, so a coefficient from them is a
+statement about having three points. Fitted lines are held to the same floor —
+`linearFit` will draw a slope through two points and `r` is the thing that says
+whether that slope is worth asserting.
 
 Related: `Temperature vs Pace` describes itself as "one line per sport, in 2 °C
 bands" and renders five disconnected dots, because no band holds enough points
