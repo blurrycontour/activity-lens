@@ -7,7 +7,7 @@ import ShareDialog from '../../components/ShareDialog'
 import NotesAndSocial from '../../components/NotesAndSocial'
 import ShareBadge from '../../components/ShareBadge'
 import UserAvatar, { userLabel } from '../../components/UserAvatar'
-import { Check, ClipboardCheck, MoreVertical, Share2, Timer, Trash2 } from 'lucide-react'
+import { Check, History, MoreVertical, Share2, Timer, Trash2 } from 'lucide-react'
 import { api } from '../../lib/api'
 import {
   blockLabel, blockProgress, chosenExercises, clockLabel, doneSetsFor, durationShort,
@@ -97,7 +97,10 @@ export default function FinishedSession({ session, onBack, onOpenUser, onDeleted
         /* Same header shape as a workout and a plan — see PlanView. */
         titleAction={
           <>
-            <span className="badge tag-session"><ClipboardCheck size={12} /> Session</span>
+            {/* History, not a clipboard: that is the session mark everywhere else —
+                the card in the list, the row in a feed, the tab that holds them.
+                A clipboard is what a *plan* wears. */}
+            <span className="badge tag-session"><History size={12} /> Session</span>
             {isOwner && <ShareBadge workout={session} />}
           </>
         }

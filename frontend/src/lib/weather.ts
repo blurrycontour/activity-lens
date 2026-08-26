@@ -199,6 +199,21 @@ export function binByTemperature(workouts: Workout[], metric: WeatherMetric, wid
 }
 
 /**
+ * The fewest paired observations before a correlation is worth printing.
+ *
+ * The guard used to be three, which let through a coefficient that is very
+ * nearly guaranteed to be large whatever the data: three points almost always
+ * lie close to *some* line, so "r -0.48" on three runs is a statement about
+ * having three runs, not about the weather. Five is the usual floor and is
+ * still generous — it is chosen so a real relationship in a normal month's
+ * training can appear, not so that every scatter gets a number.
+ *
+ * Below it the dots are shown and no coefficient is, which is the honest
+ * picture of a handful of workouts.
+ */
+export const MIN_CORRELATION_POINTS = 5
+
+/**
  * Pearson correlation coefficient, or null when there is not enough to say.
  *
  * Returns null rather than 0 for a degenerate input. Zero means "measured, and
@@ -207,7 +222,7 @@ export function binByTemperature(workouts: Workout[], metric: WeatherMetric, wid
  */
 export function pearson(xs: number[], ys: number[]): number | null {
   const n = Math.min(xs.length, ys.length)
-  if (n < 3) return null
+  if (n < MIN_CORRELATION_POINTS) return null
   let sx = 0, sy = 0
   for (let i = 0; i < n; i++) { sx += xs[i]; sy += ys[i] }
   const mx = sx / n, my = sy / n
@@ -327,6 +342,22 @@ export function weatherScatter(workouts: Workout[], xKey: WeatherKey, metric: Pe
 }
 
 /**
+ * A point on a fitted line — a coordinate and nothing else.
+ *
+ * Deliberately *not* a ScatterPoint. The endpoints used to be built as scatter
+ * points with `name: ''` and `date: ''` to satisfy that type, which put two
+ * rows into the chart's tooltip payload that looked like workouts and named
+ * none: the tooltip picked the first entry with a name field, found the fit's
+ * empty one, and rendered nothing. Eight of twenty-two dots on the explore
+ * chart answered with a blank card that way. A type that cannot be mistaken
+ * for a workout is what stops that being rediscovered.
+ */
+export interface FitPoint {
+  x: number
+  y: number
+}
+
+/**
  * Least-squares line through the points, as its two endpoints.
  *
  * Returned as endpoints rather than a slope so the caller can draw it without
@@ -334,7 +365,7 @@ export function weatherScatter(workouts: Workout[], xKey: WeatherKey, metric: Pe
  * refuses: fewer than three points, or no spread on x. A line through two
  * points is not a trend, it is those two points.
  */
-export function linearFit(points: ScatterPoint[]): [ScatterPoint, ScatterPoint] | null {
+export function linearFit(points: ScatterPoint[]): [FitPoint, FitPoint] | null {
   if (points.length < 3) return null
   let sx = 0, sy = 0
   for (const p of points) { sx += p.x; sy += p.y }
@@ -353,6 +384,6 @@ export function linearFit(points: ScatterPoint[]): [ScatterPoint, ScatterPoint] 
     if (p.x < lo) lo = p.x
     if (p.x > hi) hi = p.x
   }
-  const at = (x: number): ScatterPoint => ({ x, y: intercept + slope * x, name: '', date: '' })
+  const at = (x: number): FitPoint => ({ x, y: intercept + slope * x })
   return [at(lo), at(hi)]
 }

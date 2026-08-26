@@ -16,6 +16,7 @@ import SessionRunner from './SessionRunner'
 import SessionHistory from './SessionHistory'
 import FinishedSession from './FinishedSession'
 import { api } from '../../lib/api'
+import { relativeDay } from '../../lib/date'
 import {
   clockLabel, durationLabel, elapsedMin, elapsedSec, type PlanSession, type TrainingPlan,
 } from '../../data/plans'
@@ -378,7 +379,7 @@ export default function PlansPage({ section, detail, onOpen, onOpenUser }: Props
         onBack={() => onOpen(null)}
         onOpenUser={onOpenUser}
         // Back to the list, and reload it — the row that was just deleted is
-        // still in the History tab's cache until something refetches.
+        // still in the Sessions tab's cache until something refetches.
         onDeleted={() => { setSession(null); void load(); onOpen(null) }}
         onNotesSaved={saved => setSession(cur => (cur ? { ...cur, notes: saved.notes } : cur))}
       />
@@ -473,7 +474,7 @@ export default function PlansPage({ section, detail, onOpen, onOpenUser }: Props
         <TabStrip
           items={[
             { id: 'plans', label: 'Plans', icon: <ClipboardList size={15} /> },
-            { id: 'history', label: 'History', icon: <History size={15} /> },
+            { id: 'history', label: 'Sessions', icon: <History size={15} /> },
           ]}
           value={tab}
           onChange={setTab}
@@ -621,7 +622,7 @@ function PlanRow({ plan, selecting, picked, onOpen, onStart, onToggle, onLongPre
         <span className="plan-card-head">
           {selecting
             ? <span className="plan-pick" aria-hidden>{picked && <CheckCheck size={14} />}</span>
-            : <span className="plan-card-mark"><ClipboardList size={15} /></span>}
+            : <span className="plan-card-mark"><ClipboardList size={18} /></span>}
         </span>
         <div className="plan-card-main">
           <strong className="plan-card-name">
@@ -778,12 +779,3 @@ function Countdown({ onDone, onCancel }: { onDone: () => void; onCancel: () => v
   )
 }
 
-/** "today", "yesterday", or a date — the resolution people actually want. */
-function relativeDay(iso: string): string {
-  const then = new Date(iso)
-  const days = Math.floor((Date.now() - then.getTime()) / 86400000)
-  if (days <= 0) return 'today'
-  if (days === 1) return 'yesterday'
-  if (days < 7) return `${days} days ago`
-  return then.toLocaleDateString()
-}

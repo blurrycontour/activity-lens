@@ -1,24 +1,23 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
-import { ALL_WORKOUT_TYPES, fmtDist, fmtDuration, TYPE_COLOR, type WorkoutType, type Workout } from '../data/workouts'
+import { ALL_WORKOUT_TYPES, type WorkoutType, type Workout } from '../data/workouts'
 import TypeIcon from '../components/TypeIcon'
 import ShareBadge from '../components/ShareBadge'
 import ViewSwitcher, { readView, writeView, type ListView } from '../components/ViewSwitcher'
 import { useWorkouts } from '../context/WorkoutsContext'
-import { Search, Plus, Share2, FilterX, SlidersHorizontal, X, LoaderCircle, Layers, Image as ImageIcon, MoreVertical, Copy } from 'lucide-react'
+import { Search, Plus, FilterX, SlidersHorizontal, X, LoaderCircle, Layers, MoreVertical, Copy, CloudOff } from 'lucide-react'
 import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
 import SortDropdown, { SORT_OPTIONS, type SortKey } from '../components/SortDropdown'
 import FilterSheet, { type FilterGroup } from '../components/FilterSheet'
 import ContainsDropdown, { containsLabel, containsSheetOptions, containsState, cycleHas } from '../components/ContainsDropdown'
 import MenuButton from '../components/MenuButton'
-import ShareDialog from '../components/ShareDialog'
-import ShareCardDialog from '../components/ShareCardDialog'
 import WorkoutCard from '../components/WorkoutCard'
 import ConfirmDialog from '../components/ConfirmDialog'
 import DuplicatesDialog from '../components/DuplicatesDialog'
 import { RANGE_OPTIONS } from '../lib/range'
 import { api } from '../lib/api'
 import { useIsMobile } from '../lib/useIsMobile'
+import { useOnlineStatus } from '../lib/network'
 import { LOCATION_EVENT } from '../App'
 import { useSessionState } from '../lib/useSessionState'
 import SearchInput from '../components/SearchInput'
@@ -106,8 +105,6 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
   const setRangeDays = (v: number) => patch({ rangeDays: v })
   /** with → without → off, for one attribute; they narrow together. */
   const toggleHas = (v: Has) => patch({ has: cycleHas(has, v) })
-  const [sharing, setSharing] = useState<Workout | null>(null)
-  const [cardFor, setCardFor] = useState<Workout | null>(null)
   /** A bulk delete that partly failed, shown above the list. */
   const [listError, setListError] = useState<string | null>(null)
   const [showFilters, setShowFilters] = useState(false)
@@ -326,6 +323,13 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
 
   const source = workouts
   const busy = loading
+  /*
+   * An empty library while the backend is unreachable is not an empty library.
+   * The service worker can answer a cold cache with nothing at all, so the
+   * failure arrives as a successful fetch of zero rows rather than as an error —
+   * which is why this asks the network rather than trusting `listError`.
+   */
+  const unreachable = !useOnlineStatus() && source.length === 0
 
   const filtered = useMemo(
     // Scope pinned rather than read from the stored filters: a session that
@@ -484,13 +488,21 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
           <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-3)' }}>
             {busy
               ? <LoaderCircle size={32} strokeWidth={1.5} className="spin" style={{ margin: '0 auto 12px' }} aria-hidden />
-              : <Search size={32} strokeWidth={1.5} style={{ margin: '0 auto 12px' }} aria-hidden />}
+              : unreachable
+                ? <CloudOff size={32} strokeWidth={1.5} style={{ margin: '0 auto 12px' }} aria-hidden />
+                : <Search size={32} strokeWidth={1.5} style={{ margin: '0 auto 12px' }} aria-hidden />}
             <p style={{ fontSize: 14 }}>
               {busy
                 ? 'Loading workouts…'
                 : activeFilters.length > 0 || search
                   ? 'No workouts match these filters'
-                  : 'No workouts found'}
+                  : unreachable
+                    /* Not "No workouts found". An empty library and a library
+                       we could not fetch look identical from here, and saying
+                       the first when it is the second is the app telling
+                       someone their training is gone. */
+                    ? 'Your workouts can’t be loaded while you are offline.'
+                    : 'No workouts found'}
             </p>
             {/* The way out, where the problem is. A desktop had no reset at
                 all, so a filter left on from an earlier visit read as an empty
@@ -514,21 +526,6 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
                 onLongPress={() => startSelecting(w.id)}
                 onClick={() => (selecting ? toggle(w.id) : openWorkout(w))}
                 badge={<ShareBadge workout={w} />}
-                aside={(
-                  <>
-                    {/* Both ways of sharing, the same pair the detail page
-                        offers. A link needs the server and the workout to be
-                        shareable; a card is made from what is already here. */}
-                    <MenuButton icon={<Share2 size={15} />} label="Share">
-                      <button className="options-menu-item" onClick={() => setSharing(w)}>
-                        <Share2 size={14} /> Share
-                      </button>
-                      <button className="options-menu-item" onClick={() => setCardFor(w)}>
-                        <ImageIcon size={14} /> Share card
-                      </button>
-                    </MenuButton>
-                  </>
-                )}
               />
             ))}
           </div>
@@ -556,31 +553,6 @@ export default function Workouts({ onSelect, onImport }: WorkoutsProps) {
           onReset={activeFilters.length > 0 ? resetFilters : undefined}
         />
       )}
-
-      {sharing && (
-        <ShareDialog
-          kind="workout"
-          id={sharing.id}
-          noun="workout"
-          subject={{
-            icon: <TypeIcon type={sharing.type} />,
-            name: sharing.name,
-            meta: [
-              new Date(sharing.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }),
-              sharing.distance > 0 ? fmtDist(sharing.distance) : null,
-              sharing.duration > 0 ? fmtDuration(sharing.duration) : null,
-            ].filter(Boolean).join(' · '),
-            accent: TYPE_COLOR[sharing.type],
-          }}
-          onClose={() => setSharing(null)}
-          // The badges are driven by the library array, which WorkoutsContext
-          // owns and the dashboard also reads — so re-fetch rather than patch
-          // a local copy.
-          onChange={() => { void refresh() }}
-        />
-      )}
-
-      {cardFor && <ShareCardDialog workout={cardFor} onClose={() => setCardFor(null)} />}
 
       {showDuplicates && (
         <DuplicatesDialog

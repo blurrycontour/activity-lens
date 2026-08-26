@@ -133,6 +133,22 @@ func (s *Server) handleGetWorkout(w http.ResponseWriter, r *http.Request) {
 		// inventory, not part of the workout being shared.
 		wk.Owner = owner
 	}
+	// The same two counts a library row carries. The detail page's Gallery and
+	// Social tabs are lazy — nothing behind them is fetched until one is opened
+	// — so without these the only way to find out whether a tab holds anything
+	// is to open it and pay for the round trip.
+	//
+	// Best effort, like the list's: a tab whose badge is missing still opens.
+	// Not owner-scoped, and it does not need to be — the counts are of the
+	// workout the caller has already been granted, and are of photos and
+	// comments they can see in full one tap later.
+	if flags, ferr := s.workout.FlagsFor(r.Context(), []string{wk.ID}); ferr == nil {
+		wk.PhotoCount = flags[wk.ID].Media
+		wk.CommentCount = flags[wk.ID].Comments
+	} else {
+		slog.Warn("could not read workout flags", "workout_id", wk.ID, "error", ferr)
+	}
+
 	writeJSON(w, http.StatusOK, workoutDetailResponse{
 		Workout: wk, IsOwner: isOwner, HasOriginal: wk.RawFilename != "",
 		OriginalFormat: originalFormat(wk.RawFilename), Shared: shared,

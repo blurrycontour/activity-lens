@@ -1,7 +1,8 @@
-import { useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useState } from 'react'
 import { LayoutDashboard, Dumbbell, CalendarCheck, BarChart2, HelpCircle, Map as MapIcon, Plus, Watch, Tag, Compass, ClipboardList } from 'lucide-react'
 import { DESKTOP_PAGES, type Page } from '../lib/nav'
 import { useActiveSession } from '../context/ActiveSessionContext'
+import { loadAboutInfo, peekAboutInfo } from '../lib/buildInfo'
 
 interface SidebarProps {
   currentPage: Page
@@ -33,6 +34,29 @@ const navItems = DESKTOP_PAGES.flatMap(id => {
 })
 
 export default function Sidebar({ currentPage, onNavigate, collapsed, sidebarWidth, onWidthChange, onImport, isMobile }: SidebarProps) {
+  /*
+   * The version the *server* reports — the same one the About dialog's Version
+   * row shows, and for the same reason it gives there: on web the bundle and
+   * the server ship together, but in the Android app the bundle's version is
+   * the APK's, which is a different artifact that updates on its own schedule.
+   *
+   * This footer printed `__APP_VERSION__`, the build-time constant, so in the
+   * app it was quietly answering a different question from the dialog three
+   * taps away. The constant stays as the fallback for a server too old to
+   * serve /build, which is the one case it is the better answer.
+   *
+   * Already fetched and cached after sign-in, so this usually resolves on the
+   * first render with no request of its own.
+   */
+  const [build, setBuild] = useState(() => peekAboutInfo()?.build ?? null)
+  useEffect(() => {
+    if (build) return
+    let live = true
+    void loadAboutInfo().then(i => { if (live) setBuild(i.build) })
+    return () => { live = false }
+  }, [build])
+  const version = build?.version || __APP_VERSION__
+
   const { active: running } = useActiveSession()
   const dragRef = useRef(false)
   const startXRef = useRef(0)
@@ -154,7 +178,7 @@ export default function Sidebar({ currentPage, onNavigate, collapsed, sidebarWid
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
               <Tag size={11} aria-hidden />
-              Version: {__APP_VERSION__}
+              Version: {version}
             </span>
           </div>
         </div>

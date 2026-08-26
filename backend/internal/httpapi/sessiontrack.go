@@ -21,10 +21,21 @@ import (
 const ClientHeader = "X-Activity-Lens-Client"
 
 // seenInterval is how often one session's row is touched. A write per request
-// would put a row update behind every read on a database with one writer, to
-// record a number nobody reads at that resolution: what "last active" is for is
-// telling a phone used this morning from one signed into in March.
-const seenInterval = 5 * time.Minute
+// would put a row update behind every read on a database with one writer, and
+// most of what "last active" answers — a phone used this morning against one
+// signed into in March — needs nothing like that resolution.
+//
+// It is a minute rather than five because the Discover page reads these rows
+// to say who is here *now*, and the two numbers are coupled: nobody can show
+// as active inside a window shorter than the interval that records them.
+// See lib/date.ts ACTIVE_WINDOW_MS, which must stay comfortably above this.
+//
+// The cost is bounded by devices in use, not by traffic: this is a ceiling on
+// writes, not a schedule. One row per signed-in device per minute, and only
+// while that device is making requests at all — sixty an hour each on an
+// instance with a handful of people, against a database that ingests a
+// workout file in one transaction.
+const seenInterval = time.Minute
 
 // sessionTracker throttles those writes in memory.
 //

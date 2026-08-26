@@ -17,6 +17,8 @@ import { searchWorkouts } from '../lib/workoutFilters'
 import { fmtDist, type Workout } from '../data/workouts'
 import Modal from '../components/Modal'
 import SearchInput from '../components/SearchInput'
+import MissingRecord from '../components/MissingRecord'
+import { useOnlineStatus } from '../lib/network'
 
 interface EquipmentPageProps {
   onSelectWorkout: (id: string) => void
@@ -102,6 +104,7 @@ function wearOf(e: { type: string; totalDistance?: number; retireAtKm?: number }
 export default function EquipmentPage({ onSelectWorkout, detail, onOpenDetail }: EquipmentPageProps) {
   const [items, setItems] = useState<Equipment[]>([])
   const [loading, setLoading] = useState(true)
+  const online = useOnlineStatus()
   const [editing, setEditing] = useState<Equipment | 'new' | null>(null)
   /*
    * "Add equipment", asked for from somewhere else.
@@ -299,13 +302,17 @@ export default function EquipmentPage({ onSelectWorkout, detail, onOpenDetail }:
             onDeleted={() => { onOpenDetail(null); void load() }}
           />
         ) : loading ? (
-          <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-3)' }}>Loading…</div>
+          <div className="detail-loading">Loading…</div>
         ) : items.length === 0 ? (
-          <div className="card" style={{ padding: 40, textAlign: 'center', color: 'var(--text-3)' }}>
-            No equipment yet. Add your shoes, watch, or bike to track their usage.
+          <div className="feed-empty">
+            {/* Same distinction the library and the feeds make: an empty
+                inventory and one we could not fetch read identically. */}
+            {online
+              ? 'No equipment yet. Add your shoes, watch, or bike to track their usage.'
+              : 'Your equipment can’t be loaded while you are offline.'}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="card" style={{ padding: 40, textAlign: 'center', color: 'var(--text-3)' }}>
+          <div className="feed-empty">
             No equipment matches your filters.
           </div>
         ) : (
@@ -517,6 +524,8 @@ function EquipmentDetail({ id, reloadToken, onBack, onSelectWorkout, onEdit, onD
   onDeleted: () => void
 }) {
   const [data, setData] = useState<(Equipment & { workouts: LinkedWorkout[] }) | null>(null)
+  /** Whatever the fetch rejected with, so the page can say so instead of waiting. */
+  const [loadError, setLoadError] = useState<unknown>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [linking, setLinking] = useState(false)
   /** The workout the X was pressed on, awaiting confirmation. */
@@ -528,8 +537,20 @@ function EquipmentDetail({ id, reloadToken, onBack, onSelectWorkout, onEdit, onD
   // per candidate row on every keystroke.
   const linkedIds = useMemo(() => new Set((data?.workouts ?? []).map(w => w.id)), [data])
 
+  /*
+   * The catch is not optional. Without it a 404 — a deleted item, a link
+   * someone kept, an id typed by hand — rejected into the effect below as an
+   * unhandled promise, `data` stayed null, and the page showed "Loading…" for
+   * as long as it was open. A spinner that never ends is the one failure a
+   * reader cannot tell from a slow network.
+   */
   const load = useCallback(async () => {
-    setData(await api.getEquipment(id))
+    try {
+      setData(await api.getEquipment(id))
+      setLoadError(null)
+    } catch (e) {
+      setLoadError(e)
+    }
   }, [id])
 
   // `reloadToken` changes when the editor saves. Without it this effect only
@@ -564,7 +585,18 @@ function EquipmentDetail({ id, reloadToken, onBack, onSelectWorkout, onEdit, onD
     }
   }
 
-  if (!data) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-3)' }}>Loading…</div>
+  if (loadError) {
+    return (
+      <MissingRecord
+        noun="equipment"
+        error={loadError}
+        onBack={onBack}
+        backLabel="All equipment"
+        onRetry={() => void load()}
+      />
+    )
+  }
+  if (!data) return <div className="detail-loading">Loading…</div>
 
   return (
     <div>

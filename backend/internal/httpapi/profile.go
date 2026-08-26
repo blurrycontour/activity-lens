@@ -127,8 +127,9 @@ func (s *Server) handleUserProfile(w http.ResponseWriter, r *http.Request) {
 	// here, and a second round trip would leave the row briefly undrawable.
 	cooldown := s.pingCooldown(r)
 	writeJSON(w, http.StatusOK, map[string]any{
-		"user":    ref,
-		"tagline": prefs.Tagline,
+		"user":     ref,
+		"tagline":  prefs.Tagline,
+		"lastSeen": s.lastSeen(r, id),
 		"ping": map[string]any{
 			"messages":        pingMessages,
 			"cooldownSeconds": int(cooldown / time.Second),
@@ -149,6 +150,22 @@ func (s *Server) handleUserProfile(w http.ResponseWriter, r *http.Request) {
 		"publicSessions":         pl.publicSessions,
 		"sessionsSharedWithThem": pl.sessionsWithThem,
 	})
+}
+
+// lastSeen is when this person last made a request, on any device, or "" when
+// nothing is recorded — see sessions.Store.LastSeenFor for why an absence is
+// not the same as "a long time ago". Never fails a profile: a page that lost
+// one line is worth drawing.
+func (s *Server) lastSeen(r *http.Request, id int64) string {
+	if s.sessionClients == nil {
+		return ""
+	}
+	seen, err := s.sessionClients.LastSeenFor(r.Context(), []int64{id})
+	if err != nil {
+		slog.Warn("could not load last seen", "user_id", id, "error", err)
+		return ""
+	}
+	return seen[id]
 }
 
 // profileLists is the plan and session half of a profile: the same three

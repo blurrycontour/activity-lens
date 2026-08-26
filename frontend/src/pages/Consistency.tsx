@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { type Workout, type WorkoutType } from '../data/workouts'
 import { useWorkouts } from '../context/WorkoutsContext'
 import TypeDropdown from '../components/TypeDropdown'
@@ -11,7 +11,7 @@ import { recentWeekStarts, weekdayMatrix } from '../lib/insights'
 import ChartCard, { EmptyPlot } from '../components/ChartCard'
 import TrainingSessionsChart from '../components/TrainingSessionsChart'
 import InfoTip from '../components/InfoTip'
-import { useChartSpace } from '../components/ChartAxis'
+import { END_PADDING, useChartSpace, xLabel, WHOLE_NUMBERS } from '../components/ChartAxis'
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid, Legend, Cell,
@@ -28,24 +28,11 @@ const WEEKS_COMPARED = 5
 
 type TabId = 'calendar' | 'compare' | 'totals'
 
-const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
-  { id: 'calendar', label: 'Calendar', icon: <CalendarDays size={15} /> },
-  { id: 'compare', label: 'Compare', icon: <GitCompareArrows size={15} /> },
-  { id: 'totals', label: 'Totals', icon: <Sigma size={15} /> },
+const TABS: { id: TabId; label: string; icon: React.ReactNode; blurb: string }[] = [
+  { id: 'calendar', label: 'Calendar', icon: <CalendarDays size={15} />, blurb: 'Which days you trained, and which days you did not.' },
+  { id: 'compare', label: 'Compare', icon: <GitCompareArrows size={15} />, blurb: 'This year and this week set against the ones before them.' },
+  { id: 'totals', label: 'Totals', icon: <Sigma size={15} />, blurb: 'Distance banked as the year goes on, month by month.' },
 ]
-
-/** Axis label placed below the plot, clear of the tick row. */
-function xLabel(value: string) {
-  return { value, position: 'insideBottom' as const, offset: -12, fontSize: 10, fill: 'var(--text-3)' }
-}
-
-/** Rotated axis label centred on the y axis. */
-function yLabel(value: string) {
-  return {
-    value, angle: -90, position: 'insideLeft' as const,
-    fontSize: 10, fill: 'var(--text-3)', style: { textAnchor: 'middle' as const },
-  }
-}
 
 /** What the heatmap and the distribution charts measure. */
 type Measure = 'count' | 'duration'
@@ -70,6 +57,16 @@ const MEASURES: Record<Measure, { label: string; axisLabel: string; value: (w: W
 export default function Consistency() {
   const { workouts } = useWorkouts()
   const [hoveredDay, setHoveredDay] = useState<{ date: string; count: number; duration: number; x: number; y: number } | null>(null)
+  /*
+   * The calendar opens on today, not on last September.
+   *
+   * A year of columns is twice a phone's width, and it was landing at
+   * scrollLeft 0 — the oldest end — so the reader arrived at the months they
+   * are least interested in and had to scroll right to reach the only ones a
+   * consistency view is opened for. Re-run when the range or the measure
+   * changes, because either can change how wide the grid is.
+   */
+  const calendarRef = useRef<HTMLDivElement | null>(null)
   const [typeFilter, setTypeFilter] = useState<WorkoutType | 'All'>('All')
   const [rangeDays, setRangeDays] = useLocalStorage<number>('al_hm_range', 365)
   const [measure, setMeasure] = useLocalStorage<Measure>('al_hm_measure', 'count')
@@ -131,6 +128,14 @@ export default function Consistency() {
     const values = Object.values(activityMap).map(v => measure === 'count' ? v.count : v.duration)
     return { grid: weeks, months: monthLabels, maxValue: Math.max(...values, 1) }
   }, [filteredWorkouts, rangeDays, measure])
+
+  // Before paint, so the calendar is never seen at the wrong end and then
+  // jumping. Keyed on `grid` rather than on the filters, because it is the
+  // grid's width that has to have settled for scrollWidth to mean anything.
+  useLayoutEffect(() => {
+    const el = calendarRef.current
+    if (el) el.scrollLeft = el.scrollWidth
+  }, [grid])
 
   function cellValue(day: { count: number; duration: number }): number {
     return measure === 'count' ? day.count : day.duration
@@ -260,7 +265,7 @@ export default function Consistency() {
         {/* Heatmap grid: cells stretch to fill the available width, so on
             wide screens each day becomes a rectangle rather than a fixed
             11x11 square. */}
-        <div className="card" style={{ padding: '20px', overflowX: 'auto' }}>
+        <div className="card" style={{ padding: '20px' }}>
           <div className="chart-card-head">
             <h3 className="chart-card-title">Activity Calendar</h3>
             <InfoTip
@@ -269,7 +274,11 @@ export default function Consistency() {
             />
           </div>
           <p className="chart-card-desc">Daily activity across the {rangeLabel(rangeDays)}, shaded by {m.label.toLowerCase()}.</p>
-          <div style={{ display: 'flex', gap: 6 }}>
+          {/* The scroll belongs to the grid, not to the card. On the card it
+              carried the title and the Less/More legend off the screen with it,
+              so a phone showed a truncated year under a heading that had
+              scrolled away. */}
+          <div ref={calendarRef} className="heatmap-scroll" style={{ display: 'flex', gap: 6 }}>
             {/* Day labels */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingTop: 16, flexShrink: 0 }}>
               {DAYS.map(d => (
@@ -366,7 +375,7 @@ export default function Consistency() {
             <BarChart data={dayOfWeek} margin={space.margin(18, 4)}>
               <CartesianGrid {...GRID_PROPS} />
               <XAxis dataKey="label" tick={{ ...AXIS_TICK, fontSize: 11 }} axisLine={false} tickLine={false} label={xLabel('Day of week')} />
-              <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" unit={m.axisLabel || undefined} label={yLabel(measure === 'count' ? 'Activities' : 'Duration (hours)')} />
+              <YAxis {...(measure === 'count' ? WHOLE_NUMBERS : {})} tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" unit={m.axisLabel || undefined} label={space.yLabel(measure === 'count' ? 'Activities' : 'Duration (hours)')} />
               <Tooltip
                 cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
                 content={({ active, payload, label }) => {
@@ -374,7 +383,7 @@ export default function Consistency() {
                   return (
                     <div className="custom-tooltip">
                       <div style={{ fontWeight: 600, marginBottom: 2 }}>{label}</div>
-                      <div>{m.format(payload[0].payload.value)}{measure === 'count' ? ' activities' : ''}</div>
+                      <div>{m.format(payload[0].payload.value)}{measure === 'count' ? (payload[0].payload.value === 1 ? ' activity' : ' activities') : ''}</div>
                     </div>
                   )
                 }}
@@ -411,7 +420,7 @@ export default function Consistency() {
               <BarChart data={yoyData} margin={space.margin(18)} barCategoryGap="18%" barGap={2}>
                 <CartesianGrid {...GRID_PROPS} />
                 <XAxis dataKey="month" tick={AXIS_TICK} axisLine={false} tickLine={false} label={xLabel('Month')} />
-                <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" unit={m.axisLabel || undefined} label={yLabel(measure === 'count' ? 'Activities' : 'Duration (hours)')} />
+                <YAxis {...(measure === 'count' ? WHOLE_NUMBERS : {})} tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" unit={m.axisLabel || undefined} label={space.yLabel(measure === 'count' ? 'Activities' : 'Duration (hours)')} />
                 <Tooltip
                   cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
                   content={({ active, payload, label }) => {
@@ -451,7 +460,7 @@ export default function Consistency() {
               <BarChart data={wowData} margin={space.margin(18)} barCategoryGap="18%" barGap={2}>
                 <CartesianGrid {...GRID_PROPS} />
                 <XAxis dataKey="day" tick={AXIS_TICK} axisLine={false} tickLine={false} label={xLabel('Day of week')} />
-                <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" label={yLabel(measure === 'count' ? 'Activities' : 'Duration (hours)')} />
+                <YAxis {...(measure === 'count' ? WHOLE_NUMBERS : {})} tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" label={space.yLabel(measure === 'count' ? 'Activities' : 'Duration (hours)')} />
                 <Tooltip
                   cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
                   content={({ active, payload, label }) => {
@@ -500,8 +509,8 @@ export default function Consistency() {
             <ResponsiveContainer width="100%" height={260}>
               <LineChart data={cumulativeData} margin={space.margin(18)}>
                 <CartesianGrid {...GRID_PROPS} />
-                <XAxis dataKey="month" tick={AXIS_TICK} axisLine={false} tickLine={false} label={xLabel('Month')} />
-                <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" label={yLabel('Cumulative distance (km)')} />
+                <XAxis dataKey="month" padding={END_PADDING} tick={AXIS_TICK} axisLine={false} tickLine={false} label={xLabel('Month')} />
+                <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" label={space.yLabel('Cumulative distance (km)')} />
                 <Tooltip
                   content={({ active, payload, label }) => {
                     if (!active || !payload?.length) return null
@@ -620,7 +629,7 @@ function BreakdownGrid({ title, info, stats, label, measure, statValue, format }
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <span style={{ fontWeight: 600, fontSize: 13 }}>{label(key)}</span>
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--primary)', fontWeight: 700 }}>
-                {measure === 'count' ? `${s.count} activities` : format(s.duration)}
+                {measure === 'count' ? `${s.count} ${s.count === 1 ? 'activity' : 'activities'}` : format(s.duration)}
               </span>
             </div>
             <div style={{ background: 'var(--bg-3)', borderRadius: 99, height: 4, marginBottom: 8 }}>

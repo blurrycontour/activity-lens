@@ -11,6 +11,42 @@ import PasswordInput from '../components/PasswordInput'
 import AuthBackdrop from '../components/AuthBackdrop'
 import ConfirmDialog from '../components/ConfirmDialog'
 
+/**
+ * The server's authentication errors, in the words a person would use.
+ *
+ * They were rendered raw: the first thing the app ever said to someone with a
+ * mistyped password was the lowercase fragment `invalid credentials`, which
+ * reads like a log line because it is one. The server's phrasing is right for
+ * the server — deliberately vague about whether the account exists — and wrong
+ * for the one screen where it is the entire message.
+ *
+ * Anything unrecognised falls through with its first letter capitalised rather
+ * than being replaced, so a message this list has not met still says what it
+ * came to say.
+ */
+function authMessage(err: ApiError): string {
+  const raw = err.message.trim()
+  const key = raw.toLowerCase()
+  if (key.includes('invalid credentials') || key.includes('invalid username') || key.includes('invalid password')) {
+    // Deliberately not "no such user": which half was wrong is exactly what a
+    // login form must not tell someone guessing.
+    return 'That username or password is not right. Check both and try again.'
+  }
+  if (key.includes('inactive') || key.includes('disabled') || key.includes('deactivated')) {
+    return 'This account has been deactivated. An administrator can turn it back on.'
+  }
+  if (key.includes('registration') && key.includes('disabled')) {
+    return 'This server is not accepting new accounts.'
+  }
+  if (key.includes('already') || key.includes('taken') || key.includes('exists')) {
+    return 'That username or email is already in use.'
+  }
+  if (key.includes('too many') || key.includes('rate limit')) {
+    return 'Too many attempts. Wait a minute and try again.'
+  }
+  return raw.charAt(0).toUpperCase() + raw.slice(1)
+}
+
 export default function Login() {
   const { login, loginWithSSO, register, features } = useAuth()
   const [mode, setMode] = useState<'login' | 'register'>('login')
@@ -68,7 +104,7 @@ export default function Login() {
       // looking for a typo in a password that was never checked.
       const reachedServer = err instanceof ApiError && !isGatewayError(err.status)
       setError(reachedServer
-        ? (err as ApiError).message
+        ? authMessage(err as ApiError)
         : "Can't reach the server. Check your connection and try again.")
     } finally {
       setBusy(false)
@@ -133,10 +169,16 @@ export default function Login() {
 
       <div className="auth-card">
         <div className="auth-head">
-          <div className="auth-brand">
-            <Logo size={40} />
+          {/* An h1, not a span: this is the only page in the app with no
+              heading of any kind, so a screen reader arrived at a form with
+              nothing naming what it belongs to. */}
+          <h1 className="auth-brand">
+            {/* The mark is decorative here: the heading's own text already says
+                the name, and Logo carries an aria-label, so leaving it exposed
+                announced "Activity Lens Activity Lens". */}
+            <span aria-hidden><Logo size={40} /></span>
             <span className="auth-brand-name">Activity Lens</span>
-          </div>
+          </h1>
           <span className="auth-sub">
             {registering ? 'Start logging your training in a minute.' : 'Sign in to your training log.'}
           </span>

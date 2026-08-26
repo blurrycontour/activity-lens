@@ -23,6 +23,11 @@ const (
 	KindSessionShared Kind = "session_shared"
 	// KindGearWorn: a piece of equipment reached its replace-at distance.
 	KindGearWorn Kind = "gear_worn"
+	// KindPersonalBest: the latest activity beat everything else of its sport —
+	// its longest, its fastest, its biggest climb, or the least effort per unit
+	// of speed. Judged per sport, because a hike is not slow for being slower
+	// than a run.
+	KindPersonalBest Kind = "personal_best"
 	// KindGoalMet: a training goal was completed for its period.
 	KindGoalMet Kind = "goal_met"
 	// KindGoalAtRisk: a goal's period is nearly over and it is still short.
@@ -36,10 +41,11 @@ const (
 	// which is why it is rate limited hard and stops entirely when the training
 	// does. See checkNoGoals.
 	KindGoalNoneSet Kind = "goal_none_set"
-	// KindWorkoutSocial: someone commented on, or reacted to, a workout you
-	// own or are part of the conversation on. One kind for both, because they
-	// are one feature and nobody wants "reactions" and "comments" as separate
-	// switches for a page they either follow or do not.
+	// KindWorkoutSocial: something happened on a workout you can see — a
+	// comment, a reaction, or a photo added to one shared with you. One kind
+	// for all three, because from the reader's side they are one event ("there
+	// is something new on that workout") and nobody wants three switches for a
+	// page they either follow or do not.
 	KindWorkoutSocial Kind = "workout_social"
 	// KindPing: another member nudged you from your profile — "let's go for a
 	// run", or that they are feeling like a couch potato.
@@ -75,7 +81,7 @@ const (
 )
 
 // AllKinds is every kind, in the order Settings lists them.
-var AllKinds = []Kind{KindBroadcast, KindAppUpdate, KindWorkoutShared, KindPlanShared, KindSessionShared, KindWorkoutSocial, KindPing, KindGearWorn, KindGoalMet, KindGoalAtRisk, KindGoalNoneSet, KindWorkoutImported, KindFeedback}
+var AllKinds = []Kind{KindBroadcast, KindAppUpdate, KindWorkoutShared, KindPlanShared, KindSessionShared, KindWorkoutSocial, KindPing, KindGearWorn, KindPersonalBest, KindGoalMet, KindGoalAtRisk, KindGoalNoneSet, KindWorkoutImported, KindFeedback}
 
 // ValidKind reports whether k is a known kind.
 func ValidKind(k Kind) bool {
@@ -118,6 +124,16 @@ type Event struct {
 	// shoe is re-evaluated after every workout, but the user should hear about
 	// it once, so gear events key on the equipment id. Empty means always new.
 	DedupeKey string
+	// Supersedes retires this user's older notifications of the same kind once
+	// this one is stored.
+	//
+	// For kinds where only the latest can be acted on. An update notice for a
+	// version that is no longer the newest points at something nobody can
+	// install; eight releases left eight near-identical rows, seven of them
+	// dead, each wanting its own dismissal. Distinct from DedupeKey, which
+	// prevents a *repeat* of one event — this retires *different* events that
+	// the newest has made pointless.
+	Supersedes bool
 }
 
 // Prefs holds a user's per-kind switches plus the master push toggle. The zero

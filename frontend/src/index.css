@@ -31,7 +31,10 @@
   --border-strong: rgba(255, 255, 255, 0.15);
   --text: #e8eaed;
   --text-2: #9ca3af;
-  --text-3: #6b7280;
+  /* 4.8:1 on the page and 4.5:1 on a card. It was #6b7280, which came to 3.8:1
+     against --bg-2 — under the bar for 11px text, which is all this token is
+     ever used for. Checked in paletteSeparation.test.ts. */
+  --text-3: #767e8c;
   /* Accent — overridden dynamically via JS */
   --primary: #00e87a;
   --primary-dim: rgba(0, 232, 122, 0.15);
@@ -45,22 +48,36 @@
   --blue-dim: rgba(59, 130, 246, 0.15);
   --purple: #a855f7;
   --purple-dim: rgba(168, 85, 247, 0.15);
-  --run: #00e87a;
-  --ride: #3b82f6;
-  --hike: #f59e0b;
-  --swim: #06b6d4;
-  --strength: #a855f7;
+  /* Sport colours, chosen against the accent roster rather than beside it.
+     Every one of them used to be the exact hex of one of the six accents —
+     --run was Electric Green, --swim was Cyan, --strength was Violet — so
+     picking an accent made one sport indistinguishable from the interface's own
+     highlight, and on the default accent that sport was running. These are
+     placed for separation from all six accents, from the status colours and
+     from each other; paletteSeparation.test.ts holds the floor. */
+  --run: #bef264;
+  --ride: #60a5fa;
+  --hike: #fdba74;
+  --swim: #5eead4;
+  --strength: #ec4899;
   /* Deliberately the one grey in the sport palette: Other is not a sport, it is
      the absence of one. A workout that reads as unclassified is doing its job. */
-  --other: #94a3b8;
+  --other: #a8a29e;
   /* Training plans and the sessions run against them. Their own two colours
      rather than a borrowed sport one: a plan and a session appear in the same
      mixed list as workouts, and reusing --strength would have said "this is a
      strength workout" about a row that is neither strength nor a workout.
      Kept apart from each other too — a plan is the intent, a session is the
      record, and the feed shows both at once. */
-  --plan: #6366f1;
-  --session: #f43f5e;
+  /* A violet with chroma in it. #c4b5fd was the same hue at 39 chroma against
+     this one's 64, which on a near-black page reads as bright-but-drained —
+     the mark looked faded rather than coloured. Still 24 ΔE clear of the
+     nearest accent, which is what the palette test holds it to.
+     --session cannot follow it: every more saturated colour at its hue lands
+     within 15 ΔE of the Rose accent, which is why it is pale in the first
+     place. Moving it would mean moving its hue. */
+  --plan: #9f7aea;
+  --session: #fca5a5;
   /* Status colours. Separate from the activity-type palette above even where
      the hex matches (--hike is also amber): those track a sport, these track
      an outcome, and they are free to diverge. Never the accent — the accent is
@@ -126,12 +143,29 @@
   --border-strong: rgba(0, 0, 0, 0.15);
   --text: #0f1117;
   --text-2: #374151;
-  --text-3: #9ca3af;
+  /* Was #9ca3af — 2.5:1 on a white card, under even the 3:1 floor for large
+     text, and used for every 11px micro-label, hint and description in the app.
+     The light overrides deepened --text-2 and the status colours against the
+     white ground but made this one *lighter* than the dark theme's #6b7280,
+     which is backwards. 4.8:1 now. */
+  --text-3: #666e7b;
   /* Darker on a white ground, where the dark-theme values are too light to
      read as text. The dim/border variants keep their alpha and need no change. */
   --danger: #dc2626;
   --success: #16a34a;
   --warning: #d97706;
+  /* Sports need the same treatment as the status colours on a white ground, and
+     never had it: --run at #00e87a was 1.6:1 against a card, which is a shape
+     you can see and a colour you cannot read. Same hue family as the dark set,
+     dropped in lightness until each clears 3:1. */
+  --run: #3f6212;
+  --ride: #1e40af;
+  --hike: #854d0e;
+  --swim: #0f766e;
+  --strength: #86198f;
+  --other: #57534e;
+  --plan: #5b21b6;
+  --session: #9f1239;
 }
 
 * {
@@ -983,7 +1017,9 @@ body {
   gap: 10px;
   text-align: center;
 }
-.auth-brand { display: flex; align-items: center; gap: 10px; }
+/* An h1 now, so the page has a heading; the margin and size come from the
+   span inside it rather than from the browser default. */
+.auth-brand { display: flex; align-items: center; gap: 10px; margin: 0; font-size: inherit; }
 .auth-brand-name { font-size: 19px; font-weight: 700; letter-spacing: -0.025em; }
 .auth-sub { font-size: 13px; color: var(--text-3); }
 
@@ -1293,11 +1329,19 @@ body {
    settings pages use through <Field>. Two label styles is one too many, but
    unifying them is a visible restyle of twenty labels rather than a cleanup —
    this class exists so the decision is made in one place when it is made. */
+/* Was a second, sentence-case label style used only inside four dialogs, while
+   <Field> and every settings page used .field-label. ui-design.md recorded the
+   duality as a known gap and said unifying it was a one-line decision once both
+   were classes. This is that line: .form-label is now .field-label with the
+   block layout its callers rely on. */
 .form-label {
   display: block;
-  font-size: 11px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
   color: var(--text-3);
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 /* A search box with the magnifier inside it. The icon's offset and the input's
@@ -1969,6 +2013,328 @@ body {
 /* Placeholder while the full record is still on its way. A long workout is a
    few hundred kilobytes of samples, and the panels' own empty states say "no
    route data" — a statement about the workout rather than about the wait. */
+/* A switch with a label and a line of explanation beside it. The .switch class
+   handles the control; this handles the row it sits in. */
+.display-pref {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 0;
+  cursor: pointer;
+}
+.display-pref + .display-pref { border-top: 1px solid var(--border); }
+.display-pref .switch-track { flex-shrink: 0; margin-top: 2px; }
+.display-pref-body { display: flex; flex-direction: column; gap: 2px; }
+.display-pref-label { font-size: 13px; font-weight: 500; color: var(--text); }
+.display-pref-hint { font-size: 11px; color: var(--text-3); line-height: 1.45; }
+
+/* Two- or three-option segmented control, e.g. the volume chart's Total/Best.
+   Was a set of inline styles repeated per option; a class both removes the
+   duplication and gives the touch-target rule below something to select. */
+.segmented {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.segmented button {
+  padding: 5px 10px;
+  font-size: 11px;
+  border: none;
+  cursor: pointer;
+  background: var(--bg-3);
+  color: var(--text-3);
+}
+.segmented button.active { background: var(--primary-dim); color: var(--primary); }
+
+/* Out of the way while the reader is scrolling down. See useHideOnScroll:
+   .with-fab reserves room at the end of the scroll, which solves the last
+   screenful and nothing before it, and the button is fixed. */
+body[data-fab-hidden] .fab {
+  /* The mirror of the arrival curve. Both directions were already the same
+     duration, but a curve that leaves fast and lands slow is right for one of
+     them and wrong for the other: arriving it reads as responsive, leaving it
+     spends most of the 240ms already out of sight, which is the "it just
+     vanishes" everyone reports. Reversing the control points for the outward
+     trip makes the two halves feel like one movement.
+     A variable rather than a second `transition`, because a second one would
+     replace the first outright and drop whatever it did not restate. */
+  --fab-ease: cubic-bezier(1, 0, 0.68, 0.28);
+  transform: translateY(calc(100% + 24px + var(--bottombar-h)));
+  opacity: 0;
+  pointer-events: none;
+}
+/* The heatmap's scale, drawn from the same ramp the map layer uses. */
+.heat-legend {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 8px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-3);
+}
+.heat-legend-ramp { display: flex; gap: 2px; }
+.heat-legend-ramp i { width: 16px; height: 10px; border-radius: 2px; }
+
+/* ── Touch targets ─────────────────────────────────────────────────────
+   Nothing in the mobile chrome reached the 44px every platform's guidelines
+   ask for: the top-bar buttons measured 31×31, the avatar 32, the InfoTip
+   trigger 17×17 — and that last one is the only route to what a chart means.
+
+   The controls are not too small to *see*; they are correctly proportioned for
+   the density around them. So none of them changes size. Each grows an
+   invisible, centred overlay to the minimum instead, which is the difference
+   between a control that looks right and one a thumb can actually land on.
+
+   Coarse pointers only. With a mouse the visible edge is the target, and an
+   invisible 44px box around every icon button would start swallowing hovers
+   meant for its neighbours — and the app's own 768px breakpoint, which is what
+   makes this checkable in the browser harness, where an emulated phone is still
+   a fine pointer. */
+@media (pointer: coarse), (max-width: 768px) {
+  .btn-icon,
+  .btn,
+  .infotip-trigger,
+  .view-switch button,
+  .tab-strip-item,
+  .filter-pill,
+  .metric-chip,
+  .notif-dismiss,
+  .page-header-back,
+  .al-dropdown-trigger,
+  .segmented button,
+  .topbar > button,
+  .topbar .avatar-button {
+    /* .lightbox-close is not in this list: it is already absolutely
+       positioned, which is all its ::after needs, and `relative` here would
+       fight its own rule for which corner it sits in. */
+    position: relative;
+  }
+  .btn-icon::after,
+  .btn::after,
+  .infotip-trigger::after,
+  .view-switch button::after,
+  .tab-strip-item::after,
+  .filter-pill::after,
+  .metric-chip::after,
+  .chip-scroll::after,
+  .notif-dismiss::after,
+  .page-header-back::after,
+  .al-dropdown-trigger::after,
+  .segmented button::after,
+  .topbar > button::after,
+  .topbar .avatar-button::after,
+  .lightbox-close::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    /* Never smaller than the control, so a wide-but-short pill keeps its width
+       and gains only height. */
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+  }
+}
+
+/* ── Display preferences ───────────────────────────────────────────────
+   Two switches that sit alongside the theme rather than inside it, so they
+   compose with it: high contrast on light is the outdoor case, pure black on
+   dark is the 6am one. Both are attributes on :root, set in lib/theme.ts. */
+
+/* True black, dark only. --bg is near-black but not black; on an OLED screen
+   the difference is real power and, in a dark room, real glare. The surfaces
+   above it step up from zero so cards still separate from the page. */
+:root[data-pure-black]:not(.light) {
+  --bg: #000000;
+  --bg-2: #0b0c0f;
+  --bg-3: #16181d;
+  --border: rgba(255, 255, 255, 0.11);
+  --border-strong: rgba(255, 255, 255, 0.2);
+}
+
+/* Stronger text and lines, both themes. The answer to reading a screen outdoors
+   in sun — which is the situation this app is for, and the one where 11px
+   --text-3 labels stop existing. Deliberately not a separate palette: only the
+   contrast-bearing tokens move, so nothing changes meaning. */
+:root[data-high-contrast] {
+  --text-2: #d5d9e0;
+  --text-3: #a8afbb;
+  --border: rgba(255, 255, 255, 0.2);
+  --border-strong: rgba(255, 255, 255, 0.34);
+}
+:root[data-high-contrast].light {
+  --text-2: #1f2937;
+  --text-3: #4b5563;
+  --border: rgba(0, 0, 0, 0.22);
+  --border-strong: rgba(0, 0, 0, 0.4);
+}
+/* Micro-labels are the smallest text in the app and the first thing to go in
+   bright light. They keep their size — this is about legibility, not layout. */
+:root[data-high-contrast] .chart-card-desc,
+:root[data-high-contrast] .settings-row-sub,
+:root[data-high-contrast] .field-hint { font-weight: 500; }
+
+/* A row of a records card: what, how much, and when. */
+.pr-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+.pr-row-label { font-size: 12px; color: var(--text-3); }
+.pr-row-figure { display: flex; align-items: baseline; gap: 7px; }
+.pr-row-value {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+}
+/* The standout figure on the card, in --success rather than the accent: this is
+   an achievement, and on the Rose accent an accent-coloured record read as an
+   error message. */
+.pr-row-value.best { color: var(--success); }
+.pr-row-date {
+  font-size: 10px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+/* ── The personal-best banner ──────────────────────────────────────────
+   Two rows on a phone, one on a desktop. It used to be a wrapping flex row of
+   inline styles with no breakpoint, so whether the figure sat beside the
+   heading or under it depended on how long the workout's name happened to be —
+   and when it wrapped, the figure landed hard against the left edge with the
+   heading stranded above it. Grid states both arrangements instead of hoping
+   for one. */
+/* One card per workout, stacked. Two activities on one day can each set their
+   own records, and a card each says whose is whose structurally rather than
+   leaving it to the sport named in every label. */
+.pb-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.pb-banner {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 4px 12px;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  /* A button now — it opens the workout that set the records. */
+  font: inherit;
+  color: inherit;
+  padding: 12px 14px;
+  /* --success, not the accent. The accent is the reader's choice and means
+     nothing; this card means "you did something". On Rose they were the same
+     red as --danger and the best news the app has read like an error. */
+  border: 1px solid var(--success);
+  border-radius: calc(var(--radius) * 1.5);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+}
+.pb-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--success);
+}
+.pb-sub {
+  font-size: 12px;
+  color: var(--text-2);
+  margin-top: 2px;
+}
+.pb-figures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  /* Under both the mark and the chevron, aligned with the heading rather than
+     with the disc: the figures belong to the sentence above them. */
+  grid-column: 2 / -1;
+  margin-top: 6px;
+}
+/* The "there is somewhere to go" mark, beside the heading rather than beside
+   the figures, because it belongs to the card and not to any one record. */
+.pb-go { color: var(--text-3); grid-column: 3; grid-row: 1; }
+.pb-banner:hover .pb-go { color: var(--text-2); }
+.pb-banner:focus-visible { outline: 2px solid var(--success); outline-offset: 2px; }
+.pb-figure {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px 10px;
+  border-radius: var(--radius);
+  background: var(--bg-2);
+}
+.pb-figure-label {
+  font-size: 10px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.pb-figure-value {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+}
+/* Wide enough for one row: the figures move up beside the heading and push to
+   the right edge, which is where they were before and where they read best. */
+@media (min-width: 769px) {
+  .pb-banner {
+    grid-template-columns: auto 1fr auto auto;
+  }
+  .pb-figures {
+    grid-column: 3;
+    grid-row: 1;
+    margin-top: 0;
+    justify-content: flex-end;
+  }
+  .pb-go { grid-column: 4; }
+}
+
+/* The year calendar's own scroller. Only the grid moves: on the card, the
+   heading and the Less/More legend scrolled off with it. */
+.heatmap-scroll {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.heatmap-scroll::-webkit-scrollbar { display: none; }
+
+/* The panel a page shows when the record it was opened for did not come back.
+   Deliberately generous: this is a dead end, and the way out has to be the most
+   obvious thing on the screen rather than a link tucked under an error string. */
+.missing-record {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 240px;
+  padding: 40px 24px;
+  text-align: center;
+}
+.missing-record > svg { color: var(--text-3); }
+.missing-record h2 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+.missing-record p {
+  font-size: 13px;
+  color: var(--text-3);
+  max-width: 34ch;
+  line-height: 1.5;
+}
+.missing-record-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 6px;
+}
+
 .detail-loading {
   display: flex;
   align-items: center;
@@ -2396,7 +2762,22 @@ body {
      A shadow is painted, never hit-tested, so it costs no tap and no swipe. */
   box-shadow: 0 4px 20px var(--primary-glow), 0 10px 30px rgba(0, 0, 0, 0.75), 0 2px 8px rgba(0, 0, 0, 0.55);
   z-index: var(--z-fab);
-  transition: transform 0.2s, box-shadow 0.2s;
+  /* The arrival curve: fast off the mark, settling into place. Swapped for its
+     mirror while hidden — see body[data-fab-hidden] .fab. */
+  --fab-ease: cubic-bezier(0.32, 0.72, 0, 1);
+  /* One declaration, because a second `transition` anywhere replaces this one
+     rather than adding to it — which is what happened when the hide-on-scroll
+     rule was written separately above: it lost opacity, so the button vanished
+     instantly and only slid back. Opacity rides the same curve and the same
+     duration as the transform: fading out in 200ms under `ease` while the
+     travel took 240ms was the other half of the asymmetry. */
+  transition:
+    transform 0.24s var(--fab-ease),
+    opacity 0.24s var(--fab-ease),
+    box-shadow 0.2s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fab { transition: none; }
 }
 /* Out of the way while anything modal is open. The button is `position: fixed`
    inside the page, which the swipe pager makes a stacking context, so it cannot
@@ -2783,6 +3164,16 @@ body:has(.overlay) .dial { display: none; }
    than an overlay so it works over the strip's own background without needing
    to know what colour that is, and so it can never sit above the buttons and
    swallow a tap. The classes are set from measurement in TabStrip.tsx. */
+/* One line under the strip saying what the selected tab holds. Sits with the
+   tab labels rather than with the first card, because it describes the choice
+   above it and not the chart below. */
+.tab-strip-blurb {
+  margin: 8px 2px 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+
 .tab-strip.fade-end {
   mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
 }
@@ -2792,6 +3183,99 @@ body:has(.overlay) .dial { display: none; }
 .tab-strip.fade-start.fade-end {
   mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
 }
+/* Which measures the Trends charts draw. A scroller for the same reason the
+   strip above is one: nine chips are 893px of labels, which wrapped to three
+   rows on a phone and put the chart itself below the fold. The fade classes
+   come from the same hook. */
+.metric-chips-wrap { position: relative; }
+/* An arrow at each live end. The fade alone was not saying it: what it
+   dissolves is a chip's outline, and an outline is what the end of a row looks
+   like anyway — so four chips and a sliver read as four chips and nothing
+   more. These say it outright, and are pressable.
+   Over the row rather than beside it: two 30px gutters is a sixth of a phone's
+   width, spent on chrome, and the chip underneath is already faded to nothing
+   where the arrow sits. */
+.chip-scroll {
+  position: absolute;
+  top: 50%;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-2);
+  color: var(--text-2);
+  cursor: pointer;
+  padding: 0;
+  z-index: 1;
+  transform: translateY(-50%);
+  transition: opacity 0.18s ease, color 0.15s, border-color 0.15s;
+}
+.chip-scroll.start { left: 0; }
+.chip-scroll.end { right: 0; }
+.chip-scroll:hover { color: var(--text); border-color: var(--text-3); }
+/* Faded rather than unmounted: an arrow appearing under a finger that is
+   already moving is worse than one that is simply not lit. */
+.chip-scroll.off { opacity: 0; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) {
+  .chip-scroll { transition: none; }
+}
+.metric-chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  /* Tall enough to hold each chip's 44px touch target. `overflow-x: auto`
+     makes overflow-y scroll as well, so a hit area hanging past the edge
+     would be clipped and would add a vertical scrollbar; the padding gives it
+     somewhere to be. The bottom margin is reduced by the same amount, so the
+     gap to what follows is unchanged. */
+  padding: 8px 0;
+  margin-bottom: 8px;
+}
+.metric-chips::-webkit-scrollbar { display: none; }
+.metric-chips.fade-end {
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+}
+.metric-chips.fade-start {
+  mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent);
+}
+.metric-chips.fade-start.fade-end {
+  mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+}
+.metric-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 5px 12px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+/* The measure's own hue, set per chip from the colour its line is drawn in. */
+.metric-chip.on {
+  border-color: var(--chip-hue);
+  background: color-mix(in srgb, var(--chip-hue) 9%, transparent);
+  color: var(--chip-hue);
+}
+.metric-chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--chip-hue);
+  opacity: 0.3;
+}
+.metric-chip.on .metric-chip-dot { opacity: 1; }
+
 .tab-strip-item {
   display: inline-flex;
   align-items: center;
@@ -2808,6 +3292,22 @@ body:has(.overlay) .dial { display: none; }
   transition: background 0.15s, color 0.15s;
 }
 .tab-strip-item:hover { color: var(--text); }
+/* How much is behind the tab. A figure rather than a dot: "is there anything
+   here" and "is it worth the scroll" are different questions and the number
+   answers both. Tabular figures so it does not resize as it counts up, and
+   `currentColor` at low opacity so it follows the tab through hover, active
+   and every accent rather than needing a colour of its own. */
+.tab-strip-count {
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 99px;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
 .tab-strip-item.active {
   background: var(--bg-2);
   color: var(--primary);
@@ -3046,11 +3546,17 @@ body:has(.overlay) .dial { display: none; }
   height: 0;
   overflow: hidden;
   border-bottom-width: 0 !important;
-  transition: height 0.22s ease, border-bottom-width 0.22s ease;
+  /* Paired with aria-hidden on the element: collapsed, the bar is gone for
+     everyone rather than only for people looking at it. Delayed so it does not
+     blank the text halfway through the closing animation. */
+  visibility: hidden;
+  transition: height 0.22s ease, border-bottom-width 0.22s ease, visibility 0s linear 0.22s;
 }
 .offline-bar[data-visible='true'] {
   height: 26px;
   border-bottom-width: 1px !important;
+  visibility: visible;
+  transition-delay: 0s;
 }
 /* Standalone variant for screens with no app layout grid (the login page). */
 .offline-bar.floating {
@@ -3824,6 +4330,27 @@ body:has(.overlay) .dial { display: none; }
   transition: background 0.1s;
 }
 .notif-item:hover { background: var(--bg-3); }
+/* The row's main action, stretched behind its content so the whole row stays
+   one tap target while the dismiss beside it remains a button of its own.
+   Underneath, so the dismiss keeps its clicks. */
+.notif-open {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.notif-open:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+.notif-item > :not(.notif-open) { position: relative; z-index: 1; }
+/* …except that the text must not swallow the clicks meant for the button
+   behind it. Only the dismiss is interactive in its own right. */
+.notif-item > span:not(.notif-dismiss),
+.notif-item > img { pointer-events: none; }
 /* Unread carries an accent rail rather than a filled background, so a list that
    is mostly unread does not become a solid block of colour. */
 .notif-item.unread::before {
@@ -3907,10 +4434,20 @@ body:has(.overlay) .dial { display: none; }
   align-self: flex-start;
   flex-shrink: 0;
   padding: 3px;
+  border: none;
+  background: transparent;
   border-radius: 50%;
   color: var(--text-3);
+  cursor: pointer;
   opacity: 0;
   transition: opacity 0.12s;
+}
+/* A keyboard has no hover either, so focus has to reveal it for the same
+   reason touch does — otherwise it is a control you can tab to and not see. */
+.notif-dismiss:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
 }
 .notif-item:hover .notif-dismiss { opacity: 0.7; }
 .notif-dismiss:hover { opacity: 1 !important; background: var(--bg-2); }
@@ -4596,6 +5133,19 @@ body:has(.overlay) .dial { display: none; }
   font-weight: 600;
 }
 .discover-handle { font-size: 11px; color: var(--text-3); font-family: var(--font-mono); }
+/* When they were last around. Under the handle rather than beside it: the two
+   are different kinds of fact and a phone card is narrow enough that joining
+   them wraps. The dot is the same one the device list uses, and goes green for
+   the one state worth colouring. */
+.discover-seen {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.discover-seen.live { color: var(--success); font-weight: 500; }
 /* Two lines at most: a directory of cards stays a grid of equal tiles, and a
    tagline is a line about yourself rather than a paragraph. */
 .discover-tagline {
@@ -4627,6 +5177,16 @@ body:has(.overlay) .dial { display: none; }
 .profile-avatar-btn:hover { box-shadow: 0 0 0 3px var(--primary-dim); }
 .profile-name { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
 .profile-handle { font-size: 13px; color: var(--text-3); font-family: var(--font-mono); margin-top: 1px; }
+/* The same line the directory card carries, at the profile's own size. */
+.profile-seen {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.profile-seen.live { color: var(--success); font-weight: 500; }
 .profile-tagline {
   margin-top: 6px;
   font-size: 13px;
@@ -5169,13 +5729,13 @@ body:has(.overlay) .dial { display: none; }
   column-gap: 8px;
   row-gap: 2px;
 }
-.goal-std-head > .goal-sport-disc { grid-row: 1 / 3; align-self: center; }
+.goal-std-head > .sport-disc { grid-row: 1 / 3; align-self: center; }
 
 /* The sport hue as a wash rather than a fill: the icon on top of it is the
    same colour at full strength, so the disc has to stay well behind it or the
    mark stops reading. Mixed with transparent, not with a surface token, so it
    sits correctly on the card in either theme. */
-.goal-sport-disc {
+.sport-disc {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -5183,8 +5743,8 @@ body:has(.overlay) .dial { display: none; }
   width: 36px;
   height: 36px;
   border-radius: 99px;
-  background: color-mix(in srgb, var(--goal-hue, var(--primary)) 13%, transparent);
-  border: 1px solid color-mix(in srgb, var(--goal-hue, var(--primary)) 26%, transparent);
+  background: color-mix(in srgb, var(--sport-hue, var(--primary)) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--sport-hue, var(--primary)) 26%, transparent);
 }
 /* The third column is as wide as the wider of the verdict and the badges;
    without this the narrower of the two would stretch to fill it and stop
@@ -5389,7 +5949,18 @@ body:has(.overlay) .dial { display: none; }
   /* Now the row genuinely has to fit: the two dropdowns share what is left
      after the pill, and their labels ellipsize rather than wrapping the row. */
   .analysis-filters .al-dropdown { min-width: 0; flex: 1 1 auto; }
-  .analysis-filters .al-dropdown-trigger { min-width: 0; width: 100%; }
+  .analysis-filters .al-dropdown-trigger {
+    min-width: 0;
+    width: 100%;
+    /* Tighter than the desktop trigger by eight pixels a side. The default
+       label — "Last 30 days", what both these pages open on — was six pixels
+       wider than the space left for it, so the app's resting state on a phone
+       read "Last 30 day". Chrome is the right place to give that back: the
+       label is the content, the padding is not. */
+    gap: 6px;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
 }
 
 /* ── Analysis: trend summary tiles ──────────────────────────────────
@@ -5523,7 +6094,10 @@ body:has(.overlay) .dial { display: none; }
 }
 /* Semantic, never the accent: these report an outcome, and the accent is the
    user's choice and carries no meaning. */
-.goal-verdict.done { background: var(--primary); color: var(--on-primary); }
+/* "Done" joins its three siblings on the semantic palette. It was the only one
+   of the four using the accent, so on Rose a completed goal was pink while an
+   in-progress one was green — done looked worse than ahead. */
+.goal-verdict.done { background: var(--success); color: var(--bg); }
 .goal-verdict.ahead { background: color-mix(in srgb, var(--success) 16%, transparent); color: var(--success); }
 .goal-verdict.on { background: var(--bg-3); color: var(--text-2); }
 .goal-verdict.behind { background: color-mix(in srgb, var(--warning) 18%, transparent); color: var(--warning); }
@@ -5904,8 +6478,13 @@ body:has(.overlay) .dial { display: none; }
 .lightbox-caption { font-size: 12px; color: #e8eaed; text-align: center; }
 .lightbox-close {
   position: absolute;
-  top: 14px;
-  right: 14px;
+  /* Clear of the status bar. The lightbox is `position: fixed; inset: 0`, so
+     on a phone its top edge is behind the notch and the carrier row — the
+     close button sat up among the Android notification icons and was as
+     likely to pull the shade down as to shut the photo. Every other fixed
+     surface in the app already adds the inset; this one had not. */
+  top: calc(14px + var(--safe-top));
+  right: calc(14px + var(--safe-right));
   width: 36px;
   height: 36px;
   display: grid;
@@ -5917,7 +6496,15 @@ body:has(.overlay) .dial { display: none; }
   cursor: pointer;
 }
 @media (max-width: 768px) {
-  .lightbox { padding: 12px; }
+  /* The photo keeps clear of the same two edges the button does, so it is not
+     the image running under the status bar instead. */
+  .lightbox {
+    padding: calc(12px + var(--safe-top)) calc(12px + var(--safe-right))
+             calc(12px + var(--safe-bottom)) calc(12px + var(--safe-left));
+  }
+  /* Room for the close button above it: at full width the top of a portrait
+     photo sat directly under the button. */
+  .lightbox-body { padding-top: 44px; }
   .gallery-grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
 }
 
@@ -6242,23 +6829,28 @@ body:has(.overlay) .dial { display: none; }
   flex: 0 0 auto;
 }
 .plan-card-mark {
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
   display: inline-grid;
   place-items: center;
   flex: 0 0 auto;
   color: var(--plan);
-  background: color-mix(in srgb, var(--plan) 14%, transparent);
+  /* A wash and a ring, the same pair the sport disc uses. 14% of a colour on a
+     near-black page is barely a tile at all, so the glyph was carrying the mark
+     on its own — hence "washed": there was nothing behind it. */
+  background: color-mix(in srgb, var(--plan) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--plan) 30%, transparent);
 }
 .plan-card-mark.session {
   color: var(--session);
-  background: color-mix(in srgb, var(--session) 14%, transparent);
+  background: color-mix(in srgb, var(--session) 16%, transparent);
+  border-color: color-mix(in srgb, var(--session) 30%, transparent);
 }
 /* In a row the mark is smaller and the head is just the mark: the name sits
    beside it rather than under it, and a 30px tile would push the row's height
    up for nothing. */
-.plan-list .plan-card-mark { width: 26px; height: 26px; border-radius: 8px; }
+.plan-list .plan-card-mark { width: 30px; height: 30px; border-radius: 9px; }
 .plan-card {
   display: flex;
   align-items: center;

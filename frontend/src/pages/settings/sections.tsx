@@ -41,7 +41,7 @@ export const SETTINGS_META: SectionMeta[] = [
   },
   {
     id: 'appearance', label: 'Appearance', group: 'App',
-    sub: 'Accent colour and chart style',
+    sub: 'Theme, readability, accent colour and charts',
     icon: <Palette size={16} />,
   },
   {

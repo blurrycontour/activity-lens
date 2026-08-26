@@ -196,6 +196,11 @@ func (s *Server) handleUploadMedia(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "could not store the photo")
 		return
 	}
+	// After the row is stored, so nobody is told about a photo that failed to
+	// record. Only the people this workout was shared with directly hear about
+	// it; see notifyPhotoAdded.
+	s.notifyPhotoAdded(r, *user, wk)
+
 	writeJSON(w, http.StatusCreated, saved)
 }
 

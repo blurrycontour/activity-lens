@@ -513,24 +513,81 @@ export function sparkAverages(workouts: Workout[], windowDays: number, buckets: 
 export interface PersonalBest {
   workout: Workout
   /** Which record the workout set. */
-  kind: 'distance' | 'pace' | 'elevation' | 'duration'
+  kind: 'distance' | 'pace' | 'speed' | 'elevation' | 'duration' | 'efficiency'
   label: string
   value: string
+}
+
+/**
+ * Heartbeats spent per km/h of speed — the Efficiency tab's headline measure,
+ * where falling means improving. Zero when either half is missing.
+ *
+ * This is the honest form of "a new low heart rate". Raw resting-est average HR
+ * is not an achievement: the way to set that record is to go slowly. Dividing
+ * by the speed it bought asks the question people actually mean — did the same
+ * effort carry me further, faster — and answers it in one number.
+ */
+function efficiencyFactor(w: Workout): number {
+  if (w.avgHR <= 0 || w.avgSpeed <= 0) return 0
+  return w.avgHR / w.avgSpeed
 }
 
 /**
  * Records set by the most recent workout, judged against every other activity
  * of the same type. Requires a few prior activities of that type — being the
  * "longest ever" out of two is not an achievement worth a banner.
+ *
+ * Every label names the sport, and that is not decoration. Judging against the
+ * same type is the right call — a hike is not slow for being slower than a run —
+ * but an unqualified "Fastest pace" beside a hiking pace reads as a claim about
+ * all your training, and anyone who has run faster that month knows it is
+ * false. The scope has to appear wherever the number does.
+ *
+ * Three measures are deliberately not records here:
+ *
+ *   - **Highest max HR.** A ceiling is not an accomplishment, a banner
+ *     congratulating someone for reaching one is an invitation to chase it, and
+ *     a single bad second from a chest strap would fire it. It is worth
+ *     *noticing* — it is what the zone settings are calibrated against — but as
+ *     a prompt to update those settings, not as a trophy.
+ *   - **Lowest average HR.** The way to set that record is to go slowly. See
+ *     efficiencyFactor, which is what people mean when they ask for it.
+ *   - **Calories and steps.** Both are near-perfect proxies for duration and
+ *     distance, so they would fire alongside records already on the card and
+ *     say the same thing twice — and calories are an estimate besides.
  */
 export function recentPersonalBests(workouts: Workout[], minSameType = 3, maxAgeDays = 14, now = new Date()): PersonalBest[] {
   if (workouts.length === 0) return []
-  const sorted = [...workouts].sort((a, b) => b.date.localeCompare(a.date))
-  const latest = sorted[0]
+  /*
+   * `date` is a day, not an instant, so on any day with two workouts it sorts
+   * them equal and "the most recent" became whichever the API happened to
+   * return first. A morning run and an evening hike would then be judged in
+   * arbitrary order, and the one that actually happened last could be skipped
+   * entirely. `startTime` carries the time of day and breaks the tie; workouts
+   * old enough to predate that field fall back to the day, as before.
+   */
+  const sorted = [...workouts].sort((a, b) =>
+    b.date.localeCompare(a.date) || (b.startTime ?? '').localeCompare(a.startTime ?? ''))
   const cutoff = new Date(now)
   cutoff.setDate(cutoff.getDate() - maxAgeDays)
-  if (parseDateKey(latest.date) < cutoff) return []
+  if (parseDateKey(sorted[0].date) < cutoff) return []
 
+  /*
+   * Every workout from the latest day, not just the latest workout.
+   *
+   * A morning run and an evening hike are two activities that can each set a
+   * record of their own, against different peers — and only the later of them
+   * was ever judged, so the other's went unmentioned. Each is measured against
+   * its own sport's history with itself excluded, so two runs on one day cannot
+   * both be "the longest": the shorter loses to the longer, which is right.
+   */
+  return sorted
+    .filter(w => w.date === sorted[0].date)
+    .flatMap(w => bestsFor(w, workouts, minSameType))
+}
+
+/** The records `latest` sets against every other activity of its own type. */
+function bestsFor(latest: Workout, workouts: Workout[], minSameType: number): PersonalBest[] {
   const peers = workouts.filter(w => w.type === latest.type && w.id !== latest.id)
   if (peers.length < minSameType) return []
 
@@ -539,16 +596,45 @@ export function recentPersonalBests(workouts: Workout[], minSameType = 3, maxAge
     out.push({ workout: latest, kind: 'distance', label: 'Longest ' + latest.type, value: `${(latest.distance / 1000).toFixed(1)} km` })
   }
   if (latest.duration > 0 && peers.every(w => latest.duration > w.duration)) {
-    out.push({ workout: latest, kind: 'duration', label: 'Longest time', value: `${Math.floor(latest.duration / 3600)}h ${Math.round((latest.duration % 3600) / 60)}m` })
+    out.push({ workout: latest, kind: 'duration', label: `Longest ${latest.type} time`, value: `${Math.floor(latest.duration / 3600)}h ${Math.round((latest.duration % 3600) / 60)}m` })
   }
   const paced = peers.filter(w => w.avgPace > 0)
   if (latest.avgPace > 0 && paced.length >= minSameType && paced.every(w => latest.avgPace < w.avgPace)) {
     const mins = Math.floor(latest.avgPace / 60)
     const secs = Math.round(latest.avgPace % 60)
-    out.push({ workout: latest, kind: 'pace', label: 'Fastest pace', value: `${mins}:${String(secs).padStart(2, '0')} /km` })
+    out.push({ workout: latest, kind: 'pace', label: `Fastest ${latest.type} pace`, value: `${mins}:${String(secs).padStart(2, '0')} /km` })
+  }
+  /*
+   * Speed, for the sports that are not measured in pace.
+   *
+   * fmtRate already knows a ride and a swim report avgSpeed and no avgPace, but
+   * this function only ever looked at avgPace — so the fastest ride of someone's
+   * life set no record at all, and the banner had nothing to say about half the
+   * sports the app supports. Guarded on pace being absent rather than on the
+   * type, so the two can never both fire for one workout and claim the same
+   * thing twice in different units.
+   */
+  const bySpeed = peers.filter(w => w.avgSpeed > 0 && w.avgPace === 0)
+  if (latest.avgSpeed > 0 && latest.avgPace === 0 && bySpeed.length >= minSameType
+      && bySpeed.every(w => latest.avgSpeed > w.avgSpeed)) {
+    out.push({ workout: latest, kind: 'speed', label: `Fastest ${latest.type}`, value: `${latest.avgSpeed.toFixed(1)} km/h` })
   }
   if (latest.elevationGain > 100 && peers.every(w => latest.elevationGain > w.elevationGain)) {
-    out.push({ workout: latest, kind: 'elevation', label: 'Most climbing', value: `${Math.round(latest.elevationGain)} m` })
+    out.push({ workout: latest, kind: 'elevation', label: `Most ${latest.type} climbing`, value: `${Math.round(latest.elevationGain)} m` })
+  }
+  /*
+   * The fitness record, as opposed to the effort ones above.
+   *
+   * Every other record here can be set by trying harder on the day. This one
+   * cannot: it falls when the same heart rate starts buying more speed, which
+   * is the thing training is for and the only record on the card that is
+   * evidence of it. Reported as the Efficiency tab already words it, so the
+   * banner and the chart are describing one measure rather than two.
+   */
+  const ef = efficiencyFactor(latest)
+  const efPeers = peers.map(efficiencyFactor).filter(v => v > 0)
+  if (ef > 0 && efPeers.length >= minSameType && efPeers.every(v => ef < v)) {
+    out.push({ workout: latest, kind: 'efficiency', label: `Best ${latest.type} efficiency`, value: `${ef.toFixed(1)} bpm per km/h` })
   }
   return out
 }

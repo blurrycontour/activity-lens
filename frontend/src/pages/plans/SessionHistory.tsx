@@ -186,7 +186,7 @@ function SessionRow({ session: s, selecting, picked, canSelect, onOpen, onToggle
       <span className="plan-card-head">
         {selecting
           ? <span className="plan-pick" aria-hidden>{picked && <CheckCheck size={14} />}</span>
-          : <span className="plan-card-mark session"><History size={15} /></span>}
+          : <span className="plan-card-mark session"><History size={18} /></span>}
       </span>
       <div className="plan-card-main">
         <strong className="plan-card-name">

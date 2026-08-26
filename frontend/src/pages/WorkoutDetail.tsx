@@ -59,6 +59,8 @@ import WorkoutReshape, { emptyPlan, planChanges, presentStreams, type ReshapePla
 import ShareDialog from '../components/ShareDialog'
 import ShareCardDialog from '../components/ShareCardDialog'
 import Modal from '../components/Modal'
+import { END_PADDING } from '../components/ChartAxis'
+import { fromDateKey, longDate } from '../lib/date'
 
 interface WorkoutDetailProps {
   workout: Workout
@@ -258,7 +260,11 @@ function NotesPanel({ workout: w, onSaved }: { workout: Workout; onSaved: (w: Wo
  */
 type Metric = 'hr' | 'pace' | 'speed' | 'elevation' | 'cadence' | `extra:${string}`
 
-const CADENCE_COLOR = '#ec4899'
+/* A token rather than the literal #ec4899 it was, which followed neither theme.
+   --strength is that pink and carries a light-mode variant; cadence is not a
+   sport, but this chart never shows a sport beside it, and the alternative is a
+   hex that is right in one of the eighteen theme-and-accent combinations. */
+const CADENCE_COLOR = 'var(--strength)'
 
 /**
  * The mark for a named series.
@@ -329,6 +335,10 @@ function PlaybackBar({
         step={1}
         value={Math.round(currentTime)}
         onChange={e => onScrub(Number(e.target.value))}
+        aria-label="Position in workout"
+        /* Without this a screen reader announces the raw sample index — "7268" —
+           which is the one number on this control that means nothing to anyone. */
+        aria-valuetext={`${fmtDuration(currentTime)} of ${fmtDuration(duration)}`}
         style={{ flex: 1, accentColor: 'var(--primary)' }}
       />
       <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)', minWidth: 88, textAlign: 'right' }}>
@@ -930,6 +940,37 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
    * who opened the page to read the charts.
    */
   const [detailTab, setDetailTab] = useState<DetailTab>(() => initialTab())
+  /*
+   * What is behind Gallery and Social, so the strip can say so before either
+   * is opened. Both panels are lazy and fetch nothing until their tab is
+   * selected, so the only way to learn a tab is empty was to open it.
+   *
+   * Seeded from the workout — the detail response carries the same two counts
+   * a library row does — and then kept live by the panels themselves, because
+   * adding a photo while looking at it must not leave the badge behind.
+   */
+  const [counts, setCounts] = useState({ photos: w.photoCount ?? 0, comments: w.commentCount ?? 0 })
+  const onPhotoCount = useCallback((n: number) => setCounts(c => (c.photos === n ? c : { ...c, photos: n })), [])
+  const onCommentCount = useCallback((n: number) => setCounts(c => (c.comments === n ? c : { ...c, comments: n })), [])
+  /*
+   * The seed above is whatever the list row carried, which is nothing at all
+   * when the page was opened from a URL or a notification rather than from the
+   * library. Re-taken whenever the workout is refetched, because the server has
+   * just counted where the panel's figure is as old as the last time its tab
+   * was open.
+   *
+   * `undefined` is "no opinion", not zero. Only the GET carries these — a PATCH
+   * answers with the updated workout and both fields `omitempty` away — so
+   * reading an absent field as a count would have renaming a workout clear the
+   * badges off both its tabs.
+   */
+  useEffect(() => {
+    setCounts(c => {
+      const photos = w.photoCount ?? c.photos
+      const comments = w.commentCount ?? c.comments
+      return c.photos === photos && c.comments === comments ? c : { photos, comments }
+    })
+  }, [w.photoCount, w.commentCount])
   const sectionsRef = useRef<HTMLDivElement>(null)
 
   // Notes belong to the owner alone and are stripped from a shared response, so
@@ -937,12 +978,12 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
   // first tab does not exist would land on an empty panel, hence the fallback.
   const detailTabs: TabStripItem<DetailTab>[] = [
     ...(readOnly ? [] : [{ id: 'notes' as DetailTab, label: 'Notes', icon: <NotebookPen size={14} /> }]),
-    { id: 'gallery' as DetailTab, label: 'Gallery', icon: <Images size={14} /> },
+    { id: 'gallery' as DetailTab, label: 'Gallery', icon: <Images size={14} />, count: counts.photos },
     // Only on a workout somebody else can see. A private one has no audience,
     // so there is no conversation to be had — and offering an empty tab that
     // refuses every comment would be worse than not offering it. A viewer is
     // always past this check: they are looking at it, which is the proof.
-    ...(w.shared ? [{ id: 'social' as DetailTab, label: 'Social', icon: <MessageSquare size={14} /> }] : []),
+    ...(w.shared ? [{ id: 'social' as DetailTab, label: 'Social', icon: <MessageSquare size={14} />, count: counts.comments }] : []),
   ]
   const activeTab = detailTabs.some(t => t.id === detailTab) ? detailTab : detailTabs[0].id
 
@@ -1299,6 +1340,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
           ))}
           <XAxis
             dataKey="t" type="number" domain={[0, w.duration || 1]}
+            padding={END_PADDING}
             tick={<EdgeTick />}
             axisLine={false} tickLine={false} tickFormatter={fmtClock} interval="preserveStartEnd"
             label={xLabel('Elapsed time (h:mm)')}
@@ -1624,7 +1666,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
       )}
       <div className="page-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button className="btn-icon" onClick={onBack}><ArrowLeft size={18} /></button>
+          <button className="btn-icon" onClick={onBack} aria-label="Back"><ArrowLeft size={18} /></button>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <h1 className="page-header-title">{w.name}</h1>
@@ -1641,7 +1683,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
               {!readOnly && <ShareBadge workout={w} />}
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
-              {new Date(w.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              {longDate(fromDateKey(w.date))}
             </div>
             {/* Its own line rather than sharing one with the date: a long
                 display name would otherwise squeeze the date or wrap raggedly. */}
@@ -2113,12 +2155,12 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
                 opening a workout. The same goes for the thread. */}
             {activeTab === 'gallery' && (
               <Suspense fallback={<div className="detail-loading"><LoaderCircle size={16} className="spin" /></div>}>
-                <WorkoutGallery workoutId={w.id} canEdit={!readOnly} />
+                <WorkoutGallery workoutId={w.id} canEdit={!readOnly} onCount={onPhotoCount} />
               </Suspense>
             )}
             {activeTab === 'social' && (
               <Suspense fallback={<div className="detail-loading"><LoaderCircle size={16} className="spin" /></div>}>
-                <WorkoutSocial kind="workout" workoutId={w.id} isOwner={!readOnly} />
+                <WorkoutSocial kind="workout" workoutId={w.id} isOwner={!readOnly} onCount={onCommentCount} />
               </Suspense>
             )}
           </TabPanel>

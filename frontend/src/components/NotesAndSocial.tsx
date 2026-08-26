@@ -53,7 +53,7 @@ export default function NotesAndSocial({
 
   return (
     <div className="detail-sections">
-      <TabStrip items={tabs} value={active} onChange={setTab} ariaLabel={`${noun} sections`} fill />
+      <TabStrip items={tabs} value={active} onChange={setTab} ariaLabel={`${noun.charAt(0).toUpperCase()}${noun.slice(1)} sections`} fill />
       <div className="card detail-tab-panel">
         {active === 'notes' && (
           <NotesPanel notes={notes ?? ''} onSave={onSaveNotes} placeholder={placeholder} />

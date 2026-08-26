@@ -2,6 +2,7 @@ import type React from 'react'
 import { Check, Clock, Flame, Mountain, Navigation } from 'lucide-react'
 import { fmtDist, fmtDuration, fmtRate, TYPE_COLOR, type Workout } from '../data/workouts'
 import TypeIcon from './TypeIcon'
+import { fromDateKey, shortDate } from '../lib/date'
 import SourceMark from './SourceMark'
 import { useLongPress } from '../lib/useLongPress'
 
@@ -90,7 +91,7 @@ export default function WorkoutCard({
    * times were stored, which is why it is appended rather than assumed.
    */
   const dateLabel = [
-    new Date(w.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+    shortDate(fromDateKey(w.date)),
     w.startTime && new Date(w.startTime).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }),
   ].filter(Boolean).join(' · ')
   const rate = fmtRate(w)

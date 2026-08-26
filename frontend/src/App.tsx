@@ -3,6 +3,7 @@ import { lazyChunk } from './lib/lazyChunk'
 import NotificationBanner, { type BannerNotification } from './components/NotificationBanner'
 import { consumeOpenedParam, markNotificationOpened, PUSH_EVENT, READ_NOTIFICATION_EVENT } from './lib/notifications'
 import UpdateToast from './components/UpdateToast'
+import Toast from './components/Toast'
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, lazy, Suspense } from 'react'
 import TopBar, { type ThemeMode } from './components/TopBar'
 import Sidebar from './components/Sidebar'
@@ -13,7 +14,10 @@ import ImportIntro, { hasSeenImportIntro, markImportIntroSeen } from './componen
 import OfflineBar from './components/OfflineBar'
 import PullToRefresh from './components/PullToRefresh'
 import SwipePager from './components/SwipePager'
-import { applyAccent, ACCENTS } from './lib/theme'
+import {
+  applyAccent, applyDisplayPrefs, backgroundFor, readDisplayPrefs,
+  ACCENTS, HIGH_CONTRAST_KEY, PURE_BLACK_KEY, type DisplayPrefs,
+} from './lib/theme'
 import Dashboard from './pages/Dashboard'
 import Workouts from './pages/Workouts'
 import WorkoutDetail from './pages/WorkoutDetail'
@@ -48,6 +52,7 @@ import {
   type AdminSection, type Page, type SettingsSection,
 } from './lib/nav'
 import { useSwipeNav } from './lib/useSwipeNav'
+import { useHideOnScroll } from './lib/useHideOnScroll'
 import { consumeShareParam, takeSharedFiles } from './lib/shareTarget'
 import { onNativeIncomingFiles, takeNativeIncomingFiles } from './lib/native/incomingFiles'
 import { applySystemBars } from './lib/native/systemBars'
@@ -79,13 +84,12 @@ function resolveTheme(mode: ThemeMode): 'dark' | 'light' {
   return mode
 }
 
-/** --bg in each theme, mirrored in mobile/android/.../values/colors.xml. */
-const THEME_BACKGROUND = { light: '#f4f6f9', dark: '#0a0b0e' } as const
-
-function applyTheme(mode: ThemeMode) {
+function applyTheme(mode: ThemeMode, prefs = readDisplayPrefs()) {
   const resolved = resolveTheme(mode)
   document.documentElement.className = resolved === 'light' ? 'light' : ''
-  const background = THEME_BACKGROUND[resolved]
+  // Before the background is read, since pure black changes what it is.
+  applyDisplayPrefs(prefs)
+  const background = backgroundFor(resolved, prefs.pureBlack)
   // Keep the phone's status bar matching the page background instead of the
   // accent colour, in both themes. The meta tag does this for the installed
   // PWA; the Android app needs the same thing said to the Activity, because
@@ -122,6 +126,15 @@ export default function App() {
   if (selectedWorkout) lastWorkout.current = selectedWorkout
   // A push that arrived while the app was on screen, shown as a banner.
   const [banner, setBanner] = useState<BannerNotification | null>(null)
+  /**
+   * Said when a deep-linked workout does not come back.
+   *
+   * Landing on the library is the right recovery — better than a dead end — but
+   * done silently it reads as the link having gone to the wrong page. The three
+   * places that can fail (a cold open, the back gesture, a notification tap)
+   * all end up here so they answer the same way.
+   */
+  const [missingWorkout, setMissingWorkout] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const saved = localStorage.getItem(SIDEBAR_KEY)
@@ -133,6 +146,7 @@ export default function App() {
   const [accent, setAccent] = useState(() => {
     return localStorage.getItem(ACCENT_KEY) || ACCENTS[0].value
   })
+  const [display, setDisplay] = useState<DisplayPrefs>(readDisplayPrefs)
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const [showImportIntro, setShowImportIntro] = useState(false)
@@ -143,16 +157,18 @@ export default function App() {
 
   // Theme
   useEffect(() => {
-    applyTheme(themeMode)
+    applyTheme(themeMode, display)
     localStorage.setItem(THEME_KEY, themeMode)
+    localStorage.setItem(PURE_BLACK_KEY, display.pureBlack ? '1' : '0')
+    localStorage.setItem(HIGH_CONTRAST_KEY, display.highContrast ? '1' : '0')
 
     if (themeMode === 'system') {
       const mq = window.matchMedia('(prefers-color-scheme: light)')
-      const handler = () => applyTheme('system')
+      const handler = () => applyTheme('system', display)
       mq.addEventListener('change', handler)
       return () => mq.removeEventListener('change', handler)
     }
-  }, [themeMode])
+  }, [themeMode, display])
 
   // Accent
   useEffect(() => {
@@ -167,7 +183,8 @@ export default function App() {
   }, [sidebarWidth])
 
   // Rewrite retired routes (/timeline, /heatmap, /account) to where they moved,
-  // so the address bar matches the page and a reload doesn't redirect twice.
+  // and unrecognised ones to the dashboard they fall back to, so the address bar
+  // matches the page and a reload doesn't redirect twice.
   useEffect(() => {
     if (initialLocation.redirect) {
       window.history.replaceState(null, '', pathForPage(initialLocation.page, initialLocation.section, initialLocation.detail))
@@ -182,7 +199,11 @@ export default function App() {
       .then(w => { if (!cancelled) setSelectedWorkout(w) })
       // Deleted, or no longer shared with you: fall back to the list rather
       // than leaving a spinner on screen for a workout that is not coming.
-      .catch(() => { if (!cancelled) window.history.replaceState(null, '', pathForPage('workouts')) })
+      .catch(() => {
+        if (cancelled) return
+        window.history.replaceState(null, '', pathForPage('workouts'))
+        setMissingWorkout(true)
+      })
       .finally(() => { if (!cancelled) setOpeningWorkout(false) })
     return () => { cancelled = true }
     // Only run once, when auth resolves.
@@ -218,7 +239,29 @@ export default function App() {
   useEffect(() => {
     if (!user) return
     if ((navigator as { connection?: { saveData?: boolean } }).connection?.saveData) return
-    const warm = () => { void import('./pages/MapPage') }
+    const warm = () => {
+      void import('./pages/MapPage')
+      /*
+       * And Plans, which is lazy for its own reasons and pays for it the same
+       * way the map did.
+       *
+       * Workouts appears instantly and Plans does not, and neither half of that
+       * is about the page being slow: Workouts is in the entry bundle and its
+       * rows are already in memory, because WorkoutsContext fetches them at
+       * startup for the dashboard. Plans waits for its chunk before it can even
+       * start asking for data.
+       *
+       * On a fast connection this is invisible — measured on localhost, time to
+       * first rows is ~350ms warmed or cold, because the page-transition
+       * animation is longer than either. It is the slow ones this is for, which
+       * is the same argument the map's warm makes, and it is skipped under
+       * saveData for the same reason.
+       *
+       * The specifier must match the lazy import above verbatim, or Vite treats
+       * it as a second module and this warms nothing.
+       */
+      void import('./pages/plans/PlansPage')
+    }
     // requestIdleCallback is still missing on Safari; a timeout is a fine
     // stand-in, since the only requirement is "not during startup".
     const idle = typeof window.requestIdleCallback === 'function'
@@ -328,7 +371,9 @@ export default function App() {
         // got, so going back from a settings page to a workout appeared to land
         // somewhere else and then correct itself.
         if (lastWorkout.current?.id === loc.workoutId) setSelectedWorkout(lastWorkout.current)
-        api.getWorkout(loc.workoutId).then(setSelectedWorkout).catch(() => setSelectedWorkout(null))
+        api.getWorkout(loc.workoutId)
+          .then(setSelectedWorkout)
+          .catch(() => { setSelectedWorkout(null); setMissingWorkout(true) })
       } else {
         setSelectedWorkout(null)
       }
@@ -397,6 +442,7 @@ export default function App() {
           setSection(null)
           setDetail(null)
           window.history.pushState(null, '', pathForPage('workouts'))
+          setMissingWorkout(true)
         })
       return
     }
@@ -574,6 +620,8 @@ export default function App() {
   const onPrev = useCallback(() => swipeTo(-1), [swipeTo])
   const onNext = useCallback(() => swipeTo(1), [swipeTo])
   const swipe = useSwipeNav(mainEl, { enabled: gesturesEnabled, onPrev, onNext })
+  // Every page's FAB, from one listener on the one element that scrolls.
+  useHideOnScroll(mainEl)
 
   // Pull-to-refresh reloads the data each page registered, never the document.
   const { refresh } = useRefresh()
@@ -681,6 +729,13 @@ export default function App() {
       )}
 
       <UpdateToast />
+
+      {missingWorkout && (
+        <Toast
+          message="That workout is no longer available"
+          onDone={() => setMissingWorkout(false)}
+        />
+      )}
 
       <OfflineBar />
 
@@ -804,6 +859,8 @@ export default function App() {
             onAccentChange={setAccent}
             themeMode={themeMode}
             onThemeChange={setThemeMode}
+            display={display}
+            onDisplayChange={setDisplay}
             onViewProfile={() => { if (user) openSection('users', String(user.id)) }}
           />
         ) : page === 'admin' ? (

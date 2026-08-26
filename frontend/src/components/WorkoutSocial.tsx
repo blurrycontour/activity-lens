@@ -5,6 +5,7 @@ import UserAvatar, { userLabel } from './UserAvatar'
 import { useAuth } from '../context/AuthContext'
 import { api, ApiError, type ShareKind, type WorkoutComment, type WorkoutSocial as Social } from '../lib/api'
 import useEscape from '../lib/useEscape'
+import { whenLabel } from '../lib/date'
 
 /**
  * Reactions and comments on a shared workout, training plan or session.
@@ -31,9 +32,15 @@ interface WorkoutSocialProps {
   /** The noun used when there is nothing to show, so the empty state names
    *  the right thing. */
   noun?: string
+  /**
+   * How many comments there turned out to be, so the tab that opened this can
+   * keep its badge honest after one is posted or deleted. Must be stable
+   * across renders — it is an effect dependency.
+   */
+  onCount?: (n: number) => void
 }
 
-export default function WorkoutSocial({ kind, workoutId, isOwner, noun = 'workout' }: WorkoutSocialProps) {
+export default function WorkoutSocial({ kind, workoutId, isOwner, noun = 'workout', onCount }: WorkoutSocialProps) {
   const { user } = useAuth()
   const [social, setSocial] = useState<Social | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -72,6 +79,10 @@ export default function WorkoutSocial({ kind, workoutId, isOwner, noun = 'workou
   }, [workoutId])
 
   useEffect(() => { void load() }, [load])
+
+  // From the loaded thread rather than from each of post, edit and delete —
+  // one place that cannot be forgotten by a fourth.
+  useEffect(() => { if (social) onCount?.(social.comments.length) }, [social, onCount])
 
   async function react(emoji: string) {
     if (!social) return
@@ -358,14 +369,3 @@ function CommentBox({ value, onChange, onSubmit, ariaLabel, placeholder }: {
   )
 }
 
-/** A short, local timestamp — the date once it is no longer today's business. */
-function whenLabel(iso: string): string {
-  const then = new Date(iso)
-  if (Number.isNaN(then.getTime())) return ''
-  const mins = Math.round((Date.now() - then.getTime()) / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  if (mins < 60 * 24) return `${Math.round(mins / 60)}h ago`
-  if (mins < 60 * 24 * 7) return `${Math.round(mins / (60 * 24))}d ago`
-  return then.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
-}

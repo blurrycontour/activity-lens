@@ -277,6 +277,33 @@ export function fmtRate(w: Pick<Workout, 'avgPace' | 'avgSpeed'>): { value: stri
   return { value: '—', unit: '' }
 }
 
+/**
+ * A running total of metres, as a figure and the unit to read it in.
+ *
+ * The dashboard tiles used to divide by 1000 whatever the number was, so 80 m
+ * of climbing appeared as "0.1 km" and a first 500 m walk as "0 km" — a zero
+ * that is not zero, on the one screen someone new to the app is looking at.
+ * Under a kilometre the metres are the answer.
+ */
+export function fmtTotal(m: number): { value: string; unit: string } {
+  if (m < 1000) return { value: Math.round(m).toLocaleString(), unit: 'm' }
+  return { value: (m / 1000).toFixed(m < 10000 ? 1 : 0), unit: 'km' }
+}
+
+/**
+ * A large count, abbreviated only once the digits stop carrying information.
+ *
+ * This replaces `(n / 1000).toFixed(1)` under a unit reading "kcal ×1k" — a
+ * notation nobody writes, which rendered 5,700 kcal as "5.7" and 400 kcal as
+ * "0.4". Below ten thousand the number itself is shorter to read than the
+ * arithmetic needed to recover it.
+ */
+export function fmtCompact(n: number): string {
+  if (n < 10000) return Math.round(n).toLocaleString()
+  if (n < 1000000) return `${(n / 1000).toFixed(n < 100000 ? 1 : 0)}k`
+  return `${(n / 1000000).toFixed(1)}M`
+}
+
 export function fmtDist(m: number): string {
   if (m === 0) return '—'
   if (m >= 1000) return `${(m / 1000).toFixed(2)} km`

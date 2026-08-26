@@ -33,6 +33,12 @@ Media queries belong in `index.css`, never in a component.
 | Sports | `--run` `--ride` `--hike` `--swim` `--strength` `--other` |
 | Status | `--success` `--warning` `--danger` (+ `-dim`, `-border`) |
 
+Two switches sit *beside* the theme rather than inside it, as attributes on
+`:root` (`lib/theme.ts`): `data-pure-black` gives dark mode true-black surfaces,
+`data-high-contrast` strengthens text and lines in both. They compose with the
+theme and with each other — write new surfaces so they keep working, which
+mostly means using the tokens rather than a literal.
+
 Three rules that follow from this:
 
 - **The accent is the user's choice and carries no meaning.** Six accents
@@ -42,16 +48,20 @@ Three rules that follow from this:
   never signal state with colour alone — pair it with an icon or a label.
 - **Sport colours mean the sport**, everywhere, always. Use `TYPE_COLOR` from
   `src/data/workouts.ts`; never repaint by rank or position.
+- **The palette is checked, not eyeballed.** Every sport, status and item colour
+  must stay ≥20 ΔE from all six accents, from each other, and ≥3:1 against its
+  own background — in both themes. `lib/__tests__/paletteSeparation.test.ts`
+  reads `index.css` and enforces it. Sports had all been *identical* to an
+  accent before that existed. One exemption is documented in the test.
 
 Deriving a tint from a token — an 8% wash behind an error, say — is
 `color-mix(in srgb, var(--danger) 8%, transparent)`, never the token's hex
 retyped as `rgba(…)`. A literal cannot follow the theme, and the failure is
 quiet: it looks right in whichever mode it was written in.
 
-Known gap: form labels exist in two styles — `.field-label` (uppercase mono,
-what `<Field>` uses) and `.form-label` (sentence case, used inside dialogs).
-Both are classes now, so unifying them is a one-line decision rather than a
-hunt, but it is a visible restyle and has not been made.
+Form labels are one style: `.field-label` (uppercase mono) is what `<Field>`
+uses, and `.form-label` — which existed only inside four dialogs in sentence
+case — now matches it, keeping only the block layout its callers rely on.
 
 ## Type & shape
 
@@ -157,6 +167,13 @@ Recharts. Shared helpers live in `src/components/ChartAxis.tsx` and
 Say the thing once, briefly. Long explanations go behind an `InfoTip`, not into
 the page body. Empty states say what is missing *and* why, distinguishing "none
 yet" from "none in this filter".
+
+## Known gaps
+
+[ux-audit.md](ux-audit.md) holds what is still open after the August 2026 audit —
+three judgement calls, plus the list of things that look like gaps and are
+deliberate, so they are not re-proposed. Short, and worth reading before
+starting UI work.
 
 ## Before calling it done
 

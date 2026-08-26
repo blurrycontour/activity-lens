@@ -91,11 +91,11 @@ describe('binByTemperature', () => {
 
 describe('pearson', () => {
   it('finds a perfect positive relationship', () => {
-    expect(pearson([1, 2, 3, 4], [2, 4, 6, 8])).toBeCloseTo(1)
+    expect(pearson([1, 2, 3, 4, 5], [2, 4, 6, 8, 10])).toBeCloseTo(1)
   })
 
   it('finds a perfect negative one', () => {
-    expect(pearson([1, 2, 3, 4], [8, 6, 4, 2])).toBeCloseTo(-1)
+    expect(pearson([1, 2, 3, 4, 5], [10, 8, 6, 4, 2])).toBeCloseTo(-1)
   })
 
   // Null, not 0. Zero means "measured, and unrelated" — a real finding. An
@@ -105,11 +105,17 @@ describe('pearson', () => {
     expect(pearson([], [])).toBeNull()
     expect(pearson([1], [2])).toBeNull()
     expect(pearson([1, 2], [2, 4])).toBeNull()
+    // Three points almost always lie close to some line, so a coefficient from
+    // them describes having three points rather than any relationship. Four is
+    // barely better. The floor is five.
+    expect(pearson([1, 2, 3], [2, 4, 6])).toBeNull()
+    expect(pearson([1, 2, 3, 4], [2, 4, 6, 8])).toBeNull()
+    expect(pearson([1, 2, 3, 4, 5], [2, 4, 6, 8, 10])).toBeCloseTo(1)
   })
 
   it('refuses to answer when one axis never varies', () => {
-    expect(pearson([5, 5, 5, 5], [1, 2, 3, 4])).toBeNull()
-    expect(pearson([1, 2, 3, 4], [7, 7, 7, 7])).toBeNull()
+    expect(pearson([5, 5, 5, 5, 5], [1, 2, 3, 4, 5])).toBeNull()
+    expect(pearson([1, 2, 3, 4, 5], [7, 7, 7, 7, 7])).toBeNull()
   })
 })
 
@@ -117,7 +123,10 @@ describe('temperatureCorrelation', () => {
   it('reads slower-when-hot as a positive correlation with pace', () => {
     // Pace is seconds per km, so a bigger number is slower.
     const r = temperatureCorrelation(
-      [run(5, { avgPace: 280 }), run(15, { avgPace: 300 }), run(25, { avgPace: 330 })],
+      [
+        run(5, { avgPace: 280 }), run(10, { avgPace: 288 }), run(15, { avgPace: 300 }),
+        run(20, { avgPace: 312 }), run(25, { avgPace: 330 }),
+      ],
       'pace',
     )
     expect(r).not.toBeNull()

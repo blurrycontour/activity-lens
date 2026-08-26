@@ -17,8 +17,42 @@ import { useIsMobile } from '../lib/useIsMobile'
  * inward by a custom tick component with nothing re-checking the neighbour they
  * had just been pushed into. Hence overlap at the two ends and nowhere else.
  */
-export function denseXAxis(fontSize = 10) {
+/**
+ * Room at both ends of a point or line axis, so the first and last points are
+ * not sitting on the edge of the plot. Exported for the charts that build their
+ * axis by hand rather than through denseXAxis — see the reasoning there.
+ */
+export const END_PADDING = { left: 10, right: 10 } as const
+
+/**
+ * The same room, on a y axis.
+ *
+ * A scatter needs it on both axes for the same reason a line needs it on one:
+ * a point at the extreme of the data lands on the plot boundary, and Recharts
+ * only resolves a tooltip for pointer positions *inside* that boundary. On the
+ * weather chart the two dots at the ends of the range were unreachable, which
+ * read as "tooltips only work for some sports" because which sport owned the
+ * extremes depended on the data.
+ */
+export const EDGE_PADDING_Y = { top: 12, bottom: 12 } as const
+
+export function denseXAxis(fontSize = 10, { bars = false } = {}) {
   return {
+    /*
+     * Room at both ends, so the first and last points are not sitting on the
+     * edge of the plot.
+     *
+     * Recharts only raises a tooltip for pointer positions inside the plot
+     * area, and with no padding the end points land exactly on its boundary —
+     * so the outer half of each has no hover target, and a pointer a few pixels
+     * beyond them gets nothing at all. On a phone, where the target is a
+     * fingertip rather than a cursor, that is most of the point.
+     *
+     * Bar charts opt out: their band scale already centres each bar in a slot
+     * with space either side, and padding on top of that only shifts them out
+     * of line with the gridlines.
+     */
+    ...(bars ? {} : { padding: END_PADDING }),
     interval: 'preserveStartEnd' as const,
     // Recharts measures label widths with the axis font *size* but the page's
     // default font family, and our ticks are monospaced — so a real label comes
@@ -35,6 +69,38 @@ export function denseXAxis(fontSize = 10) {
 }
 
 /**
+ * Spread onto a `<Tooltip>` whose chart has gap-filled rows.
+ *
+ * Recharts drops every payload entry whose value is null, and then hides the
+ * tooltip outright when nothing is left. On a series with the Gaps toggle on,
+ * an inserted day is exactly that — a date and nothing else — so the whole
+ * chart went silent on every day the reader did not train, while the cursor
+ * line kept being drawn. That is the "the line moves but no tooltip appears"
+ * report, and on a long range it is most of the axis: a year of training is
+ * three hundred and sixty five slots of which perhaps forty carry an activity.
+ *
+ * The three charts that fill gaps each already had a "No activity" branch
+ * written for that case. None of them had ever rendered.
+ *
+ * The cost is that a *real* day whose metric happens to be missing now reaches
+ * the tooltip as a null entry rather than being dropped. Every one of those
+ * tooltips already renders `—` for a null value, which is the better answer
+ * anyway: a metric silently missing from the list looks like a metric that was
+ * never selected.
+ */
+export const KEEP_EMPTY_ROWS = { filterNull: false } as const
+
+/**
+ * A y axis measuring a count of things, which cannot be fractional.
+ *
+ * Recharts allows decimals by default, and picks its ticks from the data range,
+ * so a chart topping out at two activities was labelled 0, 0.5, 1, 1.5, 2 — and
+ * half an activity is not a quantity anyone has ever done. It only shows up on
+ * the small ranges, which is exactly where a new account lives.
+ */
+export const WHOLE_NUMBERS = { allowDecimals: false } as const
+
+/**
  * Horizontal room for the plot itself.
  *
  * A phone has ~360px to spend and the axis furniture was taking 76px of it, so
@@ -46,9 +112,31 @@ export function denseXAxis(fontSize = 10) {
  * against the longest tick text a chart might produce, so it is either wasteful
  * for "0–160" or too tight for "5:40".
  */
+/** Axis label placed below the plot, clear of the tick row. */
+export function xLabel(value: string) {
+  return { value, position: 'insideBottom' as const, offset: -12, fontSize: 10, fill: 'var(--text-3)' }
+}
+
 export function useChartSpace() {
   const mobile = useIsMobile()
   return {
+    /*
+     * The rotated y-axis label — and nothing at all on a phone.
+     *
+     * Rotated -90°, the label's length runs along the plot's height and its
+     * 12px line box hangs off the left edge, one pixel outside the SVG on a
+     * 390px screen: "Adjusted pace (min/km)" rendered as "usted pace (min/km)".
+     *
+     * Widening the gutter would fix the clipping and cost the plot the width,
+     * which is the scarcer thing here — and on a phone the label is saying what
+     * the card's title and description said two lines above it. Dropping it
+     * buys back the space instead, and takes the same pixels out of the dead
+     * strip to the left of the plot where a tap raises no tooltip.
+     */
+    yLabel: (value: string) => (mobile ? undefined : {
+      value, angle: -90, position: 'insideLeft' as const,
+      fontSize: 10, fill: 'var(--text-3)', style: { textAnchor: 'middle' as const },
+    }),
     /** Plot margins. `bottom` leaves room for the tick row plus the axis label. */
     margin: (bottom = 18, top = 8) => ({
       top,

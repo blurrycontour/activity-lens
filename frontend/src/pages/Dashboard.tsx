@@ -1,16 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useWorkouts } from '../context/WorkoutsContext'
-import { fmtDuration, fmtDist, fmtRate, TYPE_COLOR, type Workout, type WorkoutType } from '../data/workouts'
+import { fmtDuration, fmtDist, fmtRate, fmtTotal, fmtCompact, TYPE_COLOR, type Workout, type WorkoutType } from '../data/workouts'
 import TypeIcon from '../components/TypeIcon'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
   RadialBarChart, RadialBar,
 } from 'recharts'
-import { TrendingUp, Zap, Flame, Clock, Mountain, Heart, Trophy, Target, Activity, Footprints, ChartColumnBig, Play } from 'lucide-react'
+import { TrendingUp, Zap, Flame, Clock, Mountain, Heart, Trophy, Target, Activity, Footprints, ChartColumnBig, ChevronRight, Play } from 'lucide-react'
 import SpeedDial from '../components/SpeedDial'
 import { PAGE_META } from '../components/Sidebar'
 import Confetti from '../components/Confetti'
-import GoalSportMark, { goalColor } from '../components/GoalSportMark'
+import SportMark, { sportColor } from '../components/SportMark'
+import { buzz } from '../lib/sessionFeedback'
+import { dayMonth, fromDateKey, longDate } from '../lib/date'
 import { useLocalStorage } from '../lib/useLocalStorage'
 import { useIsMobile } from '../lib/useIsMobile'
 import InfoTip from '../components/InfoTip'
@@ -20,6 +22,7 @@ import { clockLabel, elapsedSec } from '../data/plans'
 import { useActiveSession } from '../context/ActiveSessionContext'
 import useTicker from '../lib/useTicker'
 import { AXIS_TICK, GRID_PROPS, HOVER_FILL, recencyRamp } from '../lib/chartColors'
+import { END_PADDING } from '../components/ChartAxis'
 import { useThemeTokens } from '../lib/useThemeTokens'
 import {
   DASHBOARD_CFG_KEY, defaultDashboardConfig, resolveGoalStyle, windowLabel,
@@ -105,7 +108,7 @@ function WorkoutRow({ w, onOpen }: { w: Workout; onOpen: () => void }) {
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.name}</div>
-        <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>{new Date(`${w.date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+        <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>{dayMonth(fromDateKey(w.date))}</div>
       </div>
       <div style={{ textAlign: 'right', flexShrink: 0 }}>
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600 }}>{fmtDist(w.distance)}</div>
@@ -151,7 +154,7 @@ function LatestActivity({ w, onOpen }: { w: Workout; onOpen: () => void }) {
       <button className="latest-activity-link" onClick={onOpen}>
         <span className="latest-activity-name">{w.name}</span>
         <span className="latest-activity-date">
-          {new Date(`${w.date}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+          {longDate(fromDateKey(w.date))}
         </span>
       </button>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
@@ -267,7 +270,7 @@ function GoalBar({ p, needle }: { p: GoalProgress; needle: boolean }) {
       aria-valuenow={Math.round(p.current * 10) / 10}
       aria-label={describeGoal(p.goal)}
     >
-      <span className="goal-pace-fill" style={{ width: `${pct * 100}%`, background: goalColor(p.goal.type) }} />
+      <span className="goal-pace-fill" style={{ width: `${pct * 100}%`, background: sportColor(p.goal.type) }} />
       {showNeedle && (
         <span
           className="goal-pace-needle"
@@ -305,7 +308,7 @@ function GoalHistory({ p, showPeriods, compact }: {
           <span className="goal-history-cell" key={h.key}>
             <span
               className={`goal-history-bar${h.met ? ' met' : ''}${over ? ' over' : ''}`}
-              style={{ '--goal-hue': goalColor(p.goal.type) } as React.CSSProperties}
+              style={{ '--goal-hue': sportColor(p.goal.type) } as React.CSSProperties}
               title={`From ${h.key}: ${formatGoalAmount(p.goal, h.value)}${
                 p.goal.metric === 'count' ? (h.value === 1 ? ' activity' : ' activities') : ''
               }${over ? ' — target beaten by a quarter or more' : ''}`}
@@ -363,14 +366,14 @@ function GoalTileStandard({ p, opts, index = 0 }: { p: GoalProgress; opts: GoalV
           grows into its own row rather than stretching the line the verdict
           is on, so nothing beside it moves. */}
       <div className="goal-std-head">
-        <GoalSportMark type={p.goal.type} size={17} disc />
+        <SportMark type={p.goal.type} size={17} disc />
         <span className="goal-std-desc" title={goalTitle(p.goal)}>
           {describeGoal(p.goal)} · {daysLeft(p)}d left
         </span>
         <span className={`goal-verdict ${v.tone}`}>{v.text}</span>
 
         <span className="goal-std-fig">
-          <span className="goal-std-cur mono" style={{ color: goalColor(p.goal.type) }}>
+          <span className="goal-std-cur mono" style={{ color: sportColor(p.goal.type) }}>
             {formatGoalAmount(p.goal, p.current, true)}
           </span>
           <span className="goal-std-slash mono" aria-hidden="true">/</span>
@@ -444,7 +447,7 @@ function GoalToday({ progress, opts }: { progress: GoalProgress[]; opts: GoalVie
           const v = paceVerdict(p)
           return (
             <div className="goal-today-item" key={p.goal.id} title={goalTitle(p.goal)}>
-              <GoalSportMark type={p.goal.type} size={13} />
+              <SportMark type={p.goal.type} size={13} />
               <span className="goal-today-name">{describeGoal(p.goal)}</span>
               <GoalBadges p={p} compact index={i} />
               <span className={`goal-verdict ${v.tone}`}>{v.text}</span>
@@ -469,7 +472,7 @@ function GoalRings({ progress, opts }: { progress: GoalProgress[]; opts: GoalVie
         const pct = p.goal.target > 0 ? Math.min(1, p.current / p.goal.target) : 0
         const R = 46
         const C = 2 * Math.PI * R
-        const colour = goalColor(p.goal.type)
+        const colour = sportColor(p.goal.type)
         // The pace tick, same reference the bar styles draw as a needle.
         const angle = (p.elapsed * 360) - 90
         const rad = (angle * Math.PI) / 180
@@ -507,7 +510,7 @@ function GoalRings({ progress, opts }: { progress: GoalProgress[]; opts: GoalVie
                 row they were optional height, so one goal with a streak and one
                 without pushed their histories out of line with each other. */}
             <span className="goal-ring-cap" title={goalTitle(p.goal)}>
-              <GoalSportMark type={p.goal.type} size={11} />
+              <SportMark type={p.goal.type} size={11} />
               <span className="goal-ring-name">{p.goal.type || 'Any'}</span>
               {p.streak > 0 && (
                 <span
@@ -544,7 +547,7 @@ function GoalLedger({ progress, opts }: { progress: GoalProgress[]; opts: GoalVi
         return (
           <div className="goal-ledger-row" key={p.goal.id}>
             <span className="goal-ledger-key" title={goalTitle(p.goal)}>
-              <GoalSportMark type={p.goal.type} size={13} />
+              <SportMark type={p.goal.type} size={13} />
               <span className="goal-ledger-name">{describeGoal(p.goal)}</span>
             </span>
             {/* One cluster packed against the right edge rather than three
@@ -740,8 +743,27 @@ export default function Dashboard({ onSelect, onResumeSession, onImport, onCreat
     if (sessionStorage.getItem(CELEBRATED_KEY)) return
     sessionStorage.setItem(CELEBRATED_KEY, '1')
     setCelebrating(true)
+    // The confetti is silent on a phone in a pocket. `complete` is the pattern
+    // the session runner uses for finishing one, which is the same event.
+    void buzz('complete')
   }, [allGoalsMet])
   const bests = useMemo(() => recentPersonalBests(workouts), [workouts])
+  /**
+   * The same records, grouped into the activity that set them.
+   *
+   * The banner draws one card per workout, so what it needs is not a flat list
+   * of records but a list of workouts each holding its own — which is also the
+   * only shape that lets a card open the right workout when it is tapped.
+   */
+  const bestsByWorkout = useMemo(() => {
+    const byId = new Map<string, { workout: Workout; records: typeof bests }>()
+    for (const b of bests) {
+      const seen = byId.get(b.workout.id)
+      if (seen) seen.records.push(b)
+      else byId.set(b.workout.id, { workout: b.workout, records: [b] })
+    }
+    return [...byId.values()]
+  }, [bests])
   const form = useMemo(() => formReading(workouts), [workouts])
   const nudges = useMemo(
     () => gearNudges(equipment, t => DEFAULT_RETIRE_KM[t] ?? 0),
@@ -769,10 +791,10 @@ export default function Dashboard({ onSelect, onResumeSession, onImport, onCreat
     showDeltas && d.before ? deltaPct(pick(d.now), pick(d.before)) : undefined
 
   const allCards: Record<StatCardId, React.ReactNode> = {
-    distance: <StatCard key="distance" icon={<TrendingUp size={14} />} label="Total Distance" value={(d.now.distance / 1000).toFixed(0)} unit="km" sub={caption} delta={delta(t => t.distance)} spark={spark(w => w.distance)} />,
+    distance: <StatCard key="distance" icon={<TrendingUp size={14} />} label="Total Distance" {...fmtTotal(d.now.distance)} sub={caption} delta={delta(t => t.distance)} spark={spark(w => w.distance)} />,
     time: <StatCard key="time" icon={<Clock size={14} />} label="Total Time" value={Math.floor(d.now.duration / 3600).toString()} unit="hrs" sub={caption} delta={delta(t => t.duration)} spark={spark(w => w.duration)} color="var(--purple)" />,
-    elevation: <StatCard key="elevation" icon={<Mountain size={14} />} label="Elevation" value={(d.now.elevation / 1000).toFixed(1)} unit="km" sub={`total gain · ${caption}`} delta={delta(t => t.elevation)} spark={spark(w => w.elevationGain)} color="var(--hike)" />,
-    calories: <StatCard key="calories" icon={<Flame size={14} />} label="Calories" value={(d.now.calories / 1000).toFixed(1)} unit="kcal ×1k" sub={`energy expended · ${caption}`} delta={delta(t => t.calories)} spark={spark(w => w.calories)} color="var(--accent)" />,
+    elevation: <StatCard key="elevation" icon={<Mountain size={14} />} label="Elevation" {...fmtTotal(d.now.elevation)} sub={`total gain · ${caption}`} delta={delta(t => t.elevation)} spark={spark(w => w.elevationGain)} color="var(--hike)" />,
+    calories: <StatCard key="calories" icon={<Flame size={14} />} label="Calories" value={fmtCompact(d.now.calories)} unit="kcal" sub={`energy expended · ${caption}`} delta={delta(t => t.calories)} spark={spark(w => w.calories)} color="var(--accent)" />,
     avgHr: <StatCard key="avgHr" icon={<Heart size={14} />} label="Avg Heart Rate" value={d.now.avgHR.toString()} unit="bpm" sub={caption} delta={delta(t => t.avgHR)} spark={sparkAvg(w => w.avgHR)} color="var(--danger)" />,
     activities: <StatCard key="activities" icon={<Zap size={14} />} label="Activities" value={d.now.count.toString()} unit="" sub={`${Object.keys(d.typeCount).length} sport types · ${caption}`} delta={delta(t => t.count)} spark={spark(() => 1)} color="var(--blue)" />,
   }
@@ -833,31 +855,51 @@ export default function Dashboard({ onSelect, onResumeSession, onImport, onCreat
           <>
             {/* Personal best banner — only when the newest activity actually
                 beat every previous one of its type. */}
-            {bests.length > 0 && (
-              <div
-                className="card"
-                style={{
-                  marginBottom: 16, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
-                  borderColor: 'var(--primary)', background: 'var(--primary-dim)',
-                }}
-              >
-                <Trophy size={20} style={{ color: 'var(--primary)', flexShrink: 0 }} />
-                <div style={{ flex: 1, minWidth: 180 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary)' }}>
-                    {bests.length === 1 ? 'New personal best' : `${bests.length} new personal bests`}
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>
-                    {bests[0].workout.name} · {new Date(`${bests[0].workout.date}T00:00:00`).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {bests.map(b => (
-                    <span key={b.kind} style={{ display: 'flex', flexDirection: 'column', gap: 1, padding: '5px 10px', borderRadius: 8, background: 'var(--bg-2)' }}>
-                      <span style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{b.label}</span>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700 }}>{b.value}</span>
-                    </span>
-                  ))}
-                </div>
+            {bestsByWorkout.length > 0 && (
+              /* One card per workout, not one card for the day.
+                 Two activities on one day can each set their own records
+                 against different peers, and a single card had to name both
+                 workouts in one subtitle and pool their figures underneath —
+                 which left the reader to work out which record belonged to
+                 which activity from the sport in each label. A card each says
+                 it structurally, and gives each one somewhere to go. */
+              <div className="pb-stack">
+                {bestsByWorkout.map(({ workout: w, records }) => (
+                  <button
+                    key={w.id}
+                    className="pb-banner"
+                    onClick={() => onSelect(w)}
+                    aria-label={`${w.name}: ${records.map(r => `${r.label} ${r.value}`).join(', ')}`}
+                  >
+                    {/* The same disc the goal tiles use. The sport's own mark
+                        in the sport's own colour says what the subtitle used to
+                        spell out, and a trophy on a card that already reads
+                        "personal best" was the least informative glyph on the
+                        page — but drawn bare it was the one sport icon on the
+                        dashboard without a disc under it. */}
+                    <SportMark type={w.type} size={20} disc />
+                    <div className="pb-head">
+                      <div className="pb-title">
+                        {records.length === 1 ? 'New personal best' : `${records.length} new personal bests`}
+                      </div>
+                      {/* Date first: it is the fact that orients everything
+                          else on the card, and the workout's name means little
+                          until you know when it happened. */}
+                      <div className="pb-sub">
+                        {dayMonth(fromDateKey(w.date))} · {w.name}
+                      </div>
+                    </div>
+                    <div className="pb-figures">
+                      {records.map(r => (
+                        <span key={r.kind} className="pb-figure">
+                          <span className="pb-figure-label">{r.label}</span>
+                          <span className="pb-figure-value">{r.value}</span>
+                        </span>
+                      ))}
+                    </div>
+                    <ChevronRight size={16} className="pb-go" aria-hidden />
+                  </button>
+                ))}
               </div>
             )}
 
@@ -1007,7 +1049,7 @@ export default function Dashboard({ onSelect, onResumeSession, onImport, onCreat
                 <ResponsiveContainer width="100%" height={190}>
                   <BarChart data={d.trendData} margin={{ top: 8, right: 8, left: 4, bottom: 18 }} barCategoryGap="20%" barGap={2}>
                     <CartesianGrid {...GRID_PROPS} />
-                    <XAxis dataKey="day" tick={AXIS_TICK} axisLine={false} tickLine={false} label={{ value: 'Day of week', position: 'insideBottom', offset: -12, fontSize: 10, fill: 'var(--text-3)' }} />
+                    <XAxis dataKey="day" padding={END_PADDING} tick={AXIS_TICK} axisLine={false} tickLine={false} label={{ value: 'Day of week', position: 'insideBottom', offset: -12, fontSize: 10, fill: 'var(--text-3)' }} />
                     <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={44} label={{ value: 'Hours', angle: -90, position: 'insideLeft', fontSize: 10, fill: 'var(--text-3)', style: { textAnchor: 'middle' } }} />
                     <Tooltip
                       cursor={{ fill: HOVER_FILL, opacity: 0.5 }}

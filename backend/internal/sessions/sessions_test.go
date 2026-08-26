@@ -272,3 +272,53 @@ func TestPurgeUserRemovesOnlyThatUser(t *testing.T) {
 		t.Error("another user's row was purged")
 	}
 }
+
+// "Last seen" is a fact about a person, not about one of their devices: sign in
+// on a laptop in March and on a phone this morning, and the answer is this
+// morning. A user with no rows at all must come back absent rather than as an
+// empty string, because the caller renders the two differently — one is "we
+// don't know", the other would read as "never".
+func TestLastSeenForTakesTheNewestDevice(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	s := NewStore(db)
+
+	for _, id := range []string{"old", "new"} {
+		if err := s.Record(ctx, id, 7, Client{Kind: KindWeb}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.Record(ctx, "other", 8, Client{Kind: KindAndroid}); err != nil {
+		t.Fatal(err)
+	}
+	// Backdate one of user 7's two devices, and blank the column on a third to
+	// stand in for a session that predates it.
+	if _, err := db.ExecContext(ctx,
+		`UPDATE session_clients SET last_seen = '2026-03-01T09:00:00Z' WHERE session_id = 'old'`); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Record(ctx, "blank", 9, Client{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx,
+		`UPDATE session_clients SET last_seen = '' WHERE session_id = 'blank'`); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.LastSeenFor(ctx, []int64{7, 8, 9, 10})
+	if err != nil {
+		t.Fatalf("LastSeenFor() error = %v", err)
+	}
+	if got[7] == "2026-03-01T09:00:00Z" || got[7] == "" {
+		t.Errorf("user 7 last seen = %q, want the newer of their two devices", got[7])
+	}
+	if got[8] == "" {
+		t.Error("user 8 has a session and no last seen")
+	}
+	if _, ok := got[9]; ok {
+		t.Errorf("user 9 has only a blank last_seen, want no entry, got %q", got[9])
+	}
+	if _, ok := got[10]; ok {
+		t.Error("user 10 has no sessions at all, want no entry")
+	}
+}

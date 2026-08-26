@@ -121,7 +121,7 @@ export default function TrainingSessionsChart({ rangeDays }: { rangeDays: number
         <ResponsiveContainer width="100%" height={200}>
           <BarChart data={data} margin={space.margin(18, 4)}>
             <CartesianGrid {...GRID_PROPS} />
-            <XAxis dataKey="label" {...denseXAxis(11)} />
+            <XAxis dataKey="label" {...denseXAxis(11, { bars: true })} />
             <YAxis
               tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto"
               label={{

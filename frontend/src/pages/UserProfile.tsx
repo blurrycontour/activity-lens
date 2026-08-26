@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ArrowLeft, Globe, Handshake, LoaderCircle, Send } from 'lucide-react'
-import { api, ApiError, type UserProfileData } from '../lib/api'
+import { ArrowLeft, Circle, Globe, Handshake, LoaderCircle, Send } from 'lucide-react'
+import { api, type UserProfileData } from '../lib/api'
 import type { Workout } from '../data/workouts'
 import type { PlanSession, TrainingPlan } from '../data/plans'
 import { useRefreshHandler } from '../context/RefreshContext'
+import { isActiveNow, lastActive } from '../lib/date'
 import { useSessionState } from '../lib/useSessionState'
 import ExpandModal from '../components/ExpandModal'
 import PingRow from '../components/PingRow'
@@ -11,6 +12,7 @@ import TabStrip from '../components/TabStrip'
 import UserAvatar, { avatarUrl, userLabel } from '../components/UserAvatar'
 import ItemList from '../components/ItemList'
 import { Byline } from '../components/WorkoutFilterList'
+import MissingRecord from '../components/MissingRecord'
 
 /**
  * The last profile fetched, kept across unmounts.
@@ -64,7 +66,7 @@ export default function UserProfile({ id, onBack, onSelect, onOpenUser, onSelect
   // and the fetch below only ever corrects it.
   const [data, setData] = useState<UserProfileData | null>(
     () => (lastProfile?.id === id ? lastProfile.data : null))
-  const [err, setErr] = useState<string | null>(null)
+  const [err, setErr] = useState<unknown>(null)
   /**
    * Kept across unmounts, because opening a workout from here replaces this
    * page: the tab you were reading was gone by the time you pressed back, and
@@ -85,7 +87,7 @@ export default function UserProfile({ id, onBack, onSelect, onOpenUser, onSelect
       // a refresh — or coming back from a workout — keeps the tab you chose.
       setErr(null)
     } catch (e) {
-      setErr(e instanceof ApiError ? e.message : 'Could not load this profile')
+      setErr(e)
     }
   }, [id])
   useEffect(() => { void load() }, [load])
@@ -105,9 +107,13 @@ export default function UserProfile({ id, onBack, onSelect, onOpenUser, onSelect
           </button>
         </div>
         {err ? (
-          <div className="page-content settings-page">
-            <div className="settings-card danger"><span className="status-msg err">{err}</span></div>
-          </div>
+          <MissingRecord
+            noun="profile"
+            error={err}
+            onBack={onBack}
+            backLabel="Discover"
+            onRetry={() => void load()}
+          />
         ) : (
           <div className="detail-loading"><LoaderCircle size={18} className="spin" /></div>
         )}
@@ -176,6 +182,14 @@ export default function UserProfile({ id, onBack, onSelect, onOpenUser, onSelect
         <div className="page-header-text">
           <h1 className="profile-name">{name}</h1>
           <p className="profile-handle">@{data.user.username}</p>
+          {/* Absent on your own profile and for anyone with no live session —
+              see DirectoryUser.lastSeen. */}
+          {data.lastSeen && (
+            <p className={`profile-seen${isActiveNow(data.lastSeen) ? ' live' : ''}`}>
+              <Circle size={6} fill="currentColor" strokeWidth={0} aria-hidden />
+              {lastActive(data.lastSeen)}
+            </p>
+          )}
           {data.tagline && <p className="profile-tagline">{data.tagline}</p>}
         </div>
       </div>

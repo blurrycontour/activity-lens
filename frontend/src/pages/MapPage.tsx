@@ -52,6 +52,22 @@ function literalColor(value: string, fallback: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback
 }
 
+/**
+ * The heatmap's density ramp, cool to hot.
+ *
+ * Literal colours because MapLibre parses them itself and has no DOM to resolve
+ * a custom property against — the same reason hrZones.ts keeps hexes. Exported
+ * from one place so the legend below the map is drawn from the ramp the map is
+ * actually using, rather than from a second list that can drift from it.
+ */
+const HEAT_RAMP: [number, string][] = [
+  [0.2, '#3b82f6'],
+  [0.4, '#22d3ee'],
+  [0.6, '#facc15'],
+  [0.8, '#f97316'],
+  [1, '#ef4444'],
+]
+
 type Mode = 'routes' | 'heat'
 
 /** Refetch no faster than this while a pan is in progress. */
@@ -456,11 +472,7 @@ export default function MapPage() {
           'heatmap-color': [
             'interpolate', ['linear'], ['heatmap-density'],
             0, 'rgba(0,0,0,0)',
-            0.2, '#3b82f6',
-            0.4, '#22d3ee',
-            0.6, '#facc15',
-            0.8, '#f97316',
-            1, '#ef4444',
+            ...HEAT_RAMP.flatMap(([stop, color]) => [stop, color]),
           ],
         },
       })
@@ -586,6 +598,21 @@ export default function MapPage() {
             ))}
           </div>
         </div>
+
+        {/* What the colours mean. The consistency calendar one page over has
+            labelled its scale since it was written; this one shaded the map
+            blue through red and left the reader to infer which end was which. */}
+        {mode === 'heat' && !loading && shown.length > 0 && (
+          <div className="heat-legend">
+            <span>Fewer visits</span>
+            <span className="heat-legend-ramp" aria-hidden>
+              {HEAT_RAMP.map(([stop, color]) => (
+                <i key={stop} style={{ background: color }} />
+              ))}
+            </span>
+            <span>More</span>
+          </div>
+        )}
 
         {preparing > 0 && (
           <p className="map-page-note">

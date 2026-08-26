@@ -149,3 +149,51 @@ func (s *Store) PurgeUser(ctx context.Context, userID int64) error {
 	}
 	return nil
 }
+
+// LastSeenFor returns the most recent request each of these users made, on any
+// of their devices, keyed by user id and formatted RFC 3339.
+//
+// One statement for the whole page: the Discover list and a profile both want
+// this for a set of people at once, and a query per row is how a directory of
+// twenty becomes twenty-one round trips.
+//
+// A user with no entry has not been seen — either they have never signed in
+// since this table existed, or every session of theirs has expired or been
+// revoked and the daily sweep has taken the rows with it. That is a real
+// absence and callers render it as "unknown", not as "a long time ago": the
+// two look the same from here and only one of them is true.
+//
+// The resolution is whatever sessiontrack throttles writes to, a few minutes,
+// which is the right grain for the question anyone is asking of it.
+func (s *Store) LastSeenFor(ctx context.Context, userIDs []int64) (map[int64]string, error) {
+	out := make(map[int64]string, len(userIDs))
+	if len(userIDs) == 0 {
+		return out, nil
+	}
+	args := make([]any, len(userIDs))
+	for i, id := range userIDs {
+		args[i] = id
+	}
+	// MAX over the user's sessions: "last seen" is a fact about a person, not
+	// about the phone they happened to use. Empty strings sort below every
+	// timestamp, so a session that predates the column cannot win.
+	q := `SELECT user_id, MAX(last_seen) FROM session_clients
+	       WHERE user_id IN (?` + strings.Repeat(",?", len(userIDs)-1) + `)
+	       GROUP BY user_id`
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query last seen: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var seen sql.NullString
+		if err := rows.Scan(&id, &seen); err != nil {
+			return nil, err
+		}
+		if seen.Valid && seen.String != "" {
+			out[id] = seen.String
+		}
+	}
+	return out, rows.Err()
+}

@@ -1,21 +1,25 @@
-import { useMemo } from 'react'
-import { ALL_WORKOUT_TYPES, TYPE_COLOR, fmtPace, type WorkoutType, type Workout } from '../data/workouts'
+import type React from 'react'
+import { useLayoutEffect, useMemo } from 'react'
+import { ALL_WORKOUT_TYPES, TYPE_COLOR, fmtDuration, fmtPace, type WorkoutType, type Workout } from '../data/workouts'
+import { dayMonth, fromDateKey, shortDate } from '../lib/date'
+import { centreInScroller, useEdgeFades } from '../lib/useEdgeFades'
 import { useWorkouts } from '../context/WorkoutsContext'
 import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
 import ChartCard, { EmptyPlot } from '../components/ChartCard'
 import TabStrip from '../components/TabStrip'
 import InfoTip from '../components/InfoTip'
-import { denseXAxis, useChartSpace } from '../components/ChartAxis'
+import { EDGE_PADDING_Y, END_PADDING, KEEP_EMPTY_ROWS, denseXAxis, useChartSpace, xLabel } from '../components/ChartAxis'
 import TypeLegend from '../components/TypeLegend'
+import ScatterDot, { ActiveScatterDot } from '../components/ScatterDot'
 import Dropdown from '../components/Dropdown'
 import { useLocalStorage } from '../lib/useLocalStorage'
 import { filterByRange, rangeLabel, toDateKey } from '../lib/range'
 import { everyDayBetween, everyMonthBetween, everyWeekBetween, fillGaps, keySpan } from '../lib/timeGaps'
-import { AXIS_TICK, GRID_PROPS, HOVER_FILL } from '../lib/chartColors'
+import { AXIS_TICK, DATA_LINE, GRID_PROPS, HOVER_FILL, SERIES_COLORS, TREND_LINE } from '../lib/chartColors'
 import {
   PERF_METRICS, WEATHER_FIELDS, binByTemperature, binWidthFor, describeCorrelation,
-  hasUsableWeather, linearFit, pearson, temperatureCorrelation, weatherScatter,
+  MIN_CORRELATION_POINTS, hasUsableWeather, linearFit, pearson, temperatureCorrelation, weatherScatter,
   type PerfKey, type WeatherKey, type WeatherMetric,
 } from '../lib/weather'
 import { usePreferences } from '../context/PreferencesContext'
@@ -23,26 +27,33 @@ import {
   ScatterChart, Scatter, XAxis, YAxis, ZAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   BarChart, Bar, Cell, LineChart, Line, ComposedChart, ReferenceArea, ReferenceLine,
 } from 'recharts'
-import { Award, Target, Zap, Activity, Navigation, TrendingUp, Gauge, Flame, CloudSun, Sparkles, CalendarRange } from 'lucide-react'
+import { Award, Target, Zap, Activity, Navigation, TrendingUp, Gauge, Flame, CloudSun, Sparkles, CalendarRange, ChevronLeft, ChevronRight } from 'lucide-react'
 
-type PR = { longest: Workout; fastest: Workout | null; highest: Workout }
+type PR = { longest: Workout; longestTime: Workout; fastest: Workout | null; highest: Workout }
 
 type TabId = 'records' | 'trends' | 'efficiency' | 'load' | 'weather'
 
-const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
-  { id: 'records', label: 'Records', icon: <Award size={15} /> },
-  { id: 'trends', label: 'Trends', icon: <TrendingUp size={15} /> },
-  { id: 'efficiency', label: 'Efficiency', icon: <Gauge size={15} /> },
-  { id: 'load', label: 'Load', icon: <Flame size={15} /> },
-  { id: 'weather', label: 'Weather', icon: <CloudSun size={15} /> },
+const TABS: { id: TabId; label: string; icon: React.ReactNode; blurb: string }[] = [
+  { id: 'records', label: 'Records', icon: <Award size={15} />, blurb: 'Your best single activity in each category, per sport.' },
+  { id: 'trends', label: 'Trends', icon: <TrendingUp size={15} />, blurb: 'How each measure has moved over time, and how much you did.' },
+  { id: 'efficiency', label: 'Efficiency', icon: <Gauge size={15} />, blurb: 'Whether the same effort is buying you more speed than it used to.' },
+  { id: 'load', label: 'Load', icon: <Flame size={15} />, blurb: 'How hard you have been training lately, and whether that is sustainable.' },
+  { id: 'weather', label: 'Weather', icon: <CloudSun size={15} />, blurb: 'What heat and humidity do to your pace and heart rate.' },
 ]
 
 type Metric = 'pace' | 'hr' | 'maxHr' | 'distance' | 'duration' | 'elevation' | 'calories' | 'speed' | 'steps'
 
 const METRICS: { id: Metric; label: string; color: string; unit: string; format?: (v: number) => string }[] = [
-  { id: 'pace', label: 'Avg Pace', color: 'var(--primary)', unit: '/km', format: fmtPace },
+  /* Not var(--primary). Every other entry here is a fixed hue, so the accent was
+     the one series whose colour moved when the reader changed a setting — and it
+     moved *onto* its neighbours: Electric Blue is Distance, Violet is Duration,
+     Vivid Orange is Calories. Two selected metrics could come out the same. */
+  { id: 'pace', label: 'Avg Pace', color: 'var(--run)', unit: '/km', format: fmtPace },
   { id: 'hr', label: 'Avg HR', color: 'var(--danger)', unit: 'bpm' },
-  { id: 'maxHr', label: 'Max HR', color: '#f97316', unit: 'bpm' },
+  /* Derived from the average-HR red rather than given a hue of its own: the two
+     are the same measurement, and a chart showing both should say so. A literal
+     #f97316 sat here before, which followed neither the theme nor the family. */
+  { id: 'maxHr', label: 'Max HR', color: 'color-mix(in srgb, var(--danger) 60%, var(--warning))', unit: 'bpm' },
   { id: 'distance', label: 'Distance', color: 'var(--blue)', unit: 'km', format: v => (v / 1000).toFixed(1) },
   { id: 'duration', label: 'Duration', color: 'var(--purple)', unit: 'min', format: v => Math.round(v / 60).toString() },
   { id: 'elevation', label: 'Elevation Gain', color: 'var(--hike)', unit: 'm' },
@@ -104,7 +115,7 @@ function monthLabel(key: string): string {
  */
 function dayLabel(date: string, withYear = false): string {
   const d = new Date(`${date}T00:00:00`)
-  const short = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const short = dayMonth(d)
   return withYear ? `${short} '${String(d.getFullYear()).slice(2)}` : short
 }
 
@@ -125,7 +136,7 @@ function yearMarks(keys: string[]): boolean[] {
 
 /** Tooltip form. Always names the year: there is room, and it settles it. */
 function fullDate(date: string): string {
-  return new Date(`${date}T00:00:00`).toLocaleDateString('en-US', {
+  return fromDateKey(date).toLocaleDateString(undefined, {
     weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
   })
 }
@@ -141,16 +152,44 @@ function spansYears(keys: string[]): boolean {
 type DatedRow = { date: string; dateLabel: string; dateFull: string } & Record<string, unknown>
 
 /**
+ * The longest span, in days, worth giving one axis position per day.
+ *
+ * A phone leaves the plot around 310px. At a year and a bit that is under a
+ * pixel a day, which is the point past which the spacing stops saying anything
+ * — and past which Recharts stops resolving the pointer correctly: at two and a
+ * half years the tooltip on an 800-slot axis reported dates a year out, cycling
+ * back on itself three times across the width. A slot nobody can see and the
+ * chart cannot address is worse than no slot.
+ *
+ * Chosen just above a year so the "Last year" range always fills, since that is
+ * the longest range anyone reads day by day.
+ */
+const MAX_DAY_SLOTS = 370
+
+/** Whether a span is short enough to give every day its own axis position. */
+function fitsDaySlots(first: string, last: string): boolean {
+  return (fromDateKey(last).getTime() - fromDateKey(first).getTime()) / 86400000 <= MAX_DAY_SLOTS
+}
+
+/** True when Gaps is on and the span is too long to honour it by day. */
+function gapsTooWide(rows: DatedRow[]): boolean {
+  const span = keySpan(rows, r => r.date)
+  return !!span && !fitsDaySlots(span[0], span[1])
+}
+
+/**
  * Gives a per-activity series one position per day between its first and last
  * activity, so time off shows as the distance it actually is.
  *
  * An inserted day carries only its date, leaving every value undefined. The
  * lines that draw these series pass `connectNulls`, so the line carries across
  * the gap while the x axis stops pretending the gap was not there.
+ *
+ * Above MAX_DAY_SLOTS the rows come back untouched — see there.
  */
 function withEmptyDays(rows: DatedRow[]): DatedRow[] {
   const span = keySpan(rows, r => r.date)
-  if (!span) return rows
+  if (!span || !fitsDaySlots(span[0], span[1])) return rows
   const filled = fillGaps(
     rows,
     everyDayBetween(span[0], span[1]),
@@ -165,17 +204,165 @@ function withEmptyDays(rows: DatedRow[]): DatedRow[] {
   return filled.map((r, i) => ({ ...r, dateLabel: dayLabel(r.date, marks[i]) }))
 }
 
-/** Axis label placed below the plot, clear of the tick row. */
-function xLabel(value: string) {
-  return { value, position: 'insideBottom' as const, offset: -12, fontSize: 10, fill: 'var(--text-3)' }
+/**
+ * The separator between a row's position and its printed date in an axis key.
+ * A middot: `dayLabel` builds dates out of digits, letters and an apostrophe,
+ * and never one of these.
+ */
+const SLOT_SEP = '\u00b7'
+
+/**
+ * One axis slot per row, rather than one per distinct date.
+ *
+ * These series are one row per activity and the x axis is a *category* axis
+ * keyed on the printed date — so two activities on one day were one category.
+ * Recharts still drew both dots, because the band domain keeps duplicates, but
+ * it builds its tooltip ticks from the distinct values: on a 90-day selection
+ * with seven doubled-up days that was 22 points over 15 slots, and the second
+ * activity of every shared day had nothing to hover. Pointing at it answered
+ * for the first one and highlighted the first one, while the cursor line
+ * tracked the pointer — which reads as "the tooltip is stuck one point back".
+ *
+ * It looked like a right-edge fault because the last day was one of the
+ * doubled ones. It was never about the edge.
+ *
+ * The row's position is what makes the key unique; `slotLabel` puts the date
+ * back on the tick, so the axis reads exactly as it did.
+ */
+function withSlots<T extends DatedRow>(rows: T[]): T[] {
+  return rows.map((row, i) => ({ ...row, axisKey: `${i}${SLOT_SEP}${row.dateLabel}` }))
 }
 
-/** Rotated axis label centred on the y axis. */
-function yLabel(value: string) {
-  return {
-    value, angle: -90, position: 'insideLeft' as const,
-    fontSize: 10, fill: 'var(--text-3)', style: { textAnchor: 'middle' as const },
+/**
+ * Which slots get a tick: the first of each distinct day.
+ *
+ * Slots and ticks stopped being the same thing the moment a day could hold two
+ * of them, and only the slots need to be per-row. Left to itself the axis put
+ * a tick on every slot and printed "Jul 30" twice in a row; blanking the
+ * repeat was worse, because a zero-width label always survives the collision
+ * pass and so the blanks crowded out real dates and left the axis ending on
+ * nothing.
+ *
+ * Passed as `ticks`, which the interval logic still thins to what fits — so
+ * the labels come out exactly as they did before any of this.
+ */
+function dayTicks(rows: DatedRow[]): string[] {
+  const out: string[] = []
+  let last: string | null = null
+  for (const row of rows) {
+    if (row.dateLabel !== last) {
+      out.push(row.axisKey as string)
+      last = row.dateLabel
+    }
   }
+  return out
+}
+
+/** The printed date out of an axis key made by `withSlots`. */
+function slotLabel(key: unknown): string {
+  const s = String(key ?? '')
+  const at = s.indexOf(SLOT_SEP)
+  return at < 0 ? s : s.slice(at + 1)
+}
+
+/**
+ * The first payload entry that describes a real point rather than a fitted one.
+ *
+ * These charts draw a scatter of workouts and a line fitted through them, and
+ * the fitted line's points carry only coordinates. Reading `payload[0]` blindly
+ * therefore produced a tooltip for the *line* whenever the pointer was nearer
+ * to it than to a dot — and since a fit runs right through the middle of its
+ * own dots, that was most of the time. The tooltip then rendered nothing, which
+ * looks exactly like a tooltip that does not work: the cursor line appears and
+ * no card follows.
+ */
+function realPoint(payload: readonly { payload?: Record<string, unknown> }[]): Record<string, unknown> | null {
+  for (const entry of payload) {
+    const d = entry.payload
+    // A truthy name, not merely a present one. `from` is a bin's lower bound
+    // and may legitimately be 0, so that half tests for presence instead.
+    if (d && (d.name || d.from != null)) return d
+  }
+  return null
+}
+
+/**
+ * Which measures the Trends charts draw.
+ *
+ * One scrolling row rather than a wrapping block. Nine chips come to 893px of
+ * labels, which on a phone wrapped to three rows and 102px — a quarter of the
+ * screen spent on a control, above the summary tiles and the chart it belongs
+ * to, so the chart itself barely cleared the fold.
+ *
+ * The same scroller the tab strip is: it fades at whichever end still has
+ * something past it, which is the only on-screen evidence that there is more,
+ * and it scrolls the first selected chip into view so returning to the tab
+ * shows what you picked rather than the start of the list. The swipe pager
+ * already yields to horizontal scrollers, so this does not cost a page swipe.
+ */
+function MetricChips({ selected, onToggle }: {
+  selected: Metric[]
+  onToggle: (id: Metric) => void
+}) {
+  const { ref, fadeClass, edges, measure, scrollByPage } = useEdgeFades<HTMLDivElement>()
+
+  // Before paint, so the row never appears scrolled to the wrong place. Only
+  // on mount and when the selection changes from elsewhere — not on every
+  // toggle, or tapping a chip would drag the row out from under the finger.
+  useLayoutEffect(() => {
+    centreInScroller(ref.current, ref.current?.querySelector<HTMLElement>('.metric-chip.on') ?? null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  return (
+    <div className="metric-chips-wrap">
+      <div ref={ref} className={`metric-chips${fadeClass}`} onScroll={measure} role="group" aria-label="Measures">
+        {METRICS.map(m => {
+          const on = selected.includes(m.id)
+          return (
+            <button
+              key={m.id}
+              className={`metric-chip${on ? ' on' : ''}`}
+              onClick={() => onToggle(m.id)}
+              aria-pressed={on}
+              /* The measure's own colour, which is the line's colour on the
+                 chart below — the one thing here that cannot come from a
+                 token, because it is per measure. */
+              style={{ '--chip-hue': m.color } as React.CSSProperties}
+            >
+              <span className="metric-chip-dot" aria-hidden />
+              {m.label}
+            </button>
+          )
+        })}
+      </div>
+      {/* An arrow at each live end, because the fade was not saying it. It
+          dissolves a chip's outline into the background, and an outline is
+          what the end of a row looks like anyway — so four chips and a sliver
+          read as four chips. These say it outright and can be pressed.
+          Always rendered and faded out when there is nothing that way, rather
+          than mounted and unmounted: an arrow appearing under a finger that is
+          already moving is worse than one that is simply not lit. */}
+      <button
+        className={`chip-scroll start${edges.start ? '' : ' off'}`}
+        onClick={() => scrollByPage(-1)}
+        tabIndex={edges.start ? 0 : -1}
+        aria-hidden={!edges.start}
+        aria-label="Show earlier measures"
+      >
+        <ChevronLeft size={15} />
+      </button>
+      <button
+        className={`chip-scroll end${edges.end ? '' : ' off'}`}
+        onClick={() => scrollByPage(1)}
+        tabIndex={edges.end ? 0 : -1}
+        aria-hidden={!edges.end}
+        aria-label="Show more measures"
+      >
+        <ChevronRight size={15} />
+      </button>
+    </div>
+  )
 }
 
 /** Two-option segmented control used by the volume chart's toggles. */
@@ -185,17 +372,13 @@ function Segmented<T extends string>({ value, onChange, options }: {
   options: { id: T; label: string }[]
 }) {
   return (
-    <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
+    <div className="segmented">
       {options.map(o => (
         <button
           key={o.id}
+          className={value === o.id ? 'active' : undefined}
+          aria-pressed={value === o.id}
           onClick={() => onChange(o.id)}
-          style={{
-            padding: '4px 10px', fontSize: 11, cursor: 'pointer', border: 'none',
-            background: value === o.id ? 'var(--primary-dim)' : 'var(--bg-3)',
-            color: value === o.id ? 'var(--primary)' : 'var(--text-3)',
-            fontWeight: value === o.id ? 600 : 400,
-          }}
         >
           {o.label}
         </button>
@@ -219,8 +402,19 @@ export default function Analysis() {
    * per activity, gaps closed up. That is the denser and often more readable
    * view — but it silently rescales the x axis, so a fortnight off looks like
    * business as usual. On, every skipped day or bucket keeps its place.
+   *
+   * On by default, which it was not. Off, these charts put one point per
+   * activity on a categorical axis *labelled with dates*: eight days between
+   * two workouts and one day between the next two came out the same width, so
+   * the shape of the line — which is the entire product of a page captioned
+   * "falling is improving" — was an artefact of how many times you trained
+   * rather than of when. A reader has no way to know that from looking, and a
+   * chart whose default reading is wrong is worse than a denser one.
+   *
+   * Still a toggle, because the compressed view is genuinely the better one
+   * for comparing activity to activity. It is now the thing you opt into.
    */
-  const [showGaps, setShowGaps] = useLocalStorage<boolean>('al_an_gaps', false)
+  const [showGaps, setShowGaps] = useLocalStorage<boolean>('al_an_gaps', true)
   /**
    * Whether the trend chart's y axis starts at zero or hugs the data.
    *
@@ -319,6 +513,16 @@ export default function Analysis() {
   // states far more than the data does.
   const exploreField = WEATHER_FIELDS.find(f => f.key === exploreX) ?? WEATHER_FIELDS[0]
   const exploreMetric = PERF_METRICS.find(m => m.key === exploreY) ?? PERF_METRICS[0]
+  /*
+   * Every sport's dots in one array.
+   *
+   * The chart draws one Scatter over this rather than one per sport, because
+   * Recharts gives each series its own tooltip and only one of them ever
+   * answered a tap. The colour moves to a Cell per point, which is what the
+   * Efficiency scatters already do.
+   */
+  const weatherDots = useMemo(() => weatherGroups.flatMap(g => g.scatter), [weatherGroups])
+
   const exploreGroups = useMemo(
     () => weatherTypes.map(type => {
       const points = weatherScatter(
@@ -352,6 +556,10 @@ export default function Analysis() {
       const paced = tw.filter(w => w.avgPace)
       PRs[type] = {
         longest: tw.reduce((a, b) => a.distance > b.distance ? a : b),
+        // The one record every sport can set. Strength work has no distance and
+        // no climb, so without this its card had three rows and two of them
+        // read zero — the card meant to show your best, showing nothing.
+        longestTime: tw.reduce((a, b) => a.duration > b.duration ? a : b),
         fastest: paced.length > 0 ? paced.reduce((a, b) => a.avgPace < b.avgPace ? a : b) : null,
         highest: tw.reduce((a, b) => a.elevationGain > b.elevationGain ? a : b),
       }
@@ -419,7 +627,7 @@ export default function Analysis() {
     // last three activities" rather than becoming "the last three days" the
     // moment the toggle is flipped. The toggle is about the x axis, not the
     // maths on it.
-    return showGaps ? withEmptyDays(rows) : rows
+    return withSlots(showGaps ? withEmptyDays(rows) : rows)
   }, [series, showGaps])
 
   const summaryStats = useMemo(() => {
@@ -507,7 +715,7 @@ export default function Analysis() {
       hr: d.hr,
       speed: d.speed as number,
     }))
-    return { refHr, rows: showGaps ? withEmptyDays(rows) : rows }
+    return { refHr, rows: withSlots(showGaps ? withEmptyDays(rows) : rows) }
   }, [series, showGaps])
 
   // ── Load ─────────────────────────────────────────────────────────────────
@@ -601,7 +809,7 @@ export default function Analysis() {
         {tab === 'records' && (
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
-              <Award size={16} color="var(--primary)" />
+              <Award size={16} color="var(--success)" />
               <h3 className="card-title">Personal Records</h3>
               <InfoTip text={`Your best single activity in each category, within the ${scope}. Widen the time range to see all-time bests — these follow the page filter, so a 30-day window shows your best month, not your best ever.`} label="Personal Records" />
             </div>
@@ -621,9 +829,18 @@ export default function Analysis() {
                     <div key={type} className="card" style={{ borderTop: `3px solid ${TYPE_COLOR[type]}` }}>
                       <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12, color: TYPE_COLOR[type] }}>{type}</div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        <PRRow label="Longest" value={`${(pr.longest.distance / 1000).toFixed(1)} km`} />
-                        {pr.fastest && <PRRow label="Best Pace" value={`${fmtPace(pr.fastest.avgPace)} /km`} accent />}
-                        <PRRow label="Most Elevation" value={`${Math.round(pr.highest.elevationGain)} m`} />
+                        {/* A distance or a climb of zero is not a record, it is
+                            the absence of one. Strength cards read "Longest
+                            0.0 km" and "Most Elevation 0 m" — two rows of
+                            nothing, on the card meant to show your best. */}
+                        {pr.longest.distance > 0 && (
+                          <PRRow label="Longest" value={`${(pr.longest.distance / 1000).toFixed(1)} km`} on={pr.longest.date} />
+                        )}
+                        <PRRow label="Longest time" value={fmtDuration(pr.longestTime.duration)} on={pr.longestTime.date} />
+                        {pr.fastest && <PRRow label="Best Pace" value={`${fmtPace(pr.fastest.avgPace)} /km`} on={pr.fastest.date} best />}
+                        {pr.highest.elevationGain > 0 && (
+                          <PRRow label="Most Elevation" value={`${Math.round(pr.highest.elevationGain)} m`} on={pr.highest.date} />
+                        )}
                       </div>
                     </div>
                   ))}
@@ -664,7 +881,7 @@ export default function Analysis() {
                     <YAxis
                       tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto"
                       tickFormatter={v => v >= 1000 ? `${Math.round(v / 1000)}k` : `${Math.round(v * 10) / 10}`}
-                      label={yLabel(SPORT_MEASURES.find(m => m.id === sportMeasure)!.axis)}
+                      label={space.yLabel(SPORT_MEASURES.find(m => m.id === sportMeasure)!.axis)}
                     />
                     <Tooltip
                       cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
@@ -694,25 +911,7 @@ export default function Analysis() {
         {/* ── Trends: how the numbers move over time ── */}
         {tab === 'trends' && (
           <>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
-              {METRICS.map(m => (
-                <button
-                  key={m.id}
-                  onClick={() => toggleMetric(m.id)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 6,
-                    padding: '5px 12px', borderRadius: 99,
-                    border: `1px solid ${selectedMetrics.includes(m.id) ? m.color : 'var(--border)'}`,
-                    background: selectedMetrics.includes(m.id) ? `${m.color}18` : 'transparent',
-                    color: selectedMetrics.includes(m.id) ? m.color : 'var(--text-3)',
-                    fontSize: 12, fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s',
-                  }}
-                >
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: m.color, opacity: selectedMetrics.includes(m.id) ? 1 : 0.3 }} />
-                  {m.label}
-                </button>
-              ))}
-            </div>
+            <MetricChips selected={selectedMetrics} onToggle={toggleMetric} />
 
             {summaryStats.length > 0 && (
               <div className="trend-stats">
@@ -741,7 +940,8 @@ export default function Analysis() {
             <ChartCard
               title="Performance Over Time"
               icon={<TrendingUp size={14} color="var(--primary)" />}
-              description={`One point per activity, with a bolder 3-activity moving average. ${series.length} activities.`}
+              description={`One point per activity, with a dashed 3-activity moving average. ${series.length} activities.${
+                showGaps && gapsTooWide(series) ? ' Evenly spaced: the range is too long to give every day its own position.' : ''}`}
               info="Faint lines are individual activities; bold lines smooth them over three activities to show direction rather than noise. All selected metrics share one axis, so use it to read each line's shape and trend, not to compare their absolute heights. Filtering to a single sport makes pace and speed directly comparable. Starting the axis at zero keeps the proportions honest; fitting it to the data is the only way to see movement in a metric like heart rate, which never goes near zero."
               style={{ marginBottom: 16 }}
               actions={
@@ -758,31 +958,34 @@ export default function Analysis() {
                 <ResponsiveContainer width="100%" height={300}>
                   <LineChart data={seriesWithMA} margin={space.margin(18)}>
                     <CartesianGrid {...GRID_PROPS} />
-                    <XAxis dataKey="dateLabel" {...denseXAxis()} label={xLabel('Activity date')} />
+                    <XAxis dataKey="axisKey" ticks={dayTicks(seriesWithMA)} tickFormatter={slotLabel} {...denseXAxis()} label={xLabel('Activity date')} />
                     <YAxis
                       tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto"
                       domain={trendYAxis === 'zero' ? [0, 'auto'] : ['auto', 'auto']}
-                      label={yLabel('Selected metrics')}
+                      label={space.yLabel('Selected metrics')}
                     />
                     <Tooltip
+                      {...KEEP_EMPTY_ROWS}
                       content={({ active, payload, label }) => {
                         if (!active) return null
                         // With gaps shown most positions are days with nothing
-                        // on them, and Recharts hands over an empty payload.
-                        // Returning null there reads as a broken tooltip, so the
-                        // day still names itself and says it was a rest day.
+                        // on them, and every metric on such a row is null.
+                        // KEEP_EMPTY_ROWS is what lets that reach here at all;
+                        // without it Recharts hides the tooltip and only the
+                        // cursor line moves. The day still names itself and
+                        // says it was a rest day.
                         const row = payload?.[0]?.payload as DatedRow | undefined
                         if (!payload?.length || row?.empty) {
                           return (
                             <div className="custom-tooltip">
-                              <div style={{ color: 'var(--text-2)', fontWeight: 600 }}>{row?.dateFull ?? label}</div>
+                              <div style={{ color: 'var(--text-2)', fontWeight: 600 }}>{row?.dateFull ?? slotLabel(label)}</div>
                               <div style={{ color: 'var(--text-3)' }}>No activity</div>
                             </div>
                           )
                         }
                         return (
                           <div className="custom-tooltip">
-                            <div style={{ color: 'var(--text-2)', marginBottom: 6, fontWeight: 600 }}>{row?.dateFull ?? label}</div>
+                            <div style={{ color: 'var(--text-2)', marginBottom: 6, fontWeight: 600 }}>{row?.dateFull ?? slotLabel(label)}</div>
                             {payload.filter(p => !String(p.dataKey).endsWith('_ma')).map(p => {
                               const m = METRICS.find(x => x.id === p.dataKey)
                               if (!m || !selectedMetrics.includes(m.id)) return null
@@ -799,8 +1002,8 @@ export default function Analysis() {
                     {selectedMetrics.map(metricId => {
                       const m = METRICS.find(x => x.id === metricId)!
                       return [
-                        <Line key={metricId} type="monotone" dataKey={metricId} stroke={m.color} strokeWidth={1.5} dot={{ r: 3, fill: m.color, strokeWidth: 0 }} connectNulls opacity={0.4} isAnimationActive={false} />,
-                        <Line key={`${metricId}_ma`} type="monotone" dataKey={`${metricId}_ma`} stroke={m.color} strokeWidth={2.5} dot={false} connectNulls isAnimationActive={false} />,
+                        <Line key={metricId} type="monotone" dataKey={metricId} stroke={m.color} {...DATA_LINE} dot={{ r: 3, fill: m.color, strokeWidth: 0 }} connectNulls isAnimationActive={false} />,
+                        <Line key={`${metricId}_ma`} type="monotone" dataKey={`${metricId}_ma`} stroke={m.color} {...TREND_LINE} connectNulls isAnimationActive={false} />,
                       ]
                     })}
                   </LineChart>
@@ -826,8 +1029,8 @@ export default function Analysis() {
                 <ResponsiveContainer width="100%" height={220}>
                   <ComposedChart data={volume} margin={space.margin(18, 4)}>
                     <CartesianGrid {...GRID_PROPS} />
-                    <XAxis dataKey="label" {...denseXAxis(9)} label={xLabel(volumeBucket === 'week' ? 'Week starting' : 'Month')} />
-                    <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" label={yLabel(volumeMeasure === 'distance' ? 'Distance (km)' : 'Time (hours)')} />
+                    <XAxis dataKey="label" {...denseXAxis(9, { bars: true })} label={xLabel(volumeBucket === 'week' ? 'Week starting' : 'Month')} />
+                    <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" label={space.yLabel(volumeMeasure === 'distance' ? 'Distance (km)' : 'Time (hours)')} />
                     <Tooltip
                       cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
                       content={({ active, payload }) => {
@@ -844,7 +1047,7 @@ export default function Analysis() {
                       }}
                     />
                     <Bar dataKey="value" fill="var(--primary)" opacity={0.35} radius={[3, 3, 0, 0]} maxBarSize={40} isAnimationActive={false} />
-                    <Line type="monotone" dataKey="avg" stroke="var(--primary)" strokeWidth={2.5} dot={false} isAnimationActive={false} />
+                    <Line type="monotone" dataKey="avg" stroke="var(--primary)" {...TREND_LINE} isAnimationActive={false} />
                   </ComposedChart>
                 </ResponsiveContainer>
               )}
@@ -868,9 +1071,10 @@ export default function Analysis() {
                   <ResponsiveContainer width="100%" height={220}>
                     <LineChart data={efficiency.rows} margin={space.margin(18, 4)}>
                       <CartesianGrid {...GRID_PROPS} />
-                      <XAxis dataKey="dateLabel" {...denseXAxis(9)} label={xLabel('Activity date')} />
-                      <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" domain={['dataMin - 1', 'dataMax + 1']} label={yLabel('bpm per km/h')} />
+                      <XAxis dataKey="axisKey" ticks={dayTicks(efficiency.rows)} tickFormatter={slotLabel} {...denseXAxis(9)} label={xLabel('Activity date')} />
+                      <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" domain={['dataMin - 1', 'dataMax + 1']} label={space.yLabel('bpm per km/h')} />
                       <Tooltip
+                        {...KEEP_EMPTY_ROWS}
                         content={({ active, payload }) => {
                           if (!active || !payload?.length) return null
                           const d = payload[0].payload
@@ -886,7 +1090,7 @@ export default function Analysis() {
                             <div className="custom-tooltip">
                               <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.name}</div>
                               <div style={{ color: 'var(--text-3)' }}>{d.dateFull}</div>
-                              <div style={{ color: 'var(--danger)' }}>{d.hrPerSpeed} bpm per km/h</div>
+                              <div style={{ color: SERIES_COLORS[1] }}>{d.hrPerSpeed} bpm per km/h</div>
                               <div style={{ color: 'var(--text-3)' }}>{d.hr} bpm · {d.speed.toFixed(1)} km/h</div>
                             </div>
                           )
@@ -895,7 +1099,7 @@ export default function Analysis() {
                       {/* An explicit fill: Recharts defaults a dot to solid
                           white, which is invisible in light mode and wrong in
                           both. Every other line on this page names its own. */}
-                      <Line type="monotone" dataKey="hrPerSpeed" stroke="var(--danger)" strokeWidth={2} dot={{ r: 2.5, strokeWidth: 0, fill: 'var(--danger)' }} connectNulls isAnimationActive={false} />
+                      <Line type="monotone" dataKey="hrPerSpeed" stroke={SERIES_COLORS[1]} strokeWidth={2} dot={{ r: 2.5, strokeWidth: 0, fill: SERIES_COLORS[1] }} connectNulls isAnimationActive={false} />
                     </LineChart>
                   </ResponsiveContainer>
                 )}
@@ -913,9 +1117,10 @@ export default function Analysis() {
                   <ResponsiveContainer width="100%" height={220}>
                     <LineChart data={efficiency.rows} margin={space.margin(18, 4)}>
                       <CartesianGrid {...GRID_PROPS} />
-                      <XAxis dataKey="dateLabel" {...denseXAxis(9)} label={xLabel('Activity date')} />
-                      <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" reversed domain={['dataMin - 15', 'dataMax + 15']} tickFormatter={v => fmtPace(v)} label={yLabel('Adjusted pace (min/km)')} />
+                      <XAxis dataKey="axisKey" ticks={dayTicks(efficiency.rows)} tickFormatter={slotLabel} {...denseXAxis(9)} label={xLabel('Activity date')} />
+                      <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" reversed domain={['dataMin - 15', 'dataMax + 15']} tickFormatter={v => fmtPace(v)} label={space.yLabel('Adjusted pace (min/km)')} />
                       <Tooltip
+                        {...KEEP_EMPTY_ROWS}
                         content={({ active, payload }) => {
                           if (!active || !payload?.length) return null
                           const d = payload[0].payload
@@ -960,8 +1165,8 @@ export default function Analysis() {
                       {/* Units live in the axis labels rather than on every tick:
                           with " bpm" appended to each value the labels grew wide
                           enough to be clipped by the plot area. */}
-                      <XAxis type="number" dataKey="pace" name="Pace" domain={['dataMin - 20', 'dataMax + 20']} tick={AXIS_TICK} axisLine={false} tickLine={false} reversed tickFormatter={v => fmtPace(v)} label={xLabel('Pace (min/km) — faster →')} />
-                      <YAxis type="number" dataKey="hr" name="HR" domain={['dataMin - 5', 'dataMax + 5']} width="auto" tick={AXIS_TICK} axisLine={false} tickLine={false} label={yLabel('Avg HR (bpm)')} />
+                      <XAxis type="number" dataKey="pace" name="Pace" domain={['dataMin - 20', 'dataMax + 20']} padding={END_PADDING} tick={AXIS_TICK} axisLine={false} tickLine={false} reversed tickFormatter={v => fmtPace(v)} label={xLabel('Pace (min/km) — faster →')} />
+                      <YAxis type="number" dataKey="hr" name="HR" domain={['dataMin - 5', 'dataMax + 5']} padding={EDGE_PADDING_Y} width="auto" tick={AXIS_TICK} axisLine={false} tickLine={false} label={space.yLabel('Avg HR (bpm)')} />
                       <ZAxis type="number" dataKey="distKm" range={[40, 220]} name="Distance" />
                       <Tooltip
                         cursor={{ strokeDasharray: '3 3', stroke: 'var(--border-strong)' }}
@@ -982,7 +1187,7 @@ export default function Analysis() {
                       {/* Coloured per point rather than one series per type: a
                           <Scatter> per type would give each its own z order and
                           tooltip, when all that is wanted is the sport's hue. */}
-                      <Scatter data={hrPaceData} opacity={0.6}>
+                      <Scatter data={hrPaceData} opacity={0.6} shape={<ScatterDot />} activeShape={<ActiveScatterDot />}>
                         {hrPaceData.map((d, i) => <Cell key={i} fill={TYPE_COLOR[d.type]} />)}
                       </Scatter>
                     </ScatterChart>
@@ -1003,8 +1208,8 @@ export default function Analysis() {
                   <ResponsiveContainer width="100%" height={240}>
                     <ScatterChart margin={space.margin(18)}>
                       <CartesianGrid {...GRID_PROPS} vertical />
-                      <XAxis type="number" dataKey="km" name="Distance" domain={['dataMin - 1', 'dataMax + 1']} tick={AXIS_TICK} axisLine={false} tickLine={false} label={xLabel('Distance (km)')} />
-                      <YAxis type="number" dataKey="pace" name="Pace" domain={['dataMin - 20', 'dataMax + 20']} width="auto" tick={AXIS_TICK} axisLine={false} tickLine={false} reversed tickFormatter={v => fmtPace(v)} label={yLabel('Pace (min/km)')} />
+                      <XAxis type="number" dataKey="km" name="Distance" domain={['dataMin - 1', 'dataMax + 1']} padding={END_PADDING} tick={AXIS_TICK} axisLine={false} tickLine={false} label={xLabel('Distance (km)')} />
+                      <YAxis type="number" dataKey="pace" name="Pace" domain={['dataMin - 20', 'dataMax + 20']} padding={EDGE_PADDING_Y} width="auto" tick={AXIS_TICK} axisLine={false} tickLine={false} reversed tickFormatter={v => fmtPace(v)} label={space.yLabel('Pace (min/km)')} />
                       {/* Elevation can legitimately be 0, so the range starts at
                           a visible minimum rather than collapsing to a dot. */}
                       <ZAxis type="number" dataKey="elev" range={[40, 220]} name="Elevation" />
@@ -1025,7 +1230,7 @@ export default function Analysis() {
                           )
                         }}
                       />
-                      <Scatter data={distPaceData} opacity={0.6}>
+                      <Scatter data={distPaceData} opacity={0.6} shape={<ScatterDot />} activeShape={<ActiveScatterDot />}>
                         {distPaceData.map((d, i) => <Cell key={i} fill={TYPE_COLOR[d.type]} />)}
                       </Scatter>
                     </ScatterChart>
@@ -1051,7 +1256,7 @@ export default function Analysis() {
                 <BarChart data={trainingLoad} margin={space.margin(18, 4)}>
                   <CartesianGrid {...GRID_PROPS} />
                   <XAxis dataKey="date" {...denseXAxis(9)} label={xLabel('Date')} />
-                  <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" label={yLabel('Load (TSS-equivalent)')} />
+                  <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" label={space.yLabel('Load (TSS-equivalent)')} />
                   <Tooltip
                     cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
                     content={({ active, payload }) => {
@@ -1083,7 +1288,7 @@ export default function Analysis() {
                 <LineChart data={acwr} margin={space.margin(18, 4)}>
                   <CartesianGrid {...GRID_PROPS} />
                   <XAxis dataKey="date" {...denseXAxis(9)} label={xLabel('Date')} />
-                  <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" domain={[0, (max: number) => Math.max(2, Math.ceil(max * 10) / 10)]} label={yLabel('Acute : chronic ratio')} />
+                  <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" domain={[0, (max: number) => Math.max(2, Math.ceil(max * 10) / 10)]} label={space.yLabel('Acute : chronic ratio')} />
                   <ReferenceArea y1={0.8} y2={1.3} fill="var(--success)" fillOpacity={0.1} />
                   <ReferenceLine y={1.5} stroke="var(--danger)" strokeDasharray="4 4" strokeOpacity={0.6} />
                   <Tooltip
@@ -1150,20 +1355,30 @@ export default function Analysis() {
                     <XAxis
                       type="number" dataKey="temp" name="Temperature"
                       domain={['dataMin - 2', 'dataMax + 2']}
+                      padding={END_PADDING}
                       tick={AXIS_TICK} axisLine={false} tickLine={false}
                       label={xLabel('Temperature (°C)')}
                     />
                     <YAxis
                       type="number" dataKey="value"
+                      padding={EDGE_PADDING_Y}
                       tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto"
                       tickFormatter={v => weatherMetric === 'pace' ? fmtPace(v) : String(Math.round(v))}
-                      label={yLabel(weatherMetric === 'pace' ? 'Pace (/km)' : 'Avg HR (bpm)')}
+                      label={space.yLabel(weatherMetric === 'pace' ? 'Pace (/km)' : 'Avg HR (bpm)')}
                     />
                     <Tooltip
+                      /* Item-based, not axis-based. A ComposedChart's shared
+                         tooltip resolves by x position across every series at
+                         once, and with a scatter that means a tap answers only
+                         where some series happens to have a value — which is
+                         why four sports' dots were unreachable and the fifth
+                         worked. shared=false asks the mark under the pointer. */
+                      shared={false}
                       cursor={{ stroke: HOVER_FILL }}
                       content={({ active, payload }) => {
                         if (!active || !payload?.length) return null
-                        const d = payload[0].payload
+                        const d = realPoint(payload) as any
+                        if (!d) return null
                         const value = weatherMetric === 'pace' ? fmtPace(d.value ?? d[weatherMetric]) : Math.round(d.value ?? d[weatherMetric])
                         return (
                           <div className="custom-tooltip">
@@ -1181,18 +1396,23 @@ export default function Analysis() {
                     {/* The individual workouts, faint and in their sport's
                         colour. The line alone would read as a law; the spread
                         behind it is the honest part. */}
-                    {weatherGroups.map(g => (
-                      <Scatter key={`dots-${g.type}`} data={g.scatter} dataKey="value" fill={g.color} opacity={0.4} isAnimationActive={false} />
-                    ))}
-                    {/* One line per sport, and only once that sport has bands
-                        to draw. Below that its dots are the whole story, which
-                        is the honest picture of a handful of workouts. */}
-                    {weatherGroups.map(g => g.bins.length > 0 && (
+                    {/* One series, coloured per point — see the explore chart
+                        below for why five of them could not all be tapped. */}
+                    <Scatter data={weatherDots} dataKey="value" opacity={0.55} isAnimationActive={false} shape={<ScatterDot />} activeShape={<ActiveScatterDot />}>
+                      {weatherDots.map((d, i) => <Cell key={i} fill={TYPE_COLOR[d.type as WorkoutType]} />)}
+                    </Scatter>
+                    {/* One line per sport, and only once that sport has both
+                        bands to draw and enough workouts behind them to mean
+                        anything. Below that its dots are the whole story, which
+                        is the honest picture of a handful of workouts — a line
+                        through two bands is a straight segment asserting a
+                        trend that nothing supports. */}
+                    {weatherGroups.map(g => g.bins.length > 0 && g.count >= MIN_CORRELATION_POINTS && (
                       <Line
                         key={`line-${g.type}`}
                         data={g.bins}
                         type="monotone" dataKey="value"
-                        stroke={g.color} strokeWidth={2}
+                        stroke={g.color} {...TREND_LINE}
                         dot={{ r: 3, fill: g.color }}
                         isAnimationActive={false}
                       />
@@ -1268,24 +1488,34 @@ export default function Analysis() {
                     <XAxis
                       type="number" dataKey="x" name={exploreField.label}
                       domain={['dataMin', 'dataMax']}
+                      padding={END_PADDING}
                       tick={AXIS_TICK} axisLine={false} tickLine={false}
                       label={xLabel(`${exploreField.label} (${exploreField.unit})`)}
                     />
                     <YAxis
                       type="number" dataKey="y"
+                      padding={EDGE_PADDING_Y}
                       tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto"
                       domain={['dataMin', 'dataMax']}
                       tickFormatter={exploreMetric.format}
-                      label={yLabel(`${exploreMetric.label} (${exploreMetric.unit})`)}
+                      label={space.yLabel(`${exploreMetric.label} (${exploreMetric.unit})`)}
                     />
                     <Tooltip
+                      /* Item-based, not axis-based. A ComposedChart's shared
+                         tooltip resolves by x position across every series at
+                         once, and with a scatter that means a tap answers only
+                         where some series happens to have a value — which is
+                         why four sports' dots were unreachable and the fifth
+                         worked. shared=false asks the mark under the pointer. */
+                      shared={false}
                       cursor={{ stroke: HOVER_FILL }}
                       content={({ active, payload }) => {
                         if (!active || !payload?.length) return null
-                        const d = payload[0].payload
-                        // The fitted line carries no workout, so hovering it
-                        // would otherwise show a blank card with two numbers.
-                        if (!d.name) return null
+                        // The fitted line carries no workout. Skipping past it
+                        // rather than giving up on the whole payload is what
+                        // lets a dot under a fit still answer.
+                        const d = realPoint(payload) as any
+                        if (!d?.name) return null
                         return (
                           <div className="custom-tooltip">
                             <div>{d.name}</div>
@@ -1299,17 +1529,24 @@ export default function Analysis() {
                         )
                       }}
                     />
-                    {exploreGroups.map(g => (
-                      <Scatter key={`dots-${g.type}`} data={g.points} dataKey="y" fill={g.color} opacity={0.6} isAnimationActive={false} />
-                    ))}
+                    {/* One Scatter with a Cell per point, not one Scatter per
+                        sport. Recharts gives each series its own tooltip, so
+                        with five of them only one sport's dots ever answered a
+                        tap and which one was down to z order — the same trap
+                        the two Efficiency scatters avoid by doing this. */}
+                    <Scatter data={explorePoints} dataKey="y" opacity={0.6} isAnimationActive={false} shape={<ScatterDot />} activeShape={<ActiveScatterDot />}>
+                      {explorePoints.map((d, i) => <Cell key={i} fill={TYPE_COLOR[d.type as WorkoutType]} />)}
+                    </Scatter>
                     {/* A fit each. One line through every sport at once would
                         be a trend in the mix of sports, not in the weather. */}
-                    {exploreGroups.map(g => g.fit && (
+                    {/* Only where r survived the floor: linearFit will happily
+                        draw a slope through two points, and r is the thing that
+                        says whether that slope is worth asserting. */}
+                    {exploreGroups.map(g => g.fit && g.r !== null && (
                       <Line
                         key={`fit-${g.type}`}
                         data={g.fit} dataKey="y" type="linear"
-                        stroke={g.color} strokeWidth={2} strokeDasharray="5 4"
-                        dot={false} isAnimationActive={false} legendType="none"
+                        stroke={g.color} {...TREND_LINE} legendType="none"
                       />
                     ))}
                   </ComposedChart>
@@ -1340,11 +1577,25 @@ export default function Analysis() {
   )
 }
 
-function PRRow({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+/**
+ * One line of a records card: what the record is, the figure, and when.
+ *
+ * The date is not decoration — a personal best with no "when" is half a fact,
+ * and on a page whose time range the reader controls it is the half that says
+ * whether they are looking at a lifetime or at last month.
+ *
+ * `best` marks the standout figure, in --success rather than the accent: this
+ * is an achievement, and on the Rose accent an accent-coloured record read as
+ * an error.
+ */
+function PRRow({ label, value, on, best }: { label: string; value: string; on?: string; best?: boolean }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-      <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{label}</span>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600, color: accent ? 'var(--primary)' : undefined }}>{value}</span>
+    <div className="pr-row">
+      <span className="pr-row-label">{label}</span>
+      <span className="pr-row-figure">
+        <span className={`pr-row-value${best ? ' best' : ''}`}>{value}</span>
+        {on && <span className="pr-row-date">{shortDate(new Date(`${on}T00:00:00`))}</span>}
+      </span>
     </div>
   )
 }

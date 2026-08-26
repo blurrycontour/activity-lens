@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  goalProgress, newGoal, parseDateKey, periodKeyOf, periodLabel, sparkAverages, weekStartKey, type Goal,
+  goalProgress, newGoal, parseDateKey, periodKeyOf, periodLabel, recentPersonalBests, sparkAverages,
+  weekStartKey, type Goal,
 } from '../insights'
 import type { Workout } from '../../data/workouts'
 
@@ -249,5 +250,135 @@ describe('sparkAverages', () => {
     // with no monitor reports 0, which is "not measured" rather than a value.
     expect(sparkAverages([hrWorkout('2026-07-28', 150)], 8, 4, w => w.avgHR, now)).toEqual([])
     expect(sparkAverages([hrWorkout('2026-07-22', 0), hrWorkout('2026-07-28', 0)], 8, 4, w => w.avgHR, now)).toEqual([])
+  })
+})
+
+describe('recentPersonalBests', () => {
+  const NOW = new Date('2026-08-25T12:00:00Z')
+
+  /** A workout with a pace and an optional start time, for the tie-break case. */
+  function paced(date: string, type: Workout['type'], avgPace: number, startTime?: string): Workout {
+    return { ...workout(date, 5000, type), id: date + type + avgPace, avgPace, startTime }
+  }
+
+  // Judging a hike against hikes is right — a hike is not slow for being slower
+  // than a run — but the label has to say so. Unqualified, "Fastest pace" beside
+  // a hiking pace is a claim about all your training, and a reader who ran
+  // faster last week knows it is false.
+  it('names the sport in every label', () => {
+    const hikes = [
+      paced('2026-08-24', 'Hike', 850),
+      paced('2026-08-08', 'Hike', 954),
+      paced('2026-01-03', 'Hike', 972),
+      paced('2025-12-28', 'Hike', 1020),
+    ]
+    const bests = recentPersonalBests(hikes, 3, 14, NOW)
+    const pace = bests.find(b => b.kind === 'pace')
+    expect(pace?.label).toBe('Fastest Hike pace')
+    for (const b of bests) expect(b.label).toContain('Hike')
+  })
+
+  // A faster run of another sport must not suppress a genuine hiking record,
+  // and must not be borrowed to claim one either.
+  it('judges against the same sport only', () => {
+    const mixed = [
+      paced('2026-08-24', 'Hike', 850),
+      paced('2026-08-08', 'Hike', 954),
+      paced('2026-01-03', 'Hike', 972),
+      paced('2025-12-28', 'Hike', 1020),
+      paced('2026-06-10', 'Run', 420),
+    ]
+    expect(recentPersonalBests(mixed, 3, 14, NOW).find(b => b.kind === 'pace')?.value).toBe('14:10 /km')
+  })
+
+  // A ride and a swim report avgSpeed and no avgPace, so a function that only
+  // looked at pace gave half the sports the app supports no record at all.
+  it('records a speed best for the sports that have no pace', () => {
+    const ride = (date: string, avgSpeed: number): Workout =>
+      ({ ...workout(date, 20000, 'Ride'), id: date + avgSpeed, avgPace: 0, avgSpeed })
+    const rides = [ride('2026-08-24', 31), ride('2026-08-10', 26), ride('2026-07-02', 28), ride('2026-06-01', 24)]
+    const best = recentPersonalBests(rides, 3, 14, NOW).find(b => b.kind === 'speed')
+    expect(best?.label).toBe('Fastest Ride')
+    expect(best?.value).toBe('31.0 km/h')
+  })
+
+  // The two must never both fire: they are the same claim in different units.
+  it('does not report both a pace and a speed best for one workout', () => {
+    const runs = [
+      paced('2026-08-24', 'Run', 420),
+      paced('2026-08-10', 'Run', 460),
+      paced('2026-07-02', 'Run', 455),
+      paced('2026-06-01', 'Run', 470),
+    ].map(w => ({ ...w, avgSpeed: 3600 / w.avgPace }))
+    const kinds = recentPersonalBests(runs, 3, 14, NOW).map(b => b.kind)
+    expect(kinds).toContain('pace')
+    expect(kinds).not.toContain('speed')
+  })
+
+  // The one record on the card that cannot be set by trying harder on the day.
+  it('records the efficiency best when the same HR buys more speed', () => {
+    const w = (date: string, avgHR: number, avgSpeed: number): Workout =>
+      ({ ...workout(date, 5000, 'Run'), id: date + avgHR, avgHR, avgSpeed, avgPace: 0 })
+    // 150/12 = 12.5, below every peer, while the HR itself is not the lowest.
+    const runs = [w('2026-08-24', 150, 12), w('2026-08-10', 140, 10), w('2026-07-02', 155, 11), w('2026-06-01', 145, 10)]
+    const best = recentPersonalBests(runs, 3, 14, NOW).find(b => b.kind === 'efficiency')
+    expect(best?.label).toBe('Best Run efficiency')
+    expect(best?.value).toBe('12.5 bpm per km/h')
+  })
+
+  // Going slowly must not look like getting fitter: the record is HR per unit
+  // of speed, not HR.
+  it('does not call the slowest workout the most efficient', () => {
+    const w = (date: string, avgHR: number, avgSpeed: number): Workout =>
+      ({ ...workout(date, 5000, 'Run'), id: date + avgHR, avgHR, avgSpeed, avgPace: 0 })
+    // Lowest HR of the four, but crawling: 100/5 = 20 is the worst ratio here.
+    const runs = [w('2026-08-24', 100, 5), w('2026-08-10', 140, 10), w('2026-07-02', 155, 11), w('2026-06-01', 145, 10)]
+    expect(recentPersonalBests(runs, 3, 14, NOW).find(b => b.kind === 'efficiency')).toBeUndefined()
+  })
+
+  // A morning run and an evening hike are two activities that can each set a
+  // record against different peers. Only the later one used to be judged.
+  it('reports a record from every workout on the latest day', () => {
+    const ws = [
+      // The hike: longest of its four.
+      { ...workout('2026-08-24', 20000, 'Hike'), id: 'hike-new', startTime: '2026-08-24T17:00:00Z' },
+      ...['2026-08-01', '2026-07-01', '2026-06-01'].map(d => workout(d, 5000, 'Hike')),
+      // The run, earlier the same day: fastest of its four.
+      { ...paced('2026-08-24', 'Run', 400), id: 'run-new', startTime: '2026-08-24T08:00:00Z' },
+      paced('2026-08-02', 'Run', 460), paced('2026-07-02', 'Run', 455), paced('2026-06-02', 'Run', 470),
+    ]
+    const bests = recentPersonalBests(ws, 3, 14, NOW)
+    expect(bests.some(b => b.label === 'Longest Hike')).toBe(true)
+    expect(bests.some(b => b.label === 'Fastest Run pace')).toBe(true)
+    expect(new Set(bests.map(b => b.workout.id)).size).toBe(2)
+  })
+
+  // Two of the same sport on one day: the slower cannot also be the fastest.
+  it('does not credit both of two same-day workouts with the same record', () => {
+    const ws = [
+      { ...paced('2026-08-24', 'Run', 400), id: 'fast', startTime: '2026-08-24T17:00:00Z' },
+      { ...paced('2026-08-24', 'Run', 450), id: 'slow', startTime: '2026-08-24T08:00:00Z' },
+      paced('2026-08-02', 'Run', 460), paced('2026-07-02', 'Run', 455), paced('2026-06-02', 'Run', 470),
+    ]
+    const paceBests = recentPersonalBests(ws, 3, 14, NOW).filter(b => b.kind === 'pace')
+    expect(paceBests).toHaveLength(1)
+    expect(paceBests[0].workout.id).toBe('fast')
+  })
+
+  // `date` is a day, so two workouts on one day sort equal and "the most recent"
+  // used to be whichever the API returned first. The evening hike is the latest
+  // workout whatever order the list arrives in.
+  it('breaks a same-day tie on the start time', () => {
+    const sameDay = [
+      paced('2026-08-24', 'Run', 494, '2026-08-24T08:41:00Z'),
+      paced('2026-08-24', 'Hike', 850, '2026-08-24T16:52:00Z'),
+      paced('2026-08-08', 'Hike', 954),
+      paced('2026-01-03', 'Hike', 972),
+      paced('2025-12-28', 'Hike', 1020),
+    ]
+    const forwards = recentPersonalBests(sameDay, 3, 14, NOW)
+    const backwards = recentPersonalBests([...sameDay].reverse(), 3, 14, NOW)
+    expect(forwards.find(b => b.kind === 'pace')?.label).toBe('Fastest Hike pace')
+    expect(backwards).toEqual(forwards)
   })
 })

@@ -76,6 +76,7 @@ export default function TopBar({ onToggleSidebar, themeMode, onCycleTheme, onUse
           dot in half. */}
       <span style={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}>
         <button
+          className="avatar-button"
           onClick={onUserMenu}
           style={{
             width: 32, height: 32, borderRadius: '50%',

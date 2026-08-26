@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ClipboardList, Clock, FilterX, Ghost, History, LoaderCircle } from 'lucide-react'
+import { ClipboardList, Clock, CloudOff, FilterX, Ghost, History, LoaderCircle } from 'lucide-react'
 import { clockLabel, elapsedSec, sessionWhen, type PlanSession, type TrainingPlan } from '../data/plans'
 import type { Workout } from '../data/workouts'
+import { shortDate } from '../lib/date'
 import {
   applyItemFilters, asPlanItem, asSessionItem, asWorkoutItem,
   type FeedItem, type ItemKind, type ItemNarrowing,
 } from '../lib/itemFilters'
 import { useSessionState } from '../lib/useSessionState'
 import { NO_NARROWING } from '../lib/itemFilters'
+import { useOnlineStatus } from '../lib/network'
 import ItemFilterBar from './ItemFilterBar'
 import WorkoutCard from './WorkoutCard'
 import { Byline } from './WorkoutFilterList'
@@ -93,6 +95,7 @@ export default function ItemList({
   // One funnel, so this is the only place that has to put the list back to the
   // first page when what it shows changes.
   const change = (next: ItemNarrowing) => { setShown(PAGE_SIZE); setNarrow(next) }
+  const unreachable = !useOnlineStatus() && items.length === 0
   const narrowed = narrow.search !== '' || filtered.length !== items.length
 
   return (
@@ -129,6 +132,13 @@ export default function ItemList({
                   </button>
                 </div>
               )}
+            </>
+          ) : unreachable ? (
+            /* An empty feed and a feed we could not fetch look the same from
+               here, and only one of them is the reader's fault to fix. */
+            <>
+              <CloudOff size={28} strokeWidth={1.5} style={{ margin: '0 auto 10px' }} aria-hidden />
+              <div>Nothing can be loaded while you are offline.</div>
             </>
           ) : (
             <>
@@ -248,9 +258,9 @@ function PlanRow({ plan, onOpen, onOpenUser, footer }: {
       icon={<ClipboardList size={20} color="var(--plan)" />}
       badge="Plan"
       name={plan.name}
-      date={shortDate(plan.updatedAt)}
+      date={rowDate(plan.updatedAt)}
       stats={plan.lastSessionAt
-        ? <div className="workout-row-stat"><History size={11} color="var(--text-3)" /><span>run {shortDate(plan.lastSessionAt)}</span></div>
+        ? <div className="workout-row-stat"><History size={11} color="var(--text-3)" /><span>run {rowDate(plan.lastSessionAt)}</span></div>
         : <div className="workout-row-stat"><span>never run</span></div>}
       figure={String(plan.dayCount)}
       unit={plan.dayCount === 1 ? 'day' : 'days'}
@@ -293,9 +303,8 @@ function SessionRow({ session: s, onOpen, onOpenUser, footer }: {
   )
 }
 
-/** The same "Jul 26, 2026" a workout row shows, so the dates line up. */
-function shortDate(iso: string): string {
+/** The same date a workout row shows, so the two line up. */
+function rowDate(iso: string): string {
   const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return ''
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return Number.isNaN(d.getTime()) ? '' : shortDate(d)
 }

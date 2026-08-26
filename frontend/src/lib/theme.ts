@@ -7,7 +7,10 @@ export const ACCENTS: { name: string; value: string; dim: string; glow: string }
   { name: 'Vivid Orange',   value: '#ff6b35', dim: 'rgba(255,107,53,0.15)', glow: 'rgba(255,107,53,0.3)' },
   { name: 'Violet',         value: '#a855f7', dim: 'rgba(168,85,247,0.15)', glow: 'rgba(168,85,247,0.3)' },
   { name: 'Cyan',           value: '#06b6d4', dim: 'rgba(6,182,212,0.15)',  glow: 'rgba(6,182,212,0.3)'  },
-  { name: 'Rose',           value: '#f43f5e', dim: 'rgba(244,63,94,0.15)',  glow: 'rgba(244,63,94,0.3)'  },
+  /* Lifted off #f43f5e, which sat 14.7 ΔE from --danger — close enough that on
+     Rose a delete button and the accent were the same colour, and the one thing
+     the status palette exists to keep separate was not. */
+  { name: 'Rose',           value: '#fb7185', dim: 'rgba(251,113,133,0.15)', glow: 'rgba(251,113,133,0.3)' },
 ]
 
 export function applyAccent(value: string) {
@@ -27,4 +30,50 @@ export function applyAccent(value: string) {
    * reinstall, and it is a no-op off the phone.
    */
   void setNativeAccent(a.value)
+}
+
+
+/**
+ * Display preferences that sit alongside the theme rather than inside it.
+ *
+ * Dark and light each had exactly one background, so the only thing anyone
+ * could adjust was the hue of the highlights — while the things that actually
+ * vary with how a training app gets used, glare and ambient light and a phone
+ * held at arm's length mid-set, were fixed. These are switches rather than
+ * extra entries in the theme list precisely so they compose: high contrast on
+ * light is the outdoor case, pure black on dark is the 6am one, and picking
+ * either from a single list would have cost the system-follows behaviour.
+ */
+export const PURE_BLACK_KEY = 'al_pure_black'
+export const HIGH_CONTRAST_KEY = 'al_high_contrast'
+
+export interface DisplayPrefs {
+  /** True black surfaces in dark mode. No effect in light. */
+  pureBlack: boolean
+  /** Stronger text and lines, in both themes. */
+  highContrast: boolean
+}
+
+export function readDisplayPrefs(): DisplayPrefs {
+  return {
+    pureBlack: localStorage.getItem(PURE_BLACK_KEY) === '1',
+    highContrast: localStorage.getItem(HIGH_CONTRAST_KEY) === '1',
+  }
+}
+
+/**
+ * Reflected as attributes on :root rather than as classes, so the theme's own
+ * `.light` class stays the single thing that says which theme is on and these
+ * two can be selected against it without a combinatorial explosion of names.
+ */
+export function applyDisplayPrefs({ pureBlack, highContrast }: DisplayPrefs) {
+  const root = document.documentElement
+  root.toggleAttribute('data-pure-black', pureBlack)
+  root.toggleAttribute('data-high-contrast', highContrast)
+}
+
+/** The page background for a resolved theme, honouring pure black. */
+export function backgroundFor(theme: 'dark' | 'light', pureBlack: boolean): string {
+  if (theme === 'light') return '#f4f6f9'
+  return pureBlack ? '#000000' : '#0a0b0e'
 }

@@ -120,6 +120,57 @@ func (s *Server) notifySocial(r *http.Request, actor auth.User, subj workout.Sub
 	}
 }
 
+/*
+notifyPhotoAdded tells the people a workout was shared with that its owner put
+a photo on it.
+
+Direct recipients only, never "everyone signed in here". A public workout has
+readers rather than an audience: nobody chose to follow it, and a photo added
+to one is not news anybody asked for. A workout that is only public therefore
+notifies nobody, which is what makes the rule stateable — you hear about the
+workouts somebody sent to you.
+
+KindWorkoutSocial rather than a kind of its own. From the reader's side this is
+the same event as a comment appearing — something happened on a workout I can
+see — and it wants the same single switch in Settings rather than a fifteenth
+row for something that happens once a month.
+
+Deduped per workout per day, because adding photos is a batch action: the
+gallery uploads sequentially and a set of eight would otherwise be eight
+notifications saying the same sentence. The first one fires and the rest are
+absorbed; the gallery's own count is what says how many arrived. Tomorrow's
+photo is a new day and notifies again.
+
+Deletion is deliberately silent. Removing a photo is the owner tidying up
+after themselves, and there is nothing at the far end of that notification
+worth opening.
+*/
+func (s *Server) notifyPhotoAdded(r *http.Request, actor auth.User, wk *workout.Workout) {
+	recipients, err := s.workout.ShareRecipients(r.Context(), actor.ID, wk.ID)
+	if err != nil {
+		// Best effort: the photo is stored and the upload has succeeded.
+		slog.Warn("could not read share recipients for photo notification", "workout_id", wk.ID, "error", err)
+		return
+	}
+	day := time.Now().UTC().Format("2006-01-02")
+	for _, id := range recipients {
+		if id == actor.ID {
+			continue
+		}
+		s.notify.Notify(r.Context(), notify.Event{
+			UserID: id,
+			Kind:   notify.KindWorkoutSocial,
+			Title:  fmt.Sprintf("%s added a photo", actorName(actor)),
+			Body:   wk.Name,
+			// Straight to the gallery: landing on the charts would leave the
+			// reader to find the thing they were told about.
+			Link:      "/workouts/" + wk.ID + "?tab=gallery",
+			Icon:      effectiveAvatar(actor),
+			DedupeKey: fmt.Sprintf("photo:%s:%s", wk.ID, day),
+		})
+	}
+}
+
 // actorName is how a person is named in a notification about what they did.
 func actorName(u auth.User) string {
 	if u.DisplayName != "" {
@@ -172,6 +223,7 @@ func (s *Server) afterWorkoutRecorded(r *http.Request, userID int64) {
 	// written; they are not something the client waits for.
 	ctx := context.WithoutCancel(r.Context())
 	s.checkGearWear(ctx, userID)
+	s.checkPersonalBests(ctx, userID)
 	s.checkGoals(ctx, userID)
 	// The import path only marks a workout as owed a lookup; this tells the
 	// scheduler not to wait for its next tick. Here rather than in the import
@@ -196,6 +248,53 @@ func (s *Server) afterWorkoutRemoved(r *http.Request, userID int64) {
 	ctx := context.WithoutCancel(r.Context())
 	s.checkGearWear(ctx, userID)
 	s.checkGoals(ctx, userID)
+}
+
+/*
+checkPersonalBests says when the latest day's training beat everything before it.
+
+The dashboard has drawn this banner for a while, which means it only ever
+arrived if you opened the app and looked. A record is the most obviously
+notification-shaped thing this app knows about, and it was the one achievement
+that never left the screen it was drawn on.
+
+Dedupe is keyed on the workout and the measure, so re-importing the same file,
+recalculating it, or deleting a later workout and re-crossing the same line
+cannot say it twice. Several records from one day arrive as one notification,
+because four buzzes for one morning is not four times the news.
+*/
+func (s *Server) checkPersonalBests(ctx context.Context, userID int64) {
+	ws, err := s.workout.ListSummary(ctx, userID)
+	if err != nil {
+		slog.Warn("personal best check failed", "user_id", userID, "error", err)
+		return
+	}
+	records := workout.RecentPersonalBests(ws, time.Now())
+	if len(records) == 0 {
+		return
+	}
+
+	// One key covering every record in the batch, so the notification is sent
+	// once for this set and not once per measure.
+	key := "pb:"
+	parts := make([]string, 0, len(records))
+	for _, r := range records {
+		key += string(r.Kind) + ":" + r.Workout.ID + ";"
+		parts = append(parts, r.Label+" "+r.Value)
+	}
+
+	title := "New personal best"
+	if len(records) > 1 {
+		title = fmt.Sprintf("%d new personal bests", len(records))
+	}
+	s.notify.Notify(ctx, notify.Event{
+		UserID:    userID,
+		Kind:      notify.KindPersonalBest,
+		Title:     title,
+		Body:      joinDot(parts),
+		Link:      "/workouts/" + records[0].Workout.ID,
+		DedupeKey: key,
+	})
 }
 
 // checkGearWear notifies once per item when it passes its replace-at distance.
