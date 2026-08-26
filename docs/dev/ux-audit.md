@@ -131,7 +131,7 @@ Only the newest can be acted on; the rest are individually dismissable noise. An
 update notice should supersede its unread predecessor rather than stack on it.
 The joke also stops being one somewhere around the third repetition.
 
-### 12. Personal records show meaningless zeros · S · low
+### 12. Personal records show meaningless zeros · S · low · **✅ fixed**
 
 `/analysis` renders a Strength card reading `Longest 0.0 km` and
 `Most Elevation 0 m`. Neither figure means anything for strength work. Records
@@ -146,7 +146,7 @@ the row's accessible name absorb the word "Dismiss".
 
 ## P3 — systemic, recorded and awaiting a decision
 
-### 14. The accent doubles as the success colour · M · high
+### 14. The accent doubles as the success colour · M · high · **✅ fixed**
 
 `--primary` is used to mean *achievement*: the "New personal best" banner, best-pace
 figures on the records cards, and `.goal-verdict.done`. That last one is the
@@ -383,7 +383,7 @@ The fix is not subtle: pick six accent hues that no sport, series or status
 token uses. There is plenty of room — teal, indigo, magenta, lime, slate-blue,
 amber-gold — and nothing else has to change.
 
-### 42. The accent is doing three jobs · M · high
+### 42. The accent is doing three jobs · M · high · **✅ fixed**
 
 Between this and #14 it carries: **personalisation** (the user's choice),
 **achievement** (`--primary` on the personal-best banner, records, completed

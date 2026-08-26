@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
-import { ALL_WORKOUT_TYPES, TYPE_COLOR, fmtPace, type WorkoutType, type Workout } from '../data/workouts'
+import { ALL_WORKOUT_TYPES, TYPE_COLOR, fmtDuration, fmtPace, type WorkoutType, type Workout } from '../data/workouts'
+import { shortDate } from '../lib/date'
 import { useWorkouts } from '../context/WorkoutsContext'
 import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
@@ -25,7 +26,7 @@ import {
 } from 'recharts'
 import { Award, Target, Zap, Activity, Navigation, TrendingUp, Gauge, Flame, CloudSun, Sparkles, CalendarRange } from 'lucide-react'
 
-type PR = { longest: Workout; fastest: Workout | null; highest: Workout }
+type PR = { longest: Workout; longestTime: Workout; fastest: Workout | null; highest: Workout }
 
 type TabId = 'records' | 'trends' | 'efficiency' | 'load' | 'weather'
 
@@ -355,6 +356,10 @@ export default function Analysis() {
       const paced = tw.filter(w => w.avgPace)
       PRs[type] = {
         longest: tw.reduce((a, b) => a.distance > b.distance ? a : b),
+        // The one record every sport can set. Strength work has no distance and
+        // no climb, so without this its card had three rows and two of them
+        // read zero — the card meant to show your best, showing nothing.
+        longestTime: tw.reduce((a, b) => a.duration > b.duration ? a : b),
         fastest: paced.length > 0 ? paced.reduce((a, b) => a.avgPace < b.avgPace ? a : b) : null,
         highest: tw.reduce((a, b) => a.elevationGain > b.elevationGain ? a : b),
       }
@@ -604,7 +609,7 @@ export default function Analysis() {
         {tab === 'records' && (
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
-              <Award size={16} color="var(--primary)" />
+              <Award size={16} color="var(--success)" />
               <h3 className="card-title">Personal Records</h3>
               <InfoTip text={`Your best single activity in each category, within the ${scope}. Widen the time range to see all-time bests — these follow the page filter, so a 30-day window shows your best month, not your best ever.`} label="Personal Records" />
             </div>
@@ -624,9 +629,18 @@ export default function Analysis() {
                     <div key={type} className="card" style={{ borderTop: `3px solid ${TYPE_COLOR[type]}` }}>
                       <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12, color: TYPE_COLOR[type] }}>{type}</div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        <PRRow label="Longest" value={`${(pr.longest.distance / 1000).toFixed(1)} km`} />
-                        {pr.fastest && <PRRow label="Best Pace" value={`${fmtPace(pr.fastest.avgPace)} /km`} accent />}
-                        <PRRow label="Most Elevation" value={`${Math.round(pr.highest.elevationGain)} m`} />
+                        {/* A distance or a climb of zero is not a record, it is
+                            the absence of one. Strength cards read "Longest
+                            0.0 km" and "Most Elevation 0 m" — two rows of
+                            nothing, on the card meant to show your best. */}
+                        {pr.longest.distance > 0 && (
+                          <PRRow label="Longest" value={`${(pr.longest.distance / 1000).toFixed(1)} km`} on={pr.longest.date} />
+                        )}
+                        <PRRow label="Longest time" value={fmtDuration(pr.longestTime.duration)} on={pr.longestTime.date} />
+                        {pr.fastest && <PRRow label="Best Pace" value={`${fmtPace(pr.fastest.avgPace)} /km`} on={pr.fastest.date} best />}
+                        {pr.highest.elevationGain > 0 && (
+                          <PRRow label="Most Elevation" value={`${Math.round(pr.highest.elevationGain)} m`} on={pr.highest.date} />
+                        )}
                       </div>
                     </div>
                   ))}
@@ -1343,11 +1357,25 @@ export default function Analysis() {
   )
 }
 
-function PRRow({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+/**
+ * One line of a records card: what the record is, the figure, and when.
+ *
+ * The date is not decoration — a personal best with no "when" is half a fact,
+ * and on a page whose time range the reader controls it is the half that says
+ * whether they are looking at a lifetime or at last month.
+ *
+ * `best` marks the standout figure, in --success rather than the accent: this
+ * is an achievement, and on the Rose accent an accent-coloured record read as
+ * an error.
+ */
+function PRRow({ label, value, on, best }: { label: string; value: string; on?: string; best?: boolean }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-      <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{label}</span>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600, color: accent ? 'var(--primary)' : undefined }}>{value}</span>
+    <div className="pr-row">
+      <span className="pr-row-label">{label}</span>
+      <span className="pr-row-figure">
+        <span className={`pr-row-value${best ? ' best' : ''}`}>{value}</span>
+        {on && <span className="pr-row-date">{shortDate(new Date(`${on}T00:00:00`))}</span>}
+      </span>
     </div>
   )
 }

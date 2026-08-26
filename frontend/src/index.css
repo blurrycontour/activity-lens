@@ -1988,6 +1988,31 @@ body {
 /* Placeholder while the full record is still on its way. A long workout is a
    few hundred kilobytes of samples, and the panels' own empty states say "no
    route data" — a statement about the workout rather than about the wait. */
+/* A row of a records card: what, how much, and when. */
+.pr-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+.pr-row-label { font-size: 12px; color: var(--text-3); }
+.pr-row-figure { display: flex; align-items: baseline; gap: 7px; }
+.pr-row-value {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+}
+/* The standout figure on the card, in --success rather than the accent: this is
+   an achievement, and on the Rose accent an accent-coloured record read as an
+   error message. */
+.pr-row-value.best { color: var(--success); }
+.pr-row-date {
+  font-size: 10px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
 /* ── The personal-best banner ──────────────────────────────────────────
    Two rows on a phone, one on a desktop. It used to be a wrapping flex row of
    inline styles with no breakpoint, so whether the figure sat beside the
@@ -2002,9 +2027,12 @@ body {
   gap: 4px 12px;
   margin-bottom: 16px;
   padding: 12px 14px;
-  border: 1px solid var(--primary);
+  /* --success, not the accent. The accent is the reader's choice and means
+     nothing; this card means "you did something". On Rose they were the same
+     red as --danger and the best news the app has read like an error. */
+  border: 1px solid var(--success);
   border-radius: calc(var(--radius) * 1.5);
-  background: var(--primary-dim);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
 }
 .pb-mark {
   display: flex;
@@ -2021,7 +2049,7 @@ body {
 .pb-title {
   font-size: 13px;
   font-weight: 700;
-  color: var(--primary);
+  color: var(--success);
 }
 .pb-sub {
   font-size: 12px;
@@ -5713,7 +5741,10 @@ body:has(.overlay) .dial { display: none; }
 }
 /* Semantic, never the accent: these report an outcome, and the accent is the
    user's choice and carries no meaning. */
-.goal-verdict.done { background: var(--primary); color: var(--on-primary); }
+/* "Done" joins its three siblings on the semantic palette. It was the only one
+   of the four using the accent, so on Rose a completed goal was pink while an
+   in-progress one was green — done looked worse than ahead. */
+.goal-verdict.done { background: var(--success); color: var(--bg); }
 .goal-verdict.ahead { background: color-mix(in srgb, var(--success) 16%, transparent); color: var(--success); }
 .goal-verdict.on { background: var(--bg-3); color: var(--text-2); }
 .goal-verdict.behind { background: color-mix(in srgb, var(--warning) 18%, transparent); color: var(--warning); }
