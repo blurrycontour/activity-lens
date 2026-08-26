@@ -2061,38 +2061,6 @@ body[data-fab-hidden] .fab {
 .heat-legend-ramp { display: flex; gap: 2px; }
 .heat-legend-ramp i { width: 16px; height: 10px; border-radius: 2px; }
 
-/* ── Gym view ──────────────────────────────────────────────────────────
-   The session runner, presented for the way it is actually used: propped
-   against a wall, at arm's length, mid-set, glanced at rather than read. Every
-   other screen in this app is read at reading distance; this one is not, and it
-   was styled as though it were.
-
-   Nothing here changes what is on the page or where — only its size and its
-   contrast. A mode, not a layout: the same markup at a distance you can use. */
-.plan-run-page.gym .plan-ex-title { font-size: 17px; }
-.plan-run-page.gym .plan-ex-target { font-size: 15px; color: var(--text); }
-.plan-run-page.gym .plan-ex-sub { font-size: 13.5px; color: var(--text-2); }
-.plan-run-page.gym .plan-sets-for { font-size: 13px; color: var(--text-2); min-width: 96px; }
-
-/* The thing you aim at with a hand that has just been on a barbell. */
-.plan-run-page.gym .plan-set {
-  width: 48px;
-  height: 48px;
-  border-width: 2.5px;
-}
-.plan-run-page.gym .plan-set svg { width: 22px; height: 22px; }
-
-/* The clock is the whole point of the screen at the moment you look up. The
-   player is a sibling of the page rather than a child, so it carries the class
-   itself. */
-.plan-player.gym .plan-timer-digits { font-size: 38px; }
-.plan-player.gym .plan-timer-what { font-size: 12px; }
-.plan-player.gym .plan-nudge { font-size: 13px; }
-
-/* Rows breathe, because a fingertip that misses by 4mm should still land on
-   the row it was aimed at rather than the one below. */
-.plan-run-page.gym .plan-ex-head { padding-top: 13px; padding-bottom: 13px; }
-
 /* ── Touch targets ─────────────────────────────────────────────────────
    Nothing in the mobile chrome reached the 44px every platform's guidelines
    ask for: the top-bar buttons measured 31×31, the avatar 32, the InfoTip

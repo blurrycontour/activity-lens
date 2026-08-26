@@ -21,8 +21,6 @@ import {
   claimSessionNotice, clearSessionNotice, repostSessionNotice, showSessionNotice,
 } from '../../lib/native/sessionNotice'
 import { longTimerSec, primeSound, signal } from '../../lib/sessionFeedback'
-import { useLocalStorage } from '../../lib/useLocalStorage'
-import { useWakeLock } from '../../lib/useWakeLock'
 
 interface Props {
   session: PlanSession
@@ -78,26 +76,6 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
   // A set of ids rather than one id: "expand all" is a real request in a gym,
   // where you want to read the whole day at once before you start.
   const [openIds, setOpenIds] = useState<Set<string>>(new Set())
-  /*
-   * Gym view: bigger type, bigger targets, screen held awake.
-   *
-   * This is the one screen used with the phone propped against a wall, at arm's
-   * length, with a hand that has just been on a barbell — and it was styled
-   * like every other page in the app, at the same 11px labels and the same
-   * 36px boxes. A training app can change its presentation when the context
-   * changes, and this is the context.
-   *
-   * On by default and remembered per device, because being in a session *is*
-   * the signal — there is nothing else to ask. Anyone who prefers the density
-   * turns it off once and it stays off.
-   */
-  const [gymView, setGymView] = useLocalStorage<boolean>('al_gym_view', true)
-  /*
-   * Held for as long as the runner is open, not only while a rest is counting.
-   * The gap between two sets is exactly when nobody is touching the phone, and
-   * a screen that locks there takes the timer with it.
-   */
-  useWakeLock(true)
   const [confirmFinish, setConfirmFinish] = useState(false)
   const [confirmDiscard, setConfirmDiscard] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -554,15 +532,6 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
           <div className="plan-run-actions">
             <button
               className="btn-icon"
-              onClick={() => setGymView(!gymView)}
-              title={gymView ? 'Smaller text and controls' : 'Bigger text and controls'}
-              aria-label={gymView ? 'Leave gym view' : 'Gym view: bigger text and controls'}
-              aria-pressed={gymView}
-            >
-              {gymView ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
-            </button>
-            <button
-              className="btn-icon"
               onClick={() => setOpenIds(allOpen ? new Set() : new Set(blocks.map(b => b.id)))}
               title={allOpen ? 'Collapse every exercise' : 'Expand every exercise'}
               aria-label={allOpen ? 'Collapse every exercise' : 'Expand every exercise'}
@@ -577,7 +546,7 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
           browser will only let one open in response to one — and a rest timer
           ends minutes later with nobody touching anything. See primeChime. */}
       <div
-        className={`page-content plan-run-page${running ? ' has-timer' : ''}${gymView ? ' gym' : ''}`}
+        className={`page-content plan-run-page${running ? ' has-timer' : ''}`}
         onPointerDown={primeSound}
       >
         {error && <div className="status-msg err" role="alert">{error}</div>}
@@ -628,7 +597,7 @@ export default function SessionRunner({ session, onFinished, onDiscarded, onBack
         you were only while you happened to be looking at the top of the page,
         this stays put — which is what the figures on it are for.
       */}
-      <div className={`plan-player${gymView ? ' gym' : ''}`} role="group" aria-label="Session controls">
+      <div className="plan-player" role="group" aria-label="Session controls">
         {/* The timer's own row, above the transport. Only while something is
             counting. It carries its own progress bar — how much of *this*
             timer is left is a different question from how much of the

@@ -16,7 +16,7 @@ What the audit changed that outlives it lives where it will be read:
   any sport, status or item colour drifts back within 20 ΔE of an accent, or
   below its contrast floor. This is the one finding that could silently return,
   so it is the one with a test.
-- **`components/ChartAxis.tsx`** — `denseXAxis`, `timeXAxis`, `END_PADDING`,
+- **`components/ChartAxis.tsx`** — `denseXAxis`, `END_PADDING`,
   `EDGE_PADDING_Y`, `WHOLE_NUMBERS`. Most of the chart findings were one of
   these missing; the conventions are exported so the next chart gets them free.
 
@@ -70,5 +70,9 @@ Things that look like gaps and are not, so they are not re-proposed:
   way to set a lowest-average-HR is to go slowly; calories and steps track
   duration and distance closely enough to say the same thing twice. The
   reasoning is in `recentPersonalBests` and its Go counterpart.
+- **The Efficiency charts draw one line for the whole selection**, not one per
+  sport on a time axis. That was built and reverted: splitting by sport is
+  defensible on the data and worse to read, because two or three short lines
+  with gaps between them say less about direction than one continuous one.
 - **The doubled API requests in development** are React's StrictMode
   double-invoking effects. A production build issues each once.

@@ -7,14 +7,14 @@ import RangeDropdown from '../components/RangeDropdown'
 import ChartCard, { EmptyPlot } from '../components/ChartCard'
 import TabStrip from '../components/TabStrip'
 import InfoTip from '../components/InfoTip'
-import { EDGE_PADDING_Y, END_PADDING, denseXAxis, timeXAxis, useChartSpace, xLabel } from '../components/ChartAxis'
+import { EDGE_PADDING_Y, END_PADDING, denseXAxis, useChartSpace, xLabel } from '../components/ChartAxis'
 import TypeLegend from '../components/TypeLegend'
 import ScatterDot from '../components/ScatterDot'
 import Dropdown from '../components/Dropdown'
 import { useLocalStorage } from '../lib/useLocalStorage'
 import { filterByRange, rangeLabel, toDateKey } from '../lib/range'
 import { everyDayBetween, everyMonthBetween, everyWeekBetween, fillGaps, keySpan } from '../lib/timeGaps'
-import { AXIS_TICK, DATA_LINE, GRID_PROPS, HOVER_FILL, TREND_LINE } from '../lib/chartColors'
+import { AXIS_TICK, DATA_LINE, GRID_PROPS, HOVER_FILL, SERIES_COLORS, TREND_LINE } from '../lib/chartColors'
 import {
   PERF_METRICS, WEATHER_FIELDS, binByTemperature, binWidthFor, describeCorrelation,
   MIN_CORRELATION_POINTS, hasUsableWeather, linearFit, pearson, temperatureCorrelation, weatherScatter,
@@ -191,19 +191,6 @@ function realPoint(payload: readonly { payload?: Record<string, unknown> }[]): R
     if (d && (d.name != null || d.from != null)) return d
   }
   return null
-}
-
-/** One activity on the efficiency charts, positioned by when it happened. */
-interface EfficiencyPoint {
-  /** Timestamp in ms — a numeric x axis, so sports with different dates align. */
-  t: number
-  dateFull: string
-  name: string
-  type: WorkoutType
-  hrPerSpeed: number
-  adjPace: number
-  hr: number
-  speed: number
 }
 
 /** Two-option segmented control used by the volume chart's toggles. */
@@ -538,67 +525,26 @@ export default function Analysis() {
     })),
   [workouts])
 
-  /*
-   * Efficiency, one series per sport, on a real time axis.
-   *
-   * Both of these charts used to connect every activity in the selection into a
-   * single line. With "All Types" — the default — that put a hike's adjusted
-   * pace and a run's on one series, so the line plunged off the plot and came
-   * back, which is what "broken" looks like to a reader. The weather scatter
-   * one tab over already refuses to do this and says why in its own caption:
-   * a run and a ride are never averaged together, because their pace means
-   * different things. The same sentence applies here.
-   *
-   * The x axis carries a timestamp rather than a label, which is what lets each
-   * sport bring its own rows and still line up. It also makes these two the
-   * only charts on the page whose spacing is time whether or not Gaps is on,
-   * because a numeric axis places a point where it belongs rather than where
-   * its turn comes.
-   */
   const efficiency = useMemo(() => {
     const usable = series.filter(d => d.hr > 0 && (d.speed ?? 0) > 0 && d.pace)
-    if (usable.length === 0) return { groups: [], refHr: 0, types: [] as WorkoutType[], ticks: [] as number[] }
+    if (usable.length === 0) return { rows: [], refHr: 0 }
     // The reference HR is this selection's median, so the adjusted pace lands
     // in the same range as the real paces and needs no configuration.
     const hrs = usable.map(d => d.hr).sort((a, b) => a - b)
     const refHr = hrs[Math.floor(hrs.length / 2)]
-    const byType = new Map<WorkoutType, EfficiencyPoint[]>()
-    for (const d of usable) {
-      const row: EfficiencyPoint = {
-        t: fromDateKey(d.date).getTime(),
-        dateFull: d.dateFull,
-        name: d.name,
-        type: d.type,
-        hrPerSpeed: Math.round((d.hr / (d.speed as number)) * 10) / 10,
-        adjPace: Math.round((d.pace as number) * (refHr / d.hr)),
-        hr: d.hr,
-        speed: d.speed as number,
-      }
-      const list = byType.get(d.type)
-      if (list) list.push(row)
-      else byType.set(d.type, [row])
-    }
-    const types = [...byType.keys()]
-    /*
-     * The axis ticks, computed once here rather than left to Recharts.
-     *
-     * Each <Line> carries its own data, and Recharts derives a tick set per
-     * series and renders all of them — so a two-sport chart drew two overlapping
-     * rows of labels, "Jul 30" on top of "Jul 30". Four evenly spaced instants
-     * across the whole span is one row, correct for any number of sports.
-     */
-    const all = [...byType.values()].flat().map(r => r.t)
-    const [lo, hi] = [Math.min(...all), Math.max(...all)]
-    const ticks = lo === hi ? [lo] : [0, 1, 2, 3].map(i => Math.round(lo + ((hi - lo) * i) / 3))
-    return {
-      refHr,
-      types,
-      ticks,
-      // Sorted, because a Line over a numeric axis draws in array order and an
-      // unsorted series doubles back on itself.
-      groups: types.map(type => ({ type, rows: byType.get(type)!.sort((a, b) => a.t - b.t) })),
-    }
-  }, [series])
+    const rows: DatedRow[] = usable.map(d => ({
+      date: d.date,
+      dateLabel: d.dateLabel,
+      dateFull: d.dateFull,
+      name: d.name,
+      hrPerSpeed: Math.round((d.hr / (d.speed as number)) * 10) / 10,
+      adjPace: Math.round((d.pace as number) * (refHr / d.hr)),
+      pace: d.pace as number,
+      hr: d.hr,
+      speed: d.speed as number,
+    }))
+    return { refHr, rows: showGaps ? withEmptyDays(rows) : rows }
+  }, [series, showGaps])
 
   // ── Load ─────────────────────────────────────────────────────────────────
   const { trainingLoad, acwr } = useMemo(() => {
@@ -961,59 +907,43 @@ export default function Analysis() {
                 description="Heartbeats spent per km/h of speed. Falling is improving."
                 info="Average heart rate divided by average speed for each activity. Because it normalises effort against output, it stays comparable across easy and hard days — unlike raw pace. A downward trend over weeks means your aerobic engine is getting stronger. Heat, altitude, fatigue and hills all push it up temporarily, so read the slope over a month rather than any single point."
               >
-                {efficiency.groups.length === 0 ? (
+                {efficiency.rows.length === 0 ? (
                   <EmptyPlot height={220}>Needs activities with both heart rate and speed</EmptyPlot>
                 ) : (
                   <ResponsiveContainer width="100%" height={220}>
-                    <ComposedChart margin={space.margin(18, 4)}>
+                    <LineChart data={efficiency.rows} margin={space.margin(18, 4)}>
                       <CartesianGrid {...GRID_PROPS} />
-                      {/* A timestamp, not a label. Each sport brings its own
-                          rows and they line up because the axis is time. */}
-                      <XAxis
-                        type="number" dataKey="t" domain={['dataMin', 'dataMax']}
-                        padding={END_PADDING} scale="time"
-                        ticks={efficiency.ticks}
-                        tickFormatter={v => dayMonth(new Date(v))}
-                        {...timeXAxis(9)}
-                        label={xLabel('Activity date')}
-                      />
+                      <XAxis dataKey="dateLabel" {...denseXAxis(9)} label={xLabel('Activity date')} />
                       <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" domain={['dataMin - 1', 'dataMax + 1']} label={space.yLabel('bpm per km/h')} />
                       <Tooltip
-                        shared={false}
-                        cursor={{ strokeDasharray: '3 3', stroke: 'var(--border-strong)' }}
                         content={({ active, payload }) => {
                           if (!active || !payload?.length) return null
-                          const d = payload[0].payload as EfficiencyPoint
-                          if (!d?.name) return null
+                          const d = payload[0].payload
+                          if (!d?.name) {
+                            return (
+                              <div className="custom-tooltip">
+                                <div style={{ fontWeight: 600 }}>{d?.dateFull ?? ''}</div>
+                                <div style={{ color: 'var(--text-3)' }}>No activity</div>
+                              </div>
+                            )
+                          }
                           return (
                             <div className="custom-tooltip">
                               <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.name}</div>
                               <div style={{ color: 'var(--text-3)' }}>{d.dateFull}</div>
-                              <div style={{ color: TYPE_COLOR[d.type as WorkoutType] }}>{d.hrPerSpeed} bpm per km/h</div>
+                              <div style={{ color: SERIES_COLORS[1] }}>{d.hrPerSpeed} bpm per km/h</div>
                               <div style={{ color: 'var(--text-3)' }}>{d.hr} bpm · {d.speed.toFixed(1)} km/h</div>
                             </div>
                           )
                         }}
                       />
-                      {/* One line per sport, in the sport's own colour, because
-                          a hike's pace and a run's are different quantities —
-                          drawn as one series they produced a line that fell off
-                          the plot and climbed back. An explicit dot fill:
-                          Recharts defaults to solid white, invisible in light
-                          mode and wrong in both. */}
-                      {efficiency.groups.map(g => (
-                        <Line
-                          key={g.type} data={g.rows} type="monotone" dataKey="hrPerSpeed"
-                          stroke={TYPE_COLOR[g.type]} strokeWidth={2}
-                          dot={{ r: 2.5, strokeWidth: 0, fill: TYPE_COLOR[g.type] }}
-                          connectNulls isAnimationActive={false}
-                        />
-                      ))}
-                    </ComposedChart>
+                      {/* An explicit fill: Recharts defaults a dot to solid
+                          white, which is invisible in light mode and wrong in
+                          both. Every other line on this page names its own. */}
+                      <Line type="monotone" dataKey="hrPerSpeed" stroke={SERIES_COLORS[1]} strokeWidth={2} dot={{ r: 2.5, strokeWidth: 0, fill: SERIES_COLORS[1] }} connectNulls isAnimationActive={false} />
+                    </LineChart>
                   </ResponsiveContainer>
                 )}
-                {/* Which colour is which sport — the charts draw one line each. */}
-                <TypeLegend types={efficiency.types} />
               </ChartCard>
 
               <ChartCard
@@ -1022,51 +952,40 @@ export default function Analysis() {
                 description={`Every pace rescaled to ${efficiency.refHr || '—'} bpm, so easy and hard days compare directly.`}
                 info={`Each activity's pace is multiplied by the ratio of the reference heart rate to its own, answering "what would this pace have been at ${efficiency.refHr || 'a typical'} bpm?". The reference is the median heart rate of the current selection, so it recalibrates as you change the filters and needs no setup. A downward trend means you're covering ground faster at the same effort.`}
               >
-                {efficiency.groups.length === 0 ? (
+                {efficiency.rows.length === 0 ? (
                   <EmptyPlot height={220}>Needs activities with both heart rate and pace</EmptyPlot>
                 ) : (
                   <ResponsiveContainer width="100%" height={220}>
-                    <ComposedChart margin={space.margin(18, 4)}>
+                    <LineChart data={efficiency.rows} margin={space.margin(18, 4)}>
                       <CartesianGrid {...GRID_PROPS} />
-                      <XAxis
-                        type="number" dataKey="t" domain={['dataMin', 'dataMax']}
-                        padding={END_PADDING} scale="time"
-                        ticks={efficiency.ticks}
-                        tickFormatter={v => dayMonth(new Date(v))}
-                        {...timeXAxis(9)}
-                        label={xLabel('Activity date')}
-                      />
-                      <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" reversed domain={['dataMin - 15', 'dataMax + 15']} padding={EDGE_PADDING_Y} tickFormatter={v => fmtPace(v)} label={space.yLabel('Adjusted pace (min/km)')} />
+                      <XAxis dataKey="dateLabel" {...denseXAxis(9)} label={xLabel('Activity date')} />
+                      <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" reversed domain={['dataMin - 15', 'dataMax + 15']} tickFormatter={v => fmtPace(v)} label={space.yLabel('Adjusted pace (min/km)')} />
                       <Tooltip
-                        shared={false}
-                        cursor={{ strokeDasharray: '3 3', stroke: 'var(--border-strong)' }}
                         content={({ active, payload }) => {
                           if (!active || !payload?.length) return null
-                          const d = payload[0].payload as EfficiencyPoint
-                          if (!d?.name) return null
+                          const d = payload[0].payload
+                          if (!d?.name) {
+                            return (
+                              <div className="custom-tooltip">
+                                <div style={{ fontWeight: 600 }}>{d?.dateFull ?? ''}</div>
+                                <div style={{ color: 'var(--text-3)' }}>No activity</div>
+                              </div>
+                            )
+                          }
                           return (
                             <div className="custom-tooltip">
                               <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.name}</div>
                               <div style={{ color: 'var(--text-3)' }}>{d.dateFull}</div>
-                              <div style={{ color: TYPE_COLOR[d.type] }}>{fmtPace(d.adjPace)} /km at {efficiency.refHr} bpm</div>
-                              <div style={{ color: 'var(--text-3)' }}>{d.hr} bpm · {d.speed.toFixed(1)} km/h</div>
+                              <div style={{ color: 'var(--blue)' }}>{fmtPace(d.adjPace)} /km adjusted</div>
+                              <div style={{ color: 'var(--text-3)' }}>{fmtPace(d.pace)} /km actual · {d.hr} bpm</div>
                             </div>
                           )
                         }}
                       />
-                      {efficiency.groups.map(g => (
-                        <Line
-                          key={g.type} data={g.rows} type="monotone" dataKey="adjPace"
-                          stroke={TYPE_COLOR[g.type]} strokeWidth={2}
-                          dot={{ r: 2.5, strokeWidth: 0, fill: TYPE_COLOR[g.type] }}
-                          connectNulls isAnimationActive={false}
-                        />
-                      ))}
-                    </ComposedChart>
+                      <Line type="monotone" dataKey="adjPace" stroke="var(--blue)" strokeWidth={2} dot={{ r: 2.5, strokeWidth: 0, fill: 'var(--blue)' }} connectNulls isAnimationActive={false} />
+                    </LineChart>
                   </ResponsiveContainer>
                 )}
-                {/* Which colour is which sport — the charts draw one line each. */}
-                <TypeLegend types={efficiency.types} />
               </ChartCard>
             </div>
 
