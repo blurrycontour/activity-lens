@@ -306,13 +306,27 @@ Related: `Temperature vs Pace` describes itself as "one line per sport, in 2 °C
 bands" and renders five disconnected dots, because no band holds enough points
 to make a line. The caption promises a chart the data cannot produce.
 
-### 35. Rotated y-axis labels are clipped at phone width · S · med
+### 35. Rotated y-axis labels are clipped at phone width · S · med · **✅ fixed**
 
 "Adjusted pace (min/km)" renders as "usted pace (min/km)". The DOM box is
 correct — a rotated SVG label is 12px wide and extends visually beyond it, past
 `margin.left: 0` (which `useChartSpace` sets on mobile) and into the card's
 padding, where it is cut. It affects every chart with a y-axis label on a phone;
 it only *shows* when the label is long enough to reach the edge.
+
+### 45. The Efficiency charts draw one line through every sport · M · high
+
+Spotted while verifying #33. `Efficiency Factor` and `Pace at Fixed HR` take
+whatever the type filter allows — "All Types" by default — and connect it as a
+single series. So a hike at 25:24/km adjusted and a run at 12:00 sit on one
+line, and the result plunges off the bottom of the plot and comes back, which is
+what "broken" looks like to a reader.
+
+The weather scatter one tab over already refuses to do this, and says why in its
+own caption: *"a run and a ride are never averaged together, because their pace
+means different things."* The same sentence applies here and the same fix is
+available — one line per sport, as that chart does — or the tab could require a
+single sport before it draws anything.
 
 ### 36. Charts are exposed to screen readers three different ways · S · low · **🚫 won’t do**
 

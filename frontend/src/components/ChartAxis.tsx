@@ -78,9 +78,31 @@ export const WHOLE_NUMBERS = { allowDecimals: false } as const
  * against the longest tick text a chart might produce, so it is either wasteful
  * for "0–160" or too tight for "5:40".
  */
+/** Axis label placed below the plot, clear of the tick row. */
+export function xLabel(value: string) {
+  return { value, position: 'insideBottom' as const, offset: -12, fontSize: 10, fill: 'var(--text-3)' }
+}
+
 export function useChartSpace() {
   const mobile = useIsMobile()
   return {
+    /*
+     * The rotated y-axis label — and nothing at all on a phone.
+     *
+     * Rotated -90°, the label's length runs along the plot's height and its
+     * 12px line box hangs off the left edge, one pixel outside the SVG on a
+     * 390px screen: "Adjusted pace (min/km)" rendered as "usted pace (min/km)".
+     *
+     * Widening the gutter would fix the clipping and cost the plot the width,
+     * which is the scarcer thing here — and on a phone the label is saying what
+     * the card's title and description said two lines above it. Dropping it
+     * buys back the space instead, and takes the same pixels out of the dead
+     * strip to the left of the plot where a tap raises no tooltip.
+     */
+    yLabel: (value: string) => (mobile ? undefined : {
+      value, angle: -90, position: 'insideLeft' as const,
+      fontSize: 10, fill: 'var(--text-3)', style: { textAnchor: 'middle' as const },
+    }),
     /** Plot margins. `bottom` leaves room for the tick row plus the axis label. */
     margin: (bottom = 18, top = 8) => ({
       top,

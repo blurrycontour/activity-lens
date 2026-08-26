@@ -11,7 +11,7 @@ import { recentWeekStarts, weekdayMatrix } from '../lib/insights'
 import ChartCard, { EmptyPlot } from '../components/ChartCard'
 import TrainingSessionsChart from '../components/TrainingSessionsChart'
 import InfoTip from '../components/InfoTip'
-import { END_PADDING, useChartSpace, WHOLE_NUMBERS } from '../components/ChartAxis'
+import { END_PADDING, useChartSpace, xLabel, WHOLE_NUMBERS } from '../components/ChartAxis'
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid, Legend, Cell,
@@ -33,19 +33,6 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: 'compare', label: 'Compare', icon: <GitCompareArrows size={15} /> },
   { id: 'totals', label: 'Totals', icon: <Sigma size={15} /> },
 ]
-
-/** Axis label placed below the plot, clear of the tick row. */
-function xLabel(value: string) {
-  return { value, position: 'insideBottom' as const, offset: -12, fontSize: 10, fill: 'var(--text-3)' }
-}
-
-/** Rotated axis label centred on the y axis. */
-function yLabel(value: string) {
-  return {
-    value, angle: -90, position: 'insideLeft' as const,
-    fontSize: 10, fill: 'var(--text-3)', style: { textAnchor: 'middle' as const },
-  }
-}
 
 /** What the heatmap and the distribution charts measure. */
 type Measure = 'count' | 'duration'
@@ -388,7 +375,7 @@ export default function Consistency() {
             <BarChart data={dayOfWeek} margin={space.margin(18, 4)}>
               <CartesianGrid {...GRID_PROPS} />
               <XAxis dataKey="label" tick={{ ...AXIS_TICK, fontSize: 11 }} axisLine={false} tickLine={false} label={xLabel('Day of week')} />
-              <YAxis {...(measure === 'count' ? WHOLE_NUMBERS : {})} tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" unit={m.axisLabel || undefined} label={yLabel(measure === 'count' ? 'Activities' : 'Duration (hours)')} />
+              <YAxis {...(measure === 'count' ? WHOLE_NUMBERS : {})} tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" unit={m.axisLabel || undefined} label={space.yLabel(measure === 'count' ? 'Activities' : 'Duration (hours)')} />
               <Tooltip
                 cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
                 content={({ active, payload, label }) => {
@@ -433,7 +420,7 @@ export default function Consistency() {
               <BarChart data={yoyData} margin={space.margin(18)} barCategoryGap="18%" barGap={2}>
                 <CartesianGrid {...GRID_PROPS} />
                 <XAxis dataKey="month" tick={AXIS_TICK} axisLine={false} tickLine={false} label={xLabel('Month')} />
-                <YAxis {...(measure === 'count' ? WHOLE_NUMBERS : {})} tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" unit={m.axisLabel || undefined} label={yLabel(measure === 'count' ? 'Activities' : 'Duration (hours)')} />
+                <YAxis {...(measure === 'count' ? WHOLE_NUMBERS : {})} tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" unit={m.axisLabel || undefined} label={space.yLabel(measure === 'count' ? 'Activities' : 'Duration (hours)')} />
                 <Tooltip
                   cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
                   content={({ active, payload, label }) => {
@@ -473,7 +460,7 @@ export default function Consistency() {
               <BarChart data={wowData} margin={space.margin(18)} barCategoryGap="18%" barGap={2}>
                 <CartesianGrid {...GRID_PROPS} />
                 <XAxis dataKey="day" tick={AXIS_TICK} axisLine={false} tickLine={false} label={xLabel('Day of week')} />
-                <YAxis {...(measure === 'count' ? WHOLE_NUMBERS : {})} tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" label={yLabel(measure === 'count' ? 'Activities' : 'Duration (hours)')} />
+                <YAxis {...(measure === 'count' ? WHOLE_NUMBERS : {})} tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" label={space.yLabel(measure === 'count' ? 'Activities' : 'Duration (hours)')} />
                 <Tooltip
                   cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
                   content={({ active, payload, label }) => {
@@ -523,7 +510,7 @@ export default function Consistency() {
               <LineChart data={cumulativeData} margin={space.margin(18)}>
                 <CartesianGrid {...GRID_PROPS} />
                 <XAxis dataKey="month" padding={END_PADDING} tick={AXIS_TICK} axisLine={false} tickLine={false} label={xLabel('Month')} />
-                <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" label={yLabel('Cumulative distance (km)')} />
+                <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" label={space.yLabel('Cumulative distance (km)')} />
                 <Tooltip
                   content={({ active, payload, label }) => {
                     if (!active || !payload?.length) return null
