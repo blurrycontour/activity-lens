@@ -203,6 +203,67 @@ function withEmptyDays(rows: DatedRow[]): DatedRow[] {
 }
 
 /**
+ * The separator between a row's position and its printed date in an axis key.
+ * A middot: `dayLabel` builds dates out of digits, letters and an apostrophe,
+ * and never one of these.
+ */
+const SLOT_SEP = '\u00b7'
+
+/**
+ * One axis slot per row, rather than one per distinct date.
+ *
+ * These series are one row per activity and the x axis is a *category* axis
+ * keyed on the printed date — so two activities on one day were one category.
+ * Recharts still drew both dots, because the band domain keeps duplicates, but
+ * it builds its tooltip ticks from the distinct values: on a 90-day selection
+ * with seven doubled-up days that was 22 points over 15 slots, and the second
+ * activity of every shared day had nothing to hover. Pointing at it answered
+ * for the first one and highlighted the first one, while the cursor line
+ * tracked the pointer — which reads as "the tooltip is stuck one point back".
+ *
+ * It looked like a right-edge fault because the last day was one of the
+ * doubled ones. It was never about the edge.
+ *
+ * The row's position is what makes the key unique; `slotLabel` puts the date
+ * back on the tick, so the axis reads exactly as it did.
+ */
+function withSlots<T extends DatedRow>(rows: T[]): T[] {
+  return rows.map((row, i) => ({ ...row, axisKey: `${i}${SLOT_SEP}${row.dateLabel}` }))
+}
+
+/**
+ * Which slots get a tick: the first of each distinct day.
+ *
+ * Slots and ticks stopped being the same thing the moment a day could hold two
+ * of them, and only the slots need to be per-row. Left to itself the axis put
+ * a tick on every slot and printed "Jul 30" twice in a row; blanking the
+ * repeat was worse, because a zero-width label always survives the collision
+ * pass and so the blanks crowded out real dates and left the axis ending on
+ * nothing.
+ *
+ * Passed as `ticks`, which the interval logic still thins to what fits — so
+ * the labels come out exactly as they did before any of this.
+ */
+function dayTicks(rows: DatedRow[]): string[] {
+  const out: string[] = []
+  let last: string | null = null
+  for (const row of rows) {
+    if (row.dateLabel !== last) {
+      out.push(row.axisKey as string)
+      last = row.dateLabel
+    }
+  }
+  return out
+}
+
+/** The printed date out of an axis key made by `withSlots`. */
+function slotLabel(key: unknown): string {
+  const s = String(key ?? '')
+  const at = s.indexOf(SLOT_SEP)
+  return at < 0 ? s : s.slice(at + 1)
+}
+
+/**
  * The first payload entry that describes a real point rather than a fitted one.
  *
  * These charts draw a scatter of workouts and a line fitted through them, and
@@ -485,7 +546,7 @@ export default function Analysis() {
     // last three activities" rather than becoming "the last three days" the
     // moment the toggle is flipped. The toggle is about the x axis, not the
     // maths on it.
-    return showGaps ? withEmptyDays(rows) : rows
+    return withSlots(showGaps ? withEmptyDays(rows) : rows)
   }, [series, showGaps])
 
   const summaryStats = useMemo(() => {
@@ -573,7 +634,7 @@ export default function Analysis() {
       hr: d.hr,
       speed: d.speed as number,
     }))
-    return { refHr, rows: showGaps ? withEmptyDays(rows) : rows }
+    return { refHr, rows: withSlots(showGaps ? withEmptyDays(rows) : rows) }
   }, [series, showGaps])
 
   // ── Load ─────────────────────────────────────────────────────────────────
@@ -834,7 +895,7 @@ export default function Analysis() {
                 <ResponsiveContainer width="100%" height={300}>
                   <LineChart data={seriesWithMA} margin={space.margin(18)}>
                     <CartesianGrid {...GRID_PROPS} />
-                    <XAxis dataKey="dateLabel" {...denseXAxis()} label={xLabel('Activity date')} />
+                    <XAxis dataKey="axisKey" ticks={dayTicks(seriesWithMA)} tickFormatter={slotLabel} {...denseXAxis()} label={xLabel('Activity date')} />
                     <YAxis
                       tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto"
                       domain={trendYAxis === 'zero' ? [0, 'auto'] : ['auto', 'auto']}
@@ -854,14 +915,14 @@ export default function Analysis() {
                         if (!payload?.length || row?.empty) {
                           return (
                             <div className="custom-tooltip">
-                              <div style={{ color: 'var(--text-2)', fontWeight: 600 }}>{row?.dateFull ?? label}</div>
+                              <div style={{ color: 'var(--text-2)', fontWeight: 600 }}>{row?.dateFull ?? slotLabel(label)}</div>
                               <div style={{ color: 'var(--text-3)' }}>No activity</div>
                             </div>
                           )
                         }
                         return (
                           <div className="custom-tooltip">
-                            <div style={{ color: 'var(--text-2)', marginBottom: 6, fontWeight: 600 }}>{row?.dateFull ?? label}</div>
+                            <div style={{ color: 'var(--text-2)', marginBottom: 6, fontWeight: 600 }}>{row?.dateFull ?? slotLabel(label)}</div>
                             {payload.filter(p => !String(p.dataKey).endsWith('_ma')).map(p => {
                               const m = METRICS.find(x => x.id === p.dataKey)
                               if (!m || !selectedMetrics.includes(m.id)) return null
@@ -947,7 +1008,7 @@ export default function Analysis() {
                   <ResponsiveContainer width="100%" height={220}>
                     <LineChart data={efficiency.rows} margin={space.margin(18, 4)}>
                       <CartesianGrid {...GRID_PROPS} />
-                      <XAxis dataKey="dateLabel" {...denseXAxis(9)} label={xLabel('Activity date')} />
+                      <XAxis dataKey="axisKey" ticks={dayTicks(efficiency.rows)} tickFormatter={slotLabel} {...denseXAxis(9)} label={xLabel('Activity date')} />
                       <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" domain={['dataMin - 1', 'dataMax + 1']} label={space.yLabel('bpm per km/h')} />
                       <Tooltip
                         {...KEEP_EMPTY_ROWS}
@@ -993,7 +1054,7 @@ export default function Analysis() {
                   <ResponsiveContainer width="100%" height={220}>
                     <LineChart data={efficiency.rows} margin={space.margin(18, 4)}>
                       <CartesianGrid {...GRID_PROPS} />
-                      <XAxis dataKey="dateLabel" {...denseXAxis(9)} label={xLabel('Activity date')} />
+                      <XAxis dataKey="axisKey" ticks={dayTicks(efficiency.rows)} tickFormatter={slotLabel} {...denseXAxis(9)} label={xLabel('Activity date')} />
                       <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" reversed domain={['dataMin - 15', 'dataMax + 15']} tickFormatter={v => fmtPace(v)} label={space.yLabel('Adjusted pace (min/km)')} />
                       <Tooltip
                         {...KEEP_EMPTY_ROWS}
