@@ -89,14 +89,27 @@ export function relativeDay(iso: string): string {
 }
 
 /**
+ * How recent counts as "now".
+ *
+ * Coupled to `seenInterval` in the backend's sessiontrack.go, which is how
+ * often a session's last-seen is actually written: this window has to stay
+ * comfortably above it, or someone sitting in the app reads as minutes idle
+ * because the server has not touched their row yet. That interval is a minute;
+ * this is two, which leaves a minute of slack for a request that lands just
+ * after a throttled one.
+ *
+ * Shortening it below the interval would not make the answer finer — it would
+ * report the throttle instead of the person.
+ */
+const ACTIVE_WINDOW_MS = 2 * 60_000
+
+/**
  * "Active now", "Active 3 hours ago", "Last active 4 Mar" — when someone was
  * last around.
  *
  * Its own resolution rather than one of the two above, because the question is
  * different again: a person is either here, here today, or not, and the units
- * step up accordingly. The six-minute floor for "now" matches how often the
- * server actually writes a last-seen — anything finer would be reporting the
- * throttle rather than the person.
+ * step up accordingly.
  *
  * Says nothing at all for an absent or unparseable time. "Last seen: never"
  * is a claim about someone, and the honest reading of no row is that we do not
@@ -106,8 +119,8 @@ export function lastActive(iso: string | undefined): string {
   if (!iso) return ''
   const then = new Date(iso).getTime()
   if (Number.isNaN(then)) return ''
+  if (Date.now() - then < ACTIVE_WINDOW_MS) return 'Active now'
   const mins = Math.floor((Date.now() - then) / 60000)
-  if (mins < 6) return 'Active now'
   if (mins < 60) return `Active ${mins} min ago`
   const hours = Math.floor(mins / 60)
   if (hours < 24) return `Active ${hours} ${hours === 1 ? 'hour' : 'hours'} ago`
@@ -118,5 +131,5 @@ export function lastActive(iso: string | undefined): string {
 
 /** Whether someone counts as here right now — the one fact worth colouring. */
 export function isActiveNow(iso: string | undefined): boolean {
-  return !!iso && Date.now() - new Date(iso).getTime() < 6 * 60000
+  return !!iso && Date.now() - new Date(iso).getTime() < ACTIVE_WINDOW_MS
 }
