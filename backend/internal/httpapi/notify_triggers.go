@@ -172,6 +172,7 @@ func (s *Server) afterWorkoutRecorded(r *http.Request, userID int64) {
 	// written; they are not something the client waits for.
 	ctx := context.WithoutCancel(r.Context())
 	s.checkGearWear(ctx, userID)
+	s.checkPersonalBests(ctx, userID)
 	s.checkGoals(ctx, userID)
 	// The import path only marks a workout as owed a lookup; this tells the
 	// scheduler not to wait for its next tick. Here rather than in the import
@@ -196,6 +197,53 @@ func (s *Server) afterWorkoutRemoved(r *http.Request, userID int64) {
 	ctx := context.WithoutCancel(r.Context())
 	s.checkGearWear(ctx, userID)
 	s.checkGoals(ctx, userID)
+}
+
+/*
+checkPersonalBests says when the latest day's training beat everything before it.
+
+The dashboard has drawn this banner for a while, which means it only ever
+arrived if you opened the app and looked. A record is the most obviously
+notification-shaped thing this app knows about, and it was the one achievement
+that never left the screen it was drawn on.
+
+Dedupe is keyed on the workout and the measure, so re-importing the same file,
+recalculating it, or deleting a later workout and re-crossing the same line
+cannot say it twice. Several records from one day arrive as one notification,
+because four buzzes for one morning is not four times the news.
+*/
+func (s *Server) checkPersonalBests(ctx context.Context, userID int64) {
+	ws, err := s.workout.ListSummary(ctx, userID)
+	if err != nil {
+		slog.Warn("personal best check failed", "user_id", userID, "error", err)
+		return
+	}
+	records := workout.RecentPersonalBests(ws, time.Now())
+	if len(records) == 0 {
+		return
+	}
+
+	// One key covering every record in the batch, so the notification is sent
+	// once for this set and not once per measure.
+	key := "pb:"
+	parts := make([]string, 0, len(records))
+	for _, r := range records {
+		key += string(r.Kind) + ":" + r.Workout.ID + ";"
+		parts = append(parts, r.Label+" "+r.Value)
+	}
+
+	title := "New personal best"
+	if len(records) > 1 {
+		title = fmt.Sprintf("%d new personal bests", len(records))
+	}
+	s.notify.Notify(ctx, notify.Event{
+		UserID:    userID,
+		Kind:      notify.KindPersonalBest,
+		Title:     title,
+		Body:      joinDot(parts),
+		Link:      "/workouts/" + records[0].Workout.ID,
+		DedupeKey: key,
+	})
 }
 
 // checkGearWear notifies once per item when it passes its replace-at distance.

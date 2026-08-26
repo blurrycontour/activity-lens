@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Bell, Hand, Check, Download, Share2, Footprints, Trophy, Clock, X, Trash2, FolderDown, MessageSquare, Target, Megaphone } from 'lucide-react'
+import { Award, Bell, Hand, Check, Download, Share2, Footprints, Trophy, Clock, X, Trash2, FolderDown, MessageSquare, Target, Megaphone } from 'lucide-react'
 import { api, apiURL, type AppNotification, type NotificationKind } from '../lib/api'
 import { dismissOSNotification, enablePush, maybePromptForPush, pushState, syncPushSubscription, type PushState } from '../lib/push'
 import { maybeEnrolNativePush, syncNativePush, watchNativeEndpoint } from '../lib/native/unifiedPush'
@@ -20,6 +20,7 @@ const KIND_ICON: Record<NotificationKind, React.ReactNode> = {
   workout_social: <MessageSquare size={14} />,
   ping: <Hand size={14} />,
   gear_worn: <Footprints size={14} />,
+  personal_best: <Award size={14} />,
   goal_met: <Trophy size={14} />,
   goal_at_risk: <Clock size={14} />,
   goal_none_set: <Target size={14} />,

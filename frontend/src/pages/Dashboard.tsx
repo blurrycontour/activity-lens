@@ -748,6 +748,9 @@ export default function Dashboard({ onSelect, onResumeSession, onImport, onCreat
     void buzz('complete')
   }, [allGoalsMet])
   const bests = useMemo(() => recentPersonalBests(workouts), [workouts])
+  /** The distinct activities and sports behind those records, in order. */
+  const bestNames = useMemo(() => [...new Set(bests.map(b => b.workout.name))], [bests])
+  const bestSports = useMemo(() => [...new Set(bests.map(b => b.workout.type))], [bests])
   const form = useMemo(() => formReading(workouts), [workouts])
   const nudges = useMemo(
     () => gearNudges(equipment, t => DEFAULT_RETIRE_KM[t] ?? 0),
@@ -851,20 +854,28 @@ export default function Dashboard({ onSelect, onResumeSession, onImport, onCreat
                   {/* The sport's own mark, in the sport's own colour. It says
                       what the subtitle used to spell out, and a trophy on the
                       one card that already says "personal best" was the least
-                      informative glyph on the page. */}
-                  <TypeIcon type={bests[0].workout.type} size={20} />
+                      informative glyph on the page. Two sports in one day fall
+                      back to the trophy, since neither mark would be honest. */}
+                  {bestSports.length === 1
+                    ? <TypeIcon type={bestSports[0]} size={20} />
+                    : <Trophy size={20} style={{ color: 'var(--success)' }} />}
                 </span>
                 <div className="pb-head">
                   <div className="pb-title">
                     {bests.length === 1 ? 'New personal best' : `${bests.length} new personal bests`}
                   </div>
+                  {/* Every workout that set one, because a morning run and an
+                      evening hike can each set their own and naming only the
+                      first would credit it with both. Each figure's label
+                      already carries the sport, so which record belongs to
+                      which activity stays readable. */}
                   <div className="pb-sub">
-                    {bests[0].workout.name} · {dayMonth(fromDateKey(bests[0].workout.date))}
+                    {bestNames.join(' · ')} · {dayMonth(fromDateKey(bests[0].workout.date))}
                   </div>
                 </div>
                 <div className="pb-figures">
                   {bests.map(b => (
-                    <span key={b.kind} className="pb-figure">
+                    <span key={`${b.workout.id}-${b.kind}`} className="pb-figure">
                       <span className="pb-figure-label">{b.label}</span>
                       <span className="pb-figure-value">{b.value}</span>
                     </span>

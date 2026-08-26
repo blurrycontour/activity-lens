@@ -23,6 +23,11 @@ const (
 	KindSessionShared Kind = "session_shared"
 	// KindGearWorn: a piece of equipment reached its replace-at distance.
 	KindGearWorn Kind = "gear_worn"
+	// KindPersonalBest: the latest activity beat everything else of its sport —
+	// its longest, its fastest, its biggest climb, or the least effort per unit
+	// of speed. Judged per sport, because a hike is not slow for being slower
+	// than a run.
+	KindPersonalBest Kind = "personal_best"
 	// KindGoalMet: a training goal was completed for its period.
 	KindGoalMet Kind = "goal_met"
 	// KindGoalAtRisk: a goal's period is nearly over and it is still short.
@@ -75,7 +80,7 @@ const (
 )
 
 // AllKinds is every kind, in the order Settings lists them.
-var AllKinds = []Kind{KindBroadcast, KindAppUpdate, KindWorkoutShared, KindPlanShared, KindSessionShared, KindWorkoutSocial, KindPing, KindGearWorn, KindGoalMet, KindGoalAtRisk, KindGoalNoneSet, KindWorkoutImported, KindFeedback}
+var AllKinds = []Kind{KindBroadcast, KindAppUpdate, KindWorkoutShared, KindPlanShared, KindSessionShared, KindWorkoutSocial, KindPing, KindGearWorn, KindPersonalBest, KindGoalMet, KindGoalAtRisk, KindGoalNoneSet, KindWorkoutImported, KindFeedback}
 
 // ValidKind reports whether k is a known kind.
 func ValidKind(k Kind) bool {

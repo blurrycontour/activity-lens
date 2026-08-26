@@ -452,6 +452,23 @@ screen-wake, entered automatically when a session starts and left when it ends.
 That is not a colour scheme, it is a mode, and it would be more useful than all
 six accents put together.
 
+### 46. Personal bests were drawn but never announced · M · med · **✅ fixed**
+
+The dashboard has drawn its records banner for a while, which meant a record
+only ever reached you if you opened the app and looked. It is the most obviously
+notification-shaped thing the app knows about and the one achievement that never
+left the screen it was drawn on.
+
+It notifies now, as a kind of its own with its own row in Settings →
+Notifications. The record logic exists twice — `lib/insights.ts` for the banner
+and `internal/workout/records.go` for the notification — because the two answer
+the same question for different audiences. Both have tests covering the same
+behaviours, which is what keeps them in step.
+
+Also fixed while there: the banner judged only the single most recent workout,
+so a morning run and an evening hike that each set their own record produced one
+mention, not two.
+
 ## Missing features and ideas
 
 ### 24. No password reset · M · high · **🚫 won’t do**

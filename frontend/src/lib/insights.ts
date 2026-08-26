@@ -568,11 +568,26 @@ export function recentPersonalBests(workouts: Workout[], minSameType = 3, maxAge
    */
   const sorted = [...workouts].sort((a, b) =>
     b.date.localeCompare(a.date) || (b.startTime ?? '').localeCompare(a.startTime ?? ''))
-  const latest = sorted[0]
   const cutoff = new Date(now)
   cutoff.setDate(cutoff.getDate() - maxAgeDays)
-  if (parseDateKey(latest.date) < cutoff) return []
+  if (parseDateKey(sorted[0].date) < cutoff) return []
 
+  /*
+   * Every workout from the latest day, not just the latest workout.
+   *
+   * A morning run and an evening hike are two activities that can each set a
+   * record of their own, against different peers — and only the later of them
+   * was ever judged, so the other's went unmentioned. Each is measured against
+   * its own sport's history with itself excluded, so two runs on one day cannot
+   * both be "the longest": the shorter loses to the longer, which is right.
+   */
+  return sorted
+    .filter(w => w.date === sorted[0].date)
+    .flatMap(w => bestsFor(w, workouts, minSameType))
+}
+
+/** The records `latest` sets against every other activity of its own type. */
+function bestsFor(latest: Workout, workouts: Workout[], minSameType: number): PersonalBest[] {
   const peers = workouts.filter(w => w.type === latest.type && w.id !== latest.id)
   if (peers.length < minSameType) return []
 

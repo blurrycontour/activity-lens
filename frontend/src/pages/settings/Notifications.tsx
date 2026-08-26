@@ -29,6 +29,7 @@ const NOTIFY_KINDS: { id: NotificationKind; label: string; adminOnly?: boolean }
   // wanting to. Off here means their taps land nowhere, which is the point.
   { id: 'ping', label: 'Someone pings me from my profile' },
   { id: 'gear_worn', label: 'Gear reaches its replacement distance' },
+  { id: 'personal_best', label: 'I set a personal best' },
   { id: 'goal_met', label: 'I complete a training goal' },
   { id: 'goal_at_risk', label: "A goal's period is nearly over and I'm short" },
   // Off by default here would contradict the server, which opts every kind in

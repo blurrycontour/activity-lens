@@ -336,6 +336,35 @@ describe('recentPersonalBests', () => {
     expect(recentPersonalBests(runs, 3, 14, NOW).find(b => b.kind === 'efficiency')).toBeUndefined()
   })
 
+  // A morning run and an evening hike are two activities that can each set a
+  // record against different peers. Only the later one used to be judged.
+  it('reports a record from every workout on the latest day', () => {
+    const ws = [
+      // The hike: longest of its four.
+      { ...workout('2026-08-24', 20000, 'Hike'), id: 'hike-new', startTime: '2026-08-24T17:00:00Z' },
+      ...['2026-08-01', '2026-07-01', '2026-06-01'].map(d => workout(d, 5000, 'Hike')),
+      // The run, earlier the same day: fastest of its four.
+      { ...paced('2026-08-24', 'Run', 400), id: 'run-new', startTime: '2026-08-24T08:00:00Z' },
+      paced('2026-08-02', 'Run', 460), paced('2026-07-02', 'Run', 455), paced('2026-06-02', 'Run', 470),
+    ]
+    const bests = recentPersonalBests(ws, 3, 14, NOW)
+    expect(bests.some(b => b.label === 'Longest Hike')).toBe(true)
+    expect(bests.some(b => b.label === 'Fastest Run pace')).toBe(true)
+    expect(new Set(bests.map(b => b.workout.id)).size).toBe(2)
+  })
+
+  // Two of the same sport on one day: the slower cannot also be the fastest.
+  it('does not credit both of two same-day workouts with the same record', () => {
+    const ws = [
+      { ...paced('2026-08-24', 'Run', 400), id: 'fast', startTime: '2026-08-24T17:00:00Z' },
+      { ...paced('2026-08-24', 'Run', 450), id: 'slow', startTime: '2026-08-24T08:00:00Z' },
+      paced('2026-08-02', 'Run', 460), paced('2026-07-02', 'Run', 455), paced('2026-06-02', 'Run', 470),
+    ]
+    const paceBests = recentPersonalBests(ws, 3, 14, NOW).filter(b => b.kind === 'pace')
+    expect(paceBests).toHaveLength(1)
+    expect(paceBests[0].workout.id).toBe('fast')
+  })
+
   // `date` is a day, so two workouts on one day sort equal and "the most recent"
   // used to be whichever the API returned first. The evening hike is the latest
   // workout whatever order the list arrives in.
