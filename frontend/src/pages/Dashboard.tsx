@@ -6,7 +6,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
   RadialBarChart, RadialBar,
 } from 'recharts'
-import { TrendingUp, Zap, Flame, Clock, Mountain, Heart, Trophy, Target, Activity, Footprints, ChartColumnBig, Play } from 'lucide-react'
+import { TrendingUp, Zap, Flame, Clock, Mountain, Heart, Trophy, Target, Activity, Footprints, ChartColumnBig, ChevronRight, Play } from 'lucide-react'
 import SpeedDial from '../components/SpeedDial'
 import { PAGE_META } from '../components/Sidebar'
 import Confetti from '../components/Confetti'
@@ -748,9 +748,22 @@ export default function Dashboard({ onSelect, onResumeSession, onImport, onCreat
     void buzz('complete')
   }, [allGoalsMet])
   const bests = useMemo(() => recentPersonalBests(workouts), [workouts])
-  /** The distinct activities and sports behind those records, in order. */
-  const bestNames = useMemo(() => [...new Set(bests.map(b => b.workout.name))], [bests])
-  const bestSports = useMemo(() => [...new Set(bests.map(b => b.workout.type))], [bests])
+  /**
+   * The same records, grouped into the activity that set them.
+   *
+   * The banner draws one card per workout, so what it needs is not a flat list
+   * of records but a list of workouts each holding its own — which is also the
+   * only shape that lets a card open the right workout when it is tapped.
+   */
+  const bestsByWorkout = useMemo(() => {
+    const byId = new Map<string, { workout: Workout; records: typeof bests }>()
+    for (const b of bests) {
+      const seen = byId.get(b.workout.id)
+      if (seen) seen.records.push(b)
+      else byId.set(b.workout.id, { workout: b.workout, records: [b] })
+    }
+    return [...byId.values()]
+  }, [bests])
   const form = useMemo(() => formReading(workouts), [workouts])
   const nudges = useMemo(
     () => gearNudges(equipment, t => DEFAULT_RETIRE_KM[t] ?? 0),
@@ -842,45 +855,51 @@ export default function Dashboard({ onSelect, onResumeSession, onImport, onCreat
           <>
             {/* Personal best banner — only when the newest activity actually
                 beat every previous one of its type. */}
-            {bests.length > 0 && (
-              /* Laid out in index.css rather than here. It was a flex row of
-                 inline styles with `flexWrap: 'wrap'` and no breakpoint, which
-                 held together only while the text stayed short: naming the
-                 sport in the subtitle was enough to push the figure onto a
-                 second line, where it sat orphaned under the heading. The
-                 wrapping is now the design rather than the failure mode. */
-              <div className="pb-banner">
-                <span className="pb-mark">
-                  {/* The sport's own mark, in the sport's own colour. It says
-                      what the subtitle used to spell out, and a trophy on the
-                      one card that already says "personal best" was the least
-                      informative glyph on the page. Two sports in one day fall
-                      back to the trophy, since neither mark would be honest. */}
-                  {bestSports.length === 1
-                    ? <TypeIcon type={bestSports[0]} size={20} />
-                    : <Trophy size={20} style={{ color: 'var(--success)' }} />}
-                </span>
-                <div className="pb-head">
-                  <div className="pb-title">
-                    {bests.length === 1 ? 'New personal best' : `${bests.length} new personal bests`}
-                  </div>
-                  {/* Every workout that set one, because a morning run and an
-                      evening hike can each set their own and naming only the
-                      first would credit it with both. Each figure's label
-                      already carries the sport, so which record belongs to
-                      which activity stays readable. */}
-                  <div className="pb-sub">
-                    {bestNames.join(' · ')} · {dayMonth(fromDateKey(bests[0].workout.date))}
-                  </div>
-                </div>
-                <div className="pb-figures">
-                  {bests.map(b => (
-                    <span key={`${b.workout.id}-${b.kind}`} className="pb-figure">
-                      <span className="pb-figure-label">{b.label}</span>
-                      <span className="pb-figure-value">{b.value}</span>
+            {bestsByWorkout.length > 0 && (
+              /* One card per workout, not one card for the day.
+                 Two activities on one day can each set their own records
+                 against different peers, and a single card had to name both
+                 workouts in one subtitle and pool their figures underneath —
+                 which left the reader to work out which record belonged to
+                 which activity from the sport in each label. A card each says
+                 it structurally, and gives each one somewhere to go. */
+              <div className="pb-stack">
+                {bestsByWorkout.map(({ workout: w, records }) => (
+                  <button
+                    key={w.id}
+                    className="pb-banner"
+                    onClick={() => onSelect(w)}
+                    aria-label={`${w.name}: ${records.map(r => `${r.label} ${r.value}`).join(', ')}`}
+                  >
+                    <span className="pb-mark">
+                      {/* The sport's own mark, in the sport's own colour — it
+                          says what the subtitle used to spell out, and a trophy
+                          on a card that already says "personal best" was the
+                          least informative glyph on the page. */}
+                      <TypeIcon type={w.type} size={20} />
                     </span>
-                  ))}
-                </div>
+                    <div className="pb-head">
+                      <div className="pb-title">
+                        {records.length === 1 ? 'New personal best' : `${records.length} new personal bests`}
+                      </div>
+                      {/* Date first: it is the fact that orients everything
+                          else on the card, and the workout's name means little
+                          until you know when it happened. */}
+                      <div className="pb-sub">
+                        {dayMonth(fromDateKey(w.date))} · {w.name}
+                      </div>
+                    </div>
+                    <div className="pb-figures">
+                      {records.map(r => (
+                        <span key={r.kind} className="pb-figure">
+                          <span className="pb-figure-label">{r.label}</span>
+                          <span className="pb-figure-value">{r.value}</span>
+                        </span>
+                      ))}
+                    </div>
+                    <ChevronRight size={16} className="pb-go" aria-hidden />
+                  </button>
+                ))}
               </div>
             )}
 

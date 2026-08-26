@@ -2185,12 +2185,26 @@ body[data-fab-hidden] .fab {
    and when it wrapped, the figure landed hard against the left edge with the
    heading stranded above it. Grid states both arrangements instead of hoping
    for one. */
+/* One card per workout, stacked. Two activities on one day can each set their
+   own records, and a card each says whose is whose structurally rather than
+   leaving it to the sport named in every label. */
+.pb-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
 .pb-banner {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 4px 12px;
-  margin-bottom: 16px;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  /* A button now — it opens the workout that set the records. */
+  font: inherit;
+  color: inherit;
   padding: 12px 14px;
   /* --success, not the accent. The accent is the reader's choice and means
      nothing; this card means "you did something". On Rose they were the same
@@ -2225,11 +2239,16 @@ body[data-fab-hidden] .fab {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  /* Under both the mark and the heading, aligned with the heading rather than
+  /* Under both the mark and the chevron, aligned with the heading rather than
      with the disc: the figures belong to the sentence above them. */
-  grid-column: 2;
+  grid-column: 2 / -1;
   margin-top: 6px;
 }
+/* The "there is somewhere to go" mark, beside the heading rather than beside
+   the figures, because it belongs to the card and not to any one record. */
+.pb-go { color: var(--text-3); grid-column: 3; grid-row: 1; }
+.pb-banner:hover .pb-go { color: var(--text-2); }
+.pb-banner:focus-visible { outline: 2px solid var(--success); outline-offset: 2px; }
 .pb-figure {
   display: flex;
   flex-direction: column;
@@ -2253,7 +2272,7 @@ body[data-fab-hidden] .fab {
    the right edge, which is where they were before and where they read best. */
 @media (min-width: 769px) {
   .pb-banner {
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: auto 1fr auto auto;
   }
   .pb-figures {
     grid-column: 3;
@@ -2261,6 +2280,7 @@ body[data-fab-hidden] .fab {
     margin-top: 0;
     justify-content: flex-end;
   }
+  .pb-go { grid-column: 4; }
 }
 
 /* The year calendar's own scroller. Only the grid moves: on the card, the
