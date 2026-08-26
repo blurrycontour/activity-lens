@@ -275,12 +275,21 @@ export interface DirectoryUser {
   self?: boolean
   /** What they wrote about themselves; absent when they wrote none. */
   tagline?: string
+  /**
+   * Their most recent request on any device, RFC 3339.
+   *
+   * Absent on your own entry, and absent for anyone with no live session —
+   * which is "we don't know", not "a long time ago". Render nothing for it.
+   */
+  lastSeen?: string
 }
 
 /** Another member, and the workouts you and they can see of each other's. */
 export interface UserProfileData {
   user: { id: number; username: string; displayName: string; avatarPath: string }
   tagline?: string
+  /** When they were last around; absent on your own profile. See DirectoryUser. */
+  lastSeen?: string
   /** True when this is your own profile, which carries only the public half. */
   self?: boolean
   /** Theirs, sent to you directly. */

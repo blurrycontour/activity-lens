@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"sort"
 	"strconv"
@@ -223,6 +224,20 @@ func (s *Server) handleListUserDirectory(w http.ResponseWriter, r *http.Request)
 			out[i].Tagline = taglines[out[i].ID]
 		}
 	}
+	// Likewise one query for the whole page. Never for your own row: you know
+	// when you were last here, and "you, 2 minutes ago" is the one entry on
+	// the page that tells the reader nothing.
+	if s.sessionClients != nil {
+		if seen, err := s.sessionClients.LastSeenFor(r.Context(), ids); err == nil {
+			for i := range out {
+				if !out[i].Self {
+					out[i].LastSeen = seen[out[i].ID]
+				}
+			}
+		} else {
+			slog.Warn("could not load last seen", "error", err)
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"users": out})
 }
 
@@ -236,6 +251,17 @@ type directoryUser struct {
 	Self bool `json:"self,omitempty"`
 	// Tagline is what they wrote about themselves; absent when they wrote none.
 	Tagline string `json:"tagline,omitempty"`
+	// LastSeen is their most recent request on any device, RFC 3339, and is
+	// absent for the caller's own entry and for anyone with no live session.
+	//
+	// Every member can already see every other member's name, avatar, tagline
+	// and shared workouts here, and can ping them; when they were last around
+	// is the same kind of fact and is what makes the difference between a
+	// directory and a list of names. It is deliberately not on the share
+	// picker's own use of this endpoint — the picker shows it because it is
+	// the same projection, and there is nothing to hide from someone you are
+	// about to share a workout with.
+	LastSeen string `json:"lastSeen,omitempty"`
 }
 
 // userDirectory indexes every user by id in one lookup, so rendering a feed or

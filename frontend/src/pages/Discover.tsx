@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowDownAZ, ArrowUpAZ, Globe, Inbox, Users as UsersIcon } from 'lucide-react'
+import { ArrowDownAZ, ArrowUpAZ, Circle, Globe, Inbox, Users as UsersIcon } from 'lucide-react'
 import { api, type DirectoryUser } from '../lib/api'
 import type { Workout } from '../data/workouts'
 import type { PlanSession, TrainingPlan } from '../data/plans'
@@ -8,6 +8,7 @@ import PageHeader from '../components/PageHeader'
 import TabStrip from '../components/TabStrip'
 import UserAvatar, { userLabel } from '../components/UserAvatar'
 import ItemList from '../components/ItemList'
+import { isActiveNow, lastActive } from '../lib/date'
 import { useSessionState } from '../lib/useSessionState'
 import SearchInput from '../components/SearchInput'
 
@@ -161,11 +162,12 @@ export default function Discover({ onOpenUser, onSelectWorkout, onSelectPlan, on
                 <div>{query ? 'Nobody matches that.' : 'Nobody else is on this server yet.'}</div>
               </div>
             ) : (
-              /* Names and taglines and nothing else — no email, no role, no
-                 activity — because this is the one user listing open to every
-                 signed-in user rather than to administrators. The server
-                 projects the same subset the share picker gets, so there is
-                 nothing here to leak even if the page were wrong. */
+              /* Names, taglines and when someone was last around — never an
+                 email, a role, or whether an account is enabled — because this
+                 is the one user listing open to every signed-in user rather
+                 than to administrators. The server projects the same subset the
+                 share picker gets, so there is nothing here to leak even if the
+                 page were wrong. */
               <div className="discover-grid">
                 {shown.map(u => (
                   <button
@@ -181,6 +183,18 @@ export default function Discover({ onOpenUser, onSelectWorkout, onSelectPlan, on
                         {u.self && <span className="admin-user-you">You</span>}
                       </span>
                       <span className="discover-handle">@{u.username}</span>
+                      {/* Never on your own row — the server does not send it
+                          there, because "you, active now" is the one entry on
+                          this page that tells the reader nothing. Absent, not
+                          "never", when there is no live session to read it
+                          from: that we cannot see them is not a fact about
+                          them. */}
+                      {u.lastSeen && (
+                        <span className={`discover-seen${isActiveNow(u.lastSeen) ? ' live' : ''}`}>
+                          <Circle size={6} fill="currentColor" strokeWidth={0} aria-hidden />
+                          {lastActive(u.lastSeen)}
+                        </span>
+                      )}
                       {u.tagline && <span className="discover-tagline">{u.tagline}</span>}
                     </span>
                   </button>

@@ -1,5 +1,6 @@
 import { Calendar, Circle, Network, Smartphone, HelpCircle } from 'lucide-react'
 import type { SessionInfo } from '../lib/api'
+import { isActiveNow, lastActive } from '../lib/date'
 import BrowserMark from './BrowserMark'
 
 /**
@@ -22,25 +23,6 @@ function formatDate(iso: string): string {
   const d = new Date(iso)
   if (isNaN(d.getTime())) return iso
   return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
-}
-
-/**
- * How long ago, in the units a person would say it in.
- *
- * Relative rather than absolute for last-seen: "3 days ago" answers "is this
- * still in use" at a glance, where a date makes you do the subtraction.
- */
-export function ago(iso: string): string {
-  const then = new Date(iso).getTime()
-  if (isNaN(then)) return ''
-  const mins = Math.floor((Date.now() - then) / 60000)
-  if (mins < 6) return 'Active now'
-  if (mins < 60) return `Active ${mins} min ago`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `Active ${hours} ${hours === 1 ? 'hour' : 'hours'} ago`
-  const days = Math.floor(hours / 24)
-  if (days < 30) return `Active ${days} ${days === 1 ? 'day' : 'days'} ago`
-  return `Last active ${formatDate(iso)}`
 }
 
 /**
@@ -90,7 +72,7 @@ export default function SessionCard({
   const showRawAgent = !s.browser && !s.platform && !s.kind && !!s.userAgent
   // "Active now" is the one fact worth colouring: it is what separates a device
   // in use from one signed in months ago and forgotten.
-  const live = !!s.lastSeen && Date.now() - new Date(s.lastSeen).getTime() < 6 * 60000
+  const live = isActiveNow(s.lastSeen)
 
   return (
     <div className="session-card">
@@ -110,7 +92,7 @@ export default function SessionCard({
         <div className="session-card-facts">
           {s.lastSeen && (
             <Line icon={<Circle size={7} fill="currentColor" strokeWidth={0} />}>
-              <span className={live ? 'session-live' : undefined}>{ago(s.lastSeen)}</span>
+              <span className={live ? 'session-live' : undefined}>{lastActive(s.lastSeen)}</span>
             </Line>
           )}
           {s.ip && <Line icon={<Network size={12} />}>{s.ip}</Line>}

@@ -5010,6 +5010,19 @@ body:has(.overlay) .dial { display: none; }
   font-weight: 600;
 }
 .discover-handle { font-size: 11px; color: var(--text-3); font-family: var(--font-mono); }
+/* When they were last around. Under the handle rather than beside it: the two
+   are different kinds of fact and a phone card is narrow enough that joining
+   them wraps. The dot is the same one the device list uses, and goes green for
+   the one state worth colouring. */
+.discover-seen {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.discover-seen.live { color: var(--success); font-weight: 500; }
 /* Two lines at most: a directory of cards stays a grid of equal tiles, and a
    tagline is a line about yourself rather than a paragraph. */
 .discover-tagline {
@@ -5041,6 +5054,16 @@ body:has(.overlay) .dial { display: none; }
 .profile-avatar-btn:hover { box-shadow: 0 0 0 3px var(--primary-dim); }
 .profile-name { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
 .profile-handle { font-size: 13px; color: var(--text-3); font-family: var(--font-mono); margin-top: 1px; }
+/* The same line the directory card carries, at the profile's own size. */
+.profile-seen {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.profile-seen.live { color: var(--success); font-weight: 500; }
 .profile-tagline {
   margin-top: 6px;
   font-size: 13px;

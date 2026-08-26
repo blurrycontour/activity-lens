@@ -87,3 +87,36 @@ export function relativeDay(iso: string): string {
   if (days < 7) return `${days} days ago`
   return shortDate(then)
 }
+
+/**
+ * "Active now", "Active 3 hours ago", "Last active 4 Mar" — when someone was
+ * last around.
+ *
+ * Its own resolution rather than one of the two above, because the question is
+ * different again: a person is either here, here today, or not, and the units
+ * step up accordingly. The six-minute floor for "now" matches how often the
+ * server actually writes a last-seen — anything finer would be reporting the
+ * throttle rather than the person.
+ *
+ * Says nothing at all for an absent or unparseable time. "Last seen: never"
+ * is a claim about someone, and the honest reading of no row is that we do not
+ * know — see sessions.Store.LastSeenFor.
+ */
+export function lastActive(iso: string | undefined): string {
+  if (!iso) return ''
+  const then = new Date(iso).getTime()
+  if (Number.isNaN(then)) return ''
+  const mins = Math.floor((Date.now() - then) / 60000)
+  if (mins < 6) return 'Active now'
+  if (mins < 60) return `Active ${mins} min ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `Active ${hours} ${hours === 1 ? 'hour' : 'hours'} ago`
+  const days = Math.floor(hours / 24)
+  if (days < 30) return `Active ${days} ${days === 1 ? 'day' : 'days'} ago`
+  return `Last active ${shortDate(new Date(then))}`
+}
+
+/** Whether someone counts as here right now — the one fact worth colouring. */
+export function isActiveNow(iso: string | undefined): boolean {
+  return !!iso && Date.now() - new Date(iso).getTime() < 6 * 60000
+}

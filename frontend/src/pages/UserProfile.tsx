@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ArrowLeft, Globe, Handshake, LoaderCircle, Send } from 'lucide-react'
+import { ArrowLeft, Circle, Globe, Handshake, LoaderCircle, Send } from 'lucide-react'
 import { api, type UserProfileData } from '../lib/api'
 import type { Workout } from '../data/workouts'
 import type { PlanSession, TrainingPlan } from '../data/plans'
 import { useRefreshHandler } from '../context/RefreshContext'
+import { isActiveNow, lastActive } from '../lib/date'
 import { useSessionState } from '../lib/useSessionState'
 import ExpandModal from '../components/ExpandModal'
 import PingRow from '../components/PingRow'
@@ -181,6 +182,14 @@ export default function UserProfile({ id, onBack, onSelect, onOpenUser, onSelect
         <div className="page-header-text">
           <h1 className="profile-name">{name}</h1>
           <p className="profile-handle">@{data.user.username}</p>
+          {/* Absent on your own profile and for anyone with no live session —
+              see DirectoryUser.lastSeen. */}
+          {data.lastSeen && (
+            <p className={`profile-seen${isActiveNow(data.lastSeen) ? ' live' : ''}`}>
+              <Circle size={6} fill="currentColor" strokeWidth={0} aria-hidden />
+              {lastActive(data.lastSeen)}
+            </p>
+          )}
           {data.tagline && <p className="profile-tagline">{data.tagline}</p>}
         </div>
       </div>
