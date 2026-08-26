@@ -69,6 +69,31 @@ export function denseXAxis(fontSize = 10, { bars = false } = {}) {
 }
 
 /**
+ * A *numeric* date axis — one whose positions are timestamps rather than slots.
+ *
+ * denseXAxis is for a category axis, where Recharts measures each label and
+ * drops the ones that would collide. A numeric axis picks its own tick values
+ * instead, and `preserveStartEnd` has nothing to preserve: with a handful of
+ * activities it chose near-identical timestamps and drew "Jul 30Jul 30" on top
+ * of itself. A tick count and a real gap are what that axis wants.
+ *
+ * Four is deliberate. It is enough to read a month at phone width and few
+ * enough that the labels cannot meet, whatever the range or the formatter.
+ */
+export function timeXAxis(fontSize = 10) {
+  return {
+    // The caller passes explicit `ticks`; this is the floor that keeps two of
+    // them from touching if it ever does not.
+    minTickGap: 24,
+    fontSize,
+    tick: { ...AXIS_TICK, fontSize },
+    axisLine: false as const,
+    tickLine: false as const,
+  }
+}
+
+/**
+ * A y axis measuring a count of things/**
  * A y axis measuring a count of things, which cannot be fractional.
  *
  * Recharts allows decimals by default, and picks its ticks from the data range,
