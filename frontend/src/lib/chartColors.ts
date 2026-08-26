@@ -99,7 +99,7 @@ function lightness(hex: string): number {
  * Fixed hues for unordered multi-series charts, assigned in order and never
  * cycled. These are design tokens, so they stay put when the accent changes.
  */
-export const SERIES_COLORS = ['var(--blue)', 'var(--purple)', 'var(--hike)', 'var(--swim)', '#ec4899']
+export const SERIES_COLORS = ['var(--blue)', 'var(--purple)', 'var(--hike)', 'var(--swim)', 'var(--strength)']
 
 /** Neutral fill for tooltip/hover cursors that respects the active theme. */
 export const HOVER_FILL = 'var(--bg-3)'

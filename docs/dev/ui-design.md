@@ -59,10 +59,9 @@ Deriving a tint from a token — an 8% wash behind an error, say — is
 retyped as `rgba(…)`. A literal cannot follow the theme, and the failure is
 quiet: it looks right in whichever mode it was written in.
 
-Known gap: form labels exist in two styles — `.field-label` (uppercase mono,
-what `<Field>` uses) and `.form-label` (sentence case, used inside dialogs).
-Both are classes now, so unifying them is a one-line decision rather than a
-hunt, but it is a visible restyle and has not been made.
+Form labels are one style: `.field-label` (uppercase mono) is what `<Field>`
+uses, and `.form-label` — which existed only inside four dialogs in sentence
+case — now matches it, keeping only the block layout its callers rely on.
 
 ## Type & shape
 

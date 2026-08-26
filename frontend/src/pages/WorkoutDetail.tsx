@@ -259,7 +259,11 @@ function NotesPanel({ workout: w, onSaved }: { workout: Workout; onSaved: (w: Wo
  */
 type Metric = 'hr' | 'pace' | 'speed' | 'elevation' | 'cadence' | `extra:${string}`
 
-const CADENCE_COLOR = '#ec4899'
+/* A token rather than the literal #ec4899 it was, which followed neither theme.
+   --strength is that pink and carries a light-mode variant; cadence is not a
+   sport, but this chart never shows a sport beside it, and the alternative is a
+   hex that is right in one of the eighteen theme-and-accent combinations. */
+const CADENCE_COLOR = 'var(--strength)'
 
 /**
  * The mark for a named series.
@@ -330,6 +334,10 @@ function PlaybackBar({
         step={1}
         value={Math.round(currentTime)}
         onChange={e => onScrub(Number(e.target.value))}
+        aria-label="Position in workout"
+        /* Without this a screen reader announces the raw sample index — "7268" —
+           which is the one number on this control that means nothing to anyone. */
+        aria-valuetext={`${fmtDuration(currentTime)} of ${fmtDuration(duration)}`}
         style={{ flex: 1, accentColor: 'var(--primary)' }}
       />
       <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)', minWidth: 88, textAlign: 'right' }}>
@@ -1626,7 +1634,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
       )}
       <div className="page-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button className="btn-icon" onClick={onBack}><ArrowLeft size={18} /></button>
+          <button className="btn-icon" onClick={onBack} aria-label="Back"><ArrowLeft size={18} /></button>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <h1 className="page-header-title">{w.name}</h1>

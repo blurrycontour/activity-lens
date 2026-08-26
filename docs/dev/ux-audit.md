@@ -218,7 +218,7 @@ theme's `#6b7280`, which is backwards. `#6b7280` on white is 4.8:1 and passes.
 
 One token, wide visual effect.
 
-### 19. Two hardcoded colours that are not justified · S · low
+### 19. Two hardcoded colours that are not justified · S · low · **✅ fixed**
 
 Most literals in the tree are correct and explained: MapLibre has no DOM to
 resolve a custom property against, `shareCard` renders a standalone PNG, and
@@ -241,12 +241,12 @@ good and worth keeping — no utilities, media queries centralised, semantic cla
 The single file is the debt. Splitting into `@import`ed parts (tokens, base,
 components, pages) preserves cascade order exactly and costs nothing at build time.
 
-### 22. `.field-label` vs `.form-label` · S · low
+### 22. `.field-label` vs `.form-label` · S · low · **✅ fixed**
 
 The duality `ui-design.md` already admits to, at 11 files to 4. Both are classes,
 so it is the one-line decision the doc says it is.
 
-### 23. Loose ends · S · low
+### 23. Loose ends · S · low · **✅ fixed**
 
 - The workout-detail back button has no accessible name; every other page's says "Back".
 - The route scrubber is announced as `slider: "7268"` — a raw sample index. It wants `aria-valuetext` with the elapsed time.
@@ -461,7 +461,7 @@ account deletion sends a confirmation code through it — so the plumbing exists
 On a multi-user instance meant to run for years, this is the likeliest support
 request there is, and today the only answer is an admin editing the database.
 
-### 25. Sign-in errors are raw backend strings · S · med
+### 25. Sign-in errors are raw backend strings · S · med · **✅ fixed**
 
 `invalid credentials`, lowercase, no guidance, no distinction between a wrong
 password and an unknown account (correctly, for security — but then say so in a
@@ -494,7 +494,7 @@ earns that slot.
 Long-press, the pull-to-refresh commit, tab switches and goal completion are all
 silent in the Android app.
 
-### 30. The map heatmap has no legend · S · low
+### 30. The map heatmap has no legend · S · low · **✅ fixed**
 
 A blue→red density ramp with nothing saying what the ends mean, while the
 consistency calendar one page over labels its scale "Less … More".

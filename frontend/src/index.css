@@ -1010,7 +1010,9 @@ body {
   gap: 10px;
   text-align: center;
 }
-.auth-brand { display: flex; align-items: center; gap: 10px; }
+/* An h1 now, so the page has a heading; the margin and size come from the
+   span inside it rather than from the browser default. */
+.auth-brand { display: flex; align-items: center; gap: 10px; margin: 0; font-size: inherit; }
 .auth-brand-name { font-size: 19px; font-weight: 700; letter-spacing: -0.025em; }
 .auth-sub { font-size: 13px; color: var(--text-3); }
 
@@ -1320,11 +1322,19 @@ body {
    settings pages use through <Field>. Two label styles is one too many, but
    unifying them is a visible restyle of twenty labels rather than a cleanup —
    this class exists so the decision is made in one place when it is made. */
+/* Was a second, sentence-case label style used only inside four dialogs, while
+   <Field> and every settings page used .field-label. ui-design.md recorded the
+   duality as a known gap and said unifying it was a one-line decision once both
+   were classes. This is that line: .form-label is now .field-label with the
+   block layout its callers rely on. */
 .form-label {
   display: block;
-  font-size: 11px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
   color: var(--text-3);
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 /* A search box with the magnifier inside it. The icon's offset and the input's
@@ -2029,6 +2039,19 @@ body {
   color: var(--text-3);
 }
 .segmented button.active { background: var(--primary-dim); color: var(--primary); }
+
+/* The heatmap's scale, drawn from the same ramp the map layer uses. */
+.heat-legend {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 8px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-3);
+}
+.heat-legend-ramp { display: flex; gap: 2px; }
+.heat-legend-ramp i { width: 16px; height: 10px; border-radius: 2px; }
 
 /* ── Touch targets ─────────────────────────────────────────────────────
    Nothing in the mobile chrome reached the 44px every platform's guidelines
