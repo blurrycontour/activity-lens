@@ -188,7 +188,9 @@ function withEmptyDays(rows: DatedRow[]): DatedRow[] {
 function realPoint(payload: readonly { payload?: Record<string, unknown> }[]): Record<string, unknown> | null {
   for (const entry of payload) {
     const d = entry.payload
-    if (d && (d.name != null || d.from != null)) return d
+    // A truthy name, not merely a present one. `from` is a bin's lower bound
+    // and may legitimately be 0, so that half tests for presence instead.
+    if (d && (d.name || d.from != null)) return d
   }
   return null
 }

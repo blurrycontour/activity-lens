@@ -342,6 +342,22 @@ export function weatherScatter(workouts: Workout[], xKey: WeatherKey, metric: Pe
 }
 
 /**
+ * A point on a fitted line — a coordinate and nothing else.
+ *
+ * Deliberately *not* a ScatterPoint. The endpoints used to be built as scatter
+ * points with `name: ''` and `date: ''` to satisfy that type, which put two
+ * rows into the chart's tooltip payload that looked like workouts and named
+ * none: the tooltip picked the first entry with a name field, found the fit's
+ * empty one, and rendered nothing. Eight of twenty-two dots on the explore
+ * chart answered with a blank card that way. A type that cannot be mistaken
+ * for a workout is what stops that being rediscovered.
+ */
+export interface FitPoint {
+  x: number
+  y: number
+}
+
+/**
  * Least-squares line through the points, as its two endpoints.
  *
  * Returned as endpoints rather than a slope so the caller can draw it without
@@ -349,7 +365,7 @@ export function weatherScatter(workouts: Workout[], xKey: WeatherKey, metric: Pe
  * refuses: fewer than three points, or no spread on x. A line through two
  * points is not a trend, it is those two points.
  */
-export function linearFit(points: ScatterPoint[]): [ScatterPoint, ScatterPoint] | null {
+export function linearFit(points: ScatterPoint[]): [FitPoint, FitPoint] | null {
   if (points.length < 3) return null
   let sx = 0, sy = 0
   for (const p of points) { sx += p.x; sy += p.y }
@@ -368,6 +384,6 @@ export function linearFit(points: ScatterPoint[]): [ScatterPoint, ScatterPoint] 
     if (p.x < lo) lo = p.x
     if (p.x > hi) hi = p.x
   }
-  const at = (x: number): ScatterPoint => ({ x, y: intercept + slope * x, name: '', date: '' })
+  const at = (x: number): FitPoint => ({ x, y: intercept + slope * x })
   return [at(lo), at(hi)]
 }
