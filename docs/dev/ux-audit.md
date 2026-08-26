@@ -337,7 +337,7 @@ picture. A `role="img"` with an `aria-label` summarising the trend in a sentence
 would serve better than any of them, and the data for that sentence is already
 computed for the captions.
 
-### 37. Series colours borrow the status palette · S · med
+### 37. Series colours borrow the status palette · S · med · **✅ fixed**
 
 `Efficiency Factor` draws its only series in `--danger`, and `Max HR` in
 `Analysis.tsx` is a hardcoded `#f97316`. `ui-design.md` reserves the status
@@ -345,13 +345,14 @@ colours ("never reuse `--danger` as series 2") for exactly this reason: a red
 line reads as a warning, and this one is just a measurement. `SERIES_COLORS`
 exists.
 
-### 38. Legends are built two ways · S · low
+### 38. Legends are built two ways · S · low · **🚫 not a real finding**
 
-Consistency's year and week comparisons render their legend as bare text nodes
-(`2024`, `2025`, `2026`), while the Dashboard's weekly trend builds a real
-`<ul>` with swatch images. Same information, same page family, two
-implementations — and only one of them pairs the colour with anything a screen
-reader can use.
+*Withdrawn.* I read this off the accessibility snapshots, where Consistency's
+legend appeared as bare `text:` nodes and the Dashboard's as a `list` of
+`listitem`s with swatch images, and concluded there were two implementations.
+Checking the actual DOM, both go through Recharts' `<Legend>` and both render
+`ul` → `li` with an icon per item. The snapshots differ because one passes a
+`formatter` and the other does not; the markup does not differ. Nothing to fix.
 
 ### 39. Fractional counts on a count axis · S · med · **✅ fixed**
 

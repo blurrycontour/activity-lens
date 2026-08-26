@@ -41,7 +41,11 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
 type Metric = 'pace' | 'hr' | 'maxHr' | 'distance' | 'duration' | 'elevation' | 'calories' | 'speed' | 'steps'
 
 const METRICS: { id: Metric; label: string; color: string; unit: string; format?: (v: number) => string }[] = [
-  { id: 'pace', label: 'Avg Pace', color: 'var(--primary)', unit: '/km', format: fmtPace },
+  /* Not var(--primary). Every other entry here is a fixed hue, so the accent was
+     the one series whose colour moved when the reader changed a setting — and it
+     moved *onto* its neighbours: Electric Blue is Distance, Violet is Duration,
+     Vivid Orange is Calories. Two selected metrics could come out the same. */
+  { id: 'pace', label: 'Avg Pace', color: 'var(--run)', unit: '/km', format: fmtPace },
   { id: 'hr', label: 'Avg HR', color: 'var(--danger)', unit: 'bpm' },
   /* Derived from the average-HR red rather than given a hue of its own: the two
      are the same measurement, and a chart showing both should say so. A literal
@@ -901,7 +905,7 @@ export default function Analysis() {
                             <div className="custom-tooltip">
                               <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.name}</div>
                               <div style={{ color: 'var(--text-3)' }}>{d.dateFull}</div>
-                              <div style={{ color: 'var(--danger)' }}>{d.hrPerSpeed} bpm per km/h</div>
+                              <div style={{ color: SERIES_COLORS[1] }}>{d.hrPerSpeed} bpm per km/h</div>
                               <div style={{ color: 'var(--text-3)' }}>{d.hr} bpm · {d.speed.toFixed(1)} km/h</div>
                             </div>
                           )
