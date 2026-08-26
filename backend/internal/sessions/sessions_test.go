@@ -250,6 +250,13 @@ func TestPruneOrphansDropsRevokedSessionsOnly(t *testing.T) {
 	if _, ok := got["revoked"]; ok {
 		t.Error("the revoked session's client row survived")
 	}
+	seen, err := s.LastSeenFor(ctx, []int64{1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if seen[1] == "" {
+		t.Error("pruning a revoked session erased the user's last seen time")
+	}
 }
 
 func TestPurgeUserRemovesOnlyThatUser(t *testing.T) {
@@ -270,6 +277,16 @@ func TestPurgeUserRemovesOnlyThatUser(t *testing.T) {
 	}
 	if _, ok := got["b"]; !ok {
 		t.Error("another user's row was purged")
+	}
+	seen, err := s.LastSeenFor(ctx, []int64{1, 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := seen[1]; ok {
+		t.Error("the purged user's presence survived")
+	}
+	if seen[2] == "" {
+		t.Error("another user's presence was purged")
 	}
 }
 
@@ -302,6 +319,9 @@ func TestLastSeenForTakesTheNewestDevice(t *testing.T) {
 	}
 	if _, err := db.ExecContext(ctx,
 		`UPDATE session_clients SET last_seen = '' WHERE session_id = 'blank'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `DELETE FROM user_presence WHERE user_id = 9`); err != nil {
 		t.Fatal(err)
 	}
 

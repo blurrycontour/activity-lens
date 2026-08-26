@@ -68,7 +68,9 @@ func (s *Server) handleGetAdminUser(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		// Sessions is redundant beside the list below, but a row that says zero
 		// while two are listed under it is wrong rather than merely repetitive.
-		"user":     adminUser{User: users[idx], LastLoginAt: last[id], Sessions: len(list)},
+		"user": adminUser{
+			User: users[idx], LastLoginAt: last[id], LastSeen: s.lastSeen(r, id), Sessions: len(list),
+		},
 		"stats":    stats,
 		"sessions": s.describeSessions(r.Context(), list),
 	})

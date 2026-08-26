@@ -37,6 +37,7 @@ func TestEveryUserScopedTableHasAnOwnerForPurging(t *testing.T) {
 		"workout_comments":    "workout.Service.PurgeUserComments (superseded by `comments` in 0038; kept as a backup, still purged)",
 		"workout_reactions":   "workout.Service.PurgeUserReactions (superseded by `reactions` in 0038; kept as a backup, still purged)",
 		"session_clients":     "sessions.Store.PurgeUser",
+		"user_presence":       "sessions.Store.PurgeUser",
 		"training_plans":      "plans.Service.PurgeUser (days, blocks and exercises cascade from the plan)",
 		"plan_sessions":       "plans.Service.PurgeUser",
 		"plan_shares":         "plans.Service.PurgeUser (recipient rows; owner rows cascade from training_plans)",

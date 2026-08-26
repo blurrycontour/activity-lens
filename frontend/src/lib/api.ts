@@ -350,6 +350,7 @@ export interface AdminUser {
   role: string
   hasPassword: boolean
   lastLoginAt: string
+  lastSeen?: string
   /** How many devices this account is signed in on. */
   sessions?: number
   /** Absent when the totals could not be computed — not the same as zero. */

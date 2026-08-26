@@ -1,6 +1,6 @@
 import { Calendar, Circle, Network, Smartphone, HelpCircle } from 'lucide-react'
 import type { SessionInfo } from '../lib/api'
-import { isActiveNow, lastActive } from '../lib/date'
+import { isActiveNow, lastUsed } from '../lib/date'
 import BrowserMark from './BrowserMark'
 
 /**
@@ -92,11 +92,11 @@ export default function SessionCard({
         <div className="session-card-facts">
           {s.lastSeen && (
             <Line icon={<Circle size={7} fill="currentColor" strokeWidth={0} />}>
-              <span className={live ? 'session-live' : undefined}>{lastActive(s.lastSeen)}</span>
+              <span className={live ? 'session-live' : undefined}>{lastUsed(s.lastSeen)}</span>
             </Line>
           )}
           {s.ip && <Line icon={<Network size={12} />}>{s.ip}</Line>}
-          <Line icon={<Calendar size={12} />}>Signed in {formatDate(s.createdAt)}</Line>
+          <Line icon={<Calendar size={12} />}>Session started {formatDate(s.createdAt)}</Line>
         </div>
 
         {/* Only when nothing above came from it — otherwise it is a second,

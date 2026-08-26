@@ -75,10 +75,15 @@ func (s *Store) Record(ctx context.Context, sessionID string, userID int64, c Cl
 		return nil
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin recording session client: %w", err)
+	}
+	defer tx.Rollback()
 	// The kind and version are only overwritten when the caller has something
 	// to say. A background request from a stale tab must not blank out what the
 	// app reported at login.
-	_, err := s.db.ExecContext(ctx,
+	_, err = tx.ExecContext(ctx,
 		`INSERT INTO session_clients (session_id, user_id, kind, app_version, last_seen)
 		 VALUES (?, ?, ?, ?, ?)
 		 ON CONFLICT(session_id) DO UPDATE SET
@@ -88,6 +93,18 @@ func (s *Store) Record(ctx context.Context, sessionID string, userID int64, c Cl
 		sessionID, userID, c.Kind, c.AppVersion, now)
 	if err != nil {
 		return fmt.Errorf("record session client: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO user_presence (user_id, last_seen) VALUES (?, ?)
+		 ON CONFLICT(user_id) DO UPDATE SET last_seen = CASE
+		   WHEN excluded.last_seen > user_presence.last_seen THEN excluded.last_seen
+		   ELSE user_presence.last_seen
+		 END`,
+		userID, now); err != nil {
+		return fmt.Errorf("record user presence: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit session client: %w", err)
 	}
 	return nil
 }
@@ -144,24 +161,33 @@ func (s *Store) PruneOrphans(ctx context.Context) (int64, error) {
 
 // PurgeUser drops everything recorded for one user, for account deletion.
 func (s *Store) PurgeUser(ctx context.Context, userID int64) error {
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM session_clients WHERE user_id = ?`, userID); err != nil {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin purge session clients: %w", err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM session_clients WHERE user_id = ?`, userID); err != nil {
 		return fmt.Errorf("purge session clients: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM user_presence WHERE user_id = ?`, userID); err != nil {
+		return fmt.Errorf("purge user presence: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit session client purge: %w", err)
 	}
 	return nil
 }
 
-// LastSeenFor returns the most recent request each of these users made, on any
-// of their devices, keyed by user id and formatted RFC 3339.
+// LastSeenFor returns the most recent request each of these users made, keyed
+// by user id and formatted RFC 3339.
 //
 // One statement for the whole page: the Discover list and a profile both want
 // this for a set of people at once, and a query per row is how a directory of
 // twenty becomes twenty-one round trips.
 //
-// A user with no entry has not been seen — either they have never signed in
-// since this table existed, or every session of theirs has expired or been
-// revoked and the daily sweep has taken the rows with it. That is a real
-// absence and callers render it as "unknown", not as "a long time ago": the
-// two look the same from here and only one of them is true.
+// A user with no entry has not been seen since presence tracking was added.
+// That is a real absence and callers render it as "unknown", not as "a long
+// time ago": the two look the same from here and only one of them is true.
 //
 // The resolution is whatever sessiontrack throttles writes to, a few minutes,
 // which is the right grain for the question anyone is asking of it.
@@ -174,12 +200,8 @@ func (s *Store) LastSeenFor(ctx context.Context, userIDs []int64) (map[int64]str
 	for i, id := range userIDs {
 		args[i] = id
 	}
-	// MAX over the user's sessions: "last seen" is a fact about a person, not
-	// about the phone they happened to use. Empty strings sort below every
-	// timestamp, so a session that predates the column cannot win.
-	q := `SELECT user_id, MAX(last_seen) FROM session_clients
-	       WHERE user_id IN (?` + strings.Repeat(",?", len(userIDs)-1) + `)
-	       GROUP BY user_id`
+	q := `SELECT user_id, last_seen FROM user_presence
+	       WHERE user_id IN (?` + strings.Repeat(",?", len(userIDs)-1) + `)`
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query last seen: %w", err)

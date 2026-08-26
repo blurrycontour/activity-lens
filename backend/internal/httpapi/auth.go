@@ -254,6 +254,9 @@ func (s *Server) oidcOnSuccess(w http.ResponseWriter, r *http.Request, user *aut
 		s.finishNativeOIDC(w, r, scheme, challenge, sid, exp, user)
 		return
 	}
+	if user != nil {
+		s.RecordSessionClient(r, sid, user.ID)
+	}
 	secure := s.secure(r)
 	http.SetCookie(w, s.auth.SessionCookie(sid, exp, secure))
 	if csrf, err := s.mw.IssueCSRFCookie(r); err == nil {

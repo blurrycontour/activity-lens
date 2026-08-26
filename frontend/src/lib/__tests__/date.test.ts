@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { isActiveNow, lastActive, relativeDay, whenLabel, shortDate } from '../date'
+import { isActiveNow, lastActive, lastUsed, relativeDay, whenLabel, shortDate } from '../date'
 
 const at = (iso: string) => { vi.useFakeTimers(); vi.setSystemTime(new Date(iso)) }
 afterEach(() => vi.useRealTimers())
@@ -63,9 +63,9 @@ describe('lastActive', () => {
     expect(lastActive('2026-08-25T11:59:00Z')).toBe('Active now')
     expect(lastActive('2026-08-25T11:58:30Z')).toBe('Active now')
     // Past the window, and no gap: the minute count picks up where "now" stops.
-    expect(lastActive('2026-08-25T11:57:00Z')).toBe('Active 3 min ago')
-    expect(lastActive('2026-08-25T09:00:00Z')).toBe('Active 3 hours ago')
-    expect(lastActive('2026-08-20T09:00:00Z')).toBe('Active 5 days ago')
+    expect(lastActive('2026-08-25T11:57:00Z')).toBe('Last active 3 min ago')
+    expect(lastActive('2026-08-25T09:00:00Z')).toBe('Last active 3 hours ago')
+    expect(lastActive('2026-08-18T12:00:00Z')).toBe('Last active 7 days ago')
     expect(lastActive('2026-03-04T09:00:00Z')).toMatch(/^Last active /)
   })
 
@@ -82,5 +82,11 @@ describe('lastActive', () => {
     at('2026-08-25T12:00:00Z')
     expect(isActiveNow('2026-08-25T11:59:00Z')).toBe(true)
     expect(isActiveNow('2026-08-25T11:57:00Z')).toBe(false)
+  })
+
+  it('describes a session timestamp as last used', () => {
+    at('2026-08-25T12:00:00Z')
+    expect(lastUsed('2026-08-25T11:59:00Z')).toBe('Active now')
+    expect(lastUsed('2026-08-18T12:00:00Z')).toBe('Last used 7 days ago')
   })
 })

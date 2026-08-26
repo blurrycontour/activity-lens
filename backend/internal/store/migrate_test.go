@@ -31,9 +31,47 @@ func TestMigrateAppOnFreshDatabase(t *testing.T) {
 		`SELECT endpoint, user_id, p256dh, auth FROM push_subscriptions LIMIT 0`,
 		`SELECT user_id, goals, notify_prefs FROM user_prefs LIMIT 0`,
 		`SELECT id, user_id, retire_at_km FROM equipment LIMIT 0`,
+		`SELECT user_id, last_seen FROM user_presence LIMIT 0`,
 	} {
 		if _, err := db.ExecContext(context.Background(), q); err != nil {
 			t.Errorf("schema check failed: %v\n  query: %s", err, q)
+		}
+	}
+}
+
+func TestUserPresenceBackfillUsesNewestObservation(t *testing.T) {
+	ctx := context.Background()
+	db := openTemp(t)
+	if err := MigrateApp(ctx, db); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `
+		INSERT INTO session_clients (session_id, user_id, last_seen) VALUES
+			('old-session', 1, '2026-08-19T20:19:47Z'),
+			('newer-session', 2, '2026-08-25T12:00:00Z');
+		INSERT INTO user_last_login (user_id, last_login_at) VALUES
+			(1, '2026-08-26T20:29:07Z'),
+			(2, '2026-08-24T12:00:00Z');
+		INSERT INTO user_presence (user_id, last_seen) VALUES
+			(2, '2026-08-26T21:00:00Z');
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := MigrateApp(ctx, db); err != nil {
+		t.Fatal(err)
+	}
+	for userID, want := range map[int64]string{
+		1: "2026-08-26T20:29:07Z",
+		2: "2026-08-26T21:00:00Z",
+	} {
+		var got string
+		if err := db.QueryRowContext(ctx,
+			`SELECT last_seen FROM user_presence WHERE user_id = ?`, userID).Scan(&got); err != nil {
+			t.Fatal(err)
+		}
+		if got != want {
+			t.Errorf("user %d last_seen = %q, want %q", userID, got, want)
 		}
 	}
 }

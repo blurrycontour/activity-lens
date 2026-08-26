@@ -104,8 +104,8 @@ export function relativeDay(iso: string): string {
 const ACTIVE_WINDOW_MS = 2 * 60_000
 
 /**
- * "Active now", "Active 3 hours ago", "Last active 4 Mar" — when someone was
- * last around.
+ * "Active now", "Last active 3 hours ago", "Last active 4 Mar" — when someone
+ * was last around.
  *
  * Its own resolution rather than one of the two above, because the question is
  * different again: a person is either here, here today, or not, and the units
@@ -115,18 +115,27 @@ const ACTIVE_WINDOW_MS = 2 * 60_000
  * is a claim about someone, and the honest reading of no row is that we do not
  * know — see sessions.Store.LastSeenFor.
  */
-export function lastActive(iso: string | undefined): string {
+function activityTime(iso: string | undefined, past: string): string {
   if (!iso) return ''
   const then = new Date(iso).getTime()
   if (Number.isNaN(then)) return ''
   if (Date.now() - then < ACTIVE_WINDOW_MS) return 'Active now'
   const mins = Math.floor((Date.now() - then) / 60000)
-  if (mins < 60) return `Active ${mins} min ago`
+  if (mins < 60) return `${past} ${mins} min ago`
   const hours = Math.floor(mins / 60)
-  if (hours < 24) return `Active ${hours} ${hours === 1 ? 'hour' : 'hours'} ago`
+  if (hours < 24) return `${past} ${hours} ${hours === 1 ? 'hour' : 'hours'} ago`
   const days = Math.floor(hours / 24)
-  if (days < 30) return `Active ${days} ${days === 1 ? 'day' : 'days'} ago`
-  return `Last active ${shortDate(new Date(then))}`
+  if (days < 30) return `${past} ${days} ${days === 1 ? 'day' : 'days'} ago`
+  return `${past} ${shortDate(new Date(then))}`
+}
+
+export function lastActive(iso: string | undefined): string {
+  return activityTime(iso, 'Last active')
+}
+
+/** Session-specific activity, which may differ from the user's latest device. */
+export function lastUsed(iso: string | undefined): string {
+  return activityTime(iso, 'Last used')
 }
 
 /** Whether someone counts as here right now — the one fact worth colouring. */

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Dumbbell, HardDrive, Images, LogOut, Trash2, Watch } from 'lucide-react'
+import { Circle, Dumbbell, HardDrive, Images, LogOut, Trash2, Watch } from 'lucide-react'
 import { api, ApiError, type AdminUserDetail, type UserStats } from '../../lib/api'
 import { useRefreshHandler } from '../../context/RefreshContext'
 import SettingsCard from '../../components/SettingsCard'
@@ -9,6 +9,7 @@ import StatusMsg, { type Msg } from '../../components/StatusMsg'
 import UserAvatar from '../../components/UserAvatar'
 import Field from '../../components/Field'
 import Dropdown, { type DropdownOption } from '../../components/Dropdown'
+import { isActiveNow, lastActive } from '../../lib/date'
 
 const ROLE_OPTIONS: DropdownOption<string>[] = ['administrator', 'editor', 'reader'].map(r => ({
   value: r,
@@ -239,13 +240,21 @@ export default function UserDetailAdmin({ userId, onBack, onChanged, isSelf, isL
             sub={s.originalBytes > 0 ? `${fmtBytes(s.originalBytes)} of originals` : undefined}
           />
         </div>
-        <div className="field-hint" style={{ marginTop: 12 }}>
-          Last signed in {fmtDate(u.lastLoginAt) === '—' ? 'never' : fmtDate(u.lastLoginAt)}
+        <div className="admin-account-activity">
+          {data.user.lastSeen && (
+            <div className={`session-account-seen${isActiveNow(data.user.lastSeen) ? ' live' : ''}`}>
+              <Circle size={7} fill="currentColor" strokeWidth={0} aria-hidden />
+              {lastActive(data.user.lastSeen)}
+            </div>
+          )}
+          <div className="field-hint">
+            Last signed in {fmtDate(u.lastLoginAt) === '—' ? 'never' : fmtDate(u.lastLoginAt)}
+          </div>
         </div>
       </SettingsCard>
 
       <SettingsCard
-        title={`Signed-in devices (${data.sessions.length})`}
+        title={`Active sessions (${data.sessions.length})`}
         actions={
           <button
             className="btn btn-ghost"

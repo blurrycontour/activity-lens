@@ -730,6 +730,20 @@ body {
   gap: 3px;
   margin-top: 6px;
 }
+.session-account-seen {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.session-account-seen.live { color: var(--success); font-weight: 500; }
+.admin-account-activity {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 12px;
+}
 .session-line {
   display: flex;
   align-items: center;
@@ -3206,6 +3220,7 @@ body:has(.overlay) .dial { display: none; }
   border: 1px solid var(--border-strong);
   background: var(--bg-2);
   color: var(--text-2);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--text) 24%, transparent);
   cursor: pointer;
   padding: 0;
   z-index: 1;
@@ -7398,11 +7413,11 @@ body:has(.overlay) .dial { display: none; }
 
 /* A narrow editor column: the name gets the first row with the remove button
    beside it, and the four number fields share the row below.
-   
+
    The remove button acts on the whole row and the row's identity is its name,
    so the two belong together; DOM order stays name → fields → remove for the
    keyboard, and only the painting order changes.
-   
+
    min-width: 0 is load-bearing in three places. An <input> carries an
    intrinsic width from its size attribute and a flex item defaults to
    min-width: auto, so without it the fields refuse to shrink and spill out of

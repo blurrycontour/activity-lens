@@ -283,6 +283,7 @@ func (s *Server) handleTestEmail(w http.ResponseWriter, r *http.Request) {
 type adminUser struct {
 	auth.User
 	LastLoginAt string `json:"lastLoginAt"`
+	LastSeen    string `json:"lastSeen,omitempty"`
 	// Sessions is how many devices this account is signed in on, so the list
 	// can show it without every row carrying the devices themselves.
 	Sessions int `json:"sessions"`
@@ -316,9 +317,20 @@ func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Warn("could not count sessions", "error", err)
 	}
+	ids := make([]int64, 0, len(users))
+	for _, u := range users {
+		ids = append(ids, u.ID)
+	}
+	seen := map[int64]string{}
+	if s.sessionClients != nil {
+		if seen, err = s.sessionClients.LastSeenFor(r.Context(), ids); err != nil {
+			slog.Warn("could not load last seen", "error", err)
+			seen = map[int64]string{}
+		}
+	}
 	out := make([]adminUser, 0, len(users))
 	for _, u := range users {
-		row := adminUser{User: u, LastLoginAt: last[u.ID], Sessions: counts[u.ID]}
+		row := adminUser{User: u, LastLoginAt: last[u.ID], LastSeen: seen[u.ID], Sessions: counts[u.ID]}
 		if stats != nil {
 			// A user with no workouts has no row in any of those grouped
 			// queries, which is not the same as the totals being unavailable —
