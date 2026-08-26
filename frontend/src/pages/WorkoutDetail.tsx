@@ -59,6 +59,7 @@ import WorkoutReshape, { emptyPlan, planChanges, presentStreams, type ReshapePla
 import ShareDialog from '../components/ShareDialog'
 import ShareCardDialog from '../components/ShareCardDialog'
 import Modal from '../components/Modal'
+import { END_PADDING } from '../components/ChartAxis'
 
 interface WorkoutDetailProps {
   workout: Workout
@@ -1299,6 +1300,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
           ))}
           <XAxis
             dataKey="t" type="number" domain={[0, w.duration || 1]}
+            padding={END_PADDING}
             tick={<EdgeTick />}
             axisLine={false} tickLine={false} tickFormatter={fmtClock} interval="preserveStartEnd"
             label={xLabel('Elapsed time (h:mm)')}

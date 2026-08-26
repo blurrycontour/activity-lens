@@ -11,7 +11,7 @@ import { recentWeekStarts, weekdayMatrix } from '../lib/insights'
 import ChartCard, { EmptyPlot } from '../components/ChartCard'
 import TrainingSessionsChart from '../components/TrainingSessionsChart'
 import InfoTip from '../components/InfoTip'
-import { useChartSpace, WHOLE_NUMBERS } from '../components/ChartAxis'
+import { END_PADDING, useChartSpace, WHOLE_NUMBERS } from '../components/ChartAxis'
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid, Legend, Cell,
@@ -522,7 +522,7 @@ export default function Consistency() {
             <ResponsiveContainer width="100%" height={260}>
               <LineChart data={cumulativeData} margin={space.margin(18)}>
                 <CartesianGrid {...GRID_PROPS} />
-                <XAxis dataKey="month" tick={AXIS_TICK} axisLine={false} tickLine={false} label={xLabel('Month')} />
+                <XAxis dataKey="month" padding={END_PADDING} tick={AXIS_TICK} axisLine={false} tickLine={false} label={xLabel('Month')} />
                 <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" label={yLabel('Cumulative distance (km)')} />
                 <Tooltip
                   content={({ active, payload, label }) => {

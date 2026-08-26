@@ -12,7 +12,7 @@ import Dropdown from '../components/Dropdown'
 import { useLocalStorage } from '../lib/useLocalStorage'
 import { filterByRange, rangeLabel, toDateKey } from '../lib/range'
 import { everyDayBetween, everyMonthBetween, everyWeekBetween, fillGaps, keySpan } from '../lib/timeGaps'
-import { AXIS_TICK, GRID_PROPS, HOVER_FILL } from '../lib/chartColors'
+import { AXIS_TICK, DATA_LINE, GRID_PROPS, HOVER_FILL, SERIES_COLORS, TREND_LINE } from '../lib/chartColors'
 import {
   PERF_METRICS, WEATHER_FIELDS, binByTemperature, binWidthFor, describeCorrelation,
   hasUsableWeather, linearFit, pearson, temperatureCorrelation, weatherScatter,
@@ -42,7 +42,10 @@ type Metric = 'pace' | 'hr' | 'maxHr' | 'distance' | 'duration' | 'elevation' | 
 const METRICS: { id: Metric; label: string; color: string; unit: string; format?: (v: number) => string }[] = [
   { id: 'pace', label: 'Avg Pace', color: 'var(--primary)', unit: '/km', format: fmtPace },
   { id: 'hr', label: 'Avg HR', color: 'var(--danger)', unit: 'bpm' },
-  { id: 'maxHr', label: 'Max HR', color: '#f97316', unit: 'bpm' },
+  /* Derived from the average-HR red rather than given a hue of its own: the two
+     are the same measurement, and a chart showing both should say so. A literal
+     #f97316 sat here before, which followed neither the theme nor the family. */
+  { id: 'maxHr', label: 'Max HR', color: 'color-mix(in srgb, var(--danger) 60%, var(--warning))', unit: 'bpm' },
   { id: 'distance', label: 'Distance', color: 'var(--blue)', unit: 'km', format: v => (v / 1000).toFixed(1) },
   { id: 'duration', label: 'Duration', color: 'var(--purple)', unit: 'min', format: v => Math.round(v / 60).toString() },
   { id: 'elevation', label: 'Elevation Gain', color: 'var(--hike)', unit: 'm' },
@@ -741,7 +744,7 @@ export default function Analysis() {
             <ChartCard
               title="Performance Over Time"
               icon={<TrendingUp size={14} color="var(--primary)" />}
-              description={`One point per activity, with a bolder 3-activity moving average. ${series.length} activities.`}
+              description={`One point per activity, with a dashed 3-activity moving average. ${series.length} activities.`}
               info="Faint lines are individual activities; bold lines smooth them over three activities to show direction rather than noise. All selected metrics share one axis, so use it to read each line's shape and trend, not to compare their absolute heights. Filtering to a single sport makes pace and speed directly comparable. Starting the axis at zero keeps the proportions honest; fitting it to the data is the only way to see movement in a metric like heart rate, which never goes near zero."
               style={{ marginBottom: 16 }}
               actions={
@@ -799,8 +802,8 @@ export default function Analysis() {
                     {selectedMetrics.map(metricId => {
                       const m = METRICS.find(x => x.id === metricId)!
                       return [
-                        <Line key={metricId} type="monotone" dataKey={metricId} stroke={m.color} strokeWidth={1.5} dot={{ r: 3, fill: m.color, strokeWidth: 0 }} connectNulls opacity={0.4} isAnimationActive={false} />,
-                        <Line key={`${metricId}_ma`} type="monotone" dataKey={`${metricId}_ma`} stroke={m.color} strokeWidth={2.5} dot={false} connectNulls isAnimationActive={false} />,
+                        <Line key={metricId} type="monotone" dataKey={metricId} stroke={m.color} {...DATA_LINE} dot={{ r: 3, fill: m.color, strokeWidth: 0 }} connectNulls isAnimationActive={false} />,
+                        <Line key={`${metricId}_ma`} type="monotone" dataKey={`${metricId}_ma`} stroke={m.color} {...TREND_LINE} connectNulls isAnimationActive={false} />,
                       ]
                     })}
                   </LineChart>
@@ -826,7 +829,7 @@ export default function Analysis() {
                 <ResponsiveContainer width="100%" height={220}>
                   <ComposedChart data={volume} margin={space.margin(18, 4)}>
                     <CartesianGrid {...GRID_PROPS} />
-                    <XAxis dataKey="label" {...denseXAxis(9)} label={xLabel(volumeBucket === 'week' ? 'Week starting' : 'Month')} />
+                    <XAxis dataKey="label" {...denseXAxis(9, { bars: true })} label={xLabel(volumeBucket === 'week' ? 'Week starting' : 'Month')} />
                     <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" label={yLabel(volumeMeasure === 'distance' ? 'Distance (km)' : 'Time (hours)')} />
                     <Tooltip
                       cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
@@ -844,7 +847,7 @@ export default function Analysis() {
                       }}
                     />
                     <Bar dataKey="value" fill="var(--primary)" opacity={0.35} radius={[3, 3, 0, 0]} maxBarSize={40} isAnimationActive={false} />
-                    <Line type="monotone" dataKey="avg" stroke="var(--primary)" strokeWidth={2.5} dot={false} isAnimationActive={false} />
+                    <Line type="monotone" dataKey="avg" stroke="var(--primary)" {...TREND_LINE} isAnimationActive={false} />
                   </ComposedChart>
                 </ResponsiveContainer>
               )}
@@ -895,7 +898,7 @@ export default function Analysis() {
                       {/* An explicit fill: Recharts defaults a dot to solid
                           white, which is invisible in light mode and wrong in
                           both. Every other line on this page names its own. */}
-                      <Line type="monotone" dataKey="hrPerSpeed" stroke="var(--danger)" strokeWidth={2} dot={{ r: 2.5, strokeWidth: 0, fill: 'var(--danger)' }} connectNulls isAnimationActive={false} />
+                      <Line type="monotone" dataKey="hrPerSpeed" stroke={SERIES_COLORS[1]} strokeWidth={2} dot={{ r: 2.5, strokeWidth: 0, fill: SERIES_COLORS[1] }} connectNulls isAnimationActive={false} />
                     </LineChart>
                   </ResponsiveContainer>
                 )}
@@ -1192,7 +1195,7 @@ export default function Analysis() {
                         key={`line-${g.type}`}
                         data={g.bins}
                         type="monotone" dataKey="value"
-                        stroke={g.color} strokeWidth={2}
+                        stroke={g.color} {...TREND_LINE}
                         dot={{ r: 3, fill: g.color }}
                         isAnimationActive={false}
                       />

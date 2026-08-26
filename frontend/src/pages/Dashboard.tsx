@@ -20,6 +20,7 @@ import { clockLabel, elapsedSec } from '../data/plans'
 import { useActiveSession } from '../context/ActiveSessionContext'
 import useTicker from '../lib/useTicker'
 import { AXIS_TICK, GRID_PROPS, HOVER_FILL, recencyRamp } from '../lib/chartColors'
+import { END_PADDING } from '../components/ChartAxis'
 import { useThemeTokens } from '../lib/useThemeTokens'
 import {
   DASHBOARD_CFG_KEY, defaultDashboardConfig, resolveGoalStyle, windowLabel,
@@ -834,31 +835,33 @@ export default function Dashboard({ onSelect, onResumeSession, onImport, onCreat
             {/* Personal best banner — only when the newest activity actually
                 beat every previous one of its type. */}
             {bests.length > 0 && (
-              <div
-                className="card"
-                style={{
-                  marginBottom: 16, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
-                  borderColor: 'var(--primary)', background: 'var(--primary-dim)',
-                }}
-              >
-                <Trophy size={20} style={{ color: 'var(--primary)', flexShrink: 0 }} />
-                <div style={{ flex: 1, minWidth: 180 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary)' }}>
+              /* Laid out in index.css rather than here. It was a flex row of
+                 inline styles with `flexWrap: 'wrap'` and no breakpoint, which
+                 held together only while the text stayed short: naming the
+                 sport in the subtitle was enough to push the figure onto a
+                 second line, where it sat orphaned under the heading. The
+                 wrapping is now the design rather than the failure mode. */
+              <div className="pb-banner">
+                <span className="pb-mark">
+                  {/* The sport's own mark, in the sport's own colour. It says
+                      what the subtitle used to spell out, and a trophy on the
+                      one card that already says "personal best" was the least
+                      informative glyph on the page. */}
+                  <TypeIcon type={bests[0].workout.type} size={20} />
+                </span>
+                <div className="pb-head">
+                  <div className="pb-title">
                     {bests.length === 1 ? 'New personal best' : `${bests.length} new personal bests`}
                   </div>
-                  {/* The sport, beside the name. Each tile below already names
-                      it, but the headline says "personal best" without one, and
-                      the scope of the claim should be settled before the reader
-                      gets to the numbers. */}
-                  <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>
-                    {bests[0].workout.name} · {bests[0].workout.type} · {new Date(`${bests[0].workout.date}T00:00:00`).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
+                  <div className="pb-sub">
+                    {bests[0].workout.name} · {new Date(`${bests[0].workout.date}T00:00:00`).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <div className="pb-figures">
                   {bests.map(b => (
-                    <span key={b.kind} style={{ display: 'flex', flexDirection: 'column', gap: 1, padding: '5px 10px', borderRadius: 8, background: 'var(--bg-2)' }}>
-                      <span style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{b.label}</span>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700 }}>{b.value}</span>
+                    <span key={b.kind} className="pb-figure">
+                      <span className="pb-figure-label">{b.label}</span>
+                      <span className="pb-figure-value">{b.value}</span>
                     </span>
                   ))}
                 </div>
@@ -1011,7 +1014,7 @@ export default function Dashboard({ onSelect, onResumeSession, onImport, onCreat
                 <ResponsiveContainer width="100%" height={190}>
                   <BarChart data={d.trendData} margin={{ top: 8, right: 8, left: 4, bottom: 18 }} barCategoryGap="20%" barGap={2}>
                     <CartesianGrid {...GRID_PROPS} />
-                    <XAxis dataKey="day" tick={AXIS_TICK} axisLine={false} tickLine={false} label={{ value: 'Day of week', position: 'insideBottom', offset: -12, fontSize: 10, fill: 'var(--text-3)' }} />
+                    <XAxis dataKey="day" padding={END_PADDING} tick={AXIS_TICK} axisLine={false} tickLine={false} label={{ value: 'Day of week', position: 'insideBottom', offset: -12, fontSize: 10, fill: 'var(--text-3)' }} />
                     <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={44} label={{ value: 'Hours', angle: -90, position: 'insideLeft', fontSize: 10, fill: 'var(--text-3)', style: { textAnchor: 'middle' } }} />
                     <Tooltip
                       cursor={{ fill: HOVER_FILL, opacity: 0.5 }}

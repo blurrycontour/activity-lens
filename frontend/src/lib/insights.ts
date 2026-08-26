@@ -513,9 +513,23 @@ export function sparkAverages(workouts: Workout[], windowDays: number, buckets: 
 export interface PersonalBest {
   workout: Workout
   /** Which record the workout set. */
-  kind: 'distance' | 'pace' | 'elevation' | 'duration'
+  kind: 'distance' | 'pace' | 'speed' | 'elevation' | 'duration' | 'efficiency'
   label: string
   value: string
+}
+
+/**
+ * Heartbeats spent per km/h of speed — the Efficiency tab's headline measure,
+ * where falling means improving. Zero when either half is missing.
+ *
+ * This is the honest form of "a new low heart rate". Raw resting-est average HR
+ * is not an achievement: the way to set that record is to go slowly. Dividing
+ * by the speed it bought asks the question people actually mean — did the same
+ * effort carry me further, faster — and answers it in one number.
+ */
+function efficiencyFactor(w: Workout): number {
+  if (w.avgHR <= 0 || w.avgSpeed <= 0) return 0
+  return w.avgHR / w.avgSpeed
 }
 
 /**
@@ -528,6 +542,19 @@ export interface PersonalBest {
  * but an unqualified "Fastest pace" beside a hiking pace reads as a claim about
  * all your training, and anyone who has run faster that month knows it is
  * false. The scope has to appear wherever the number does.
+ *
+ * Three measures are deliberately not records here:
+ *
+ *   - **Highest max HR.** A ceiling is not an accomplishment, a banner
+ *     congratulating someone for reaching one is an invitation to chase it, and
+ *     a single bad second from a chest strap would fire it. It is worth
+ *     *noticing* — it is what the zone settings are calibrated against — but as
+ *     a prompt to update those settings, not as a trophy.
+ *   - **Lowest average HR.** The way to set that record is to go slowly. See
+ *     efficiencyFactor, which is what people mean when they ask for it.
+ *   - **Calories and steps.** Both are near-perfect proxies for duration and
+ *     distance, so they would fire alongside records already on the card and
+ *     say the same thing twice — and calories are an estimate besides.
  */
 export function recentPersonalBests(workouts: Workout[], minSameType = 3, maxAgeDays = 14, now = new Date()): PersonalBest[] {
   if (workouts.length === 0) return []
@@ -562,8 +589,37 @@ export function recentPersonalBests(workouts: Workout[], minSameType = 3, maxAge
     const secs = Math.round(latest.avgPace % 60)
     out.push({ workout: latest, kind: 'pace', label: `Fastest ${latest.type} pace`, value: `${mins}:${String(secs).padStart(2, '0')} /km` })
   }
+  /*
+   * Speed, for the sports that are not measured in pace.
+   *
+   * fmtRate already knows a ride and a swim report avgSpeed and no avgPace, but
+   * this function only ever looked at avgPace — so the fastest ride of someone's
+   * life set no record at all, and the banner had nothing to say about half the
+   * sports the app supports. Guarded on pace being absent rather than on the
+   * type, so the two can never both fire for one workout and claim the same
+   * thing twice in different units.
+   */
+  const bySpeed = peers.filter(w => w.avgSpeed > 0 && w.avgPace === 0)
+  if (latest.avgSpeed > 0 && latest.avgPace === 0 && bySpeed.length >= minSameType
+      && bySpeed.every(w => latest.avgSpeed > w.avgSpeed)) {
+    out.push({ workout: latest, kind: 'speed', label: `Fastest ${latest.type}`, value: `${latest.avgSpeed.toFixed(1)} km/h` })
+  }
   if (latest.elevationGain > 100 && peers.every(w => latest.elevationGain > w.elevationGain)) {
     out.push({ workout: latest, kind: 'elevation', label: `Most ${latest.type} climbing`, value: `${Math.round(latest.elevationGain)} m` })
+  }
+  /*
+   * The fitness record, as opposed to the effort ones above.
+   *
+   * Every other record here can be set by trying harder on the day. This one
+   * cannot: it falls when the same heart rate starts buying more speed, which
+   * is the thing training is for and the only record on the card that is
+   * evidence of it. Reported as the Efficiency tab already words it, so the
+   * banner and the chart are describing one measure rather than two.
+   */
+  const ef = efficiencyFactor(latest)
+  const efPeers = peers.map(efficiencyFactor).filter(v => v > 0)
+  if (ef > 0 && efPeers.length >= minSameType && efPeers.every(v => ef < v)) {
+    out.push({ workout: latest, kind: 'efficiency', label: `Best ${latest.type} efficiency`, value: `${ef.toFixed(1)} bpm per km/h` })
   }
   return out
 }

@@ -17,8 +17,30 @@ import { useIsMobile } from '../lib/useIsMobile'
  * inward by a custom tick component with nothing re-checking the neighbour they
  * had just been pushed into. Hence overlap at the two ends and nowhere else.
  */
-export function denseXAxis(fontSize = 10) {
+/**
+ * Room at both ends of a point or line axis, so the first and last points are
+ * not sitting on the edge of the plot. Exported for the charts that build their
+ * axis by hand rather than through denseXAxis — see the reasoning there.
+ */
+export const END_PADDING = { left: 10, right: 10 } as const
+
+export function denseXAxis(fontSize = 10, { bars = false } = {}) {
   return {
+    /*
+     * Room at both ends, so the first and last points are not sitting on the
+     * edge of the plot.
+     *
+     * Recharts only raises a tooltip for pointer positions inside the plot
+     * area, and with no padding the end points land exactly on its boundary —
+     * so the outer half of each has no hover target, and a pointer a few pixels
+     * beyond them gets nothing at all. On a phone, where the target is a
+     * fingertip rather than a cursor, that is most of the point.
+     *
+     * Bar charts opt out: their band scale already centres each bar in a slot
+     * with space either side, and padding on top of that only shifts them out
+     * of line with the gridlines.
+     */
+    ...(bars ? {} : { padding: END_PADDING }),
     interval: 'preserveStartEnd' as const,
     // Recharts measures label widths with the axis font *size* but the page's
     // default font family, and our ticks are monospaced — so a real label comes

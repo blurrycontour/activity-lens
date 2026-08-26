@@ -109,3 +109,28 @@ export const AXIS_TICK = { fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var
 
 /** Shared grid styling. */
 export const GRID_PROPS = { strokeDasharray: '2 4', stroke: 'var(--border)', vertical: false } as const
+
+/**
+ * A line the app calculated rather than measured — a moving average, a bucket
+ * mean, a fitted slope.
+ *
+ * Dashed, so the difference is visible without reading a legend. Every chart
+ * that draws one of these draws it over the data it came from, and solid-on-
+ * solid leaves nothing to say which is the evidence and which is the reading of
+ * it. The weather fit already did this by hand; the moving averages did not,
+ * and were also the heavier of the two strokes, so on the Trends tab the line
+ * the app invented was the most prominent thing on the chart while the workouts
+ * it was derived from sat behind it at 40% opacity.
+ *
+ * Spread onto a Recharts `<Line>`, after the stroke colour and before any dot
+ * configuration the caller wants to keep.
+ */
+export const TREND_LINE = { strokeDasharray: '5 4', strokeWidth: 2, dot: false } as const
+
+/**
+ * The measured series underneath a TREND_LINE.
+ *
+ * Slightly transparent so the trend stays legible on top of it, but no thinner:
+ * the data is not the secondary thing on the chart.
+ */
+export const DATA_LINE = { strokeWidth: 2, opacity: 0.55 } as const

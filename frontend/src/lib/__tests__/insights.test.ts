@@ -291,6 +291,51 @@ describe('recentPersonalBests', () => {
     expect(recentPersonalBests(mixed, 3, 14, NOW).find(b => b.kind === 'pace')?.value).toBe('14:10 /km')
   })
 
+  // A ride and a swim report avgSpeed and no avgPace, so a function that only
+  // looked at pace gave half the sports the app supports no record at all.
+  it('records a speed best for the sports that have no pace', () => {
+    const ride = (date: string, avgSpeed: number): Workout =>
+      ({ ...workout(date, 20000, 'Ride'), id: date + avgSpeed, avgPace: 0, avgSpeed })
+    const rides = [ride('2026-08-24', 31), ride('2026-08-10', 26), ride('2026-07-02', 28), ride('2026-06-01', 24)]
+    const best = recentPersonalBests(rides, 3, 14, NOW).find(b => b.kind === 'speed')
+    expect(best?.label).toBe('Fastest Ride')
+    expect(best?.value).toBe('31.0 km/h')
+  })
+
+  // The two must never both fire: they are the same claim in different units.
+  it('does not report both a pace and a speed best for one workout', () => {
+    const runs = [
+      paced('2026-08-24', 'Run', 420),
+      paced('2026-08-10', 'Run', 460),
+      paced('2026-07-02', 'Run', 455),
+      paced('2026-06-01', 'Run', 470),
+    ].map(w => ({ ...w, avgSpeed: 3600 / w.avgPace }))
+    const kinds = recentPersonalBests(runs, 3, 14, NOW).map(b => b.kind)
+    expect(kinds).toContain('pace')
+    expect(kinds).not.toContain('speed')
+  })
+
+  // The one record on the card that cannot be set by trying harder on the day.
+  it('records the efficiency best when the same HR buys more speed', () => {
+    const w = (date: string, avgHR: number, avgSpeed: number): Workout =>
+      ({ ...workout(date, 5000, 'Run'), id: date + avgHR, avgHR, avgSpeed, avgPace: 0 })
+    // 150/12 = 12.5, below every peer, while the HR itself is not the lowest.
+    const runs = [w('2026-08-24', 150, 12), w('2026-08-10', 140, 10), w('2026-07-02', 155, 11), w('2026-06-01', 145, 10)]
+    const best = recentPersonalBests(runs, 3, 14, NOW).find(b => b.kind === 'efficiency')
+    expect(best?.label).toBe('Best Run efficiency')
+    expect(best?.value).toBe('12.5 bpm per km/h')
+  })
+
+  // Going slowly must not look like getting fitter: the record is HR per unit
+  // of speed, not HR.
+  it('does not call the slowest workout the most efficient', () => {
+    const w = (date: string, avgHR: number, avgSpeed: number): Workout =>
+      ({ ...workout(date, 5000, 'Run'), id: date + avgHR, avgHR, avgSpeed, avgPace: 0 })
+    // Lowest HR of the four, but crawling: 100/5 = 20 is the worst ratio here.
+    const runs = [w('2026-08-24', 100, 5), w('2026-08-10', 140, 10), w('2026-07-02', 155, 11), w('2026-06-01', 145, 10)]
+    expect(recentPersonalBests(runs, 3, 14, NOW).find(b => b.kind === 'efficiency')).toBeUndefined()
+  })
+
   // `date` is a day, so two workouts on one day sort equal and "the most recent"
   // used to be whichever the API returned first. The evening hike is the latest
   // workout whatever order the list arrives in.

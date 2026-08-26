@@ -1969,6 +1969,88 @@ body {
 /* Placeholder while the full record is still on its way. A long workout is a
    few hundred kilobytes of samples, and the panels' own empty states say "no
    route data" — a statement about the workout rather than about the wait. */
+/* ── The personal-best banner ──────────────────────────────────────────
+   Two rows on a phone, one on a desktop. It used to be a wrapping flex row of
+   inline styles with no breakpoint, so whether the figure sat beside the
+   heading or under it depended on how long the workout's name happened to be —
+   and when it wrapped, the figure landed hard against the left edge with the
+   heading stranded above it. Grid states both arrangements instead of hoping
+   for one. */
+.pb-banner {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 4px 12px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--primary);
+  border-radius: calc(var(--radius) * 1.5);
+  background: var(--primary-dim);
+}
+.pb-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  /* The sport's colour is on the icon itself; the disc behind it is neutral so
+     the mark reads against six accents rather than only against green. */
+  background: var(--bg-2);
+  flex-shrink: 0;
+}
+.pb-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--primary);
+}
+.pb-sub {
+  font-size: 12px;
+  color: var(--text-2);
+  margin-top: 2px;
+}
+.pb-figures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  /* Under both the mark and the heading, aligned with the heading rather than
+     with the disc: the figures belong to the sentence above them. */
+  grid-column: 2;
+  margin-top: 6px;
+}
+.pb-figure {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px 10px;
+  border-radius: var(--radius);
+  background: var(--bg-2);
+}
+.pb-figure-label {
+  font-size: 10px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.pb-figure-value {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+}
+/* Wide enough for one row: the figures move up beside the heading and push to
+   the right edge, which is where they were before and where they read best. */
+@media (min-width: 769px) {
+  .pb-banner {
+    grid-template-columns: auto 1fr auto;
+  }
+  .pb-figures {
+    grid-column: 3;
+    grid-row: 1;
+    margin-top: 0;
+    justify-content: flex-end;
+  }
+}
+
 /* The year calendar's own scroller. Only the grid moves: on the card, the
    heading and the Less/More legend scrolled off with it. */
 .heatmap-scroll {
