@@ -170,10 +170,10 @@ yet" from "none in this filter".
 
 ## Known gaps
 
-Findings from driving the real app — inconsistencies, unreachable states and
-ideas, each with an effort and a priority — live in [ux-audit.md](ux-audit.md).
-Read it before starting UI work: what looks like a free hand may already be
-recorded there as debt with a fix attached.
+[ux-audit.md](ux-audit.md) holds what is still open after the August 2026 audit —
+three judgement calls, plus the list of things that look like gaps and are
+deliberate, so they are not re-proposed. Short, and worth reading before
+starting UI work.
 
 ## Before calling it done
 
