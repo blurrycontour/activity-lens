@@ -226,7 +226,7 @@ resolve a custom property against, `shareCard` renders a standalone PNG, and
 Max HR in `pages/Analysis.tsx`, surrounded by tokens on every neighbouring line,
 and `CADENCE_COLOR = '#ec4899'` in `pages/WorkoutDetail.tsx`.
 
-### 20. Date formatting is scattered across ~16 call sites · M · med
+### 20. Date formatting is scattered across ~16 call sites · M · med · **✅ fixed**
 
 Eight hardcode `'en-US'` — `ItemList`, `Dashboard` (×3), `Analysis` (×2),
 `WorkoutCard`, `Workouts` — so a European user is shown `Aug 23, 2026` rather

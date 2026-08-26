@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { ALL_WORKOUT_TYPES, TYPE_COLOR, fmtDuration, fmtPace, type WorkoutType, type Workout } from '../data/workouts'
-import { shortDate } from '../lib/date'
+import { dayMonth, fromDateKey, shortDate } from '../lib/date'
 import { useWorkouts } from '../context/WorkoutsContext'
 import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
@@ -112,7 +112,7 @@ function monthLabel(key: string): string {
  */
 function dayLabel(date: string, withYear = false): string {
   const d = new Date(`${date}T00:00:00`)
-  const short = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const short = dayMonth(d)
   return withYear ? `${short} '${String(d.getFullYear()).slice(2)}` : short
 }
 
@@ -133,7 +133,7 @@ function yearMarks(keys: string[]): boolean[] {
 
 /** Tooltip form. Always names the year: there is room, and it settles it. */
 function fullDate(date: string): string {
-  return new Date(`${date}T00:00:00`).toLocaleDateString('en-US', {
+  return fromDateKey(date).toLocaleDateString(undefined, {
     weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
   })
 }

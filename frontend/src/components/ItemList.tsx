@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ClipboardList, Clock, CloudOff, FilterX, Ghost, History, LoaderCircle } from 'lucide-react'
 import { clockLabel, elapsedSec, sessionWhen, type PlanSession, type TrainingPlan } from '../data/plans'
 import type { Workout } from '../data/workouts'
+import { shortDate } from '../lib/date'
 import {
   applyItemFilters, asPlanItem, asSessionItem, asWorkoutItem,
   type FeedItem, type ItemKind, type ItemNarrowing,
@@ -257,9 +258,9 @@ function PlanRow({ plan, onOpen, onOpenUser, footer }: {
       icon={<ClipboardList size={20} color="var(--plan)" />}
       badge="Plan"
       name={plan.name}
-      date={shortDate(plan.updatedAt)}
+      date={rowDate(plan.updatedAt)}
       stats={plan.lastSessionAt
-        ? <div className="workout-row-stat"><History size={11} color="var(--text-3)" /><span>run {shortDate(plan.lastSessionAt)}</span></div>
+        ? <div className="workout-row-stat"><History size={11} color="var(--text-3)" /><span>run {rowDate(plan.lastSessionAt)}</span></div>
         : <div className="workout-row-stat"><span>never run</span></div>}
       figure={String(plan.dayCount)}
       unit={plan.dayCount === 1 ? 'day' : 'days'}
@@ -302,9 +303,8 @@ function SessionRow({ session: s, onOpen, onOpenUser, footer }: {
   )
 }
 
-/** The same "Jul 26, 2026" a workout row shows, so the dates line up. */
-function shortDate(iso: string): string {
+/** The same date a workout row shows, so the two line up. */
+function rowDate(iso: string): string {
   const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return ''
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return Number.isNaN(d.getTime()) ? '' : shortDate(d)
 }

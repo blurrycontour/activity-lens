@@ -60,6 +60,7 @@ import ShareDialog from '../components/ShareDialog'
 import ShareCardDialog from '../components/ShareCardDialog'
 import Modal from '../components/Modal'
 import { END_PADDING } from '../components/ChartAxis'
+import { fromDateKey, longDate } from '../lib/date'
 
 interface WorkoutDetailProps {
   workout: Workout
@@ -1651,7 +1652,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
               {!readOnly && <ShareBadge workout={w} />}
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
-              {new Date(w.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              {longDate(fromDateKey(w.date))}
             </div>
             {/* Its own line rather than sharing one with the date: a long
                 display name would otherwise squeeze the date or wrap raggedly. */}

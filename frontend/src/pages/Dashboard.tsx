@@ -12,6 +12,7 @@ import { PAGE_META } from '../components/Sidebar'
 import Confetti from '../components/Confetti'
 import GoalSportMark, { goalColor } from '../components/GoalSportMark'
 import { buzz } from '../lib/sessionFeedback'
+import { dayMonth, fromDateKey, longDate } from '../lib/date'
 import { useLocalStorage } from '../lib/useLocalStorage'
 import { useIsMobile } from '../lib/useIsMobile'
 import InfoTip from '../components/InfoTip'
@@ -107,7 +108,7 @@ function WorkoutRow({ w, onOpen }: { w: Workout; onOpen: () => void }) {
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.name}</div>
-        <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>{new Date(`${w.date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+        <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>{dayMonth(fromDateKey(w.date))}</div>
       </div>
       <div style={{ textAlign: 'right', flexShrink: 0 }}>
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600 }}>{fmtDist(w.distance)}</div>
@@ -153,7 +154,7 @@ function LatestActivity({ w, onOpen }: { w: Workout; onOpen: () => void }) {
       <button className="latest-activity-link" onClick={onOpen}>
         <span className="latest-activity-name">{w.name}</span>
         <span className="latest-activity-date">
-          {new Date(`${w.date}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+          {longDate(fromDateKey(w.date))}
         </span>
       </button>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
@@ -858,7 +859,7 @@ export default function Dashboard({ onSelect, onResumeSession, onImport, onCreat
                     {bests.length === 1 ? 'New personal best' : `${bests.length} new personal bests`}
                   </div>
                   <div className="pb-sub">
-                    {bests[0].workout.name} · {new Date(`${bests[0].workout.date}T00:00:00`).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
+                    {bests[0].workout.name} · {dayMonth(fromDateKey(bests[0].workout.date))}
                   </div>
                 </div>
                 <div className="pb-figures">
