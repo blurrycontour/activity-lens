@@ -223,8 +223,19 @@ export default function Analysis() {
    * per activity, gaps closed up. That is the denser and often more readable
    * view — but it silently rescales the x axis, so a fortnight off looks like
    * business as usual. On, every skipped day or bucket keeps its place.
+   *
+   * On by default, which it was not. Off, these charts put one point per
+   * activity on a categorical axis *labelled with dates*: eight days between
+   * two workouts and one day between the next two came out the same width, so
+   * the shape of the line — which is the entire product of a page captioned
+   * "falling is improving" — was an artefact of how many times you trained
+   * rather than of when. A reader has no way to know that from looking, and a
+   * chart whose default reading is wrong is worse than a denser one.
+   *
+   * Still a toggle, because the compressed view is genuinely the better one
+   * for comparing activity to activity. It is now the thing you opt into.
    */
-  const [showGaps, setShowGaps] = useLocalStorage<boolean>('al_an_gaps', false)
+  const [showGaps, setShowGaps] = useLocalStorage<boolean>('al_an_gaps', true)
   /**
    * Whether the trend chart's y axis starts at zero or hugs the data.
    *

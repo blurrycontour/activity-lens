@@ -263,7 +263,7 @@ the "correlation, not a cause" line under the weather scatter is the kind of
 honesty most fitness apps skip. These are the places the individual charts fall
 short of that system.
 
-### 33. The Efficiency charts plot time as if it were evenly spaced · M · high
+### 33. The Efficiency charts plot time as if it were evenly spaced · M · high · **✅ fixed**
 
 `Efficiency Factor` and `Pace at Fixed HR` put one point per activity on a
 categorical axis labelled **"Activity date"**. Six activities across four weeks
@@ -275,6 +275,11 @@ says the caption — and that shape is an artefact of the spacing. The dramatic
 spike between Aug 7 and Aug 8 is one day of data given eight days of width.
 Either the axis becomes a real time scale (`type="number"`, `scale="time"`), or
 the caption stops describing the curve as a trend.
+
+**Fixed by a third route:** the page already had the mechanism. The **Gaps**
+toggle inserts every skipped day, which makes the axis a real day-by-day scale —
+it was simply off by default, so the honest view was the one you had to find.
+It is on by default now; the compressed view is the thing you opt into.
 
 Same root cause, visible symptom: **the axis repeats labels**, reading
 `Jul 30 · Jul 30 · Aug 7 · Aug 8 · Aug 23 · Aug 23`, because two activities on
