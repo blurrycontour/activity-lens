@@ -488,11 +488,14 @@ A rare action, given the only visible affordance on each row, at a 29px target,
 while open, edit and delete live behind a long press. Worth reconsidering what
 earns that slot.
 
-### 29. Haptics exist only inside the session runner · S · med
+### 29. Haptics exist only inside the session runner · S · med · **✅ partly fixed**
 
 `lib/sessionFeedback.ts` is careful and complete about vibration during a workout.
-Long-press, the pull-to-refresh commit, tab switches and goal completion are all
-silent in the Android app.
+**Long press and goal completion now buzz**, through the same `buzz()` and the
+same preference the session signals use — one vibration switch rather than two.
+Pull-to-refresh and tab switches are left silent deliberately: both already have
+visible confirmation, and a buzz on every tab switch is the kind of feedback
+people turn off wholesale.
 
 ### 30. The map heatmap has no legend · S · low · **✅ fixed**
 

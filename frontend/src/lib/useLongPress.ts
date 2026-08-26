@@ -1,4 +1,5 @@
 import { useCallback, useRef } from 'react'
+import { buzz } from './sessionFeedback'
 
 /** How long a press has to last. Long enough not to fire on a tap, short enough to feel deliberate. */
 const HOLD_MS = 500
@@ -39,6 +40,18 @@ export function useLongPress(onLongPress: () => void) {
     cancel()
     timer.current = setTimeout(() => {
       fired.current = true
+      /*
+       * A long press has no visual "it worked" until whatever it opens appears,
+       * so on a phone the only feedback for holding a row was waiting. The
+       * platform answer is a tap you can feel, and the app already knows how to
+       * produce one.
+       *
+       * `ping` is the barely-there pattern — a receipt, not an event — and
+       * buzz() honours the same switch the session signals use. One buzz
+       * preference rather than two: someone who turned vibration off did not
+       * mean "except for this".
+       */
+      void buzz('ping')
       onLongPress()
     }, HOLD_MS)
   }, [cancel, onLongPress])

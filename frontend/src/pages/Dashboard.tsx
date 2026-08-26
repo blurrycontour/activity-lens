@@ -11,6 +11,7 @@ import SpeedDial from '../components/SpeedDial'
 import { PAGE_META } from '../components/Sidebar'
 import Confetti from '../components/Confetti'
 import GoalSportMark, { goalColor } from '../components/GoalSportMark'
+import { buzz } from '../lib/sessionFeedback'
 import { useLocalStorage } from '../lib/useLocalStorage'
 import { useIsMobile } from '../lib/useIsMobile'
 import InfoTip from '../components/InfoTip'
@@ -741,6 +742,9 @@ export default function Dashboard({ onSelect, onResumeSession, onImport, onCreat
     if (sessionStorage.getItem(CELEBRATED_KEY)) return
     sessionStorage.setItem(CELEBRATED_KEY, '1')
     setCelebrating(true)
+    // The confetti is silent on a phone in a pocket. `complete` is the pattern
+    // the session runner uses for finishing one, which is the same event.
+    void buzz('complete')
   }, [allGoalsMet])
   const bests = useMemo(() => recentPersonalBests(workouts), [workouts])
   const form = useMemo(() => formReading(workouts), [workouts])
