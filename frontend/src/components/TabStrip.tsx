@@ -14,6 +14,16 @@ export interface TabStripItem<T extends string> {
    * that hold them carried none.
    */
   blurb?: string
+  /**
+   * How much is behind the tab, shown as a small figure after the label.
+   *
+   * Zero and undefined both render nothing: a badge exists to say a tab is
+   * worth opening, and "0" is a thing to read rather than an answer. That
+   * makes "no badge" mean "nothing there", which only holds because every
+   * caller has the count in hand before the strip draws — a tab whose count
+   * is still loading must not pass one.
+   */
+  count?: number
 }
 
 interface TabStripProps<T extends string> {
@@ -103,6 +113,7 @@ export default function TabStrip<T extends string>({ items, value, onChange, ari
         >
           {t.icon}
           {t.label}
+          {!!t.count && <span className="tab-strip-count">{t.count}</span>}
         </button>
       ))}
     </nav>

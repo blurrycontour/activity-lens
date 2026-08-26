@@ -23,9 +23,18 @@ interface WorkoutGalleryProps {
   workoutId: string
   /** Only the owner may add or remove; everyone who can see the workout looks. */
   canEdit: boolean
+  /**
+   * How many photos there turned out to be, so the tab that opened this can
+   * keep its badge honest after an upload or a delete.
+   *
+   * Reported from an effect on the list rather than from each mutation, so a
+   * path that changes `photos` without remembering to call it cannot exist.
+   * Must be stable across renders — it is an effect dependency.
+   */
+  onCount?: (n: number) => void
 }
 
-export default function WorkoutGallery({ workoutId, canEdit }: WorkoutGalleryProps) {
+export default function WorkoutGallery({ workoutId, canEdit, onCount }: WorkoutGalleryProps) {
   const [photos, setPhotos] = useState<WorkoutPhoto[] | null>(null)
   const [max, setMax] = useState(30)
   const [error, setError] = useState<string | null>(null)
@@ -48,6 +57,9 @@ export default function WorkoutGallery({ workoutId, canEdit }: WorkoutGalleryPro
   }, [workoutId])
 
   useEffect(() => { void load() }, [load])
+
+  // Null is "not loaded", which is not a count of anything.
+  useEffect(() => { if (photos) onCount?.(photos.length) }, [photos, onCount])
 
   async function addFiles(files: FileList | null) {
     if (!files || files.length === 0) return

@@ -32,9 +32,15 @@ interface WorkoutSocialProps {
   /** The noun used when there is nothing to show, so the empty state names
    *  the right thing. */
   noun?: string
+  /**
+   * How many comments there turned out to be, so the tab that opened this can
+   * keep its badge honest after one is posted or deleted. Must be stable
+   * across renders — it is an effect dependency.
+   */
+  onCount?: (n: number) => void
 }
 
-export default function WorkoutSocial({ kind, workoutId, isOwner, noun = 'workout' }: WorkoutSocialProps) {
+export default function WorkoutSocial({ kind, workoutId, isOwner, noun = 'workout', onCount }: WorkoutSocialProps) {
   const { user } = useAuth()
   const [social, setSocial] = useState<Social | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -73,6 +79,10 @@ export default function WorkoutSocial({ kind, workoutId, isOwner, noun = 'workou
   }, [workoutId])
 
   useEffect(() => { void load() }, [load])
+
+  // From the loaded thread rather than from each of post, edit and delete —
+  // one place that cannot be forgotten by a fourth.
+  useEffect(() => { if (social) onCount?.(social.comments.length) }, [social, onCount])
 
   async function react(emoji: string) {
     if (!social) return

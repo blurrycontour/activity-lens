@@ -940,6 +940,37 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
    * who opened the page to read the charts.
    */
   const [detailTab, setDetailTab] = useState<DetailTab>(() => initialTab())
+  /*
+   * What is behind Gallery and Social, so the strip can say so before either
+   * is opened. Both panels are lazy and fetch nothing until their tab is
+   * selected, so the only way to learn a tab is empty was to open it.
+   *
+   * Seeded from the workout — the detail response carries the same two counts
+   * a library row does — and then kept live by the panels themselves, because
+   * adding a photo while looking at it must not leave the badge behind.
+   */
+  const [counts, setCounts] = useState({ photos: w.photoCount ?? 0, comments: w.commentCount ?? 0 })
+  const onPhotoCount = useCallback((n: number) => setCounts(c => (c.photos === n ? c : { ...c, photos: n })), [])
+  const onCommentCount = useCallback((n: number) => setCounts(c => (c.comments === n ? c : { ...c, comments: n })), [])
+  /*
+   * The seed above is whatever the list row carried, which is nothing at all
+   * when the page was opened from a URL or a notification rather than from the
+   * library. Re-taken whenever the workout is refetched, because the server has
+   * just counted where the panel's figure is as old as the last time its tab
+   * was open.
+   *
+   * `undefined` is "no opinion", not zero. Only the GET carries these — a PATCH
+   * answers with the updated workout and both fields `omitempty` away — so
+   * reading an absent field as a count would have renaming a workout clear the
+   * badges off both its tabs.
+   */
+  useEffect(() => {
+    setCounts(c => {
+      const photos = w.photoCount ?? c.photos
+      const comments = w.commentCount ?? c.comments
+      return c.photos === photos && c.comments === comments ? c : { photos, comments }
+    })
+  }, [w.photoCount, w.commentCount])
   const sectionsRef = useRef<HTMLDivElement>(null)
 
   // Notes belong to the owner alone and are stripped from a shared response, so
@@ -947,12 +978,12 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
   // first tab does not exist would land on an empty panel, hence the fallback.
   const detailTabs: TabStripItem<DetailTab>[] = [
     ...(readOnly ? [] : [{ id: 'notes' as DetailTab, label: 'Notes', icon: <NotebookPen size={14} /> }]),
-    { id: 'gallery' as DetailTab, label: 'Gallery', icon: <Images size={14} /> },
+    { id: 'gallery' as DetailTab, label: 'Gallery', icon: <Images size={14} />, count: counts.photos },
     // Only on a workout somebody else can see. A private one has no audience,
     // so there is no conversation to be had — and offering an empty tab that
     // refuses every comment would be worse than not offering it. A viewer is
     // always past this check: they are looking at it, which is the proof.
-    ...(w.shared ? [{ id: 'social' as DetailTab, label: 'Social', icon: <MessageSquare size={14} /> }] : []),
+    ...(w.shared ? [{ id: 'social' as DetailTab, label: 'Social', icon: <MessageSquare size={14} />, count: counts.comments }] : []),
   ]
   const activeTab = detailTabs.some(t => t.id === detailTab) ? detailTab : detailTabs[0].id
 
@@ -2124,12 +2155,12 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
                 opening a workout. The same goes for the thread. */}
             {activeTab === 'gallery' && (
               <Suspense fallback={<div className="detail-loading"><LoaderCircle size={16} className="spin" /></div>}>
-                <WorkoutGallery workoutId={w.id} canEdit={!readOnly} />
+                <WorkoutGallery workoutId={w.id} canEdit={!readOnly} onCount={onPhotoCount} />
               </Suspense>
             )}
             {activeTab === 'social' && (
               <Suspense fallback={<div className="detail-loading"><LoaderCircle size={16} className="spin" /></div>}>
-                <WorkoutSocial kind="workout" workoutId={w.id} isOwner={!readOnly} />
+                <WorkoutSocial kind="workout" workoutId={w.id} isOwner={!readOnly} onCount={onCommentCount} />
               </Suspense>
             )}
           </TabPanel>

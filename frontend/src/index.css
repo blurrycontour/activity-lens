@@ -3189,6 +3189,22 @@ body:has(.overlay) .dial { display: none; }
   transition: background 0.15s, color 0.15s;
 }
 .tab-strip-item:hover { color: var(--text); }
+/* How much is behind the tab. A figure rather than a dot: "is there anything
+   here" and "is it worth the scroll" are different questions and the number
+   answers both. Tabular figures so it does not resize as it counts up, and
+   `currentColor` at low opacity so it follows the tab through hover, active
+   and every accent rather than needing a colour of its own. */
+.tab-strip-count {
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 99px;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
 .tab-strip-item.active {
   background: var(--bg-2);
   color: var(--primary);
