@@ -1,6 +1,8 @@
-import { useMemo } from 'react'
+import type React from 'react'
+import { useLayoutEffect, useMemo } from 'react'
 import { ALL_WORKOUT_TYPES, TYPE_COLOR, fmtDuration, fmtPace, type WorkoutType, type Workout } from '../data/workouts'
 import { dayMonth, fromDateKey, shortDate } from '../lib/date'
+import { centreInScroller, useEdgeFades } from '../lib/useEdgeFades'
 import { useWorkouts } from '../context/WorkoutsContext'
 import TypeDropdown from '../components/TypeDropdown'
 import RangeDropdown from '../components/RangeDropdown'
@@ -282,6 +284,58 @@ function realPoint(payload: readonly { payload?: Record<string, unknown> }[]): R
     if (d && (d.name || d.from != null)) return d
   }
   return null
+}
+
+/**
+ * Which measures the Trends charts draw.
+ *
+ * One scrolling row rather than a wrapping block. Nine chips come to 893px of
+ * labels, which on a phone wrapped to three rows and 102px — a quarter of the
+ * screen spent on a control, above the summary tiles and the chart it belongs
+ * to, so the chart itself barely cleared the fold.
+ *
+ * The same scroller the tab strip is: it fades at whichever end still has
+ * something past it, which is the only on-screen evidence that there is more,
+ * and it scrolls the first selected chip into view so returning to the tab
+ * shows what you picked rather than the start of the list. The swipe pager
+ * already yields to horizontal scrollers, so this does not cost a page swipe.
+ */
+function MetricChips({ selected, onToggle }: {
+  selected: Metric[]
+  onToggle: (id: Metric) => void
+}) {
+  const { ref, fadeClass, measure } = useEdgeFades<HTMLDivElement>()
+
+  // Before paint, so the row never appears scrolled to the wrong place. Only
+  // on mount and when the selection changes from elsewhere — not on every
+  // toggle, or tapping a chip would drag the row out from under the finger.
+  useLayoutEffect(() => {
+    centreInScroller(ref.current, ref.current?.querySelector<HTMLElement>('.metric-chip.on') ?? null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  return (
+    <div ref={ref} className={`metric-chips${fadeClass}`} onScroll={measure} role="group" aria-label="Measures">
+      {METRICS.map(m => {
+        const on = selected.includes(m.id)
+        return (
+          <button
+            key={m.id}
+            className={`metric-chip${on ? ' on' : ''}`}
+            onClick={() => onToggle(m.id)}
+            aria-pressed={on}
+            /* The measure's own colour, which is the line's colour on the
+               chart below — the one thing here that cannot come from a token,
+               because it is per measure. */
+            style={{ '--chip-hue': m.color } as React.CSSProperties}
+          >
+            <span className="metric-chip-dot" aria-hidden />
+            {m.label}
+          </button>
+        )
+      })}
+    </div>
+  )
 }
 
 /** Two-option segmented control used by the volume chart's toggles. */
@@ -830,25 +884,7 @@ export default function Analysis() {
         {/* ── Trends: how the numbers move over time ── */}
         {tab === 'trends' && (
           <>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
-              {METRICS.map(m => (
-                <button
-                  key={m.id}
-                  onClick={() => toggleMetric(m.id)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 6,
-                    padding: '5px 12px', borderRadius: 99,
-                    border: `1px solid ${selectedMetrics.includes(m.id) ? m.color : 'var(--border)'}`,
-                    background: selectedMetrics.includes(m.id) ? `${m.color}18` : 'transparent',
-                    color: selectedMetrics.includes(m.id) ? m.color : 'var(--text-3)',
-                    fontSize: 12, fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s',
-                  }}
-                >
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: m.color, opacity: selectedMetrics.includes(m.id) ? 1 : 0.3 }} />
-                  {m.label}
-                </button>
-              ))}
-            </div>
+            <MetricChips selected={selectedMetrics} onToggle={toggleMetric} />
 
             {summaryStats.length > 0 && (
               <div className="trend-stats">

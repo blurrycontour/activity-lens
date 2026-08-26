@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useLayoutEffect } from 'react'
+import { centreInScroller, useEdgeFades } from '../lib/useEdgeFades'
 
 export interface TabStripItem<T extends string> {
   id: T
@@ -60,39 +61,12 @@ interface TabStripProps<T extends string> {
  * the point where the strip overflows, which no breakpoint would catch.
  */
 export default function TabStrip<T extends string>({ items, value, onChange, ariaLabel, fill }: TabStripProps<T>) {
-  const ref = useRef<HTMLElement>(null)
-  const [edges, setEdges] = useState({ start: false, end: false })
-
-  function measure() {
-    const el = ref.current
-    if (!el) return
-    // A 1px tolerance: fractional layout widths otherwise leave the "more this
-    // way" fade showing permanently at the end of the scroll.
-    const max = el.scrollWidth - el.clientWidth
-    setEdges({ start: el.scrollLeft > 1, end: el.scrollLeft < max - 1 })
-  }
+  const { ref, fadeClass, measure } = useEdgeFades<HTMLElement>()
 
   // Before paint, so the strip never appears scrolled to the wrong place.
   useLayoutEffect(() => {
-    const el = ref.current
-    const active = el?.querySelector<HTMLElement>('.tab-strip-item.active')
-    if (!el || !active) return
-    // Centred by hand rather than with scrollIntoView, which on a horizontal
-    // scroller also scrolls every ancestor — landing the user halfway down the
-    // page for the crime of switching tabs.
-    const left = active.offsetLeft - (el.clientWidth - active.clientWidth) / 2
-    el.scrollTo({ left: Math.max(0, left), behavior: 'smooth' })
-  }, [value])
-
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    measure()
-    // Resize covers rotation and a desktop window being dragged narrower.
-    const obs = new ResizeObserver(measure)
-    obs.observe(el)
-    return () => obs.disconnect()
-  }, [items.length])
+    centreInScroller(ref.current, ref.current?.querySelector<HTMLElement>('.tab-strip-item.active') ?? null)
+  }, [ref, value])
 
   const blurb = items.find(t => t.id === value)?.blurb
 
@@ -100,7 +74,7 @@ export default function TabStrip<T extends string>({ items, value, onChange, ari
     <>
     <nav
       ref={ref}
-      className={`tab-strip${fill ? ' fill' : ''}${edges.start ? ' fade-start' : ''}${edges.end ? ' fade-end' : ''}`}
+      className={`tab-strip${fill ? ' fill' : ''}${fadeClass}`}
       aria-label={ariaLabel}
       onScroll={measure}
     >

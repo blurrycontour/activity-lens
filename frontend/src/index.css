@@ -2099,6 +2099,7 @@ body[data-fab-hidden] .fab {
   .view-switch button,
   .tab-strip-item,
   .filter-pill,
+  .metric-chip,
   .notif-dismiss,
   .page-header-back,
   .al-dropdown-trigger,
@@ -2116,6 +2117,7 @@ body[data-fab-hidden] .fab {
   .view-switch button::after,
   .tab-strip-item::after,
   .filter-pill::after,
+  .metric-chip::after,
   .notif-dismiss::after,
   .page-header-back::after,
   .al-dropdown-trigger::after,
@@ -3180,6 +3182,65 @@ body:has(.overlay) .dial { display: none; }
 .tab-strip.fade-start.fade-end {
   mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
 }
+/* Which measures the Trends charts draw. A scroller for the same reason the
+   strip above is one: nine chips are 893px of labels, which wrapped to three
+   rows on a phone and put the chart itself below the fold. The fade classes
+   come from the same hook. */
+.metric-chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  /* Tall enough to hold each chip's 44px touch target. `overflow-x: auto`
+     makes overflow-y scroll as well, so a hit area hanging past the edge
+     would be clipped and would add a vertical scrollbar; the padding gives it
+     somewhere to be. The bottom margin is reduced by the same amount, so the
+     gap to what follows is unchanged. */
+  padding: 8px 0;
+  margin-bottom: 8px;
+}
+.metric-chips::-webkit-scrollbar { display: none; }
+.metric-chips.fade-end {
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+}
+.metric-chips.fade-start {
+  mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent);
+}
+.metric-chips.fade-start.fade-end {
+  mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+}
+.metric-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 5px 12px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+/* The measure's own hue, set per chip from the colour its line is drawn in. */
+.metric-chip.on {
+  border-color: var(--chip-hue);
+  background: color-mix(in srgb, var(--chip-hue) 9%, transparent);
+  color: var(--chip-hue);
+}
+.metric-chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--chip-hue);
+  opacity: 0.3;
+}
+.metric-chip.on .metric-chip-dot { opacity: 1; }
+
 .tab-strip-item {
   display: inline-flex;
   align-items: center;
