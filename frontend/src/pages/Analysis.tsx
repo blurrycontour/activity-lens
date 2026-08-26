@@ -7,7 +7,7 @@ import RangeDropdown from '../components/RangeDropdown'
 import ChartCard, { EmptyPlot } from '../components/ChartCard'
 import TabStrip from '../components/TabStrip'
 import InfoTip from '../components/InfoTip'
-import { EDGE_PADDING_Y, END_PADDING, denseXAxis, useChartSpace, xLabel } from '../components/ChartAxis'
+import { EDGE_PADDING_Y, END_PADDING, KEEP_EMPTY_ROWS, denseXAxis, useChartSpace, xLabel } from '../components/ChartAxis'
 import TypeLegend from '../components/TypeLegend'
 import ScatterDot from '../components/ScatterDot'
 import Dropdown from '../components/Dropdown'
@@ -150,16 +150,44 @@ function spansYears(keys: string[]): boolean {
 type DatedRow = { date: string; dateLabel: string; dateFull: string } & Record<string, unknown>
 
 /**
+ * The longest span, in days, worth giving one axis position per day.
+ *
+ * A phone leaves the plot around 310px. At a year and a bit that is under a
+ * pixel a day, which is the point past which the spacing stops saying anything
+ * — and past which Recharts stops resolving the pointer correctly: at two and a
+ * half years the tooltip on an 800-slot axis reported dates a year out, cycling
+ * back on itself three times across the width. A slot nobody can see and the
+ * chart cannot address is worse than no slot.
+ *
+ * Chosen just above a year so the "Last year" range always fills, since that is
+ * the longest range anyone reads day by day.
+ */
+const MAX_DAY_SLOTS = 370
+
+/** Whether a span is short enough to give every day its own axis position. */
+function fitsDaySlots(first: string, last: string): boolean {
+  return (fromDateKey(last).getTime() - fromDateKey(first).getTime()) / 86400000 <= MAX_DAY_SLOTS
+}
+
+/** True when Gaps is on and the span is too long to honour it by day. */
+function gapsTooWide(rows: DatedRow[]): boolean {
+  const span = keySpan(rows, r => r.date)
+  return !!span && !fitsDaySlots(span[0], span[1])
+}
+
+/**
  * Gives a per-activity series one position per day between its first and last
  * activity, so time off shows as the distance it actually is.
  *
  * An inserted day carries only its date, leaving every value undefined. The
  * lines that draw these series pass `connectNulls`, so the line carries across
  * the gap while the x axis stops pretending the gap was not there.
+ *
+ * Above MAX_DAY_SLOTS the rows come back untouched — see there.
  */
 function withEmptyDays(rows: DatedRow[]): DatedRow[] {
   const span = keySpan(rows, r => r.date)
-  if (!span) return rows
+  if (!span || !fitsDaySlots(span[0], span[1])) return rows
   const filled = fillGaps(
     rows,
     everyDayBetween(span[0], span[1]),
@@ -788,7 +816,8 @@ export default function Analysis() {
             <ChartCard
               title="Performance Over Time"
               icon={<TrendingUp size={14} color="var(--primary)" />}
-              description={`One point per activity, with a dashed 3-activity moving average. ${series.length} activities.`}
+              description={`One point per activity, with a dashed 3-activity moving average. ${series.length} activities.${
+                showGaps && gapsTooWide(series) ? ' Evenly spaced: the range is too long to give every day its own position.' : ''}`}
               info="Faint lines are individual activities; bold lines smooth them over three activities to show direction rather than noise. All selected metrics share one axis, so use it to read each line's shape and trend, not to compare their absolute heights. Filtering to a single sport makes pace and speed directly comparable. Starting the axis at zero keeps the proportions honest; fitting it to the data is the only way to see movement in a metric like heart rate, which never goes near zero."
               style={{ marginBottom: 16 }}
               actions={
@@ -812,12 +841,15 @@ export default function Analysis() {
                       label={space.yLabel('Selected metrics')}
                     />
                     <Tooltip
+                      {...KEEP_EMPTY_ROWS}
                       content={({ active, payload, label }) => {
                         if (!active) return null
                         // With gaps shown most positions are days with nothing
-                        // on them, and Recharts hands over an empty payload.
-                        // Returning null there reads as a broken tooltip, so the
-                        // day still names itself and says it was a rest day.
+                        // on them, and every metric on such a row is null.
+                        // KEEP_EMPTY_ROWS is what lets that reach here at all;
+                        // without it Recharts hides the tooltip and only the
+                        // cursor line moves. The day still names itself and
+                        // says it was a rest day.
                         const row = payload?.[0]?.payload as DatedRow | undefined
                         if (!payload?.length || row?.empty) {
                           return (
@@ -918,6 +950,7 @@ export default function Analysis() {
                       <XAxis dataKey="dateLabel" {...denseXAxis(9)} label={xLabel('Activity date')} />
                       <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" domain={['dataMin - 1', 'dataMax + 1']} label={space.yLabel('bpm per km/h')} />
                       <Tooltip
+                        {...KEEP_EMPTY_ROWS}
                         content={({ active, payload }) => {
                           if (!active || !payload?.length) return null
                           const d = payload[0].payload
@@ -963,6 +996,7 @@ export default function Analysis() {
                       <XAxis dataKey="dateLabel" {...denseXAxis(9)} label={xLabel('Activity date')} />
                       <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" reversed domain={['dataMin - 15', 'dataMax + 15']} tickFormatter={v => fmtPace(v)} label={space.yLabel('Adjusted pace (min/km)')} />
                       <Tooltip
+                        {...KEEP_EMPTY_ROWS}
                         content={({ active, payload }) => {
                           if (!active || !payload?.length) return null
                           const d = payload[0].payload

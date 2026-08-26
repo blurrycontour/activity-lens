@@ -69,6 +69,28 @@ export function denseXAxis(fontSize = 10, { bars = false } = {}) {
 }
 
 /**
+ * Spread onto a `<Tooltip>` whose chart has gap-filled rows.
+ *
+ * Recharts drops every payload entry whose value is null, and then hides the
+ * tooltip outright when nothing is left. On a series with the Gaps toggle on,
+ * an inserted day is exactly that — a date and nothing else — so the whole
+ * chart went silent on every day the reader did not train, while the cursor
+ * line kept being drawn. That is the "the line moves but no tooltip appears"
+ * report, and on a long range it is most of the axis: a year of training is
+ * three hundred and sixty five slots of which perhaps forty carry an activity.
+ *
+ * The three charts that fill gaps each already had a "No activity" branch
+ * written for that case. None of them had ever rendered.
+ *
+ * The cost is that a *real* day whose metric happens to be missing now reaches
+ * the tooltip as a null entry rather than being dropped. Every one of those
+ * tooltips already renders `—` for a null value, which is the better answer
+ * anyway: a metric silently missing from the list looks like a metric that was
+ * never selected.
+ */
+export const KEEP_EMPTY_ROWS = { filterNull: false } as const
+
+/**
  * A y axis measuring a count of things, which cannot be fractional.
  *
  * Recharts allows decimals by default, and picks its ticks from the data range,
