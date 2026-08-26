@@ -239,7 +239,29 @@ export default function App() {
   useEffect(() => {
     if (!user) return
     if ((navigator as { connection?: { saveData?: boolean } }).connection?.saveData) return
-    const warm = () => { void import('./pages/MapPage') }
+    const warm = () => {
+      void import('./pages/MapPage')
+      /*
+       * And Plans, which is lazy for its own reasons and pays for it the same
+       * way the map did.
+       *
+       * Workouts appears instantly and Plans does not, and neither half of that
+       * is about the page being slow: Workouts is in the entry bundle and its
+       * rows are already in memory, because WorkoutsContext fetches them at
+       * startup for the dashboard. Plans waits for its chunk before it can even
+       * start asking for data.
+       *
+       * On a fast connection this is invisible — measured on localhost, time to
+       * first rows is ~350ms warmed or cold, because the page-transition
+       * animation is longer than either. It is the slow ones this is for, which
+       * is the same argument the map's warm makes, and it is skipped under
+       * saveData for the same reason.
+       *
+       * The specifier must match the lazy import above verbatim, or Vite treats
+       * it as a second module and this warms nothing.
+       */
+      void import('./pages/plans/PlansPage')
+    }
     // requestIdleCallback is still missing on Safari; a timeout is a fine
     // stand-in, since the only requirement is "not during startup".
     const idle = typeof window.requestIdleCallback === 'function'
