@@ -362,14 +362,16 @@ appears on small numbers — which is where a new account lives. `WHOLE_NUMBERS`
 in `ChartAxis.tsx` now covers the count axes, and the monthly and yearly
 breakdowns stop saying "1 activities".
 
-### 40. The tabs are uneven, and nothing says what is behind them · S · low
+### 40. The tabs are uneven, and nothing says what is behind them · S · low · **✅ partly fixed**
 
 Records has two blocks, Trends one, Efficiency four, Load two, Weather two. A
 reader on a phone sees one tab strip with the fifth item off the edge (the fade
 is there and works) and no sense of what the tabs hold or which is worth the
 scroll. Consistency has the same shape with three.
 
-Worth considering whether Efficiency's four charts are four questions or one
+**The descriptions are done**; each tab now carries one line under the strip
+saying what it holds. The rest of this entry stands: worth considering whether
+Efficiency's four charts are four questions or one
 question asked four ways — `HR vs Pace` and `Distance vs Pace` are the same
 scatter with a different x — and whether Records, which is a table rather than a
 chart, belongs in a tab strip of charts at all.

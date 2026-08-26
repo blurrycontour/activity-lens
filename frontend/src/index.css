@@ -3014,6 +3014,16 @@ body:has(.overlay) .dial { display: none; }
    than an overlay so it works over the strip's own background without needing
    to know what colour that is, and so it can never sit above the buttons and
    swallow a tap. The classes are set from measurement in TabStrip.tsx. */
+/* One line under the strip saying what the selected tab holds. Sits with the
+   tab labels rather than with the first card, because it describes the choice
+   above it and not the chart below. */
+.tab-strip-blurb {
+  margin: 8px 2px 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+
 .tab-strip.fade-end {
   mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
 }

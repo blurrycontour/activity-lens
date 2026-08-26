@@ -30,12 +30,12 @@ type PR = { longest: Workout; longestTime: Workout; fastest: Workout | null; hig
 
 type TabId = 'records' | 'trends' | 'efficiency' | 'load' | 'weather'
 
-const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
-  { id: 'records', label: 'Records', icon: <Award size={15} /> },
-  { id: 'trends', label: 'Trends', icon: <TrendingUp size={15} /> },
-  { id: 'efficiency', label: 'Efficiency', icon: <Gauge size={15} /> },
-  { id: 'load', label: 'Load', icon: <Flame size={15} /> },
-  { id: 'weather', label: 'Weather', icon: <CloudSun size={15} /> },
+const TABS: { id: TabId; label: string; icon: React.ReactNode; blurb: string }[] = [
+  { id: 'records', label: 'Records', icon: <Award size={15} />, blurb: 'Your best single activity in each category, per sport.' },
+  { id: 'trends', label: 'Trends', icon: <TrendingUp size={15} />, blurb: 'How each measure has moved over time, and how much you did.' },
+  { id: 'efficiency', label: 'Efficiency', icon: <Gauge size={15} />, blurb: 'Whether the same effort is buying you more speed than it used to.' },
+  { id: 'load', label: 'Load', icon: <Flame size={15} />, blurb: 'How hard you have been training lately, and whether that is sustainable.' },
+  { id: 'weather', label: 'Weather', icon: <CloudSun size={15} />, blurb: 'What heat and humidity do to your pace and heart rate.' },
 ]
 
 type Metric = 'pace' | 'hr' | 'maxHr' | 'distance' | 'duration' | 'elevation' | 'calories' | 'speed' | 'steps'

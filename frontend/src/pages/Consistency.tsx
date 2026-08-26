@@ -28,10 +28,10 @@ const WEEKS_COMPARED = 5
 
 type TabId = 'calendar' | 'compare' | 'totals'
 
-const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
-  { id: 'calendar', label: 'Calendar', icon: <CalendarDays size={15} /> },
-  { id: 'compare', label: 'Compare', icon: <GitCompareArrows size={15} /> },
-  { id: 'totals', label: 'Totals', icon: <Sigma size={15} /> },
+const TABS: { id: TabId; label: string; icon: React.ReactNode; blurb: string }[] = [
+  { id: 'calendar', label: 'Calendar', icon: <CalendarDays size={15} />, blurb: 'Which days you trained, and which days you did not.' },
+  { id: 'compare', label: 'Compare', icon: <GitCompareArrows size={15} />, blurb: 'This year and this week set against the ones before them.' },
+  { id: 'totals', label: 'Totals', icon: <Sigma size={15} />, blurb: 'Distance banked as the year goes on, month by month.' },
 ]
 
 /** What the heatmap and the distribution charts measure. */

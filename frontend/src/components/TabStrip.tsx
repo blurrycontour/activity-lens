@@ -4,6 +4,16 @@ export interface TabStripItem<T extends string> {
   id: T
   label: string
   icon?: React.ReactNode
+  /**
+   * One line saying what is behind the tab, shown under the strip when it is
+   * the selected one.
+   *
+   * A strip of five reaches a phone with the last item past the right edge, and
+   * a label like "Load" or "Compare" says nothing about whether it is worth the
+   * scroll. Every chart on these pages already carries a description; the tabs
+   * that hold them carried none.
+   */
+  blurb?: string
 }
 
 interface TabStripProps<T extends string> {
@@ -74,7 +84,10 @@ export default function TabStrip<T extends string>({ items, value, onChange, ari
     return () => obs.disconnect()
   }, [items.length])
 
+  const blurb = items.find(t => t.id === value)?.blurb
+
   return (
+    <>
     <nav
       ref={ref}
       className={`tab-strip${fill ? ' fill' : ''}${edges.start ? ' fade-start' : ''}${edges.end ? ' fade-end' : ''}`}
@@ -93,5 +106,9 @@ export default function TabStrip<T extends string>({ items, value, onChange, ari
         </button>
       ))}
     </nav>
+    {/* Outside the nav, so the strip's own scrolling and edge fades are not
+        applied to a paragraph that neither scrolls nor needs them. */}
+    {blurb && <p className="tab-strip-blurb">{blurb}</p>}
+    </>
   )
 }
