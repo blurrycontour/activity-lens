@@ -52,6 +52,7 @@ import {
   type AdminSection, type Page, type SettingsSection,
 } from './lib/nav'
 import { useSwipeNav } from './lib/useSwipeNav'
+import { useHideOnScroll } from './lib/useHideOnScroll'
 import { consumeShareParam, takeSharedFiles } from './lib/shareTarget'
 import { onNativeIncomingFiles, takeNativeIncomingFiles } from './lib/native/incomingFiles'
 import { applySystemBars } from './lib/native/systemBars'
@@ -597,6 +598,8 @@ export default function App() {
   const onPrev = useCallback(() => swipeTo(-1), [swipeTo])
   const onNext = useCallback(() => swipeTo(1), [swipeTo])
   const swipe = useSwipeNav(mainEl, { enabled: gesturesEnabled, onPrev, onNext })
+  // Every page's FAB, from one listener on the one element that scrolls.
+  useHideOnScroll(mainEl)
 
   // Pull-to-refresh reloads the data each page registered, never the document.
   const { refresh } = useRefresh()

@@ -2040,6 +2040,19 @@ body {
 }
 .segmented button.active { background: var(--primary-dim); color: var(--primary); }
 
+/* Out of the way while the reader is scrolling down. See useHideOnScroll:
+   .with-fab reserves room at the end of the scroll, which solves the last
+   screenful and nothing before it, and the button is fixed. */
+body[data-fab-hidden] .fab {
+  transform: translateY(calc(100% + 24px + var(--bottombar-h)));
+  opacity: 0;
+  pointer-events: none;
+}
+.fab { transition: transform 0.22s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.18s ease; }
+@media (prefers-reduced-motion: reduce) {
+  .fab { transition: none; }
+}
+
 /* The heatmap's scale, drawn from the same ramp the map layer uses. */
 .heat-legend {
   display: flex;

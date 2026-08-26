@@ -475,7 +475,7 @@ a phone. These are the natural homes for "resume your last session", "next
 scheduled day", or gear approaching replacement — and the dashboard already
 computes that last one.
 
-### 27. The FAB permanently occludes content · S · med
+### 27. The FAB permanently occludes content · S · med · **✅ fixed**
 
 On the Dashboard it sits over the goal history bars at every scroll position; on
 Workouts, over a row. `.with-fab` reserves padding at the bottom of the scroll,
