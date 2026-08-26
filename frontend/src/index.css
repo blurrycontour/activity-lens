@@ -31,7 +31,10 @@
   --border-strong: rgba(255, 255, 255, 0.15);
   --text: #e8eaed;
   --text-2: #9ca3af;
-  --text-3: #6b7280;
+  /* 4.8:1 on the page and 4.5:1 on a card. It was #6b7280, which came to 3.8:1
+     against --bg-2 — under the bar for 11px text, which is all this token is
+     ever used for. Checked in paletteSeparation.test.ts. */
+  --text-3: #767e8c;
   /* Accent — overridden dynamically via JS */
   --primary: #00e87a;
   --primary-dim: rgba(0, 232, 122, 0.15);
@@ -133,7 +136,12 @@
   --border-strong: rgba(0, 0, 0, 0.15);
   --text: #0f1117;
   --text-2: #374151;
-  --text-3: #9ca3af;
+  /* Was #9ca3af — 2.5:1 on a white card, under even the 3:1 floor for large
+     text, and used for every 11px micro-label, hint and description in the app.
+     The light overrides deepened --text-2 and the status colours against the
+     white ground but made this one *lighter* than the dark theme's #6b7280,
+     which is backwards. 4.8:1 now. */
+  --text-3: #666e7b;
   /* Darker on a white ground, where the dark-theme values are too light to
      read as text. The dim/border variants keep their alpha and need no change. */
   --danger: #dc2626;
@@ -1988,6 +1996,59 @@ body {
 /* Placeholder while the full record is still on its way. A long workout is a
    few hundred kilobytes of samples, and the panels' own empty states say "no
    route data" — a statement about the workout rather than about the wait. */
+/* A switch with a label and a line of explanation beside it. The .switch class
+   handles the control; this handles the row it sits in. */
+.display-pref {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 0;
+  cursor: pointer;
+}
+.display-pref + .display-pref { border-top: 1px solid var(--border); }
+.display-pref .switch-track { flex-shrink: 0; margin-top: 2px; }
+.display-pref-body { display: flex; flex-direction: column; gap: 2px; }
+.display-pref-label { font-size: 13px; font-weight: 500; color: var(--text); }
+.display-pref-hint { font-size: 11px; color: var(--text-3); line-height: 1.45; }
+
+/* ── Display preferences ───────────────────────────────────────────────
+   Two switches that sit alongside the theme rather than inside it, so they
+   compose with it: high contrast on light is the outdoor case, pure black on
+   dark is the 6am one. Both are attributes on :root, set in lib/theme.ts. */
+
+/* True black, dark only. --bg is near-black but not black; on an OLED screen
+   the difference is real power and, in a dark room, real glare. The surfaces
+   above it step up from zero so cards still separate from the page. */
+:root[data-pure-black]:not(.light) {
+  --bg: #000000;
+  --bg-2: #0b0c0f;
+  --bg-3: #16181d;
+  --border: rgba(255, 255, 255, 0.11);
+  --border-strong: rgba(255, 255, 255, 0.2);
+}
+
+/* Stronger text and lines, both themes. The answer to reading a screen outdoors
+   in sun — which is the situation this app is for, and the one where 11px
+   --text-3 labels stop existing. Deliberately not a separate palette: only the
+   contrast-bearing tokens move, so nothing changes meaning. */
+:root[data-high-contrast] {
+  --text-2: #d5d9e0;
+  --text-3: #a8afbb;
+  --border: rgba(255, 255, 255, 0.2);
+  --border-strong: rgba(255, 255, 255, 0.34);
+}
+:root[data-high-contrast].light {
+  --text-2: #1f2937;
+  --text-3: #4b5563;
+  --border: rgba(0, 0, 0, 0.22);
+  --border-strong: rgba(0, 0, 0, 0.4);
+}
+/* Micro-labels are the smallest text in the app and the first thing to go in
+   bright light. They keep their size — this is about legibility, not layout. */
+:root[data-high-contrast] .chart-card-desc,
+:root[data-high-contrast] .settings-row-sub,
+:root[data-high-contrast] .field-hint { font-weight: 500; }
+
 /* A row of a records card: what, how much, and when. */
 .pr-row {
   display: flex;

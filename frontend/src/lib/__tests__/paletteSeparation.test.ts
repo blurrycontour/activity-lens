@@ -69,6 +69,29 @@ const MEANINGFUL = ['run', 'ride', 'hike', 'swim', 'strength', 'other', 'plan', 
 /** Well past "just noticeable", and short of what the palette actually achieves. */
 const MIN_SEPARATION = 20
 
+/*
+ * Text tokens, against the surfaces they are actually drawn on.
+ *
+ * --text-3 in light mode was #9ca3af — 2.5:1 on a white card, below even the
+ * 3:1 floor for large text, and it is the token behind every 11px micro-label,
+ * hint and description in the app. The light overrides had deepened --text-2
+ * and the status colours against the white ground but made this one *lighter*
+ * than the dark theme's, which is backwards.
+ */
+describe.each([
+  ['dark', ':root', '#0a0b0e', '#111318'],
+  ['light', ':root.light', '#f4f6f9', '#ffffff'],
+])('%s theme text', (_name, selector, page, card) => {
+  const tokens = selector === ':root' ? block(':root') : { ...block(':root'), ...block(':root.light') }
+  it('keeps tertiary text readable on both surfaces', () => {
+    for (const surface of [page, card]) {
+      expect(contrast(tokens['text-3'], surface), `--text-3 on ${surface}`).toBeGreaterThan(4.5)
+      expect(contrast(tokens['text-2'], surface), `--text-2 on ${surface}`).toBeGreaterThan(4.5)
+      expect(contrast(tokens['text'], surface), `--text on ${surface}`).toBeGreaterThan(7)
+    }
+  })
+})
+
 describe.each([
   ['dark', ':root', '#0a0b0e', 4.5],
   ['light', ':root.light', '#ffffff', 3],

@@ -14,7 +14,10 @@ import ImportIntro, { hasSeenImportIntro, markImportIntroSeen } from './componen
 import OfflineBar from './components/OfflineBar'
 import PullToRefresh from './components/PullToRefresh'
 import SwipePager from './components/SwipePager'
-import { applyAccent, ACCENTS } from './lib/theme'
+import {
+  applyAccent, applyDisplayPrefs, backgroundFor, readDisplayPrefs,
+  ACCENTS, HIGH_CONTRAST_KEY, PURE_BLACK_KEY, type DisplayPrefs,
+} from './lib/theme'
 import Dashboard from './pages/Dashboard'
 import Workouts from './pages/Workouts'
 import WorkoutDetail from './pages/WorkoutDetail'
@@ -80,13 +83,12 @@ function resolveTheme(mode: ThemeMode): 'dark' | 'light' {
   return mode
 }
 
-/** --bg in each theme, mirrored in mobile/android/.../values/colors.xml. */
-const THEME_BACKGROUND = { light: '#f4f6f9', dark: '#0a0b0e' } as const
-
-function applyTheme(mode: ThemeMode) {
+function applyTheme(mode: ThemeMode, prefs = readDisplayPrefs()) {
   const resolved = resolveTheme(mode)
   document.documentElement.className = resolved === 'light' ? 'light' : ''
-  const background = THEME_BACKGROUND[resolved]
+  // Before the background is read, since pure black changes what it is.
+  applyDisplayPrefs(prefs)
+  const background = backgroundFor(resolved, prefs.pureBlack)
   // Keep the phone's status bar matching the page background instead of the
   // accent colour, in both themes. The meta tag does this for the installed
   // PWA; the Android app needs the same thing said to the Activity, because
@@ -143,6 +145,7 @@ export default function App() {
   const [accent, setAccent] = useState(() => {
     return localStorage.getItem(ACCENT_KEY) || ACCENTS[0].value
   })
+  const [display, setDisplay] = useState<DisplayPrefs>(readDisplayPrefs)
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const [showImportIntro, setShowImportIntro] = useState(false)
@@ -153,16 +156,18 @@ export default function App() {
 
   // Theme
   useEffect(() => {
-    applyTheme(themeMode)
+    applyTheme(themeMode, display)
     localStorage.setItem(THEME_KEY, themeMode)
+    localStorage.setItem(PURE_BLACK_KEY, display.pureBlack ? '1' : '0')
+    localStorage.setItem(HIGH_CONTRAST_KEY, display.highContrast ? '1' : '0')
 
     if (themeMode === 'system') {
       const mq = window.matchMedia('(prefers-color-scheme: light)')
-      const handler = () => applyTheme('system')
+      const handler = () => applyTheme('system', display)
       mq.addEventListener('change', handler)
       return () => mq.removeEventListener('change', handler)
     }
-  }, [themeMode])
+  }, [themeMode, display])
 
   // Accent
   useEffect(() => {
@@ -829,6 +834,8 @@ export default function App() {
             onAccentChange={setAccent}
             themeMode={themeMode}
             onThemeChange={setThemeMode}
+            display={display}
+            onDisplayChange={setDisplay}
             onViewProfile={() => { if (user) openSection('users', String(user.id)) }}
           />
         ) : page === 'admin' ? (

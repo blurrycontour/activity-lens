@@ -1,5 +1,5 @@
 import { Check, Monitor, Moon, Sun } from 'lucide-react'
-import { ACCENTS, applyAccent } from '../../lib/theme'
+import { ACCENTS, applyAccent, type DisplayPrefs } from '../../lib/theme'
 import { useLocalStorage } from '../../lib/useLocalStorage'
 import { DEFAULT_HR_ZONE_CHART, HR_ZONE_CHART_KEY, type HRZoneChart } from '../../lib/dashboardConfig'
 import SettingsCard from '../../components/SettingsCard'
@@ -12,6 +12,8 @@ interface AppearanceProps {
   onAccentChange: (a: string) => void
   themeMode: ThemeMode
   onThemeChange: (m: ThemeMode) => void
+  display: DisplayPrefs
+  onDisplayChange: (d: DisplayPrefs) => void
 }
 
 /**
@@ -29,7 +31,7 @@ const THEMES: { id: ThemeMode; label: string; hint: string; icon: React.ReactNod
 ]
 
 /** Theme, accent colour and chart style. */
-export default function AppearanceSettings({ accent, onAccentChange, themeMode, onThemeChange }: AppearanceProps) {
+export default function AppearanceSettings({ accent, onAccentChange, themeMode, onThemeChange, display, onDisplayChange }: AppearanceProps) {
   const [hrZoneChart, setHrZoneChart] = useLocalStorage<HRZoneChart>(HR_ZONE_CHART_KEY, DEFAULT_HR_ZONE_CHART)
 
   function pick(value: string) {
@@ -58,6 +60,41 @@ export default function AppearanceSettings({ accent, onAccentChange, themeMode, 
             )
           })}
         </div>
+      </SettingsCard>
+
+      {/* Switches rather than two more entries in the list above, because they
+          compose with it: high contrast on light is the reading-outdoors case,
+          pure black on dark is the 6am one, and folding either into the theme
+          list would have cost the system-follows behaviour. */}
+      <SettingsCard title="Readability" description="Adjusts the surfaces and the text, not the colours.">
+        <label className="switch display-pref">
+          <input
+            type="checkbox"
+            checked={display.pureBlack}
+            onChange={e => onDisplayChange({ ...display, pureBlack: e.target.checked })}
+          />
+          <span className="switch-track" />
+          <span className="display-pref-body">
+            <span className="display-pref-label">Pure black</span>
+            <span className="display-pref-hint">
+              True black surfaces in dark mode. Saves power on an OLED screen and cuts glare in a dark room.
+            </span>
+          </span>
+        </label>
+        <label className="switch display-pref">
+          <input
+            type="checkbox"
+            checked={display.highContrast}
+            onChange={e => onDisplayChange({ ...display, highContrast: e.target.checked })}
+          />
+          <span className="switch-track" />
+          <span className="display-pref-body">
+            <span className="display-pref-label">High contrast</span>
+            <span className="display-pref-hint">
+              Stronger text and lines, in both themes. For reading the screen outdoors.
+            </span>
+          </span>
+        </label>
       </SettingsCard>
 
       <SettingsCard title="Accent colour" description="Used for highlights, active states and charts.">

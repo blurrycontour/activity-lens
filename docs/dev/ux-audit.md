@@ -208,7 +208,7 @@ app. The 17px InfoTip is the worst of them, and it is the only route to what a
 chart actually means. The fix is hit area via padding or a `::before` overlay, not
 visual size — these are correctly proportioned, just not tappable.
 
-### 18. Light mode's tertiary text fails WCAG AA · S · med
+### 18. Light mode's tertiary text fails WCAG AA · S · med · **✅ fixed**
 
 `--text-3: #9ca3af` on `--bg-2: #ffffff` is **2.5:1** — under even the 3:1 floor
 for large text — and it is the token behind every 11px micro-label, hint and
@@ -395,7 +395,7 @@ for achievement, sport colours for sport. Doing #41 and #14 together repairs
 five of the six accents in one pass, and neither is much code — it is the
 looking-at-every-screen afterwards that costs.
 
-### 43. Only the accent is themeable, and that is the wrong axis · M · med
+### 43. Only the accent is themeable, and that is the wrong axis · M · med · **✅ fixed**
 
 Dark and light each have exactly one background (`#0a0b0e` and `#f4f6f9`) and no
 way to change it. So the one thing a user can adjust is the hue of the

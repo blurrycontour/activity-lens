@@ -33,6 +33,12 @@ Media queries belong in `index.css`, never in a component.
 | Sports | `--run` `--ride` `--hike` `--swim` `--strength` `--other` |
 | Status | `--success` `--warning` `--danger` (+ `-dim`, `-border`) |
 
+Two switches sit *beside* the theme rather than inside it, as attributes on
+`:root` (`lib/theme.ts`): `data-pure-black` gives dark mode true-black surfaces,
+`data-high-contrast` strengthens text and lines in both. They compose with the
+theme and with each other — write new surfaces so they keep working, which
+mostly means using the tokens rather than a literal.
+
 Three rules that follow from this:
 
 - **The accent is the user's choice and carries no meaning.** Six accents

@@ -8,6 +8,7 @@ import ProfileSettings from './Profile'
 import SecuritySettings from './Security'
 import BodySettings from './Body'
 import AppearanceSettings from './Appearance'
+import type { DisplayPrefs } from '../../lib/theme'
 import DashboardSettings from './DashboardPrefs'
 import GoalsSettings from './Goals'
 import NotificationSettings from './Notifications'
@@ -26,6 +27,8 @@ interface SettingsProps {
   onAccentChange: (a: string) => void
   themeMode: ThemeMode
   onThemeChange: (m: ThemeMode) => void
+  display: DisplayPrefs
+  onDisplayChange: (d: DisplayPrefs) => void
   /** Opens the caller's own public profile, from the tagline card. */
   onViewProfile?: () => void
 }
@@ -37,7 +40,7 @@ interface SettingsProps {
  * is the one people already know from opening a workout, and desktop and mobile
  * share a single code path.
  */
-export default function Settings({ section, onOpen, onBack, accent, onAccentChange, themeMode, onThemeChange, onViewProfile }: SettingsProps) {
+export default function Settings({ section, onOpen, onBack, accent, onAccentChange, themeMode, onThemeChange, display, onDisplayChange, onViewProfile }: SettingsProps) {
   if (!section) return <SettingsHub onOpen={onOpen} />
 
   const meta = sectionMeta(section)
@@ -53,6 +56,8 @@ export default function Settings({ section, onOpen, onBack, accent, onAccentChan
           onAccentChange={onAccentChange}
           themeMode={themeMode}
           onThemeChange={onThemeChange}
+          display={display}
+          onDisplayChange={onDisplayChange}
         />
       )}
       {section === 'dashboard' && <DashboardSettings />}
