@@ -2213,18 +2213,6 @@ body[data-fab-hidden] .fab {
   border-radius: calc(var(--radius) * 1.5);
   background: color-mix(in srgb, var(--success) 12%, transparent);
 }
-.pb-mark {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  /* The sport's colour is on the icon itself; the disc behind it is neutral so
-     the mark reads against six accents rather than only against green. */
-  background: var(--bg-2);
-  flex-shrink: 0;
-}
 .pb-title {
   font-size: 13px;
   font-weight: 700;
@@ -5581,13 +5569,13 @@ body:has(.overlay) .dial { display: none; }
   column-gap: 8px;
   row-gap: 2px;
 }
-.goal-std-head > .goal-sport-disc { grid-row: 1 / 3; align-self: center; }
+.goal-std-head > .sport-disc { grid-row: 1 / 3; align-self: center; }
 
 /* The sport hue as a wash rather than a fill: the icon on top of it is the
    same colour at full strength, so the disc has to stay well behind it or the
    mark stops reading. Mixed with transparent, not with a surface token, so it
    sits correctly on the card in either theme. */
-.goal-sport-disc {
+.sport-disc {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -5595,8 +5583,8 @@ body:has(.overlay) .dial { display: none; }
   width: 36px;
   height: 36px;
   border-radius: 99px;
-  background: color-mix(in srgb, var(--goal-hue, var(--primary)) 13%, transparent);
-  border: 1px solid color-mix(in srgb, var(--goal-hue, var(--primary)) 26%, transparent);
+  background: color-mix(in srgb, var(--sport-hue, var(--primary)) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--sport-hue, var(--primary)) 26%, transparent);
 }
 /* The third column is as wide as the wider of the verdict and the badges;
    without this the narrower of the two would stretch to fill it and stop

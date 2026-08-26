@@ -10,7 +10,7 @@ import { TrendingUp, Zap, Flame, Clock, Mountain, Heart, Trophy, Target, Activit
 import SpeedDial from '../components/SpeedDial'
 import { PAGE_META } from '../components/Sidebar'
 import Confetti from '../components/Confetti'
-import GoalSportMark, { goalColor } from '../components/GoalSportMark'
+import SportMark, { sportColor } from '../components/SportMark'
 import { buzz } from '../lib/sessionFeedback'
 import { dayMonth, fromDateKey, longDate } from '../lib/date'
 import { useLocalStorage } from '../lib/useLocalStorage'
@@ -270,7 +270,7 @@ function GoalBar({ p, needle }: { p: GoalProgress; needle: boolean }) {
       aria-valuenow={Math.round(p.current * 10) / 10}
       aria-label={describeGoal(p.goal)}
     >
-      <span className="goal-pace-fill" style={{ width: `${pct * 100}%`, background: goalColor(p.goal.type) }} />
+      <span className="goal-pace-fill" style={{ width: `${pct * 100}%`, background: sportColor(p.goal.type) }} />
       {showNeedle && (
         <span
           className="goal-pace-needle"
@@ -308,7 +308,7 @@ function GoalHistory({ p, showPeriods, compact }: {
           <span className="goal-history-cell" key={h.key}>
             <span
               className={`goal-history-bar${h.met ? ' met' : ''}${over ? ' over' : ''}`}
-              style={{ '--goal-hue': goalColor(p.goal.type) } as React.CSSProperties}
+              style={{ '--goal-hue': sportColor(p.goal.type) } as React.CSSProperties}
               title={`From ${h.key}: ${formatGoalAmount(p.goal, h.value)}${
                 p.goal.metric === 'count' ? (h.value === 1 ? ' activity' : ' activities') : ''
               }${over ? ' — target beaten by a quarter or more' : ''}`}
@@ -366,14 +366,14 @@ function GoalTileStandard({ p, opts, index = 0 }: { p: GoalProgress; opts: GoalV
           grows into its own row rather than stretching the line the verdict
           is on, so nothing beside it moves. */}
       <div className="goal-std-head">
-        <GoalSportMark type={p.goal.type} size={17} disc />
+        <SportMark type={p.goal.type} size={17} disc />
         <span className="goal-std-desc" title={goalTitle(p.goal)}>
           {describeGoal(p.goal)} · {daysLeft(p)}d left
         </span>
         <span className={`goal-verdict ${v.tone}`}>{v.text}</span>
 
         <span className="goal-std-fig">
-          <span className="goal-std-cur mono" style={{ color: goalColor(p.goal.type) }}>
+          <span className="goal-std-cur mono" style={{ color: sportColor(p.goal.type) }}>
             {formatGoalAmount(p.goal, p.current, true)}
           </span>
           <span className="goal-std-slash mono" aria-hidden="true">/</span>
@@ -447,7 +447,7 @@ function GoalToday({ progress, opts }: { progress: GoalProgress[]; opts: GoalVie
           const v = paceVerdict(p)
           return (
             <div className="goal-today-item" key={p.goal.id} title={goalTitle(p.goal)}>
-              <GoalSportMark type={p.goal.type} size={13} />
+              <SportMark type={p.goal.type} size={13} />
               <span className="goal-today-name">{describeGoal(p.goal)}</span>
               <GoalBadges p={p} compact index={i} />
               <span className={`goal-verdict ${v.tone}`}>{v.text}</span>
@@ -472,7 +472,7 @@ function GoalRings({ progress, opts }: { progress: GoalProgress[]; opts: GoalVie
         const pct = p.goal.target > 0 ? Math.min(1, p.current / p.goal.target) : 0
         const R = 46
         const C = 2 * Math.PI * R
-        const colour = goalColor(p.goal.type)
+        const colour = sportColor(p.goal.type)
         // The pace tick, same reference the bar styles draw as a needle.
         const angle = (p.elapsed * 360) - 90
         const rad = (angle * Math.PI) / 180
@@ -510,7 +510,7 @@ function GoalRings({ progress, opts }: { progress: GoalProgress[]; opts: GoalVie
                 row they were optional height, so one goal with a streak and one
                 without pushed their histories out of line with each other. */}
             <span className="goal-ring-cap" title={goalTitle(p.goal)}>
-              <GoalSportMark type={p.goal.type} size={11} />
+              <SportMark type={p.goal.type} size={11} />
               <span className="goal-ring-name">{p.goal.type || 'Any'}</span>
               {p.streak > 0 && (
                 <span
@@ -547,7 +547,7 @@ function GoalLedger({ progress, opts }: { progress: GoalProgress[]; opts: GoalVi
         return (
           <div className="goal-ledger-row" key={p.goal.id}>
             <span className="goal-ledger-key" title={goalTitle(p.goal)}>
-              <GoalSportMark type={p.goal.type} size={13} />
+              <SportMark type={p.goal.type} size={13} />
               <span className="goal-ledger-name">{describeGoal(p.goal)}</span>
             </span>
             {/* One cluster packed against the right edge rather than three
@@ -871,13 +871,13 @@ export default function Dashboard({ onSelect, onResumeSession, onImport, onCreat
                     onClick={() => onSelect(w)}
                     aria-label={`${w.name}: ${records.map(r => `${r.label} ${r.value}`).join(', ')}`}
                   >
-                    <span className="pb-mark">
-                      {/* The sport's own mark, in the sport's own colour — it
-                          says what the subtitle used to spell out, and a trophy
-                          on a card that already says "personal best" was the
-                          least informative glyph on the page. */}
-                      <TypeIcon type={w.type} size={20} />
-                    </span>
+                    {/* The same disc the goal tiles use. The sport's own mark
+                        in the sport's own colour says what the subtitle used to
+                        spell out, and a trophy on a card that already reads
+                        "personal best" was the least informative glyph on the
+                        page — but drawn bare it was the one sport icon on the
+                        dashboard without a disc under it. */}
+                    <SportMark type={w.type} size={20} disc />
                     <div className="pb-head">
                       <div className="pb-title">
                         {records.length === 1 ? 'New personal best' : `${records.length} new personal bests`}
