@@ -120,6 +120,57 @@ func (s *Server) notifySocial(r *http.Request, actor auth.User, subj workout.Sub
 	}
 }
 
+/*
+notifyPhotoAdded tells the people a workout was shared with that its owner put
+a photo on it.
+
+Direct recipients only, never "everyone signed in here". A public workout has
+readers rather than an audience: nobody chose to follow it, and a photo added
+to one is not news anybody asked for. A workout that is only public therefore
+notifies nobody, which is what makes the rule stateable — you hear about the
+workouts somebody sent to you.
+
+KindWorkoutSocial rather than a kind of its own. From the reader's side this is
+the same event as a comment appearing — something happened on a workout I can
+see — and it wants the same single switch in Settings rather than a fifteenth
+row for something that happens once a month.
+
+Deduped per workout per day, because adding photos is a batch action: the
+gallery uploads sequentially and a set of eight would otherwise be eight
+notifications saying the same sentence. The first one fires and the rest are
+absorbed; the gallery's own count is what says how many arrived. Tomorrow's
+photo is a new day and notifies again.
+
+Deletion is deliberately silent. Removing a photo is the owner tidying up
+after themselves, and there is nothing at the far end of that notification
+worth opening.
+*/
+func (s *Server) notifyPhotoAdded(r *http.Request, actor auth.User, wk *workout.Workout) {
+	recipients, err := s.workout.ShareRecipients(r.Context(), actor.ID, wk.ID)
+	if err != nil {
+		// Best effort: the photo is stored and the upload has succeeded.
+		slog.Warn("could not read share recipients for photo notification", "workout_id", wk.ID, "error", err)
+		return
+	}
+	day := time.Now().UTC().Format("2006-01-02")
+	for _, id := range recipients {
+		if id == actor.ID {
+			continue
+		}
+		s.notify.Notify(r.Context(), notify.Event{
+			UserID: id,
+			Kind:   notify.KindWorkoutSocial,
+			Title:  fmt.Sprintf("%s added a photo", actorName(actor)),
+			Body:   wk.Name,
+			// Straight to the gallery: landing on the charts would leave the
+			// reader to find the thing they were told about.
+			Link:      "/workouts/" + wk.ID + "?tab=gallery",
+			Icon:      effectiveAvatar(actor),
+			DedupeKey: fmt.Sprintf("photo:%s:%s", wk.ID, day),
+		})
+	}
+}
+
 // actorName is how a person is named in a notification about what they did.
 func actorName(u auth.User) string {
 	if u.DisplayName != "" {

@@ -41,10 +41,11 @@ const (
 	// which is why it is rate limited hard and stops entirely when the training
 	// does. See checkNoGoals.
 	KindGoalNoneSet Kind = "goal_none_set"
-	// KindWorkoutSocial: someone commented on, or reacted to, a workout you
-	// own or are part of the conversation on. One kind for both, because they
-	// are one feature and nobody wants "reactions" and "comments" as separate
-	// switches for a page they either follow or do not.
+	// KindWorkoutSocial: something happened on a workout you can see — a
+	// comment, a reaction, or a photo added to one shared with you. One kind
+	// for all three, because from the reader's side they are one event ("there
+	// is something new on that workout") and nobody wants three switches for a
+	// page they either follow or do not.
 	KindWorkoutSocial Kind = "workout_social"
 	// KindPing: another member nudged you from your profile — "let's go for a
 	// run", or that they are feeling like a couch potato.
