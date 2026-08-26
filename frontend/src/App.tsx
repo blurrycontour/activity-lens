@@ -49,7 +49,7 @@ import { PreferencesProvider } from './context/PreferencesContext'
 import { ActiveSessionProvider } from './context/ActiveSessionContext'
 import {
   adjacentPage, navHighlight, parseLocation, pathForPage,
-  type AdminSection, type Page, type SettingsSection,
+  type AdminSection, type Page, type SettingsSection, canAccessPage,
 } from './lib/nav'
 import { useSwipeNav } from './lib/useSwipeNav'
 import { useHideOnScroll } from './lib/useHideOnScroll'
@@ -390,6 +390,18 @@ export default function App() {
     window.history.pushState(null, '', pathForPage(p))
   }, [])
 
+  // A hidden menu item is not a route guard. A non-admin can still type an
+  // Admin URL or reach one through browser history, so remove that location
+  // before its component is ever allowed to mount.
+  useEffect(() => {
+    if (loading || !user || canAccessPage(page, user.isAdmin)) return
+    setPage('dashboard')
+    setSection(null)
+    setDetail(null)
+    setSelectedWorkout(null)
+    window.history.replaceState(null, '', pathForPage('dashboard'))
+  }, [loading, page, user])
+
   /**
    * Drills into a category of the current hub page, or back out of one.
    *
@@ -692,6 +704,10 @@ export default function App() {
         <Login />
       </>
     )
+  }
+
+  if (!canAccessPage(page, user.isAdmin)) {
+    return null
   }
 
   return (

@@ -1,5 +1,5 @@
+import { ADMIN_SECTIONS, BOTTOM_BAR_PAGES, DESKTOP_PAGES, MOBILE_PAGES, MORE_PAGES, SETTINGS_SECTIONS, canAccessPage, parseLocation, pathForPage } from '../nav'
 import { describe, expect, it } from 'vitest'
-import { ADMIN_SECTIONS, BOTTOM_BAR_PAGES, DESKTOP_PAGES, MOBILE_PAGES, MORE_PAGES, SETTINGS_SECTIONS, parseLocation, pathForPage } from '../nav'
 
 describe('pathForPage', () => {
   it('maps the dashboard to the root', () => {
@@ -14,6 +14,14 @@ describe('pathForPage', () => {
   it('omits the category when there is none', () => {
     expect(pathForPage('settings', null)).toBe('/settings')
     expect(pathForPage('settings')).toBe('/settings')
+  })
+})
+
+describe('page access', () => {
+  it('reserves every Admin route for administrators', () => {
+    expect(canAccessPage('admin', false)).toBe(false)
+    expect(canAccessPage('admin', true)).toBe(true)
+    expect(canAccessPage('settings', false)).toBe(true)
   })
 })
 

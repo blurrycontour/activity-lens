@@ -56,6 +56,10 @@ export const MORE_PAGES: Page[] = ['analysis', 'consistency', 'map', 'equipment'
 
 /** Every page that owns a route, including the ones reached from the user menu. */
 export const PAGES: Page[] = [...DESKTOP_PAGES, 'settings', 'admin', 'users']
+/** Whether this account may render a page reached directly or through history. */
+export function canAccessPage(page: Page, isAdmin: boolean): boolean {
+  return page !== 'admin' || isAdmin
+}
 
 /**
  * Settings and admin are hubs: each category is a page of its own at
