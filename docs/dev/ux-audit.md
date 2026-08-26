@@ -74,5 +74,8 @@ Things that look like gaps and are not, so they are not re-proposed:
   sport on a time axis. That was built and reverted: splitting by sport is
   defensible on the data and worse to read, because two or three short lines
   with gaps between them say less about direction than one continuous one.
+- **The session runner is styled like every other page.** A larger "gym view"
+  was built and reverted; the type was already legible at arm's length, and a
+  second mode to maintain bought nothing anyone could see.
 - **The doubled API requests in development** are React's StrictMode
   double-invoking effects. A production build issues each once.
