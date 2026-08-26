@@ -622,7 +622,7 @@ function PlanRow({ plan, selecting, picked, onOpen, onStart, onToggle, onLongPre
         <span className="plan-card-head">
           {selecting
             ? <span className="plan-pick" aria-hidden>{picked && <CheckCheck size={14} />}</span>
-            : <span className="plan-card-mark"><ClipboardList size={15} /></span>}
+            : <span className="plan-card-mark"><ClipboardList size={18} /></span>}
         </span>
         <div className="plan-card-main">
           <strong className="plan-card-name">

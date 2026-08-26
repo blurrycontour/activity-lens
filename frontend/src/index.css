@@ -69,7 +69,14 @@
      strength workout" about a row that is neither strength nor a workout.
      Kept apart from each other too — a plan is the intent, a session is the
      record, and the feed shows both at once. */
-  --plan: #c4b5fd;
+  /* A violet with chroma in it. #c4b5fd was the same hue at 39 chroma against
+     this one's 64, which on a near-black page reads as bright-but-drained —
+     the mark looked faded rather than coloured. Still 24 ΔE clear of the
+     nearest accent, which is what the palette test holds it to.
+     --session cannot follow it: every more saturated colour at its hue lands
+     within 15 ΔE of the Rose accent, which is why it is pale in the first
+     place. Moving it would mean moving its hue. */
+  --plan: #9f7aea;
   --session: #fca5a5;
   /* Status colours. Separate from the activity-type palette above even where
      the hex matches (--hike is also amber): those track a sport, these track
@@ -6726,23 +6733,28 @@ body:has(.overlay) .dial { display: none; }
   flex: 0 0 auto;
 }
 .plan-card-mark {
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
   display: inline-grid;
   place-items: center;
   flex: 0 0 auto;
   color: var(--plan);
-  background: color-mix(in srgb, var(--plan) 14%, transparent);
+  /* A wash and a ring, the same pair the sport disc uses. 14% of a colour on a
+     near-black page is barely a tile at all, so the glyph was carrying the mark
+     on its own — hence "washed": there was nothing behind it. */
+  background: color-mix(in srgb, var(--plan) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--plan) 30%, transparent);
 }
 .plan-card-mark.session {
   color: var(--session);
-  background: color-mix(in srgb, var(--session) 14%, transparent);
+  background: color-mix(in srgb, var(--session) 16%, transparent);
+  border-color: color-mix(in srgb, var(--session) 30%, transparent);
 }
 /* In a row the mark is smaller and the head is just the mark: the name sits
    beside it rather than under it, and a 30px tile would push the row's height
    up for nothing. */
-.plan-list .plan-card-mark { width: 26px; height: 26px; border-radius: 8px; }
+.plan-list .plan-card-mark { width: 30px; height: 30px; border-radius: 9px; }
 .plan-card {
   display: flex;
   align-items: center;
