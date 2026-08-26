@@ -183,6 +183,7 @@ export default function Discover({ onOpenUser, onSelectWorkout, onSelectPlan, on
                         {u.self && <span className="admin-user-you">You</span>}
                       </span>
                       <span className="discover-handle">@{u.username}</span>
+                        {u.tagline && <span className="discover-tagline">{u.tagline}</span>}
                       {/* Never on your own row — the server does not send it
                           there, because "you, active now" is the one entry on
                           this page that tells the reader nothing. Absent, not
@@ -195,7 +196,6 @@ export default function Discover({ onOpenUser, onSelectWorkout, onSelectPlan, on
                           {lastActive(u.lastSeen)}
                         </span>
                       )}
-                      {u.tagline && <span className="discover-tagline">{u.tagline}</span>}
                     </span>
                   </button>
                 ))}
