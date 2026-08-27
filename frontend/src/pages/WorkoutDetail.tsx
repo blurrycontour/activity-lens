@@ -308,7 +308,7 @@ function smoothTimeline(data: Array<{ t: number; value: number }>, radius = 3) {
 
 
 function PlaybackBar({
-  playing, currentTime, duration, onPlayPause, onReset, onEnd, onScrub,
+  playing, currentTime, duration, onPlayPause, onReset, onEnd, onScrub, compact,
 }: {
   playing: boolean
   currentTime: number
@@ -317,9 +317,20 @@ function PlaybackBar({
   onReset: () => void
   onEnd: () => void
   onScrub: (t: number) => void
+  /**
+   * The docked phone variant: one line, and the elapsed time alone.
+   *
+   * Everything here is about vertical space, because docked it sits above the
+   * bottom bar and every pixel is one the charts do not get. "4:27:37 /
+   * 4:27:37" is seventeen characters, which on a phone forces the scrub bar
+   * onto a second row — so the total goes, and the end of the bar says it
+   * instead. Nothing is lost to a screen reader: aria-valuetext still
+   * announces both.
+   */
+  compact?: boolean
 }) {
   return (
-    <div className="playback-bar">
+    <div className={`playback-bar${compact ? ' compact' : ''}`}>
       <div className="playback-controls">
         <button className="btn-icon" onClick={onPlayPause} title={playing ? 'Pause' : 'Play'} aria-label={playing ? 'Pause' : 'Play'}>
           {playing ? <PauseIcon size={16} /> : <Play size={16} />}
@@ -344,8 +355,8 @@ function PlaybackBar({
         aria-valuetext={`${fmtDuration(currentTime)} of ${fmtDuration(duration)}`}
         style={{ flex: 1, accentColor: 'var(--primary)' }}
       />
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)', minWidth: 88, textAlign: 'right' }}>
-        {fmtDuration(currentTime)} / {fmtDuration(duration)}
+      <span className="playback-clock">
+        {compact ? fmtDuration(currentTime) : `${fmtDuration(currentTime)} / ${fmtDuration(duration)}`}
       </span>
     </div>
   )
@@ -917,24 +928,6 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
   // map marker rides it without React involved. `currentTime` is a throttled
   // copy for everything that costs a render — see lib/playhead.
   const [playing, setPlaying] = useState(false)
-  /**
-   * Whether the floating copy of the playback bar is on screen.
-   *
-   * The real one sits under the map, which on a phone means that wanting to
-   * play a chart from further down the page is a scroll up, a tap, and a scroll
-   * back down before the playhead gets anywhere interesting. So a copy follows
-   * the reader through the charts.
-   *
-   * It shows exactly while the inline bar is out of view *and* the sections
-   * past the charts have not arrived — Conditions and Equipment drive nothing,
-   * so a transport control over them is a control with nothing to control.
-   * Both edges are answered by watching the two elements themselves rather
-   * than by measuring scroll offsets, which keeps it correct as the page above
-   * changes height (a gallery loading, a map expanding, a chart toggled off).
-   */
-  const [showFloatingPlayer, setShowFloatingPlayer] = useState(false)
-  const playbackCardRef = useRef<HTMLDivElement>(null)
-  const afterChartsRef = useRef<HTMLDivElement>(null)
   const playhead = usePlayhead(w.duration)
   const currentTime = useThrottledPlayhead(playhead, playing)
 
@@ -1089,49 +1082,6 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
     return () => cancelAnimationFrame(raf)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing])
-
-  /**
-   * Drives showFloatingPlayer from where the reader is on the page.
-   *
-   * One observer over two sentinels: the inline playback card, and an empty
-   * marker just above Conditions. The bar is wanted in the gap between them —
-   * past the real control, still among the charts it drives.
-   *
-   * Phone only. On a desktop the map and the charts are side by side, so the
-   * inline bar is almost always in view and a second copy would be clutter
-   * answering a problem that layout does not have.
-   *
-   * `isIntersecting` is recorded per sentinel rather than derived from one
-   * callback's entries, because an observer reports only what changed: a
-   * callback that assumed it was told about both would flip the bar off every
-   * time one of them crossed alone.
-   */
-  useEffect(() => {
-    if (!isMobile || !playable) { setShowFloatingPlayer(false); return }
-    const inline = playbackCardRef.current
-    const tail = afterChartsRef.current
-    if (!inline || !tail) return
-    // "Passed" rather than "not visible", which is the distinction that
-    // matters: an element below the fold is also not visible, and treating
-    // that as passed showed the bar at the top of the page — before the reader
-    // had reached the map, let alone the charts under it.
-    let inlinePassed = false
-    let tailReached = false
-    const obs = new IntersectionObserver(entries => {
-      for (const e of entries) {
-        // Above the viewport, so scrolled past. Compared against the root's
-        // own top rather than zero, because the page scrolls inside the app
-        // shell and not the document.
-        const above = e.boundingClientRect.bottom <= (e.rootBounds?.top ?? 0)
-        if (e.target === inline) inlinePassed = !e.isIntersecting && above
-        else tailReached = e.isIntersecting || above
-      }
-      setShowFloatingPlayer(inlinePassed && !tailReached)
-    })
-    obs.observe(inline)
-    obs.observe(tail)
-    return () => obs.disconnect()
-  }, [isMobile, playable])
 
   function handlePlayPause() {
     if (playing) {
@@ -1824,7 +1774,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
         )}
       />
 
-      <div className="page-content">
+      <div className={`page-content${playable && isMobile ? ' with-dock' : ''}`}>
         {originalErr && (
           <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', marginBottom: 16, color: 'var(--danger)', fontSize: 13 }}>
             <AlertTriangle size={15} style={{ flexShrink: 0 }} />
@@ -1973,8 +1923,8 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
 
         {/* Playback controls: drives the map marker + chart cursors below.
             Absent entirely when there is neither — see `playable`. */}
-        {playable && (
-          <div ref={playbackCardRef} className="card playback-card" style={{ marginBottom: 16 }}>
+        {playable && !isMobile && (
+          <div className="card playback-card" style={{ marginBottom: 16 }}>
             <PlaybackBar
               playing={playing}
               currentTime={currentTime}
@@ -2146,11 +2096,6 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
           ))}
         </div>
 
-        {/* Where the charts end. The floating playback bar hides from here on:
-            nothing below drives off the playhead, so a transport control over
-            it would be a control with nothing to control. */}
-        <div ref={afterChartsRef} aria-hidden />
-
         {/* Conditions. Rendered in every state, including "you have this
             switched off" — see WeatherCard on why absence needs a voice. */}
         <WeatherCard
@@ -2311,20 +2256,24 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
       )}
 
       {/*
-        * The playback bar again, riding above the bottom bar while the reader
-        * is among the charts. Rendered rather than portalled: this page is
-        * already inside the swipe pager, and the bar is fixed to the viewport,
-        * which is enough — it is not an overlay competing with dialogs.
+        * The transport, docked above the bottom bar for the whole page.
         *
-        * Kept mounted while playable so that showing and hiding is a
-        * transition on a live element rather than a mount, which is what makes
-        * it slide instead of appear. `inert` and the pointer-events in the
-        * stylesheet keep the hidden copy out of the way of taps and of the tab
-        * order, so there are never two "Play" buttons to find.
+        * It used to be a card beside the map that a copy tried to follow you
+        * down the page, appearing and disappearing on scroll. That was fiddly
+        * to get right and worse to use — a control that comes and goes is one
+        * you have to hunt for — so on a phone there is now exactly one of
+        * them and it never moves. The map keeps the inline card on a desktop,
+        * where the charts sit beside it and it is always in view anyway.
+        *
+        * Fixed rather than portalled: this page is inside the swipe pager, but
+        * the bar is fixed to the viewport and is not an overlay competing with
+        * dialogs. `.page-content` reserves the height so the last card is not
+        * left underneath it.
         */}
       {playable && isMobile && (
-        <div className={`floating-playback${showFloatingPlayer ? ' on' : ''}`} inert={!showFloatingPlayer}>
+        <div className="playback-dock">
           <PlaybackBar
+            compact
             playing={playing}
             currentTime={currentTime}
             duration={w.duration}

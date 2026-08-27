@@ -4200,59 +4200,57 @@ body:has(.overlay) .dial { display: none; }
 .playback-card { container-type: inline-size; }
 
 /*
-  The playback bar again, following the reader down through the charts.
+  The playback transport, docked above the bottom bar on a phone.
 
-  The real one sits under the map, so on a phone playing a chart from further
-  down the page meant scrolling up, tapping, and scrolling back before the
-  playhead reached anything worth watching. This copy is fixed above the bottom
-  bar and shows only between the inline bar leaving the screen and the sections
-  past the charts arriving — WorkoutDetail owns that decision.
+  It used to be a card beside the map with a copy that appeared and vanished on
+  scroll. A control that comes and goes is one you have to hunt for, so there is
+  now exactly one of them and it never moves; the inline card stays on desktop,
+  where the charts sit beside the map and it is always in view.
 
-  Always mounted, only moved. Transitioning an element that is already there is
-  what makes it slide; mounting it on scroll would pop. Hidden it is also
-  inert, so there are never two Play buttons in the tab order.
-
-  Same easing pair as the FAB, and for the same reason: leaving should be
-  quicker and more decisive than arriving, so a bar sliding away never reads as
-  hesitation. The variable is swapped rather than the whole transition, because
-  a second `transition` declaration replaces the first rather than adding to it.
+  Sleek on purpose: every pixel of height here is one the charts do not get.
+  One row — transport, scrub bar, clock — and the clock shows the elapsed time
+  alone, because "4:27:37 / 4:27:37" forces the bar onto a second row on a
+  phone. The end of the bar is what says how long the workout is.
 */
-.floating-playback {
-  --fp-ease: cubic-bezier(1, 0, 0.68, 0.28);
+.playback-dock {
   position: fixed;
   z-index: var(--z-chrome);
-  left: max(12px, var(--safe-left));
-  right: max(12px, var(--safe-right));
-  bottom: calc(12px + var(--bottombar-h));
-  padding: 8px 12px;
-  border-radius: calc(var(--radius) * 1.5);
-  border: 1px solid var(--border-strong);
-  /* Opaque enough to read over a chart, and blurred so it still reads as
-     floating above one rather than as a band pasted across it. */
-  background: color-mix(in srgb, var(--bg-2) 92%, transparent);
+  left: 0;
+  right: 0;
+  bottom: var(--bottombar-h);
+  padding: 6px max(10px, var(--safe-left)) 6px max(10px, var(--safe-right));
+  border-top: 1px solid var(--border);
+  /* Opaque enough to read a chart through it as a surface rather than a haze,
+     and blurred so it reads as floating above the page rather than as a band
+     pasted across it. */
+  background: color-mix(in srgb, var(--bg-2) 94%, transparent);
   backdrop-filter: blur(12px);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
-  transform: translateY(calc(100% + 12px + var(--bottombar-h)));
-  opacity: 0;
-  pointer-events: none;
-  transition:
-    transform 0.24s var(--fp-ease),
-    opacity 0.24s var(--fp-ease);
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.35);
 }
-.floating-playback.on {
-  --fp-ease: cubic-bezier(0.32, 0.72, 0, 1);
-  transform: translateY(0);
-  opacity: 1;
-  pointer-events: auto;
-}
-@media (prefers-reduced-motion: reduce) {
-  .floating-playback { transition: opacity 0.24s linear; transform: none; }
-}
-/* Desktop lays the map and the charts side by side, so the inline bar is
-   almost always in view. WorkoutDetail does not render this there at all;
-   the rule is here so the intent survives someone changing that. */
-@media (min-width: 769px) {
-  .floating-playback { display: none; }
+/* Room to scroll past the dock, so the last card is reachable rather than
+   sitting underneath it. Mirrors what .with-fab does for the floating button. */
+.page-content.with-dock { padding-bottom: 68px; }
+
+/* One line, always. The container query below turns the roomy variant into two
+   rows when a card gets narrow; the docked one must never do that, because its
+   height is fixed furniture and a second row would cover a chart. */
+.playback-bar.compact { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
+.playback-bar.compact .playback-controls { gap: 2px; flex-shrink: 0; }
+.playback-bar.compact .btn-icon { width: 32px; height: 32px; }
+.playback-bar.compact input[type="range"] { min-width: 0; }
+/* Sized for "4:27:37" and no wider — a workout of hours is what sets this, and
+   a shorter one simply leaves the column part-filled rather than moving the
+   bar's end every time the clock ticks past a digit. */
+.playback-bar.compact .playback-clock { min-width: 56px; }
+
+.playback-clock {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-3);
+  min-width: 88px;
+  text-align: right;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
 }
 @container (max-width: 460px) {
   .playback-bar { display: grid; grid-template-columns: auto 1fr; gap: 8px; }
