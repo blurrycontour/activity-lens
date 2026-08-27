@@ -4,6 +4,7 @@ import PageHeader from '../../components/PageHeader'
 import MenuButton from '../../components/MenuButton'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import ShareDialog from '../../components/ShareDialog'
+import { useShareState } from '../../lib/useShareState'
 import NotesAndSocial from '../../components/NotesAndSocial'
 import ShareBadge from '../../components/ShareBadge'
 import UserAvatar, { userLabel } from '../../components/UserAvatar'
@@ -51,7 +52,10 @@ export default function PlanView({ plan, onBack, onEdit, onRename, onStart, onDe
   const isOwner = plan.isOwner !== false
   // Whether anyone else can see this, and so whether there is a conversation
   // to be had about it. A viewer is proof of it by being here at all.
-  const shared = !isOwner || plan.visibility === 'public' || (plan.sharedWithCount ?? 0) > 0
+  const [shared, onShareChange] = useShareState(
+    plan.id,
+    !isOwner || plan.visibility === 'public' || (plan.sharedWithCount ?? 0) > 0,
+  )
 
   const days = plan.days ?? []
   const day: PlanDay | undefined = days[active]
@@ -305,6 +309,9 @@ export default function PlanView({ plan, onBack, onEdit, onRename, onStart, onDe
             meta: `${days.length} day${days.length === 1 ? '' : 's'}`,
           }}
           onClose={() => setSharing(false)}
+          /* So the Social tab appears the moment this is shared — see
+             useShareState. */
+          onChange={onShareChange}
         />
       )}
     </>

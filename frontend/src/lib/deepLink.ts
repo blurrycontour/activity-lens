@@ -61,6 +61,33 @@ export function clearDeepLink() {
   window.history.replaceState(window.history.state, '', url.pathname + url.search)
 }
 
+/**
+ * The deep link, but only when it is addressed to `subjectId`.
+ *
+ * Every page that consumes a deep link listens on the window, so when a
+ * notification arrives for a *different* workout every mounted detail page
+ * hears about it. The one that was already open would read the link, act on
+ * it, and — worst of all — clear it, so the page the link was actually for
+ * mounted a moment later to find an empty URL and stayed on the charts. That
+ * is why tapping a notification while a different workout was open opened the
+ * right workout and then did nothing.
+ *
+ * So a page asks for its own link and gets nothing when the URL names someone
+ * else's. The id is matched against the last path segment, which is where all
+ * three subjects keep it: /workouts/{id}, /discover/plan/{id},
+ * /discover/session/{id}.
+ */
+export function deepLinkFor(subjectId: string, href: string = window.location.href): DeepLink {
+  let url: URL
+  try {
+    url = new URL(href, 'http://localhost')
+  } catch {
+    return NONE
+  }
+  const last = url.pathname.split('/').filter(Boolean).pop()
+  return last === subjectId ? readDeepLink(href) : NONE
+}
+
 /** The link a notification carries to one comment on a workout. */
 export function commentLink(workoutId: string, commentId: string): string {
   return `/workouts/${workoutId}?tab=social#comment=${commentId}`

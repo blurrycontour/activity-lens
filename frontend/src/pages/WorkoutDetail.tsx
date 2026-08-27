@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LOCATION_EVENT } from '../App'
-import { clearDeepLink, readDeepLink } from '../lib/deepLink'
+import { clearDeepLink, deepLinkFor } from '../lib/deepLink'
 import { createPortal } from 'react-dom'
 import { type RecalcParts, type Workout, type WorkoutType, fmtClock, fmtDuration, fmtDist, fmtPace, TYPE_COLOR } from '../data/workouts'
 import TypeIcon from '../components/TypeIcon'
@@ -967,7 +967,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
    * not there, and landing on Gallery every time would fetch photos for someone
    * who opened the page to read the charts.
    */
-  const [detailTab, setDetailTab] = useState<DetailTab>(() => askedTab(readDeepLink().tab) ?? 'notes')
+  const [detailTab, setDetailTab] = useState<DetailTab>(() => askedTab(deepLinkFor(w0.id).tab) ?? 'notes')
   /**
    * The comment a notification pointed at, until the Social panel has found it.
    *
@@ -976,7 +976,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
    * were on, not the comment you were once sent to — while the panel may not
    * have loaded its thread yet.
    */
-  const [focusComment, setFocusComment] = useState<string | null>(() => readDeepLink().commentId)
+  const [focusComment, setFocusComment] = useState<string | null>(() => deepLinkFor(w0.id).commentId)
   /*
    * What is behind Gallery and Social, so the strip can say so before either
    * is opened. Both panels are lazy and fetch nothing until their tab is
@@ -1038,7 +1038,10 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
    */
   useEffect(() => {
     function follow() {
-      const { tab, commentId } = readDeepLink()
+      // Scoped to this workout. Every mounted detail page hears this event,
+      // and a page that reads a link meant for another one also clears it —
+      // which is what left the page the link was for with nothing to act on.
+      const { tab, commentId } = deepLinkFor(w.id)
       if (!tab && !commentId) return
       const wanted = askedTab(tab)
       if (wanted) setDetailTab(wanted)

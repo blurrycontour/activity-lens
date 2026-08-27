@@ -4,6 +4,7 @@ import Confetti from '../../components/Confetti'
 import MenuButton from '../../components/MenuButton'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import ShareDialog from '../../components/ShareDialog'
+import { useShareState } from '../../lib/useShareState'
 import NotesAndSocial from '../../components/NotesAndSocial'
 import ShareBadge from '../../components/ShareBadge'
 import UserAvatar, { userLabel } from '../../components/UserAvatar'
@@ -66,7 +67,10 @@ export default function FinishedSession({ session, onBack, onOpenUser, onDeleted
   const isOwner = session.isOwner !== false
   // Whether anyone else can see this, and so whether there is a conversation
   // to be had about it. A viewer is proof of it by being here at all.
-  const shared = !isOwner || session.visibility === 'public' || (session.sharedWithCount ?? 0) > 0
+  const [shared, onShareChange] = useShareState(
+    session.id,
+    !isOwner || session.visibility === 'public' || (session.sharedWithCount ?? 0) > 0,
+  )
   const [sharing, setSharing] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -233,6 +237,9 @@ export default function FinishedSession({ session, onBack, onOpenUser, onDeleted
             meta: `${session.planName} · ${sessionWhen(session.startedAt)}`,
           }}
           onClose={() => setSharing(false)}
+          /* So the Social tab appears the moment this is shared — see
+             useShareState. */
+          onChange={onShareChange}
         />
       )}
     </>
