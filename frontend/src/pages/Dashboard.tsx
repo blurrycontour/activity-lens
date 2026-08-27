@@ -867,7 +867,9 @@ export default function Dashboard({ onSelect, onResumeSession, onImport, onCreat
                 {bestsByWorkout.map(({ workout: w, records }) => (
                   <button
                     key={w.id}
-                    className="pb-banner"
+                    /* One record sits beside the sentence; two or more go
+                       under it, because a row of them does not fit a phone. */
+                    className={`pb-banner${records.length === 1 ? ' one' : ''}`}
                     onClick={() => onSelect(w)}
                     aria-label={`${w.name}: ${records.map(r => `${r.label} ${r.value}`).join(', ')}`}
                   >

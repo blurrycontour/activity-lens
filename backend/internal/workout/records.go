@@ -133,7 +133,7 @@ func bestsFor(w *Workout, all []Workout) []Record {
 	if ef := efficiency(w); ef > 0 {
 		rated := filter(peers, func(p *Workout) bool { return efficiency(p) > 0 })
 		if len(rated) >= MinSameType && bestBy(rated, func(p *Workout) bool { return ef < efficiency(p) }) {
-			add(RecordEfficiency, "Best "+sport+" efficiency", fmt.Sprintf("%.1f bpm per km/h", ef))
+			add(RecordEfficiency, "Best "+sport+" efficiency", fmt.Sprintf("%.1f bpm/kph", ef))
 		}
 	}
 	return out

@@ -634,7 +634,7 @@ function bestsFor(latest: Workout, workouts: Workout[], minSameType: number): Pe
   const ef = efficiencyFactor(latest)
   const efPeers = peers.map(efficiencyFactor).filter(v => v > 0)
   if (ef > 0 && efPeers.length >= minSameType && efPeers.every(v => ef < v)) {
-    out.push({ workout: latest, kind: 'efficiency', label: `Best ${latest.type} efficiency`, value: `${ef.toFixed(1)} bpm per km/h` })
+    out.push({ workout: latest, kind: 'efficiency', label: `Best ${latest.type} efficiency`, value: `${ef.toFixed(1)} bpm/kph` })
   }
   return out
 }

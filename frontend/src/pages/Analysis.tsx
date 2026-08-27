@@ -1072,7 +1072,7 @@ export default function Analysis() {
                     <LineChart data={efficiency.rows} margin={space.margin(18, 4)}>
                       <CartesianGrid {...GRID_PROPS} />
                       <XAxis dataKey="axisKey" ticks={dayTicks(efficiency.rows)} tickFormatter={slotLabel} {...denseXAxis(9)} label={xLabel('Activity date')} />
-                      <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" domain={['dataMin - 1', 'dataMax + 1']} label={space.yLabel('bpm per km/h')} />
+                      <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" domain={['dataMin - 1', 'dataMax + 1']} label={space.yLabel('bpm/kph')} />
                       <Tooltip
                         {...KEEP_EMPTY_ROWS}
                         content={({ active, payload }) => {
@@ -1090,7 +1090,7 @@ export default function Analysis() {
                             <div className="custom-tooltip">
                               <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.name}</div>
                               <div style={{ color: 'var(--text-3)' }}>{d.dateFull}</div>
-                              <div style={{ color: SERIES_COLORS[1] }}>{d.hrPerSpeed} bpm per km/h</div>
+                              <div style={{ color: SERIES_COLORS[1] }}>{d.hrPerSpeed} bpm/kph</div>
                               <div style={{ color: 'var(--text-3)' }}>{d.hr} bpm · {d.speed.toFixed(1)} km/h</div>
                             </div>
                           )

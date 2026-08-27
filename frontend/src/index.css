@@ -2264,15 +2264,37 @@ body[data-fab-hidden] .fab {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  /* Under both the mark and the chevron, aligned with the heading rather than
-     with the disc: the figures belong to the sentence above them. */
+  /* Under the whole card, aligned with the heading rather than with the disc:
+     the figures belong to the sentence above them. */
   grid-column: 2 / -1;
   margin-top: 6px;
 }
-/* The "there is somewhere to go" mark, beside the heading rather than beside
-   the figures, because it belongs to the card and not to any one record. */
-.pb-go { color: var(--text-3); grid-column: 3; grid-row: 1; }
-.pb-banner:hover .pb-go { color: var(--text-2); }
+/*
+ * A single record goes beside the sentence rather than under it.
+ *
+ * The second row exists for the two- and three-record days, where a row of
+ * figures cannot fit a phone. With one there is room — "New personal best" and
+ * its date need about 145px of the 346 a card has, and the widest figure the
+ * app produces is around 145 — and dropping it below made the commonest case
+ * the tallest-looking one, a wrap with nothing wrapped around it.
+ */
+.pb-banner.one {
+  /* The heading keeps 140px whatever the figure wants. The figure's column is
+     content-sized, so the longest label the app can build — "Most strength
+     climbing" — otherwise took what it needed and left the heading a ribbon to
+     wrap in. With a floor under the heading the label wraps inside its own
+     tile instead, which is the half that can afford to. */
+  grid-template-columns: auto minmax(140px, 1fr) auto;
+}
+.pb-banner.one .pb-figures {
+  grid-column: 3;
+  grid-row: 1;
+  margin-top: 0;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  min-width: 0;
+}
+.pb-banner.one .pb-figure { min-width: 0; }
 .pb-banner:focus-visible { outline: 2px solid var(--success); outline-offset: 2px; }
 .pb-figure {
   display: flex;
@@ -2294,18 +2316,15 @@ body[data-fab-hidden] .fab {
   font-weight: 700;
 }
 /* Wide enough for one row: the figures move up beside the heading and push to
-   the right edge, which is where they were before and where they read best. */
+   the right edge, which is where they were before and where they read best.
+   Three columns, not four — the fourth held a chevron that no longer exists. */
 @media (min-width: 769px) {
-  .pb-banner {
-    grid-template-columns: auto 1fr auto auto;
-  }
   .pb-figures {
     grid-column: 3;
     grid-row: 1;
     margin-top: 0;
     justify-content: flex-end;
   }
-  .pb-go { grid-column: 4; }
 }
 
 /* The year calendar's own scroller. Only the grid moves: on the card, the

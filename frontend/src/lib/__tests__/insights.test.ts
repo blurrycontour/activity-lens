@@ -323,7 +323,7 @@ describe('recentPersonalBests', () => {
     const runs = [w('2026-08-24', 150, 12), w('2026-08-10', 140, 10), w('2026-07-02', 155, 11), w('2026-06-01', 145, 10)]
     const best = recentPersonalBests(runs, 3, 14, NOW).find(b => b.kind === 'efficiency')
     expect(best?.label).toBe('Best Run efficiency')
-    expect(best?.value).toBe('12.5 bpm per km/h')
+    expect(best?.value).toBe('12.5 bpm/kph')
   })
 
   // Going slowly must not look like getting fitter: the record is HR per unit
