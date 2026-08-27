@@ -108,7 +108,18 @@ export interface Workout {
   duration: number // seconds
   distance: number // meters
   avgHR: number
+  /** The highest heart rate recorded *in this workout*. Not the athlete's
+   * ceiling, and not what the zones are a percentage of — see athleteMaxHr. */
   maxHR: number
+  /**
+   * The maximum heart rate this workout's owner has set in their settings, or
+   * that their age implies. The five-zone model is a percentage of this.
+   *
+   * Detail responses only, and absent when the owner has told us nothing. It
+   * comes down with the workout rather than from the viewer's own preferences,
+   * because a shared workout belongs to someone else.
+   */
+  athleteMaxHr?: number
   elevationGain: number // meters
   calories: number
   steps?: number

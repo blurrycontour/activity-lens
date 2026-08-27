@@ -784,13 +784,26 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
       .map(p => ({ t: p.t, cad: Math.round(p.value) })),
     [w.cadenceTimeline],
   )
-  const [prefMaxHr, setPrefMaxHr] = useState(0)
-  useEffect(() => {
-    let cancelled = false
-    api.getPreferences().then(p => { if (!cancelled) setPrefMaxHr(p.maxHr || 0) }).catch(() => {})
-    return () => { cancelled = true }
-  }, [])
-  const effectiveMaxHR = w.maxHR > 0 ? w.maxHR : prefMaxHr
+  /**
+   * The ceiling the five HR zones are percentages of.
+   *
+   * The athlete's, not this workout's. Reading `w.maxHR` first — which is
+   * simply the hardest moment of this one activity — is what made every
+   * workout end in Zone 5 and none of them comparable to each other: an easy
+   * hour that peaked at 137 was drawn with the same top zone as an interval
+   * session that peaked at 180.
+   *
+   * `athleteMaxHr` is the owner's configured value, or the one their age
+   * implies, and it arrives with the workout so that a workout shared by
+   * someone else is measured against *them*. The old code asked the API for
+   * the signed-in viewer's preferences instead, which is the wrong person on
+   * every shared workout.
+   *
+   * The workout's own peak survives only as the last resort, for an owner who
+   * has set neither a max HR nor a birth year. It is a poor ceiling, but it is
+   * better than a chart with no zones at all.
+   */
+  const effectiveMaxHR = w.athleteMaxHr && w.athleteMaxHr > 0 ? w.athleteMaxHr : w.maxHR
   const hrZones = useMemo(() => hrZoneBuckets(w.hrTimeline, effectiveMaxHR), [w.hrTimeline, effectiveMaxHR])
 
   /**

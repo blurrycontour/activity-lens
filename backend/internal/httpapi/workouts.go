@@ -149,6 +149,15 @@ func (s *Server) handleGetWorkout(w http.ResponseWriter, r *http.Request) {
 		slog.Warn("could not read workout flags", "workout_id", wk.ID, "error", ferr)
 	}
 
+	// The ceiling the HR zones on this page are a percentage of. Always the
+	// owner's, never the viewer's — see Workout.AthleteMaxHR. Best effort: a
+	// missing value leaves the page to fall back on its own.
+	if maxHR, merr := s.settings.AthleteMaxHR(r.Context(), wk.UserID); merr == nil {
+		wk.AthleteMaxHR = maxHR
+	} else {
+		slog.Warn("could not read athlete max HR", "user_id", wk.UserID, "error", merr)
+	}
+
 	writeJSON(w, http.StatusOK, workoutDetailResponse{
 		Workout: wk, IsOwner: isOwner, HasOriginal: wk.RawFilename != "",
 		OriginalFormat: originalFormat(wk.RawFilename), Shared: shared,
