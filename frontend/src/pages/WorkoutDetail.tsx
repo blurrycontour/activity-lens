@@ -2223,6 +2223,24 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             accent: color,
           }}
           onClose={() => setSharing(false)}
+          /*
+           * Sharing a workout is what brings its Social tab into existence, so
+           * the page has to hear about it. Without this the tab appeared or
+           * vanished only on the next full read of the workout — go back, pull
+           * to refresh, open it again — which reads as the share not having
+           * taken.
+           *
+           * Adopted from the dialog's own response rather than refetched: the
+           * mutation has already been to the server and back, and `shared` is
+           * a rule over these two fields (workouts.go's handleGetWorkout
+           * computes exactly this) rather than a fact only the server holds.
+           */
+          onChange={next => setW(prev => ({
+            ...prev,
+            visibility: next.visibility,
+            sharedWithCount: next.sharedWith.length,
+            shared: next.sharedWith.length > 0 || next.visibility === 'public',
+          }))}
         />
       )}
 
