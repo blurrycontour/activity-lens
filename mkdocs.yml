@@ -24,7 +24,6 @@ nav:
       - Local setup: dev/setup.md
       - Architecture: dev/architecture.md
       - UI design: dev/ui-design.md
-      - UX audit: dev/ux-audit.md
       - Android app: dev/android.md
       - Browser checks: dev/visual-verification.md
 
