@@ -1,4 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { LOCATION_EVENT } from '../App'
+import { clearDeepLink, readDeepLink } from '../lib/deepLink'
 import { createPortal } from 'react-dom'
 import { type RecalcParts, type Workout, type WorkoutType, fmtClock, fmtDuration, fmtDist, fmtPace, TYPE_COLOR } from '../data/workouts'
 import TypeIcon from '../components/TypeIcon'
@@ -408,14 +410,8 @@ function EdgeTick(props: {
  * absent or unrecognised parameter means the default, which is what every
  * ordinary visit gets.
  */
-function initialTab(): DetailTab {
-  const asked = new URLSearchParams(window.location.search).get('tab')
-  return asked === 'gallery' || asked === 'social' || asked === 'notes' ? asked : 'notes'
-}
-
-/** Whether this page was opened at a particular tab, and so should scroll to it. */
-function wantsTabScroll(): boolean {
-  return new URLSearchParams(window.location.search).has('tab')
+function askedTab(tab: string | null): DetailTab | null {
+  return tab === 'gallery' || tab === 'social' || tab === 'notes' ? tab : null
 }
 
 /**
@@ -952,7 +948,16 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
    * not there, and landing on Gallery every time would fetch photos for someone
    * who opened the page to read the charts.
    */
-  const [detailTab, setDetailTab] = useState<DetailTab>(() => initialTab())
+  const [detailTab, setDetailTab] = useState<DetailTab>(() => askedTab(readDeepLink().tab) ?? 'notes')
+  /**
+   * The comment a notification pointed at, until the Social panel has found it.
+   *
+   * Held here rather than read from the URL by the panel, because the URL is
+   * cleared as soon as the link is acted on — a reload should be the page you
+   * were on, not the comment you were once sent to — while the panel may not
+   * have loaded its thread yet.
+   */
+  const [focusComment, setFocusComment] = useState<string | null>(() => readDeepLink().commentId)
   /*
    * What is behind Gallery and Social, so the strip can say so before either
    * is opened. Both panels are lazy and fetch nothing until their tab is
@@ -1013,11 +1018,33 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
    * the page you were on rather than the tab a notification once pointed at.
    */
   useEffect(() => {
-    if (!wantsTabScroll()) return
-    const url = new URL(window.location.href)
-    url.searchParams.delete('tab')
-    window.history.replaceState(null, '', url.pathname + url.search)
-    sectionsRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    function follow() {
+      const { tab, commentId } = readDeepLink()
+      if (!tab && !commentId) return
+      const wanted = askedTab(tab)
+      if (wanted) setDetailTab(wanted)
+      // Handed to the Social panel, which owns the scrolling and the flash —
+      // it is the only thing that knows when the thread has actually loaded.
+      // Kept in state after the URL is cleared, so the panel still has a
+      // target to find once it arrives.
+      setFocusComment(commentId)
+      clearDeepLink()
+      // The panel scrolls itself to a named comment. Scrolling to the tab strip
+      // is for the case with no comment to find — a gallery link, or a comment
+      // that has since been deleted — and for getting the reader past the
+      // charts while the thread loads.
+      if (!commentId) sectionsRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    }
+    follow()
+    // Not only on mount. Tapping a notification for the workout already on
+    // screen changes the URL without remounting anything, and reading the tab
+    // once at mount is why that tap used to do nothing at all.
+    window.addEventListener(LOCATION_EVENT, follow)
+    window.addEventListener('popstate', follow)
+    return () => {
+      window.removeEventListener(LOCATION_EVENT, follow)
+      window.removeEventListener('popstate', follow)
+    }
   }, [])
 
   useEffect(() => {
@@ -2173,7 +2200,14 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             )}
             {activeTab === 'social' && (
               <Suspense fallback={<div className="detail-loading"><LoaderCircle size={16} className="spin" /></div>}>
-                <WorkoutSocial kind="workout" workoutId={w.id} isOwner={!readOnly} onCount={onCommentCount} />
+                <WorkoutSocial
+                  kind="workout"
+                  workoutId={w.id}
+                  isOwner={!readOnly}
+                  onCount={onCommentCount}
+                  focusCommentId={focusComment}
+                  onFocused={() => setFocusComment(null)}
+                />
               </Suspense>
             )}
           </TabPanel>

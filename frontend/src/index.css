@@ -6618,6 +6618,29 @@ body:has(.overlay) .dial { display: none; }
 
 .social-thread { display: flex; flex-direction: column; gap: 14px; }
 .social-comment { display: flex; gap: 10px; align-items: flex-start; }
+/* The comment a notification pointed at, marked just long enough to answer
+   "which one" and then gone. A lasting highlight would still be there when the
+   reader scrolls back past it later, by which time it means nothing.
+
+   Padding and a negative margin so the wash extends past the text without
+   moving anything: the row is in a list whose spacing is set elsewhere, and a
+   highlight that shifts its neighbours is a highlight you notice for the wrong
+   reason. */
+.social-comment-flash {
+  animation: social-comment-flash 2.2s ease-out;
+  border-radius: var(--radius);
+  padding: 6px;
+  margin: -6px;
+}
+@keyframes social-comment-flash {
+  0%, 55% { background: color-mix(in srgb, var(--primary) 18%, transparent); }
+  100% { background: transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Still marked, just not animated: the point is to find the comment, and
+     that works as well held still for a moment as faded out. */
+  .social-comment-flash { animation: none; background: color-mix(in srgb, var(--primary) 14%, transparent); }
+}
 .social-comment-body { flex: 1; min-width: 0; }
 .social-comment-head {
   display: flex;

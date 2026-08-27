@@ -240,6 +240,20 @@ type commentRequest struct {
 	Body string `json:"body"`
 }
 
+// commentAnchor points a notification at one comment rather than at the tab it
+// lives on.
+//
+// The fragment, not the query: it is an anchor within the page the link
+// already names. The page falls back to the tab on its own when the comment
+// has been deleted between the notification going out and being opened, which
+// is why the tab stays in the link rather than being implied by the anchor.
+func commentAnchor(link, commentID string) string {
+	if commentID == "" {
+		return link
+	}
+	return link + "#comment=" + commentID
+}
+
 // handleAddComment posts a message to a shared workout.
 func (s *Server) handleAddComment(resolve socialResolver) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -268,7 +282,7 @@ func (s *Server) handleAddComment(resolve socialResolver) http.HandlerFunc {
 		// After the comment is stored, so the author counts as a participant and a
 		// reply reaches everyone already in the thread. No dedupe key: every
 		// comment is a distinct thing somebody said.
-		s.notifySocial(r, *user, ctx.subject, ctx.ownerID, ctx.link,
+		s.notifySocial(r, *user, ctx.subject, ctx.ownerID, commentAnchor(ctx.link, c.ID),
 			actorName(*user)+" commented on a "+ctx.noun, excerpt(c.Body), "")
 		writeJSON(w, http.StatusCreated, c)
 	}
@@ -305,7 +319,7 @@ func (s *Server) handleEditComment(resolve socialResolver) http.HandlerFunc {
 		// everyone else already read. Keyed on the comment, so correcting a typo
 		// three times in a row is one notification rather than three — the thread
 		// cares that the message changed, not how many passes it took.
-		s.notifySocial(r, *user, ctx.subject, ctx.ownerID, ctx.link,
+		s.notifySocial(r, *user, ctx.subject, ctx.ownerID, commentAnchor(ctx.link, c.ID),
 			actorName(*user)+" edited a comment", excerpt(c.Body), "social-edit:"+c.ID)
 		writeJSON(w, http.StatusOK, c)
 	}

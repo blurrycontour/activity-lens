@@ -8,6 +8,17 @@ import useEscape from '../lib/useEscape'
 import { whenLabel } from '../lib/date'
 
 /**
+ * The DOM id one comment is anchored by, so a notification can point at it.
+ *
+ * Prefixed rather than using the raw comment id: these ids share a document
+ * with everything else on the workout page, and an anchor that is just an
+ * opaque string is one nobody reading the HTML can place.
+ */
+function commentDomId(id: string): string {
+  return `comment-${id}`
+}
+
+/**
  * Reactions and comments on a shared workout, training plan or session.
  *
  * Mounted only when its tab is opened — see WorkoutDetail's lazy import — so a
@@ -38,9 +49,16 @@ interface WorkoutSocialProps {
    * across renders — it is an effect dependency.
    */
   onCount?: (n: number) => void
+  /**
+   * A comment a notification pointed at: scrolled to and flashed once the
+   * thread has loaded. Null when the reader simply opened the tab.
+   */
+  focusCommentId?: string | null
+  /** Called once the focus has been honoured, or found to be unreachable. */
+  onFocused?: () => void
 }
 
-export default function WorkoutSocial({ kind, workoutId, isOwner, noun = 'workout', onCount }: WorkoutSocialProps) {
+export default function WorkoutSocial({ kind, workoutId, isOwner, noun = 'workout', onCount, focusCommentId, onFocused }: WorkoutSocialProps) {
   const { user } = useAuth()
   const [social, setSocial] = useState<Social | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -79,6 +97,31 @@ export default function WorkoutSocial({ kind, workoutId, isOwner, noun = 'workou
   }, [workoutId])
 
   useEffect(() => { void load() }, [load])
+
+  /**
+   * Takes the reader to the comment a notification named.
+   *
+   * Waits for the thread, because the panel is lazy and the id arrives before
+   * the comments do. When the comment is not in the thread — deleted between
+   * the notification going out and being opened, which is the case worth
+   * handling rather than assuming away — the reader is left on the tab, which
+   * is the fallback the link was built to have.
+   *
+   * `onFocused` fires either way, so the target is spent once and re-rendering
+   * does not keep yanking the page back to it.
+   */
+  useEffect(() => {
+    if (!focusCommentId || !social) return
+    const el = document.getElementById(commentDomId(focusCommentId))
+    if (el) {
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      // A flash rather than a lasting mark: it answers "which one" and then
+      // gets out of the way. Driven by a class the stylesheet animates once.
+      el.classList.add('social-comment-flash')
+      window.setTimeout(() => el.classList.remove('social-comment-flash'), 2200)
+    }
+    onFocused?.()
+  }, [focusCommentId, social, onFocused])
 
   // From the loaded thread rather than from each of post, edit and delete —
   // one place that cannot be forgotten by a fourth.
@@ -231,7 +274,7 @@ export default function WorkoutSocial({ kind, workoutId, isOwner, noun = 'workou
           {social.comments.map(c => {
             const mine = c.author?.id === user?.id
             return (
-              <li key={c.id} className="social-comment">
+              <li key={c.id} id={commentDomId(c.id)} className="social-comment">
                 {c.author && <UserAvatar user={c.author} size={30} />}
                 <div className="social-comment-body">
                   <div className="social-comment-head">
