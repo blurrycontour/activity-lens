@@ -95,8 +95,14 @@ function safeFitPadding(map: maplibregl.Map) {
   const capY = Math.max(0, h * 0.38)
   return {
     top: Math.min(58, capY),
-    bottom: Math.min(120, capY),
-    left: Math.min(30, capX),
+    // Enough to clear the shading picker and most of the zoom stack. The full
+    // depth of that stack was too much — it gave up a quarter of the frame to
+    // guarantee a corner case — so this leaves the very bottom of the reset
+    // button as the one place a track can still reach.
+    bottom: Math.min(84, capY),
+    // The smallest of the four. Nothing lives against the left edge above the
+    // shading picker, which the bottom padding already accounts for.
+    left: Math.min(16, capX),
     right: Math.min(30, capX),
   }
 }
