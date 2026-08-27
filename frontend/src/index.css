@@ -4183,22 +4183,19 @@ body:has(.overlay) .dial { display: none; }
   font-family: var(--font-mono);
 }
 
-.playback-bar { display: flex; align-items: center; gap: 10px; }
-.playback-controls { display: flex; align-items: center; gap: 10px; }
+/* One line, everywhere the transport appears — docked on a phone, in the card
+   beside the map on a desktop, under every expanded chart and map.
 
-/* The transport buttons and the clock on top, the scrub bar full width
-   underneath, once there is not enough room for all three on one line.
-
-   That order and not the reverse: the bar is what the thumb reaches for, so it
-   belongs at the near edge of the card, and the controls read as a header for
-   it rather than as a caption under it.
-
-   Driven by the card's own width rather than the viewport. The viewport rule
-   this replaced assumed "narrow screen" and "narrow bar" were the same thing,
-   which they are not on a large phone in landscape or on a tablet — both are
-   wider than the 768px breakpoint and still too tight for a one-line
-   transport. Measuring the container is the version that cannot be wrong. */
-.playback-card { container-type: inline-size; }
+   It used to stack onto two rows in a narrow card, and needed to: the clock
+   printed "4:27:37 / 4:27:37" and three controls plus a scrub bar plus
+   seventeen characters do not fit across a phone. With the elapsed time alone
+   and a scrub bar free to shrink, they fit at any width this app draws, so the
+   container query that measured the card is gone along with the second row. */
+.playback-bar { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
+.playback-controls { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.playback-bar .btn-icon { width: 32px; height: 32px; }
+/* The one thing that gives way when the bar is narrow. */
+.playback-bar input[type="range"] { min-width: 0; }
 
 /*
   The playback transport, docked above the bottom bar on a phone.
@@ -4241,26 +4238,15 @@ body:has(.overlay) .dial { display: none; }
    sitting underneath it. Mirrors what .with-fab does for the floating button. */
 .page-content.with-dock { padding-bottom: 68px; }
 
-/* One line, always. The container query below turns the roomy variant into two
-   rows when a card gets narrow; the docked one must never do that, because its
-   height is fixed furniture and a second row would cover a chart. */
-.playback-bar.compact { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
-.playback-bar.compact .playback-controls { gap: 2px; flex-shrink: 0; }
-.playback-bar.compact .btn-icon { width: 32px; height: 32px; }
-.playback-bar.compact input[type="range"] { min-width: 0; }
-/* Sized to the text rather than to the longest time a workout could reach.
-   The fixed column was set for "4:27:37" and left a visible gap after a
-   "44:05", which on a bar this small reads as a misalignment. Tabular figures
-   below keep it from twitching per second; it changes width only when the
-   clock gains or loses a digit, which happens once or twice in a whole
-   playback. */
-.playback-bar.compact .playback-clock { min-width: 0; }
-
+/* Sized to its text rather than to the longest time a workout could reach. A
+   fixed column set for "4:27:37" left a visible gap after a "44:05", which on
+   a bar this small reads as a misalignment. Tabular figures keep it from
+   twitching per second: it changes width only when the clock gains or loses a
+   digit, once or twice in a whole playback. */
 .playback-clock {
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--text-3);
-  min-width: 88px;
   text-align: right;
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
@@ -5650,9 +5636,6 @@ body:has(.overlay) .dial { display: none; }
      thing you came to look at; a paragraph stretched to 56vh is just a
      paragraph with empty space under it. */
   .detail-hero-card:has(.session-context) { min-height: 0; }
-  /* The playback bar's stacked layout used to live here. It is a container
-     query now — see .playback-card — because the card's width, not the
-     viewport's, is what decides whether the three parts fit on one line. */
   .workout-search {
     flex-basis: 100%;
     width: 100%;

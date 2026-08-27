@@ -307,9 +307,8 @@ function smoothTimeline(data: Array<{ t: number; value: number }>, radius = 3) {
 }
 
 
-function PlaybackBar({
-  playing, currentTime, duration, onPlayPause, onReset, onEnd, onScrub, compact,
-}: {
+/** The props every copy of the bar is handed, so eleven call sites cannot drift. */
+interface PlaybackProps {
   playing: boolean
   currentTime: number
   duration: number
@@ -317,20 +316,28 @@ function PlaybackBar({
   onReset: () => void
   onEnd: () => void
   onScrub: (t: number) => void
-  /**
-   * The docked phone variant: one line, and the elapsed time alone.
-   *
-   * Everything here is about vertical space, because docked it sits above the
-   * bottom bar and every pixel is one the charts do not get. "4:27:37 /
-   * 4:27:37" is seventeen characters, which on a phone forces the scrub bar
-   * onto a second row — so the total goes, and the end of the bar says it
-   * instead. Nothing is lost to a screen reader: aria-valuetext still
-   * announces both.
-   */
-  compact?: boolean
-}) {
+}
+
+/**
+ * The transport: play, reset, jump to end, a scrub bar and the clock.
+ *
+ * One line and one shape everywhere it appears — docked on a phone, in the
+ * card beside the map on a desktop, and under every expanded chart and map.
+ * It used to have a roomier variant that stacked onto two rows in a narrow
+ * card and printed "4:27:37 / 4:27:37"; the docked copy needed neither, and
+ * once the sleek one existed there was no reason for the page to show two
+ * different players depending on where you met it.
+ *
+ * The clock is the elapsed time alone. The total is what the end of the scrub
+ * bar means, and seventeen characters of "x / y" is what forced the two-row
+ * layout in the first place. Nothing is lost to a screen reader: the slider's
+ * aria-valuetext still announces both.
+ */
+function PlaybackBar({
+  playing, currentTime, duration, onPlayPause, onReset, onEnd, onScrub,
+}: PlaybackProps) {
   return (
-    <div className={`playback-bar${compact ? ' compact' : ''}`}>
+    <div className="playback-bar">
       <div className="playback-controls">
         <button className="btn-icon" onClick={onPlayPause} title={playing ? 'Pause' : 'Play'} aria-label={playing ? 'Pause' : 'Play'}>
           {playing ? <PauseIcon size={16} /> : <Play size={16} />}
@@ -355,9 +362,7 @@ function PlaybackBar({
         aria-valuetext={`${fmtDuration(currentTime)} of ${fmtDuration(duration)}`}
         style={{ flex: 1, accentColor: 'var(--primary)' }}
       />
-      <span className="playback-clock">
-        {compact ? fmtDuration(currentTime) : `${fmtDuration(currentTime)} / ${fmtDuration(duration)}`}
-      </span>
+      <span className="playback-clock">{fmtDuration(currentTime)}</span>
     </div>
   )
 }
@@ -1082,6 +1087,23 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
     return () => cancelAnimationFrame(raf)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing])
+
+  /**
+   * The one set of props every copy of the transport is handed.
+   *
+   * Eleven call sites — the dock, the desktop card and every expanded chart and
+   * map — repeated the same seven props by hand, which is nine chances for one
+   * of them to be given a stale handler and no way to notice.
+   */
+  const playbackProps: PlaybackProps = {
+    playing,
+    currentTime,
+    duration: w.duration,
+    onPlayPause: handlePlayPause,
+    onReset: handleReset,
+    onEnd: handleEnd,
+    onScrub: handleScrub,
+  }
 
   function handlePlayPause() {
     if (playing) {
@@ -1924,16 +1946,8 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
         {/* Playback controls: drives the map marker + chart cursors below.
             Absent entirely when there is neither — see `playable`. */}
         {playable && !isMobile && (
-          <div className="card playback-card" style={{ marginBottom: 16 }}>
-            <PlaybackBar
-              playing={playing}
-              currentTime={currentTime}
-              duration={w.duration}
-              onPlayPause={handlePlayPause}
-              onReset={handleReset}
-              onEnd={handleEnd}
-              onScrub={handleScrub}
-            />
+          <div className="card" style={{ marginBottom: 16 }}>
+            <PlaybackBar {...playbackProps} />
           </div>
         )}
 
@@ -2272,16 +2286,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
         */}
       {playable && isMobile && (
         <div className="playback-dock">
-          <PlaybackBar
-            compact
-            playing={playing}
-            currentTime={currentTime}
-            duration={w.duration}
-            onPlayPause={handlePlayPause}
-            onReset={handleReset}
-            onEnd={handleEnd}
-            onScrub={handleScrub}
-          />
+          <PlaybackBar {...playbackProps} />
         </div>
       )}
 
@@ -2332,7 +2337,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
         <ExpandModal title="Route" onClose={() => setExpanded(null)} variant="map">
           <div ref={setModalHost} className="modal-immersive-map" />
           <div className="modal-immersive-foot">
-            <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onEnd={handleEnd} onScrub={handleScrub} />
+            <PlaybackBar {...playbackProps} />
           </div>
         </ExpandModal>
       )}
@@ -2362,7 +2367,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
           />
           </div>
           <div className="modal-immersive-foot">
-            <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onEnd={handleEnd} onScrub={handleScrub} />
+            <PlaybackBar {...playbackProps} />
           </div>
         </ExpandModal>
       )}
@@ -2370,7 +2375,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
         <ExpandModal title="Heart Rate" onClose={() => setExpanded(null)}>
           {hrChart(400)}
           <div style={{ marginTop: 12 }}>
-            <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onEnd={handleEnd} onScrub={handleScrub} />
+            <PlaybackBar {...playbackProps} />
           </div>
         </ExpandModal>
       )}
@@ -2378,7 +2383,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
         <ExpandModal title="Pace" onClose={() => setExpanded(null)}>
           {paceChart(400)}
           <div style={{ marginTop: 12 }}>
-            <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onEnd={handleEnd} onScrub={handleScrub} />
+            <PlaybackBar {...playbackProps} />
           </div>
         </ExpandModal>
       )}
@@ -2386,7 +2391,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
         <ExpandModal title="Speed" onClose={() => setExpanded(null)}>
           {speedChart(400)}
           <div style={{ marginTop: 12 }}>
-            <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onEnd={handleEnd} onScrub={handleScrub} />
+            <PlaybackBar {...playbackProps} />
           </div>
         </ExpandModal>
       )}
@@ -2394,7 +2399,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
         <ExpandModal title="Elevation" onClose={() => setExpanded(null)}>
           {elevChart(400)}
           <div style={{ marginTop: 12 }}>
-            <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onEnd={handleEnd} onScrub={handleScrub} />
+            <PlaybackBar {...playbackProps} />
           </div>
         </ExpandModal>
       )}
@@ -2402,7 +2407,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
         <ExpandModal title="Cadence" onClose={() => setExpanded(null)}>
           {cadenceChart(400)}
           <div style={{ marginTop: 12 }}>
-            <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onEnd={handleEnd} onScrub={handleScrub} />
+            <PlaybackBar {...playbackProps} />
           </div>
         </ExpandModal>
       )}
@@ -2413,7 +2418,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
         >
           {extraChart(expanded.slice(6), 400)}
           <div style={{ marginTop: 12 }}>
-            <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onEnd={handleEnd} onScrub={handleScrub} />
+            <PlaybackBar {...playbackProps} />
           </div>
         </ExpandModal>
       )}
@@ -2422,7 +2427,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
           {hrZoneChart(320)}
           {w.hrTimeline.length > 0 && (
             <div style={{ marginTop: 12 }}>
-              <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onEnd={handleEnd} onScrub={handleScrub} />
+              <PlaybackBar {...playbackProps} />
             </div>
           )}
         </ExpandModal>
