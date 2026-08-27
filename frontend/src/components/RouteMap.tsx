@@ -36,6 +36,24 @@ function nearestRouteIndex(route: Array<[number, number]>, lat: number, lng: num
   return best
 }
 
+/**
+ * The smallest and largest value in one pass, and without a spread.
+ *
+ * `Math.min(...values)` passes every sample as an argument, which a long
+ * activity — a 1 Hz recording of an all-day ride is six figures of samples —
+ * can push past the engine's argument limit and turn into a RangeError. The
+ * loop has no ceiling, and answers both halves of the question at once.
+ */
+function range(values: number[]): [number, number] {
+  let min = Infinity
+  let max = -Infinity
+  for (let i = 0; i < values.length; i++) {
+    if (values[i] < min) min = values[i]
+    if (values[i] > max) max = values[i]
+  }
+  return [min, max]
+}
+
 /** Start and finish pins, as plain elements for a MapLibre marker. */
 function pinElement(html: string, cls = 'route-pin'): HTMLElement {
   const el = document.createElement('div')
@@ -273,8 +291,8 @@ export default function RouteMap({
     }
     const { samples, values } = series[shading]
     if (samples.length === 0) return [{ positions: route, color }]
-    const min = Math.min(...values)
-    const span = Math.max(Math.max(...values) - min, 1)
+    const [min, max] = range(values)
+    const span = Math.max(max - min, 1)
     const maxSegments = 220
     const step = Math.max(1, Math.ceil((route.length - 1) / maxSegments))
     const segStep = duration / Math.max(route.length - 1, 1)
@@ -320,8 +338,7 @@ export default function RouteMap({
     }[shading]
     if (series.length === 0) return null
     if (shading === 'hr') return { title: 'Heart rate', zones: HR_ZONE_SHORT }
-    const min = Math.min(...series)
-    const max = Math.max(...series)
+    const [min, max] = range(series)
     // The same 210°→20° sweep the segments are coloured with, as a CSS
     // gradient. Kept in step by hand, which is safe because both live in this
     // file and there is nowhere else for either to be used.
