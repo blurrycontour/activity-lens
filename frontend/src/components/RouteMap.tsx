@@ -54,6 +54,43 @@ function range(values: number[]): [number, number] {
   return [min, max]
 }
 
+/**
+ * The inset that keeps the framed route clear of the map's own furniture.
+ *
+ * Every corner of the map carries a control: the shading legend and the
+ * maximize and layer buttons along the top, the shading picker bottom left,
+ * and MapLibre's reset and zoom stack bottom right. A route framed to the bare
+ * container edge therefore has its start or finish pin — which are the two
+ * points on it a reader most wants to see — sitting underneath a button, and
+ * on a phone that is most routes: the aspect ratio rarely matches the map's,
+ * so one axis is always fitted tight.
+ *
+ * Padding on the fit is the fix rather than a smaller map, because it moves
+ * only what is framed. Uniform on the horizontal, taller on the vertical, and
+ * bottom-heaviest of all: the controls stack two deep down there while the top
+ * holds a single row.
+ *
+ * The reset-view control fits through this same function, so the button lands
+ * on the safe frame too rather than undoing it.
+ *
+ * Clamped to a third of the container per axis. The constants suit the map at
+ * the sizes this app draws it, and a much shorter one — a future card, a short
+ * landscape phone — would otherwise ask MapLibre to fit a route into no
+ * remaining space at all, which zooms out to nothing.
+ */
+function safeFitPadding(map: maplibregl.Map) {
+  const w = map.getContainer().clientWidth
+  const h = map.getContainer().clientHeight
+  const capX = Math.max(0, w / 3)
+  const capY = Math.max(0, h / 3)
+  return {
+    top: Math.min(52, capY),
+    bottom: Math.min(64, capY),
+    left: Math.min(24, capX),
+    right: Math.min(24, capX),
+  }
+}
+
 /** Start and finish pins, as plain elements for a MapLibre marker. */
 function pinElement(html: string, cls = 'route-pin'): HTMLElement {
   const el = document.createElement('div')
@@ -534,7 +571,7 @@ export default function RouteMap({
     if (!map || r.length < 2) return
     const bounds = new maplibregl.LngLatBounds()
     for (const [lat, lng] of r) bounds.extend([lng, lat])
-    map.fitBounds(bounds, { padding: 28, duration: animate ? 400 : 0 })
+    map.fitBounds(bounds, { padding: safeFitPadding(map), duration: animate ? 400 : 0 })
   }, [])
   const fitRef = useRef(fitRoute)
   fitRef.current = fitRoute
