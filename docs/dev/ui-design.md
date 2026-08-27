@@ -168,12 +168,32 @@ Say the thing once, briefly. Long explanations go behind an `InfoTip`, not into
 the page body. Empty states say what is missing *and* why, distinguishing "none
 yet" from "none in this filter".
 
-## Known gaps
+## Settled, and not to be re-proposed
 
-[ux-audit.md](ux-audit.md) holds what is still open after the August 2026 audit —
-three judgement calls, plus the list of things that look like gaps and are
-deliberate, so they are not re-proposed. Short, and worth reading before
-starting UI work.
+Things that look like gaps and are decisions. The August 2026 audit that
+produced most of them is closed and its file is gone; `git log` is the record
+of what each fix was and why.
+
+- **Pull-to-refresh and tab switches do not buzz.** Both confirm themselves
+  visibly, and a buzz on every tab switch is what gets vibration turned off
+  wholesale. Long press and goal completion do buzz.
+- **`--success` may coincide with the green accent.** Success is green because
+  success is green, and one of the six accents is green for the same reason.
+  Both readings of that colour are "good". The exemption is in the palette test.
+- **Max HR, lowest average HR, calories and steps are not personal bests.** A
+  ceiling is not an accomplishment and celebrating one invites chasing it; the
+  way to set a lowest-average-HR is to go slowly; calories and steps track
+  duration and distance closely enough to say the same thing twice. The
+  reasoning is in `recentPersonalBests` and its Go counterpart.
+- **The Efficiency charts draw one line for the whole selection**, not one per
+  sport on a time axis. That was built and reverted: splitting by sport is
+  defensible on the data and worse to read, because two or three short lines
+  with gaps between them say less about direction than one continuous one.
+- **The session runner is styled like every other page.** A larger "gym view"
+  was built and reverted; the type was already legible at arm's length, and a
+  second mode to maintain bought nothing anyone could see.
+- **The doubled API requests in development** are React's StrictMode
+  double-invoking effects. A production build issues each once.
 
 ## Before calling it done
 
