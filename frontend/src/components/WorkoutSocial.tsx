@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext'
 import { api, ApiError, type ShareKind, type WorkoutComment, type WorkoutSocial as Social } from '../lib/api'
 import useEscape from '../lib/useEscape'
 import { whenLabel } from '../lib/date'
+import { PUSH_EVENT } from '../lib/notifications'
 
 /**
  * The DOM id one comment is anchored by, so a notification can point at it.
@@ -58,6 +59,17 @@ interface WorkoutSocialProps {
   onFocused?: () => void
 }
 
+/**
+ * How often an open thread re-reads itself.
+ *
+ * Only while the tab is on screen and the document is visible, so this is not
+ * a background cost: a panel nobody is looking at makes no requests at all.
+ * Five seconds is close enough to feel live in a conversation without being a
+ * request rate worth thinking about for the handful of people who can see any
+ * one workout.
+ */
+const REFRESH_MS = 5000
+
 export default function WorkoutSocial({ kind, workoutId, isOwner, noun = 'workout', onCount, focusCommentId, onFocused }: WorkoutSocialProps) {
   const { user } = useAuth()
   const [social, setSocial] = useState<Social | null>(null)
@@ -97,6 +109,37 @@ export default function WorkoutSocial({ kind, workoutId, isOwner, noun = 'workou
   }, [workoutId])
 
   useEffect(() => { void load() }, [load])
+
+  /**
+   * Keeps an open thread current, so a comment posted by someone else appears
+   * where you are reading rather than the next time you open the page.
+   *
+   * Polled rather than pushed. There is no realtime channel in this app and one
+   * long-lived connection per reader is a lot of new machinery for one panel,
+   * so this leans on the two things that already exist: a timer, and the push
+   * event App raises when a notification arrives while the app is open. The
+   * push is what makes the common case immediate — the person who commented is
+   * the reason you have a notification — and the timer is what covers everyone
+   * who has push turned off.
+   *
+   * Both are gated on the document being visible. A backgrounded tab makes no
+   * requests, and coming back to one refreshes it at once rather than waiting
+   * out the interval — which is also what makes returning from another app show
+   * the conversation as it stands.
+   */
+  useEffect(() => {
+    const tick = () => { if (document.visibilityState === 'visible') void load() }
+    const id = setInterval(tick, REFRESH_MS)
+    // Also on the way back in, so the first thing a returning reader sees is
+    // current rather than up to REFRESH_MS old.
+    document.addEventListener('visibilitychange', tick)
+    window.addEventListener(PUSH_EVENT, tick)
+    return () => {
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', tick)
+      window.removeEventListener(PUSH_EVENT, tick)
+    }
+  }, [load])
 
   /**
    * Takes the reader to the comment a notification named.
