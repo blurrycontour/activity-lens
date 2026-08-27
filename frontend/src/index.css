@@ -123,6 +123,7 @@
   --z-map-ui: 400;       /* controls drawn over a map canvas */
   --z-map-panel: 500;    /* the maximize button */
   --z-map-picker: 1000;  /* a picker opened from a map control, over both */
+  --z-dock: 1050;        /* the playback bar: over a map's own controls, under a dialog */
   --z-dial: 1090;        /* an open speed dial — over the frame, under a dialog */
   --z-overlay: 1100;     /* the dimming behind a dialog */
   --z-dialog: 1101;      /* dialogs, sheets, panels: the overlay's content */
@@ -4214,15 +4215,24 @@ body:has(.overlay) .dial { display: none; }
 */
 .playback-dock {
   position: fixed;
-  z-index: var(--z-chrome);
+  /* Above the map's own controls. At --z-chrome the shading picker, which sits
+     at --z-map-picker so an open dropdown clears everything, drew straight
+     over the bar. Its menu opens upward, away from here, so nothing is lost by
+     putting the bar above it. */
+  z-index: var(--z-dock);
   left: 0;
   right: 0;
   bottom: var(--bottombar-h);
   padding: 6px max(10px, var(--safe-left)) 6px max(10px, var(--safe-right));
-  border-top: 1px solid var(--border);
-  /* Opaque enough to read a chart through it as a surface rather than a haze,
-     and blurred so it reads as floating above the page rather than as a band
-     pasted across it. */
+  /* A drawn edge, not a shadow. A shadow separates this from the page in light
+     mode and is invisible in dark, where the page behind it is nearly black
+     already — the same thing the FAB's comment records. So the line is what
+     does the work in both themes and the shadow is left to deepen it in light.
+     --border-strong rather than --border because this is app furniture over
+     arbitrary content, not a divider between two known surfaces. */
+  border-top: 1px solid var(--border-strong);
+  /* Opaque enough to read as a surface rather than a haze, and blurred so it
+     reads as floating above the page rather than pasted onto it. */
   background: color-mix(in srgb, var(--bg-2) 94%, transparent);
   backdrop-filter: blur(12px);
   box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.35);
@@ -4238,10 +4248,13 @@ body:has(.overlay) .dial { display: none; }
 .playback-bar.compact .playback-controls { gap: 2px; flex-shrink: 0; }
 .playback-bar.compact .btn-icon { width: 32px; height: 32px; }
 .playback-bar.compact input[type="range"] { min-width: 0; }
-/* Sized for "4:27:37" and no wider — a workout of hours is what sets this, and
-   a shorter one simply leaves the column part-filled rather than moving the
-   bar's end every time the clock ticks past a digit. */
-.playback-bar.compact .playback-clock { min-width: 56px; }
+/* Sized to the text rather than to the longest time a workout could reach.
+   The fixed column was set for "4:27:37" and left a visible gap after a
+   "44:05", which on a bar this small reads as a misalignment. Tabular figures
+   below keep it from twitching per second; it changes width only when the
+   clock gains or loses a digit, which happens once or twice in a whole
+   playback. */
+.playback-bar.compact .playback-clock { min-width: 0; }
 
 .playback-clock {
   font-family: var(--font-mono);
