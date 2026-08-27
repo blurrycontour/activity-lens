@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/blurrycontour/activity-lens/backend/internal/workout"
 
@@ -316,11 +317,18 @@ func (s *Server) handleEditComment(resolve socialResolver) http.HandlerFunc {
 			c.Author = ref
 		}
 		// An edit is told to the thread, because on a shared page it changes what
-		// everyone else already read. Keyed on the comment, so correcting a typo
-		// three times in a row is one notification rather than three — the thread
-		// cares that the message changed, not how many passes it took.
+		// everyone else already read. Keyed on the comment *and the day*, so
+		// correcting a typo three times in a row is one notification rather than
+		// three — the thread cares that the message changed, not how many passes
+		// it took — while a revision tomorrow is news again.
+		//
+		// The day is what this was missing. A dedupe key fires exactly once for
+		// all time, so keying on the comment alone meant the first edit notified
+		// and every later one was silently absorbed, however long afterwards. The
+		// same per-day convention the gallery uses for photo bursts.
+		day := time.Now().UTC().Format("2006-01-02")
 		s.notifySocial(r, *user, ctx.subject, ctx.ownerID, commentAnchor(ctx.link, c.ID),
-			actorName(*user)+" edited a comment", excerpt(c.Body), "social-edit:"+c.ID)
+			actorName(*user)+" edited a comment", excerpt(c.Body), "social-edit:"+c.ID+":"+day)
 		writeJSON(w, http.StatusOK, c)
 	}
 }
