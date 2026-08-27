@@ -476,6 +476,37 @@ export default function RouteMap({
         return
       }
       map.addSource('route', { type: 'geojson', data: routeGeoJSON })
+      // A dark casing under the track, so it reads over whatever the tiles put
+      // behind it. Street tiles are a wash of pale greens, pinks and yellows
+      // with orange roads running through them, and a 4px green or blue line
+      // laid straight onto that competes with every one of them — worst
+      // exactly where it matters, on the park and forest greens a route
+      // usually goes through.
+      //
+      // Two layers rather than a shadow, because a line has nowhere to cast
+      // one: MapLibre has no drop-shadow, and `line-blur` on the track itself
+      // would soften the track. So the casing is its own line — wider, dark,
+      // and slightly blurred so it reads as depth rather than as an outline
+      // drawn around the route.
+      //
+      // It costs one more line layer over the same source and the same
+      // geometry, which is uploaded once; nothing here runs per frame.
+      map.addLayer({
+        id: 'route-casing',
+        type: 'line',
+        source: 'route',
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: {
+          'line-color': '#000',
+          // Wide enough to show either side of the 4px track, soft enough to
+          // read as a shadow, and faint enough that it never darkens the
+          // track itself where the route doubles back over its own casing —
+          // which is what a harder, more opaque casing did at switchbacks.
+          'line-width': 7,
+          'line-blur': 2,
+          'line-opacity': 0.35,
+        },
+      })
       map.addLayer({
         id: 'route',
         type: 'line',
@@ -483,7 +514,12 @@ export default function RouteMap({
         layout: { 'line-join': 'round', 'line-cap': 'round' },
         // Each feature carries its own colour, so shading is a data change
         // rather than a different set of layers.
-        paint: { 'line-color': ['get', 'color'], 'line-width': 4, 'line-opacity': 0.85 },
+        //
+        // Fully opaque now that the casing separates it from the tiles. The
+        // 0.85 it used to carry was doing the job a casing does properly —
+        // blending the track *into* the background to soften it, which is the
+        // opposite of making it legible.
+        paint: { 'line-color': ['get', 'color'], 'line-width': 4 },
       })
     }
     // Drawn now if there is a style to draw into, and again after every style
