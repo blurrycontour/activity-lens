@@ -4186,6 +4186,62 @@ body:has(.overlay) .dial { display: none; }
    wider than the 768px breakpoint and still too tight for a one-line
    transport. Measuring the container is the version that cannot be wrong. */
 .playback-card { container-type: inline-size; }
+
+/*
+  The playback bar again, following the reader down through the charts.
+
+  The real one sits under the map, so on a phone playing a chart from further
+  down the page meant scrolling up, tapping, and scrolling back before the
+  playhead reached anything worth watching. This copy is fixed above the bottom
+  bar and shows only between the inline bar leaving the screen and the sections
+  past the charts arriving — WorkoutDetail owns that decision.
+
+  Always mounted, only moved. Transitioning an element that is already there is
+  what makes it slide; mounting it on scroll would pop. Hidden it is also
+  inert, so there are never two Play buttons in the tab order.
+
+  Same easing pair as the FAB, and for the same reason: leaving should be
+  quicker and more decisive than arriving, so a bar sliding away never reads as
+  hesitation. The variable is swapped rather than the whole transition, because
+  a second `transition` declaration replaces the first rather than adding to it.
+*/
+.floating-playback {
+  --fp-ease: cubic-bezier(1, 0, 0.68, 0.28);
+  position: fixed;
+  z-index: var(--z-chrome);
+  left: max(12px, var(--safe-left));
+  right: max(12px, var(--safe-right));
+  bottom: calc(12px + var(--bottombar-h));
+  padding: 8px 12px;
+  border-radius: calc(var(--radius) * 1.5);
+  border: 1px solid var(--border-strong);
+  /* Opaque enough to read over a chart, and blurred so it still reads as
+     floating above one rather than as a band pasted across it. */
+  background: color-mix(in srgb, var(--bg-2) 92%, transparent);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
+  transform: translateY(calc(100% + 12px + var(--bottombar-h)));
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform 0.24s var(--fp-ease),
+    opacity 0.24s var(--fp-ease);
+}
+.floating-playback.on {
+  --fp-ease: cubic-bezier(0.32, 0.72, 0, 1);
+  transform: translateY(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  .floating-playback { transition: opacity 0.24s linear; transform: none; }
+}
+/* Desktop lays the map and the charts side by side, so the inline bar is
+   almost always in view. WorkoutDetail does not render this there at all;
+   the rule is here so the intent survives someone changing that. */
+@media (min-width: 769px) {
+  .floating-playback { display: none; }
+}
 @container (max-width: 460px) {
   .playback-bar { display: grid; grid-template-columns: auto 1fr; gap: 8px; }
   .playback-controls { grid-column: 1; grid-row: 1; }
