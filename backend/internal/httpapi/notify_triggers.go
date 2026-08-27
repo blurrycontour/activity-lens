@@ -84,23 +84,46 @@ func plural(n int) string {
 // notifySocial tells the people following a workout that someone said
 // something on it.
 //
-// Who "following" means: the owner, plus anyone else who has already commented.
-// A conversation nobody is told about is a conversation that happens once, and
-// on an instance with a handful of people the alternative — a subscribe button
-// — would be more machinery than the feature is.
+// Who "following" means, in three parts: the owner, anyone who has already
+// commented, and anyone the owner shared it with directly. A conversation
+// nobody is told about is a conversation that happens once, and on an instance
+// with a handful of people the alternative — a subscribe button — would be more
+// machinery than the feature is.
+//
+// The third part is the one this was missing, and its absence had a precise
+// shape: an owner commenting on their own shared workout notified nobody at
+// all. The set was the owner plus prior commenters, so on a thread with no
+// replies yet it was just the owner — and then the actor was removed from it,
+// leaving nothing. The very first comment on anything you shared, which is
+// exactly the one worth hearing about, was the silent case.
+//
+// Direct recipients only, never "everyone signed in here". A public workout has
+// readers rather than an audience: nobody chose to follow it, and a comment on
+// one is not news anybody asked for. The same rule the gallery's photo
+// notification states — you hear about the things somebody sent to you.
 //
 // The actor never hears about their own action, and each recipient is told once
 // however many ways they qualify.
-func (s *Server) notifySocial(r *http.Request, actor auth.User, subj workout.Subject, ownerID int64, link, title, body, dedupe string) {
+func (s *Server) notifySocial(r *http.Request, actor auth.User, subj workout.Subject, ownerID int64, audience func() ([]int64, error), link, title, body, dedupe string) {
 	recipients := map[int64]bool{ownerID: true}
-	// Best effort: the comment or reaction has already been stored, and failing
-	// to read the thread is not a reason to fail the request that made it.
+	// Best effort throughout: the comment or reaction has already been stored,
+	// and failing to read who to tell is not a reason to fail the request that
+	// made it.
 	if comments, err := s.workout.Comments(r.Context(), subj); err == nil {
 		for _, c := range comments {
 			recipients[c.UserID] = true
 		}
 	} else {
 		slog.Warn("could not load thread for social notification", "subject", subj.ID, "error", err)
+	}
+	if audience != nil {
+		if ids, err := audience(); err == nil {
+			for _, id := range ids {
+				recipients[id] = true
+			}
+		} else {
+			slog.Warn("could not load share recipients for social notification", "subject", subj.ID, "error", err)
+		}
 	}
 	delete(recipients, actor.ID)
 
