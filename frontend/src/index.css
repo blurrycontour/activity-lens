@@ -1372,7 +1372,19 @@ body {
 }
 
 .page-header-title { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
-.page-header-sub { font-size: 13px; color: var(--text-3); margin-top: 4px; }
+.page-header-sub { font-size: 13px; color: var(--text-3); }
+/* The date and the thing's own chips on one line. The chips used to sit beside
+   the title, which is the one piece of text in this header with no length
+   limit — a long workout or plan name pushed them onto a second and third row
+   on a phone. Here they share a line with a date, which is short and fixed. */
+.page-header-sub-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  min-width: 0;
+}
 .page-header-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .page-content { padding: 24px; }
 /* Pages whose header already carries the filters (Workouts, Equipment) sit

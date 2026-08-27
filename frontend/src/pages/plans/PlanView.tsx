@@ -92,7 +92,7 @@ export default function PlanView({ plan, onBack, onEdit, onRename, onStart, onDe
            beside its name, whether you have shared it, and whose it is on the
            line under the date. It used to sit at the top of the page body,
            which read as content of the plan rather than as its identity. */
-        titleAction={
+        subtitleAction={
           <>
             <span className="badge tag-plan"><ClipboardList size={12} /> Plan</span>
             {isOwner && <ShareBadge workout={plan} />}

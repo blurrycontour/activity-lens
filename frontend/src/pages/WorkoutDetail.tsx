@@ -4,11 +4,12 @@ import { clearDeepLink, readDeepLink } from '../lib/deepLink'
 import { createPortal } from 'react-dom'
 import { type RecalcParts, type Workout, type WorkoutType, fmtClock, fmtDuration, fmtDist, fmtPace, TYPE_COLOR } from '../data/workouts'
 import TypeIcon from '../components/TypeIcon'
+import PageHeader from '../components/PageHeader'
 import SportDropdown from '../components/SportDropdown'
 import Dropdown from '../components/Dropdown'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ReferenceDot, ReferenceArea, BarChart, Bar } from 'recharts'
 import {
-  ArrowLeft, Heart, Mountain, Zap, Clock, TrendingUp, Navigation, Pencil, Trash2, Gauge,
+  Heart, Mountain, Zap, Clock, TrendingUp, Navigation, Pencil, Trash2, Gauge,
   Check, X as XIcon, Play, Pause as PauseIcon, LoaderCircle, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, AlertTriangle, Activity, Share2, Lock, FileDown, Plus, Image as ImageIcon, NotebookPen, Images, MessageSquare, ClipboardList, Watch, Undo2, ChevronDown, Thermometer, LineChart, Info } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useAuth } from '../context/AuthContext'
@@ -320,13 +321,13 @@ function PlaybackBar({
   return (
     <div className="playback-bar">
       <div className="playback-controls">
-        <button className="btn-icon" onClick={onPlayPause} title={playing ? 'Pause' : 'Play'}>
+        <button className="btn-icon" onClick={onPlayPause} title={playing ? 'Pause' : 'Play'} aria-label={playing ? 'Pause' : 'Play'}>
           {playing ? <PauseIcon size={16} /> : <Play size={16} />}
         </button>
-        <button className="btn-icon" onClick={onReset} title="Reset">
+        <button className="btn-icon" onClick={onReset} title="Reset" aria-label="Reset">
           <RotateCcw size={16} />
         </button>
-        <button className="btn-icon" onClick={onEnd} title="Jump to end">
+        <button className="btn-icon" onClick={onEnd} title="Jump to end" aria-label="Jump to end">
           <SkipForward size={16} />
         </button>
       </div>
@@ -1765,61 +1766,60 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             </div>
         </Modal>
       )}
-      <div className="page-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button className="btn-icon" onClick={onBack} aria-label="Back"><ArrowLeft size={18} /></button>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <h1 className="page-header-title">{w.name}</h1>
-              <span className={`badge tag-${w.type.toLowerCase()}`}><TypeIcon type={w.type} size={12} /> {w.type}</span>
-              {/* The same mark the list row carries. It was only ever on the
-                  list, which meant the one page you would open to check
-                  whether a workout is shared was the one that did not say.
+      {/* The shared header, like a plan's and a session's. This page used to
+          hand-roll the same markup with its own inline styles, which is how
+          the three drifted apart in the first place. */}
+      <PageHeader
+        title={w.name}
+        subtitle={longDate(fromDateKey(w.date))}
+        onBack={onBack}
+        /* Beside the date, not the title: a long workout name with two chips
+           after it wrapped the header onto three lines on a phone. */
+        subtitleAction={
+          <>
+            <span className={`badge tag-${w.type.toLowerCase()}`}><TypeIcon type={w.type} size={12} /> {w.type}</span>
+            {/* The same mark the list row carries. It was only ever on the
+                list, which meant the one page you would open to check
+                whether a workout is shared was the one that did not say.
 
-                  Owner only, and that is the whole meaning of it: the badge
-                  says "you have shared this". On someone else's workout the
-                  server sets `shared` unconditionally — that is how the Social
-                  tab knows it has an audience — so rendering it here told you
-                  that a workout you are merely a guest on is one you shared. */}
-              {!readOnly && <ShareBadge workout={w} />}
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
-              {longDate(fromDateKey(w.date))}
-            </div>
-            {/* Its own line rather than sharing one with the date: a long
-                display name would otherwise squeeze the date or wrap raggedly. */}
-            {readOnly && w.owner && (
-              /* Opens their profile: the workouts of theirs you can see,
-                 gathered by person rather than by recency. */
-              <button
-                type="button"
-                className="owner-byline owner-byline-link"
-                style={{ marginTop: 4 }}
-                onClick={() => onOpenUser?.(w.owner!.id)}
-              >
-                <span>Shared by</span>
-                <UserAvatar user={w.owner} size={20} />
-                <span>{userLabel(w.owner)}</span>
-              </button>
-            )}
-          </div>
-          <div style={{ marginLeft: 'auto', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
-            {readOnly ? null : (
-              <OptionsMenu
-                onEdit={startEdit}
-                onInfo={() => setShowInfo(true)}
-                onDownloadOriginal={w.hasOriginal ? downloadOriginal : undefined}
-                onRestore={w.hasOriginal ? () => setConfirmRestore(true) : undefined}
-                onShare={() => setSharing(true)}
-                onShareCard={() => setCardOpen(true)}
-                onRecalculate={() => { setRecalcErr(null); setConfirmRecalc(true) }}
-                onDelete={() => setConfirmDelete(true)}
-                deleting={deleting}
-              />
-            )}
-          </div>
-        </div>
-      </div>
+                Owner only, and that is the whole meaning of it: the badge
+                says "you have shared this". On someone else's workout the
+                server sets `shared` unconditionally — that is how the Social
+                tab knows it has an audience — so rendering it here told you
+                that a workout you are merely a guest on is one you shared. */}
+            {!readOnly && <ShareBadge workout={w} />}
+          </>
+        }
+        /* Its own line rather than sharing one with the date: a long display
+           name would otherwise squeeze the date or wrap raggedly. */
+        meta={readOnly && w.owner ? (
+          /* Opens their profile: the workouts of theirs you can see,
+             gathered by person rather than by recency. */
+          <button
+            type="button"
+            className="owner-byline owner-byline-link page-header-byline"
+            onClick={() => onOpenUser?.(w.owner!.id)}
+          >
+            <span>Shared by</span>
+            <UserAvatar user={w.owner} size={20} />
+            <span>{userLabel(w.owner)}</span>
+          </button>
+        ) : undefined}
+        compactActions
+        actions={readOnly ? undefined : (
+          <OptionsMenu
+            onEdit={startEdit}
+            onInfo={() => setShowInfo(true)}
+            onDownloadOriginal={w.hasOriginal ? downloadOriginal : undefined}
+            onRestore={w.hasOriginal ? () => setConfirmRestore(true) : undefined}
+            onShare={() => setSharing(true)}
+            onShareCard={() => setCardOpen(true)}
+            onRecalculate={() => { setRecalcErr(null); setConfirmRecalc(true) }}
+            onDelete={() => setConfirmDelete(true)}
+            deleting={deleting}
+          />
+        )}
+      />
 
       <div className="page-content">
         {originalErr && (

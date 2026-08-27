@@ -95,7 +95,7 @@ export default function FinishedSession({ session, onBack, onOpenUser, onDeleted
         subtitle={`${session.planName} · ${sessionWhen(session.startedAt)}`}
         onBack={onBack}
         /* Same header shape as a workout and a plan — see PlanView. */
-        titleAction={
+        subtitleAction={
           <>
             {/* History, not a clipboard: that is the session mark everywhere else —
                 the card in the list, the row in a feed, the tab that holds them.
