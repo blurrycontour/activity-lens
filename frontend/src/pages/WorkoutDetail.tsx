@@ -1338,7 +1338,25 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
       ? [0, series.count ? Math.ceil(series.max * 1.05) || 1 : 1]
       : padDomain(series.min, series.max, series.count)
     const cursorVal = valueAtTime(data, dataKey as any, currentTime)
-    const strokeStops = hrZoneStroke && maxHRForZones ? hrZoneStops(yDomain[0], yDomain[1], maxHRForZones) : null
+    // The zone gradient is an SVG linear gradient in objectBoundingBox units,
+    // so it maps to the *stroke path's* bounding box — the value range of the
+    // line actually drawn — not to the padded axis domain. Computing the stops
+    // against the axis domain painted the peak with the colour meant for the
+    // padded top of the chart, so a Zone-4 peak drew as Zone 5 with no Zone-5
+    // sample behind it. Measure the visible line's own range so the offsets
+    // line up, and it stays right as the line grows during playback.
+    let visMin = Infinity
+    let visMax = -Infinity
+    if (hrZoneStroke) {
+      for (const p of visible) {
+        const v = (p as Record<string, number>)[dataKey]
+        if (v < visMin) visMin = v
+        if (v > visMax) visMax = v
+      }
+    }
+    const strokeStops = hrZoneStroke && maxHRForZones && visible.length
+      ? hrZoneStops(visMin, visMax, maxHRForZones)
+      : null
     const strokeColor = strokeStops ? `url(#${gradId}_stroke)` : stroke
     return (
       <ResponsiveContainer width="100%" height={height}>
