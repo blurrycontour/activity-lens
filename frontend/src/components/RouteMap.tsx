@@ -266,7 +266,7 @@ function positionAt(route: Array<[number, number]>, fraction: number): [number, 
 
 export default function RouteMap({
   route, color, duration, currentTime, playhead, onScrub, height, distance, hrTimeline, paceTimeline, elevTimeline, cadenceTimeline, avatarUrl, maxHR, cadenceLabel,
-  shading, onShadingChange, maximizeButton,
+  shading, onShadingChange, maximizeButton, cooperativeGestures = false,
 }: {
   route: Array<[number, number]>
   color: string
@@ -297,6 +297,13 @@ export default function RouteMap({
    *  switcher then takes the corner instead of leaving a hole where the button
    *  would have been. */
   maximizeButton?: React.ReactNode
+  /**
+   * Require two fingers to pan, so a one-finger drag scrolls the page instead
+   * and MapLibre shows its "use two fingers" hint. On for the inline map on a
+   * phone, where the map sits mid-scroll; off once it is maximized, where the
+   * map is the whole screen and there is nothing to scroll past.
+   */
+  cooperativeGestures?: boolean
 }) {
   const [layer, setLayer] = useState<MapLayerId>(() => {
     const stored = localStorage.getItem(MAP_LAYER_KEY)
@@ -456,6 +463,11 @@ export default function RouteMap({
   const clickData = useRef({ route, duration, onScrub, selected: selectedPoint })
   clickData.current = { route, duration, onScrub, selected: selectedPoint }
 
+  // Read by the map constructor, which runs once and must not close over a
+  // stale first-render value; the effect below owns every change after that.
+  const coopRef = useRef(cooperativeGestures)
+  coopRef.current = cooperativeGestures
+
   /**
    * The playback time this component last asked for, so a move it did not cause
    * can be told apart from one it did.
@@ -487,6 +499,9 @@ export default function RouteMap({
       pitchWithRotate: false,
       dragRotate: false,
       touchZoomRotate: true,
+      // Initial value only; the effect below keeps it in step as the map is
+      // maximized and restored without rebuilding the instance.
+      cooperativeGestures: coopRef.current,
     })
     map.touchZoomRotate.disableRotation()
     // Before the zoom buttons, so it sits on top of them: MapLibre stacks a
@@ -519,6 +534,17 @@ export default function RouteMap({
     // data changes are handled by the effects below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapBuildable])
+
+  // Two-finger panning is a per-view choice, not a per-instance one: the same
+  // map is inline (cooperative) and then maximized (free), so the handler is
+  // toggled rather than the map rebuilt. mapBuildable is a dependency so this
+  // also runs on the render that finishes building the map.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map?.cooperativeGestures) return
+    if (cooperativeGestures) map.cooperativeGestures.enable()
+    else map.cooperativeGestures.disable()
+  }, [cooperativeGestures, mapBuildable])
 
   useEffect(() => {
     const map = mapRef.current
