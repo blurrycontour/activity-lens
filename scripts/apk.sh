@@ -79,7 +79,7 @@ if [ -z "${AL_VERSION:-}" ]; then
   AL_VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo 0.0.0-dev)"
 fi
 if [ -z "${AL_VERSION_CODE:-}" ]; then
-  AL_VERSION_CODE="$(git rev-list --count HEAD 2>/dev/null || echo 1)"
+  AL_VERSION_CODE="$(date -u +%s)"
 fi
 
 echo "==> Activity Lens APK: $BUILD_TYPE $AL_VERSION (code $AL_VERSION_CODE)"
