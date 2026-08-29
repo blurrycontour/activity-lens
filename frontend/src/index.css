@@ -4197,6 +4197,11 @@ body:has(.overlay) .dial { display: none; }
 /* The one thing that gives way when the bar is narrow. */
 .playback-bar input[type="range"] { min-width: 0; }
 
+/* The play button carries the accent: it is the one control used on every
+   visit, so it reads as the primary action rather than one of a row of equals. */
+.playback-play { background: var(--primary); color: var(--on-primary); }
+.playback-play:hover { background: var(--primary); color: var(--on-primary); filter: brightness(1.08); }
+
 /*
   The playback transport, docked above the bottom bar on a phone.
 

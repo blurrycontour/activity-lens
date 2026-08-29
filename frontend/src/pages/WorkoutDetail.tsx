@@ -339,7 +339,7 @@ function PlaybackBar({
   return (
     <div className="playback-bar">
       <div className="playback-controls">
-        <button className="btn-icon" onClick={onPlayPause} title={playing ? 'Pause' : 'Play'} aria-label={playing ? 'Pause' : 'Play'}>
+        <button className="btn-icon playback-play" onClick={onPlayPause} title={playing ? 'Pause' : 'Play'} aria-label={playing ? 'Pause' : 'Play'}>
           {playing ? <PauseIcon size={16} /> : <Play size={16} />}
         </button>
         <button className="btn-icon" onClick={onReset} title="Reset" aria-label="Reset">
