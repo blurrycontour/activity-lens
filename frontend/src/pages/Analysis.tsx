@@ -10,7 +10,6 @@ import ChartCard, { EmptyPlot } from '../components/ChartCard'
 import TabStrip from '../components/TabStrip'
 import InfoTip from '../components/InfoTip'
 import { EDGE_PADDING_Y, END_PADDING, KEEP_EMPTY_ROWS, denseXAxis, useChartSpace, xLabel } from '../components/ChartAxis'
-import TypeLegend from '../components/TypeLegend'
 import ScatterDot, { ActiveScatterDot } from '../components/ScatterDot'
 import Dropdown from '../components/Dropdown'
 import { useLocalStorage } from '../lib/useLocalStorage'
@@ -24,10 +23,10 @@ import {
 } from '../lib/weather'
 import { usePreferences } from '../context/PreferencesContext'
 import {
-  ScatterChart, Scatter, XAxis, YAxis, ZAxis, Tooltip, ResponsiveContainer, CartesianGrid,
+  Scatter, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   BarChart, Bar, Cell, LineChart, Line, ComposedChart, ReferenceArea, ReferenceLine,
 } from 'recharts'
-import { Award, Target, Zap, Activity, Navigation, TrendingUp, Gauge, Flame, CloudSun, Sparkles, CalendarRange, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Award, Target, Zap, Activity, TrendingUp, Gauge, Flame, CloudSun, Sparkles, CalendarRange, ChevronLeft, ChevronRight } from 'lucide-react'
 
 type PR = { longest: Workout; longestTime: Workout; fastest: Workout | null; highest: Workout }
 
@@ -83,6 +82,37 @@ const SPORT_MEASURES: {
   { id: 'duration', label: 'Time', axis: 'Time (hours)', of: w => w.duration / 3600, fmt: v => `${v.toFixed(1)} h` },
   { id: 'elevation', label: 'Elevation', axis: 'Elevation gain (m)', of: w => w.elevationGain, fmt: v => `${Math.round(v)} m` },
   { id: 'calories', label: 'Calories', axis: 'Calories (kcal)', of: w => w.calories, fmt: v => `${Math.round(v).toLocaleString()} kcal` },
+]
+
+/** Zero is a missing measurement, not a value — the same rule weather.ts uses. */
+const positiveOnly = (v: number) => (v > 0 ? v : null)
+
+/**
+ * The measures the Efficiency scatter can put on either axis.
+ *
+ * Any-against-any, so a single chart replaces the fixed "HR vs Pace" and
+ * "Distance vs Pace" pair. `get` returns null where the workout did not record
+ * the figure, which is what keeps a missing heart rate out of the cloud rather
+ * than dropping a workout at zero.
+ */
+interface AxisMetric {
+  key: string
+  label: string
+  unit: string
+  get: (w: Workout) => number | null
+  format: (v: number) => string
+}
+
+const SCATTER_METRICS: AxisMetric[] = [
+  { key: 'pace', label: 'Avg Pace', unit: '/km', get: w => positiveOnly(w.avgPace), format: fmtPace },
+  { key: 'hr', label: 'Avg HR', unit: 'bpm', get: w => positiveOnly(w.avgHR), format: v => String(Math.round(v)) },
+  { key: 'maxHr', label: 'Max HR', unit: 'bpm', get: w => positiveOnly(w.maxHR), format: v => String(Math.round(v)) },
+  { key: 'speed', label: 'Avg Speed', unit: 'km/h', get: w => positiveOnly(w.avgSpeed), format: v => v.toFixed(1) },
+  { key: 'distance', label: 'Distance', unit: 'km', get: w => positiveOnly(w.distance / 1000), format: v => v.toFixed(1) },
+  { key: 'duration', label: 'Duration', unit: 'min', get: w => positiveOnly(w.duration / 60), format: v => String(Math.round(v)) },
+  // Not `positiveOnly`: a flat activity really did climb nothing.
+  { key: 'elevation', label: 'Elevation Gain', unit: 'm', get: w => (w.elevationGain >= 0 ? w.elevationGain : null), format: v => String(Math.round(v)) },
+  { key: 'calories', label: 'Calories', unit: 'kcal', get: w => positiveOnly(w.calories), format: v => String(Math.round(v)) },
 ]
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -429,6 +459,9 @@ export default function Analysis() {
   const [weatherMetric, setWeatherMetric] = useLocalStorage<WeatherMetric>('al_an_wx_metric', 'pace')
   const [exploreX, setExploreX] = useLocalStorage<WeatherKey>('al_an_wx_x', 'humidity')
   const [exploreY, setExploreY] = useLocalStorage<PerfKey>('al_an_wx_y', 'pace')
+  // The Efficiency scatter's two axes, any measure against any other.
+  const [effScatterX, setEffScatterX] = useLocalStorage<string>('al_an_eff_x', 'pace')
+  const [effScatterY, setEffScatterY] = useLocalStorage<string>('al_an_eff_y', 'hr')
   const { prefs } = usePreferences()
   const space = useChartSpace()
 
@@ -672,30 +705,31 @@ export default function Analysis() {
   }, [workouts, volumeBucket, volumeMeasure, showGaps])
 
   // ── Efficiency ───────────────────────────────────────────────────────────
-  const hrPaceData = useMemo(() =>
-    workouts.filter(w => w.avgPace > 0 && w.avgHR > 0).map(w => ({
-      hr: w.avgHR,
-      pace: Math.round(w.avgPace),
-      distKm: Math.round(w.distance / 100) / 10,
-      type: w.type,
-      name: w.name,
-      date: w.date,
-    })),
-  [workouts])
-
-  const distPaceData = useMemo(() =>
-    workouts.filter(w => w.avgPace > 0 && w.distance > 0).map(w => ({
-      km: Math.round(w.distance / 100) / 10,
-      pace: Math.round(w.avgPace),
-      // Marker area encodes elevation gain, so the slow-because-hilly efforts
-      // separate visually from the slow-because-tired ones.
-      elev: Math.round(w.elevationGain),
-      hr: w.avgHR,
-      type: w.type,
-      name: w.name,
-      date: w.date,
-    })),
-  [workouts])
+  // The flexible scatter: any measure against any other, one fitted line per
+  // sport — the same shape the Weather tab's free-choice chart uses.
+  const effX = useMemo(() => SCATTER_METRICS.find(m => m.key === effScatterX) ?? SCATTER_METRICS[0], [effScatterX])
+  const effY = useMemo(() => SCATTER_METRICS.find(m => m.key === effScatterY) ?? SCATTER_METRICS[1], [effScatterY])
+  const effGroups = useMemo(() => {
+    // Grouped by sport and drawn in the palette's own order, so the fit through
+    // each is a trend in that sport rather than in the mix of sports.
+    const byType = new Map<WorkoutType, { x: number; y: number; name: string; date: string; type: WorkoutType }[]>()
+    for (const w of workouts) {
+      const x = effX.get(w)
+      const y = effY.get(w)
+      if (x === null || y === null) continue
+      const arr = byType.get(w.type) ?? []
+      arr.push({ x, y, name: w.name, date: w.date, type: w.type })
+      byType.set(w.type, arr)
+    }
+    return [...byType.entries()].map(([type, points]) => ({
+      type,
+      color: TYPE_COLOR[type],
+      points,
+      fit: linearFit(points),
+      r: pearson(points.map(p => p.x), points.map(p => p.y)),
+    }))
+  }, [workouts, effX, effY])
+  const effPoints = useMemo(() => effGroups.flatMap(g => g.points), [effGroups])
 
   const efficiency = useMemo(() => {
     const usable = series.filter(d => d.hr > 0 && (d.speed ?? 0) > 0 && d.pace)
@@ -1149,96 +1183,108 @@ export default function Analysis() {
               </ChartCard>
             </div>
 
-            <div className="grid-2">
-              <ChartCard
-                title="HR vs Pace"
-                icon={<Target size={14} color="var(--primary)" />}
-                description="Lower HR at faster pace = improved aerobic efficiency. Marker size is distance, colour is activity type."
-                info="Every activity plotted by its average pace and average heart rate, with marker area scaled to distance. As fitness improves the cloud drifts down and to the right — faster for fewer beats. Points high and left are hard efforts or bad days; large markers sitting low are your strongest long runs."
-              >
-                {hrPaceData.length === 0 ? (
-                  <EmptyPlot height={240}>No activities with pace and heart rate in the {rangeLabel(rangeDays)}</EmptyPlot>
-                ) : (
-                  <ResponsiveContainer width="100%" height={240}>
-                    <ScatterChart margin={space.margin(18)}>
-                      <CartesianGrid {...GRID_PROPS} vertical />
-                      {/* Units live in the axis labels rather than on every tick:
-                          with " bpm" appended to each value the labels grew wide
-                          enough to be clipped by the plot area. */}
-                      <XAxis type="number" dataKey="pace" name="Pace" domain={['dataMin - 20', 'dataMax + 20']} padding={END_PADDING} tick={AXIS_TICK} axisLine={false} tickLine={false} reversed tickFormatter={v => fmtPace(v)} label={xLabel('Pace (min/km) — faster →')} />
-                      <YAxis type="number" dataKey="hr" name="HR" domain={['dataMin - 5', 'dataMax + 5']} padding={EDGE_PADDING_Y} width="auto" tick={AXIS_TICK} axisLine={false} tickLine={false} label={space.yLabel('Avg HR (bpm)')} />
-                      <ZAxis type="number" dataKey="distKm" range={[40, 220]} name="Distance" />
+            <ChartCard
+              title={`${effX.label} vs ${effY.label}`}
+              icon={<Target size={14} color="var(--primary)" />}
+              description={effGroups.length > 1
+                ? 'Any measure against any other, one dot per activity coloured by sport — with a fitted line for each sport, never one through all of them.'
+                : 'Any measure against any other, one dot per activity.'}
+              info="Pick any two figures and see whether they move together across your activities. The dotted line for each sport is a least-squares fit through its dots, and r is how tightly they follow it — near 0 means no relationship in this selection. A fit is only drawn where there are enough points to mean something. Everything here is observational: distance, terrain and training phase move together, so a relationship is not a cause."
+              actions={
+                <div className="explore-picks">
+                  <Dropdown
+                    value={effScatterX}
+                    onChange={setEffScatterX}
+                    ariaLabel="Horizontal axis"
+                    options={SCATTER_METRICS.map(m => ({ value: m.key, label: m.label }))}
+                  />
+                  <span className="explore-vs">vs</span>
+                  <Dropdown
+                    value={effScatterY}
+                    onChange={setEffScatterY}
+                    ariaLabel="Vertical axis"
+                    options={SCATTER_METRICS.map(m => ({ value: m.key, label: m.label }))}
+                  />
+                </div>
+              }
+            >
+              {effPoints.length === 0 ? (
+                <EmptyPlot height={260}>
+                  No activities record both {effX.label.toLowerCase()} and {effY.label.toLowerCase()} in
+                  the {rangeLabel(rangeDays)}. Widen the range, or pick another pair.
+                </EmptyPlot>
+              ) : (
+                <>
+                  <ResponsiveContainer width="100%" height={260}>
+                    <ComposedChart margin={space.margin(18)}>
+                      <CartesianGrid {...GRID_PROPS} />
+                      {/* Pace is the one measure where a smaller number is the
+                          better result, so its axis reads high-to-low to keep
+                          "better" pointing the same way as every other pick. */}
+                      <XAxis
+                        type="number" dataKey="x" name={effX.label}
+                        domain={['dataMin', 'dataMax']} padding={END_PADDING}
+                        tick={AXIS_TICK} axisLine={false} tickLine={false}
+                        reversed={effX.key === 'pace'}
+                        tickFormatter={effX.format}
+                        label={xLabel(`${effX.label}${effX.unit ? ` (${effX.unit})` : ''}`)}
+                      />
+                      <YAxis
+                        type="number" dataKey="y" name={effY.label}
+                        domain={['dataMin', 'dataMax']} padding={EDGE_PADDING_Y} width="auto"
+                        tick={AXIS_TICK} axisLine={false} tickLine={false}
+                        reversed={effY.key === 'pace'}
+                        tickFormatter={effY.format}
+                        label={space.yLabel(`${effY.label}${effY.unit ? ` (${effY.unit})` : ''}`)}
+                      />
                       <Tooltip
-                        cursor={{ strokeDasharray: '3 3', stroke: 'var(--border-strong)' }}
+                        shared={false}
+                        cursor={{ stroke: HOVER_FILL }}
                         content={({ active, payload }) => {
                           if (!active || !payload?.length) return null
-                          const d = payload[0].payload
+                          const d = realPoint(payload) as any
+                          if (!d?.name) return null
                           return (
                             <div className="custom-tooltip">
                               <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.name}</div>
                               <div style={{ color: 'var(--text-3)' }}>{d.type} · {d.date}</div>
-                              <div>Pace: {fmtPace(d.pace)} /km</div>
-                              <div>HR: {d.hr} bpm</div>
-                              <div>Distance: {d.distKm} km</div>
+                              <div>{effX.label}: {effX.format(d.x)} {effX.unit}</div>
+                              <div>{effY.label}: {effY.format(d.y)} {effY.unit}</div>
                             </div>
                           )
                         }}
                       />
-                      {/* Coloured per point rather than one series per type: a
-                          <Scatter> per type would give each its own z order and
-                          tooltip, when all that is wanted is the sport's hue. */}
-                      <Scatter data={hrPaceData} opacity={0.6} shape={<ScatterDot />} activeShape={<ActiveScatterDot />}>
-                        {hrPaceData.map((d, i) => <Cell key={i} fill={TYPE_COLOR[d.type]} />)}
+                      {/* One Scatter with a Cell per point, not one per sport:
+                          Recharts gives each series its own tooltip, so with
+                          several only one sport's dots would answer a tap. */}
+                      <Scatter data={effPoints} dataKey="y" opacity={0.6} isAnimationActive={false} shape={<ScatterDot />} activeShape={<ActiveScatterDot />}>
+                        {effPoints.map((d, i) => <Cell key={i} fill={TYPE_COLOR[d.type]} />)}
                       </Scatter>
-                    </ScatterChart>
+                      {/* A fit each, only where the correlation cleared the
+                          floor — linearFit will slope through anything. */}
+                      {effGroups.map(g => g.fit && g.r !== null && (
+                        <Line
+                          key={`fit-${g.type}`}
+                          data={g.fit} dataKey="y" type="linear"
+                          stroke={g.color} {...TREND_LINE} legendType="none"
+                        />
+                      ))}
+                    </ComposedChart>
                   </ResponsiveContainer>
-                )}
-                <TypeLegend types={hrPaceData.map(d => d.type)} />
-              </ChartCard>
-
-              <ChartCard
-                title="Distance vs Pace"
-                icon={<Navigation size={14} color="var(--blue)" />}
-                description="Does pace hold up as distance grows? Marker size is elevation gain, colour is activity type."
-                info="Each activity plotted by distance against pace, with marker area scaled to elevation gain. A flat cloud means your pace is durable over distance; one that slopes toward slower paces as distance grows points at endurance rather than speed being the limiter. Large markers low on the chart are hills, not fatigue — that's what the size encoding is there to separate."
-              >
-                {distPaceData.length === 0 ? (
-                  <EmptyPlot height={240}>No activities with distance and pace in the {rangeLabel(rangeDays)}</EmptyPlot>
-                ) : (
-                  <ResponsiveContainer width="100%" height={240}>
-                    <ScatterChart margin={space.margin(18)}>
-                      <CartesianGrid {...GRID_PROPS} vertical />
-                      <XAxis type="number" dataKey="km" name="Distance" domain={['dataMin - 1', 'dataMax + 1']} padding={END_PADDING} tick={AXIS_TICK} axisLine={false} tickLine={false} label={xLabel('Distance (km)')} />
-                      <YAxis type="number" dataKey="pace" name="Pace" domain={['dataMin - 20', 'dataMax + 20']} padding={EDGE_PADDING_Y} width="auto" tick={AXIS_TICK} axisLine={false} tickLine={false} reversed tickFormatter={v => fmtPace(v)} label={space.yLabel('Pace (min/km)')} />
-                      {/* Elevation can legitimately be 0, so the range starts at
-                          a visible minimum rather than collapsing to a dot. */}
-                      <ZAxis type="number" dataKey="elev" range={[40, 220]} name="Elevation" />
-                      <Tooltip
-                        cursor={{ strokeDasharray: '3 3', stroke: 'var(--border-strong)' }}
-                        content={({ active, payload }) => {
-                          if (!active || !payload?.length) return null
-                          const d = payload[0].payload
-                          return (
-                            <div className="custom-tooltip">
-                              <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.name}</div>
-                              <div style={{ color: 'var(--text-3)' }}>{d.type} · {d.date}</div>
-                              <div>Distance: {d.km} km</div>
-                              <div>Pace: {fmtPace(d.pace)} /km</div>
-                              <div>Elevation: {d.elev} m</div>
-                              <div>HR: {d.hr || '—'} bpm</div>
-                            </div>
-                          )
-                        }}
-                      />
-                      <Scatter data={distPaceData} opacity={0.6} shape={<ScatterDot />} activeShape={<ActiveScatterDot />}>
-                        {distPaceData.map((d, i) => <Cell key={i} fill={TYPE_COLOR[d.type]} />)}
-                      </Scatter>
-                    </ScatterChart>
-                  </ResponsiveContainer>
-                )}
-                <TypeLegend types={distPaceData.map(d => d.type)} />
-              </ChartCard>
-            </div>
+                  <div className="wx-legend">
+                    {effGroups.map(g => (
+                      <span key={g.type} className="wx-legend-item">
+                        <span className="wx-legend-dot" style={{ background: g.color }} aria-hidden />
+                        {g.type}
+                        <span className="wx-legend-num">
+                          {g.points.length}{g.r !== null && ` · r ${g.r.toFixed(2)}`}
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+                </>
+              )}
+            </ChartCard>
           </>
         )}
 
