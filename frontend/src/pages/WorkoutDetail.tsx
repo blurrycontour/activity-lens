@@ -1796,7 +1796,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
         )}
       />
 
-      <div className={`page-content${playable && isMobile ? ' with-dock' : ''}`}>
+      <div className={`page-content${playable ? ' with-dock' : ''}`}>
         {originalErr && (
           <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', marginBottom: 16, color: 'var(--danger)', fontSize: 13 }}>
             <AlertTriangle size={15} style={{ flexShrink: 0 }} />
@@ -1942,14 +1942,6 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             </div>
           </div>
         </div>
-
-        {/* Playback controls: drives the map marker + chart cursors below.
-            Absent entirely when there is neither — see `playable`. */}
-        {playable && !isMobile && (
-          <div className="card" style={{ marginBottom: 16 }}>
-            <PlaybackBar {...playbackProps} />
-          </div>
-        )}
 
         {/* Metric toggle row. Its two switches are about the charts, so with no
             charts to configure the row goes with them. */}
@@ -2270,21 +2262,21 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
       )}
 
       {/*
-        * The transport, docked above the bottom bar for the whole page.
+        * The transport, docked to the bottom of the page on every width.
         *
         * It used to be a card beside the map that a copy tried to follow you
         * down the page, appearing and disappearing on scroll. That was fiddly
         * to get right and worse to use — a control that comes and goes is one
-        * you have to hunt for — so on a phone there is now exactly one of
-        * them and it never moves. The map keeps the inline card on a desktop,
-        * where the charts sit beside it and it is always in view anyway.
+        * you have to hunt for — so there is now exactly one of them and it
+        * never moves. On a desktop it clears the sidebar (see .playback-dock);
+        * on a phone it sits above the bottom bar.
         *
         * Fixed rather than portalled: this page is inside the swipe pager, but
         * the bar is fixed to the viewport and is not an overlay competing with
         * dialogs. `.page-content` reserves the height so the last card is not
         * left underneath it.
         */}
-      {playable && isMobile && (
+      {playable && (
         <div className="playback-dock">
           <PlaybackBar {...playbackProps} />
         </div>

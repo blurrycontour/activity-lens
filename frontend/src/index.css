@@ -4207,8 +4207,9 @@ body:has(.overlay) .dial { display: none; }
 
   It used to be a card beside the map with a copy that appeared and vanished on
   scroll. A control that comes and goes is one you have to hunt for, so there is
-  now exactly one of them and it never moves; the inline card stays on desktop,
-  where the charts sit beside the map and it is always in view.
+  now exactly one of them and it never moves. On a desktop it clears the left
+  sidebar and spans the content column; on a phone it spans the full width above
+  the bottom bar.
 
   Sleek on purpose: every pixel of height here is one the charts do not get.
   One row — transport, scrub bar, clock — and the clock shows the elapsed time
@@ -4238,6 +4239,12 @@ body:has(.overlay) .dial { display: none; }
   background: color-mix(in srgb, var(--bg-2) 94%, transparent);
   backdrop-filter: blur(12px);
   box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.35);
+}
+/* On a desktop the sidebar occupies the left edge, so the fixed dock starts
+   where the content column does rather than under the sidebar. --bottombar-h is
+   0 here, so the existing bottom already sits it on the viewport floor. */
+@media (min-width: 769px) {
+  .playback-dock { left: var(--sidebar-w); }
 }
 /* Room to scroll past the dock, so the last card is reachable rather than
    sitting underneath it. Mirrors what .with-fab does for the floating button. */
