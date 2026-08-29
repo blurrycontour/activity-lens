@@ -1901,7 +1901,11 @@ body {
    fills the host. */
 .map-page-host,
 .map-page-gl { position: absolute; inset: 0; }
-.map-page-expand {
+/* Scoped to the canvas so it outweighs the coarse-pointer rule that gives every
+   .btn-icon `position: relative` for its touch target — that later, equal-
+   specificity rule was flipping this to relative and dragging it off the left
+   edge on a phone. */
+.map-page-canvas .map-page-expand {
   position: absolute;
   top: 10px;
   right: 10px;
