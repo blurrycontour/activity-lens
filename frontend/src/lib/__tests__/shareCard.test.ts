@@ -89,6 +89,10 @@ describe('cardStats', () => {
     expect(cardStats(workout()).every(s => typeof s.icon === 'object' || typeof s.icon === 'function')).toBe(true)
   })
 
+  it('gives every figure a literal colour for its icon and label', () => {
+    expect(cardStats(workout()).every(s => /^#[0-9a-f]{6}$/i.test(s.color))).toBe(true)
+  })
+
   // Dropped rather than blanked: a tile reading "Avg HR —" prints the very
   // thing the sender chose to leave out.
   it('leaves heart rate out entirely when it is switched off', () => {

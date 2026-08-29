@@ -163,6 +163,10 @@ export interface CardStat {
   label: string
   value: string
   icon: LucideIcon
+  /** Fixed hue for the icon and label, so the four figures read apart at a
+   *  glance. Literal because canvas cannot resolve a CSS variable, and vetted
+   *  against both card themes — these are the heart-rate zone palette. */
+  color: string
 }
 
 /**
@@ -171,12 +175,12 @@ export interface CardStat {
  */
 export function cardStats(w: Workout, options: CardOptions = {}): CardStat[] {
   const stats: CardStat[] = [
-    { label: 'Time', value: w.duration > 0 ? fmtDuration(w.duration) : '—', icon: Clock },
-    { label: 'Distance', value: w.distance > 0 ? fmtDist(w.distance) : '—', icon: Navigation },
-    { label: 'Avg HR', value: w.avgHR > 0 ? `${w.avgHR} bpm` : '—', icon: Heart },
+    { label: 'Time', value: w.duration > 0 ? fmtDuration(w.duration) : '—', icon: Clock, color: '#60a5fa' },
+    { label: 'Distance', value: w.distance > 0 ? fmtDist(w.distance) : '—', icon: Navigation, color: '#34d399' },
+    { label: 'Avg HR', value: w.avgHR > 0 ? `${w.avgHR} bpm` : '—', icon: Heart, color: '#ef4444' },
     // Pace is meaningless without distance, and "0:00 /km" reads as a number
     // rather than as an absence.
-    { label: 'Avg Pace', value: w.avgPace > 0 ? `${fmtPace(w.avgPace)} /km` : '—', icon: Gauge },
+    { label: 'Avg Pace', value: w.avgPace > 0 ? `${fmtPace(w.avgPace)} /km` : '—', icon: Gauge, color: '#a855f7' },
   ]
   // Dropped, not blanked. A tile reading "Avg HR —" is the fact the sender
   // chose to leave out, printed anyway.
@@ -422,7 +426,7 @@ export async function drawShareCard(
   // awaiting in the middle of it would leave the card half-painted on screen.
   const [sportIcon, ...statIcons] = await Promise.all([
     iconImage(TYPE_ICON[sport], sportColor, 64),
-    ...stats.map(s => iconImage(s.icon, theme.muted, 34)),
+    ...stats.map(s => iconImage(s.icon, s.color, 34)),
   ])
 
   // ── Header ─────────────────────────────────────────────────────────────────
@@ -532,7 +536,7 @@ export async function drawShareCard(
       // this wide with the value under the label would be mostly empty panel.
       if (icon) ctx.drawImage(icon, inner, y + rowH / 2 - 16, 32, 32)
       ctx.textAlign = 'left'
-      ctx.fillStyle = theme.muted
+      ctx.fillStyle = s.color
       ctx.font = `500 26px ${SANS}`
       ctx.fillText(s.label.toUpperCase(), inner + (icon ? 46 : 0), y + rowH / 2 + 9)
 
@@ -547,7 +551,7 @@ export async function drawShareCard(
     if (icon) ctx.drawImage(icon, inner, y + 30, 34, 34)
 
     ctx.textAlign = 'left'
-    ctx.fillStyle = theme.muted
+    ctx.fillStyle = s.color
     ctx.font = `500 23px ${SANS}`
     ctx.fillText(s.label.toUpperCase(), inner + (icon ? 46 : 0), y + 55)
 
