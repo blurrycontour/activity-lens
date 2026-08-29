@@ -354,7 +354,11 @@ export default function RouteMap({
       while (cursor < samples.length - 1 && Math.abs(samples[cursor + 1].t - t) <= Math.abs(samples[cursor].t - t)) cursor++
       if (shading === 'hr') return hrZoneColor(values[cursor], maxHR)
       const ratio = (values[cursor] - min) / span
-      return `hsl(${210 - ratio * 190} 78% 52%)`
+      // Pace is time-per-distance, so a lower number is faster. Faster should
+      // read as hotter (red), matching every other effort scale, so pace is
+      // inverted; elevation and cadence keep higher = hotter.
+      const warmth = shading === 'pace' ? 1 - ratio : ratio
+      return `hsl(${210 - warmth * 190} 78% 52%)`
     }
     const segs: Array<{ positions: Array<[number, number]>; color: string }> = []
     for (let i = 0; i < route.length - 1; i += step) {
@@ -396,15 +400,18 @@ export default function RouteMap({
     // gradient. Kept in step by hand, which is safe because both live in this
     // file and there is nowhere else for either to be used.
     const ramp = `linear-gradient(to right, hsl(210 78% 52%), hsl(115 78% 52%), hsl(20 78% 52%))`
-    // Faster is a lower number, so the pace ramp reads high-to-low; labelling
-    // the ends by value rather than by "min"/"max" is what keeps that honest.
     const fmt = shading === 'pace'
       ? (v: number) => `${fmtPace(v)}/km`
       : shading === 'elevation'
         ? (v: number) => `${Math.round(v)} m`
         : (v: number) => `${Math.round(v)} ${cadenceLabel}`
     const title = shading === 'pace' ? 'Pace' : shading === 'elevation' ? 'Elevation' : 'Cadence'
-    return { title, ramp, low: fmt(min), high: fmt(max) }
+    // The ramp's left end is the coolest (blue) and its right end the hottest
+    // (red). Pace inverts value-to-warmth, so its ends swap: the fastest pace
+    // (smallest number) sits under the red end.
+    const coolVal = shading === 'pace' ? max : min
+    const warmVal = shading === 'pace' ? min : max
+    return { title, ramp, low: fmt(coolVal), high: fmt(warmVal) }
   }, [shading, hrTimeline, paceTimeline, elevTimeline, cadenceTimeline, cadenceLabel])
 
   /**
