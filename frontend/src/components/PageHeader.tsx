@@ -29,6 +29,18 @@ interface PageHeaderProps {
    * workout page has always put it.
    */
   meta?: React.ReactNode
+  /**
+   * Chips that belong to the thing rather than to the page — its kind, whether
+   * it is shared — shown on the subtitle's row.
+   *
+   * Beside the subtitle and not beside the title, because the title is the one
+   * piece of text here with no length limit. A workout called "Morning run
+   * along the canal and back" with two chips after it wrapped onto three lines
+   * on a phone, and the chips are short and fixed-width where the name is
+   * neither. The date line has room to spare and nothing that suffers from
+   * sharing it.
+   */
+  subtitleAction?: React.ReactNode
 }
 
 /**
@@ -39,7 +51,7 @@ interface PageHeaderProps {
  * header as opening a workout, so going one level deep looks the same wherever
  * you do it.
  */
-export default function PageHeader({ title, subtitle, onBack, actions, titleAction, compactActions, meta }: PageHeaderProps) {
+export default function PageHeader({ title, subtitle, onBack, actions, titleAction, compactActions, meta, subtitleAction }: PageHeaderProps) {
   return (
     <div className="page-header page-header-row">
       {onBack && (
@@ -52,7 +64,12 @@ export default function PageHeader({ title, subtitle, onBack, actions, titleActi
           <h1 className="page-header-title">{title}</h1>
           {titleAction}
         </div>
-        {subtitle && <p className="page-header-sub">{subtitle}</p>}
+        {(subtitle || subtitleAction) && (
+          <div className="page-header-sub-row">
+            {subtitle && <p className="page-header-sub">{subtitle}</p>}
+            {subtitleAction}
+          </div>
+        )}
         {meta}
       </div>
       {/* Wrapped so the phone layout can drop it onto its own line. Filters

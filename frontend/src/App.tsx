@@ -100,6 +100,15 @@ function applyTheme(mode: ThemeMode, prefs = readDisplayPrefs()) {
 
 export default function App() {
   const { user, loading, logout } = useAuth()
+  /**
+   * The session, readable from callbacks that must not be rebuilt when it
+   * changes. `openLink` is one: it is a dependency of the notification
+   * listeners, and re-creating it would tear those down and rebind them every
+   * time auth settled — which is exactly when a tapped notification is in
+   * flight.
+   */
+  const userRef = useRef(user)
+  userRef.current = user
   const initialLocation = useRef(parseLocation()).current
   const [page, setPage] = useState<Page>(initialLocation.page)
   // The open category within a hub page (settings, admin), or null for the hub.
@@ -107,6 +116,13 @@ export default function App() {
   // The record open inside that category, e.g. the account under Admin > Users.
   const [detail, setDetail] = useState<string | null>(initialLocation.detail)
   const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null)
+  /**
+   * A deep link that arrived before the session did, held until it can be
+   * followed. See the effect that drains it, near the notification-tap
+   * handlers. A ref rather than state: nothing renders differently for having
+   * one, and it is written from inside a callback that must not re-run.
+   */
+  const pendingLink = useRef<string | null>(null)
   /**
    * True while a workout named in the URL is still being fetched.
    *
@@ -429,9 +445,18 @@ export default function App() {
     const target = new URL(link, window.location.origin)
     // Not a page but an instruction: the update notification asks for the
     // update to start, which on Android means the install dialog and on the
-    // web means picking up the build this server is now serving.
+    // web means picking up the build this server is now serving. Deliberately
+    // before the session check below: starting an update needs no session, and
+    // the endpoints it uses are unauthenticated for exactly that reason.
     if (target.pathname === UPDATE_LINK) {
       void startUpdate()
+      return
+    }
+    // Everything else needs a signed-in session to fetch anything. On a cold
+    // start from a tapped notification this runs before there is one, so the
+    // link is held rather than followed into a 401.
+    if (!userRef.current) {
+      pendingLink.current = link
       return
     }
     const loc = parseLocation(target.pathname)
@@ -439,12 +464,28 @@ export default function App() {
       api.getWorkout(loc.workoutId)
         .then(w => {
           setSelectedWorkout(w)
-          // The query string comes along, exactly as it does for a page below:
-          // a social notification links to "?tab=social", and dropping it would
-          // land on the charts and leave the reader to find the comment.
+          // Which nav item lights up behind the workout. Someone else's
+          // workout is one you reached through Discover — the same reasoning
+          // navHighlight already applies to profiles — and your own belongs to
+          // your library. Without this the tap left whatever page you happened
+          // to be on lit, which on a notification arriving from elsewhere in
+          // the app is simply the wrong answer rather than a stale one.
+          setPage(w.isOwner === false ? 'discover' : 'workouts')
+          setSection(null)
+          setDetail(null)
+          // The query string and the fragment both come along: a social
+          // notification links to "?tab=social#comment=abc", and dropping
+          // either lands on the charts and leaves the reader to find the thing
+          // they were told about.
           // Marked like any workout we open, so closing it goes back to
           // wherever the tap came from rather than to the library.
-          window.history.pushState({ workout: true }, '', `/workouts/${w.id}${target.search}`)
+          window.history.pushState({ workout: true }, '', `/workouts/${w.id}${target.search}${target.hash}`)
+          // The workout may already be the one on screen, in which case
+          // nothing remounts and the new tab and comment in the URL would go
+          // unread. This says "the URL changed" to whoever is listening — which
+          // is what makes tapping a notification for the page you are already
+          // looking at do something.
+          window.dispatchEvent(new Event(LOCATION_EVENT))
         })
         // A workout that has since been unshared or deleted: land on the list
         // rather than a dead end.
@@ -527,6 +568,28 @@ export default function App() {
     void consumeNotificationTap().then(tap => { if (tap) go(tap) })
     return onNotificationTap(go)
   }, [openLink])
+
+  /**
+   * A link that arrived before there was a session to open it with.
+   *
+   * Tapping a notification cold-starts the app, and the tap is delivered as
+   * soon as this effect mounts — which on a cold start is well before the
+   * session has been restored. `openLink` then asked for the workout with no
+   * credentials, got a 401, and took the not-found branch: the reader was
+   * dropped on their library being told the workout was gone, and killing and
+   * reopening the app was the only way to see the comment they had been told
+   * about. That is the "clicked a notification and had to restart" report.
+   *
+   * So a link that cannot be followed yet is held rather than spent. `openLink`
+   * hands it back here, and it is followed once — the ref is cleared before the
+   * call — the moment a user exists.
+   */
+  useEffect(() => {
+    const link = pendingLink.current
+    if (!user || !link) return
+    pendingLink.current = null
+    openLink(link)
+  }, [user, openLink])
 
   // A cold start from a tapped notification, where the worker had no window to
   // message and put the id in the URL instead. Waits for auth: marking one read

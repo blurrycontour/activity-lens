@@ -1,12 +1,15 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { LOCATION_EVENT } from '../App'
+import { clearDeepLink, deepLinkFor } from '../lib/deepLink'
 import { createPortal } from 'react-dom'
 import { type RecalcParts, type Workout, type WorkoutType, fmtClock, fmtDuration, fmtDist, fmtPace, TYPE_COLOR } from '../data/workouts'
 import TypeIcon from '../components/TypeIcon'
+import PageHeader from '../components/PageHeader'
 import SportDropdown from '../components/SportDropdown'
 import Dropdown from '../components/Dropdown'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ReferenceDot, ReferenceArea, BarChart, Bar } from 'recharts'
 import {
-  ArrowLeft, Heart, Mountain, Zap, Clock, TrendingUp, Navigation, Pencil, Trash2, Gauge,
+  Heart, Mountain, Zap, Clock, TrendingUp, Navigation, Pencil, Trash2, Gauge,
   Check, X as XIcon, Play, Pause as PauseIcon, LoaderCircle, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, AlertTriangle, Activity, Share2, Lock, FileDown, Plus, Image as ImageIcon, NotebookPen, Images, MessageSquare, ClipboardList, Watch, Undo2, ChevronDown, Thermometer, LineChart, Info } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useAuth } from '../context/AuthContext'
@@ -304,9 +307,8 @@ function smoothTimeline(data: Array<{ t: number; value: number }>, radius = 3) {
 }
 
 
-function PlaybackBar({
-  playing, currentTime, duration, onPlayPause, onReset, onEnd, onScrub,
-}: {
+/** The props every copy of the bar is handed, so eleven call sites cannot drift. */
+interface PlaybackProps {
   playing: boolean
   currentTime: number
   duration: number
@@ -314,17 +316,36 @@ function PlaybackBar({
   onReset: () => void
   onEnd: () => void
   onScrub: (t: number) => void
-}) {
+}
+
+/**
+ * The transport: play, reset, jump to end, a scrub bar and the clock.
+ *
+ * One line and one shape everywhere it appears — docked on a phone, in the
+ * card beside the map on a desktop, and under every expanded chart and map.
+ * It used to have a roomier variant that stacked onto two rows in a narrow
+ * card and printed "4:27:37 / 4:27:37"; the docked copy needed neither, and
+ * once the sleek one existed there was no reason for the page to show two
+ * different players depending on where you met it.
+ *
+ * The clock is the elapsed time alone. The total is what the end of the scrub
+ * bar means, and seventeen characters of "x / y" is what forced the two-row
+ * layout in the first place. Nothing is lost to a screen reader: the slider's
+ * aria-valuetext still announces both.
+ */
+function PlaybackBar({
+  playing, currentTime, duration, onPlayPause, onReset, onEnd, onScrub,
+}: PlaybackProps) {
   return (
     <div className="playback-bar">
       <div className="playback-controls">
-        <button className="btn-icon" onClick={onPlayPause} title={playing ? 'Pause' : 'Play'}>
+        <button className="btn-icon" onClick={onPlayPause} title={playing ? 'Pause' : 'Play'} aria-label={playing ? 'Pause' : 'Play'}>
           {playing ? <PauseIcon size={16} /> : <Play size={16} />}
         </button>
-        <button className="btn-icon" onClick={onReset} title="Reset">
+        <button className="btn-icon" onClick={onReset} title="Reset" aria-label="Reset">
           <RotateCcw size={16} />
         </button>
-        <button className="btn-icon" onClick={onEnd} title="Jump to end">
+        <button className="btn-icon" onClick={onEnd} title="Jump to end" aria-label="Jump to end">
           <SkipForward size={16} />
         </button>
       </div>
@@ -341,9 +362,7 @@ function PlaybackBar({
         aria-valuetext={`${fmtDuration(currentTime)} of ${fmtDuration(duration)}`}
         style={{ flex: 1, accentColor: 'var(--primary)' }}
       />
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-3)', minWidth: 88, textAlign: 'right' }}>
-        {fmtDuration(currentTime)} / {fmtDuration(duration)}
-      </span>
+      <span className="playback-clock">{fmtDuration(currentTime)}</span>
     </div>
   )
 }
@@ -408,14 +427,8 @@ function EdgeTick(props: {
  * absent or unrecognised parameter means the default, which is what every
  * ordinary visit gets.
  */
-function initialTab(): DetailTab {
-  const asked = new URLSearchParams(window.location.search).get('tab')
-  return asked === 'gallery' || asked === 'social' || asked === 'notes' ? asked : 'notes'
-}
-
-/** Whether this page was opened at a particular tab, and so should scroll to it. */
-function wantsTabScroll(): boolean {
-  return new URLSearchParams(window.location.search).has('tab')
+function askedTab(tab: string | null): DetailTab | null {
+  return tab === 'gallery' || tab === 'social' || tab === 'notes' ? tab : null
 }
 
 /**
@@ -784,13 +797,26 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
       .map(p => ({ t: p.t, cad: Math.round(p.value) })),
     [w.cadenceTimeline],
   )
-  const [prefMaxHr, setPrefMaxHr] = useState(0)
-  useEffect(() => {
-    let cancelled = false
-    api.getPreferences().then(p => { if (!cancelled) setPrefMaxHr(p.maxHr || 0) }).catch(() => {})
-    return () => { cancelled = true }
-  }, [])
-  const effectiveMaxHR = w.maxHR > 0 ? w.maxHR : prefMaxHr
+  /**
+   * The ceiling the five HR zones are percentages of.
+   *
+   * The athlete's, not this workout's. Reading `w.maxHR` first — which is
+   * simply the hardest moment of this one activity — is what made every
+   * workout end in Zone 5 and none of them comparable to each other: an easy
+   * hour that peaked at 137 was drawn with the same top zone as an interval
+   * session that peaked at 180.
+   *
+   * `athleteMaxHr` is the owner's configured value, or the one their age
+   * implies, and it arrives with the workout so that a workout shared by
+   * someone else is measured against *them*. The old code asked the API for
+   * the signed-in viewer's preferences instead, which is the wrong person on
+   * every shared workout.
+   *
+   * The workout's own peak survives only as the last resort, for an owner who
+   * has set neither a max HR nor a birth year. It is a poor ceiling, but it is
+   * better than a chart with no zones at all.
+   */
+  const effectiveMaxHR = w.athleteMaxHr && w.athleteMaxHr > 0 ? w.athleteMaxHr : w.maxHR
   const hrZones = useMemo(() => hrZoneBuckets(w.hrTimeline, effectiveMaxHR), [w.hrTimeline, effectiveMaxHR])
 
   /**
@@ -939,7 +965,16 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
    * not there, and landing on Gallery every time would fetch photos for someone
    * who opened the page to read the charts.
    */
-  const [detailTab, setDetailTab] = useState<DetailTab>(() => initialTab())
+  const [detailTab, setDetailTab] = useState<DetailTab>(() => askedTab(deepLinkFor(w0.id).tab) ?? 'notes')
+  /**
+   * The comment a notification pointed at, until the Social panel has found it.
+   *
+   * Held here rather than read from the URL by the panel, because the URL is
+   * cleared as soon as the link is acted on — a reload should be the page you
+   * were on, not the comment you were once sent to — while the panel may not
+   * have loaded its thread yet.
+   */
+  const [focusComment, setFocusComment] = useState<string | null>(() => deepLinkFor(w0.id).commentId)
   /*
    * What is behind Gallery and Social, so the strip can say so before either
    * is opened. Both panels are lazy and fetch nothing until their tab is
@@ -1000,11 +1035,36 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
    * the page you were on rather than the tab a notification once pointed at.
    */
   useEffect(() => {
-    if (!wantsTabScroll()) return
-    const url = new URL(window.location.href)
-    url.searchParams.delete('tab')
-    window.history.replaceState(null, '', url.pathname + url.search)
-    sectionsRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    function follow() {
+      // Scoped to this workout. Every mounted detail page hears this event,
+      // and a page that reads a link meant for another one also clears it —
+      // which is what left the page the link was for with nothing to act on.
+      const { tab, commentId } = deepLinkFor(w.id)
+      if (!tab && !commentId) return
+      const wanted = askedTab(tab)
+      if (wanted) setDetailTab(wanted)
+      // Handed to the Social panel, which owns the scrolling and the flash —
+      // it is the only thing that knows when the thread has actually loaded.
+      // Kept in state after the URL is cleared, so the panel still has a
+      // target to find once it arrives.
+      setFocusComment(commentId)
+      clearDeepLink()
+      // The panel scrolls itself to a named comment. Scrolling to the tab strip
+      // is for the case with no comment to find — a gallery link, or a comment
+      // that has since been deleted — and for getting the reader past the
+      // charts while the thread loads.
+      if (!commentId) sectionsRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    }
+    follow()
+    // Not only on mount. Tapping a notification for the workout already on
+    // screen changes the URL without remounting anything, and reading the tab
+    // once at mount is why that tap used to do nothing at all.
+    window.addEventListener(LOCATION_EVENT, follow)
+    window.addEventListener('popstate', follow)
+    return () => {
+      window.removeEventListener(LOCATION_EVENT, follow)
+      window.removeEventListener('popstate', follow)
+    }
   }, [])
 
   useEffect(() => {
@@ -1027,6 +1087,23 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
     return () => cancelAnimationFrame(raf)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing])
+
+  /**
+   * The one set of props every copy of the transport is handed.
+   *
+   * Eleven call sites — the dock, the desktop card and every expanded chart and
+   * map — repeated the same seven props by hand, which is nine chances for one
+   * of them to be given a stale handler and no way to notice.
+   */
+  const playbackProps: PlaybackProps = {
+    playing,
+    currentTime,
+    duration: w.duration,
+    onPlayPause: handlePlayPause,
+    onReset: handleReset,
+    onEnd: handleEnd,
+    onScrub: handleScrub,
+  }
 
   function handlePlayPause() {
     if (playing) {
@@ -1504,7 +1581,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
       // The fallback matches the frame the map will fill, so its arrival does
       // not reflow the cards underneath it.
       <Suspense fallback={<div className="route-map-loading" style={{ height }}>Loading map…</div>}>
-      <RouteMap route={w.route} color={trailColor} duration={w.duration} currentTime={currentTime} playhead={playhead} onScrub={handleScrub} height={height} distance={w.distance} hrTimeline={w.hrTimeline} paceTimeline={w.paceTimeline} elevTimeline={w.elevTimeline} cadenceTimeline={cadenceTimeline} cadenceLabel={cadenceUnit(w.type)} avatarUrl={routeAvatar} maxHR={effectiveMaxHR} shading={shading} onShadingChange={setShading} maximizeButton={maximizeButton} />
+      <RouteMap route={w.route} color={trailColor} duration={w.duration} currentTime={currentTime} playhead={playhead} onScrub={handleScrub} height={height} distance={w.distance} hrTimeline={w.hrTimeline} paceTimeline={smoothPaceTimeline} elevTimeline={w.elevTimeline} cadenceTimeline={cadenceTimeline} cadenceLabel={cadenceUnit(w.type)} avatarUrl={routeAvatar} maxHR={effectiveMaxHR} shading={shading} onShadingChange={setShading} maximizeButton={maximizeButton} />
       </Suspense>
     )
   }
@@ -1664,63 +1741,62 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             </div>
         </Modal>
       )}
-      <div className="page-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button className="btn-icon" onClick={onBack} aria-label="Back"><ArrowLeft size={18} /></button>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <h1 className="page-header-title">{w.name}</h1>
-              <span className={`badge tag-${w.type.toLowerCase()}`}><TypeIcon type={w.type} size={12} /> {w.type}</span>
-              {/* The same mark the list row carries. It was only ever on the
-                  list, which meant the one page you would open to check
-                  whether a workout is shared was the one that did not say.
+      {/* The shared header, like a plan's and a session's. This page used to
+          hand-roll the same markup with its own inline styles, which is how
+          the three drifted apart in the first place. */}
+      <PageHeader
+        title={w.name}
+        subtitle={longDate(fromDateKey(w.date))}
+        onBack={onBack}
+        /* Beside the date, not the title: a long workout name with two chips
+           after it wrapped the header onto three lines on a phone. */
+        subtitleAction={
+          <>
+            <span className={`badge tag-${w.type.toLowerCase()}`}><TypeIcon type={w.type} size={12} /> {w.type}</span>
+            {/* The same mark the list row carries. It was only ever on the
+                list, which meant the one page you would open to check
+                whether a workout is shared was the one that did not say.
 
-                  Owner only, and that is the whole meaning of it: the badge
-                  says "you have shared this". On someone else's workout the
-                  server sets `shared` unconditionally — that is how the Social
-                  tab knows it has an audience — so rendering it here told you
-                  that a workout you are merely a guest on is one you shared. */}
-              {!readOnly && <ShareBadge workout={w} />}
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
-              {longDate(fromDateKey(w.date))}
-            </div>
-            {/* Its own line rather than sharing one with the date: a long
-                display name would otherwise squeeze the date or wrap raggedly. */}
-            {readOnly && w.owner && (
-              /* Opens their profile: the workouts of theirs you can see,
-                 gathered by person rather than by recency. */
-              <button
-                type="button"
-                className="owner-byline owner-byline-link"
-                style={{ marginTop: 4 }}
-                onClick={() => onOpenUser?.(w.owner!.id)}
-              >
-                <span>Shared by</span>
-                <UserAvatar user={w.owner} size={20} />
-                <span>{userLabel(w.owner)}</span>
-              </button>
-            )}
-          </div>
-          <div style={{ marginLeft: 'auto', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
-            {readOnly ? null : (
-              <OptionsMenu
-                onEdit={startEdit}
-                onInfo={() => setShowInfo(true)}
-                onDownloadOriginal={w.hasOriginal ? downloadOriginal : undefined}
-                onRestore={w.hasOriginal ? () => setConfirmRestore(true) : undefined}
-                onShare={() => setSharing(true)}
-                onShareCard={() => setCardOpen(true)}
-                onRecalculate={() => { setRecalcErr(null); setConfirmRecalc(true) }}
-                onDelete={() => setConfirmDelete(true)}
-                deleting={deleting}
-              />
-            )}
-          </div>
-        </div>
-      </div>
+                Owner only, and that is the whole meaning of it: the badge
+                says "you have shared this". On someone else's workout the
+                server sets `shared` unconditionally — that is how the Social
+                tab knows it has an audience — so rendering it here told you
+                that a workout you are merely a guest on is one you shared. */}
+            {!readOnly && <ShareBadge workout={w} />}
+          </>
+        }
+        /* Its own line rather than sharing one with the date: a long display
+           name would otherwise squeeze the date or wrap raggedly. */
+        meta={readOnly && w.owner ? (
+          /* Opens their profile: the workouts of theirs you can see,
+             gathered by person rather than by recency. */
+          <button
+            type="button"
+            className="owner-byline owner-byline-link page-header-byline"
+            onClick={() => onOpenUser?.(w.owner!.id)}
+          >
+            <span>Shared by</span>
+            <UserAvatar user={w.owner} size={20} />
+            <span>{userLabel(w.owner)}</span>
+          </button>
+        ) : undefined}
+        compactActions
+        actions={readOnly ? undefined : (
+          <OptionsMenu
+            onEdit={startEdit}
+            onInfo={() => setShowInfo(true)}
+            onDownloadOriginal={w.hasOriginal ? downloadOriginal : undefined}
+            onRestore={w.hasOriginal ? () => setConfirmRestore(true) : undefined}
+            onShare={() => setSharing(true)}
+            onShareCard={() => setCardOpen(true)}
+            onRecalculate={() => { setRecalcErr(null); setConfirmRecalc(true) }}
+            onDelete={() => setConfirmDelete(true)}
+            deleting={deleting}
+          />
+        )}
+      />
 
-      <div className="page-content">
+      <div className={`page-content${playable && isMobile ? ' with-dock' : ''}`}>
         {originalErr && (
           <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', marginBottom: 16, color: 'var(--danger)', fontSize: 13 }}>
             <AlertTriangle size={15} style={{ flexShrink: 0 }} />
@@ -1869,17 +1945,9 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
 
         {/* Playback controls: drives the map marker + chart cursors below.
             Absent entirely when there is neither — see `playable`. */}
-        {playable && (
-          <div className="card playback-card" style={{ marginBottom: 16 }}>
-            <PlaybackBar
-              playing={playing}
-              currentTime={currentTime}
-              duration={w.duration}
-              onPlayPause={handlePlayPause}
-              onReset={handleReset}
-              onEnd={handleEnd}
-              onScrub={handleScrub}
-            />
+        {playable && !isMobile && (
+          <div className="card" style={{ marginBottom: 16 }}>
+            <PlaybackBar {...playbackProps} />
           </div>
         )}
 
@@ -2160,7 +2228,14 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             )}
             {activeTab === 'social' && (
               <Suspense fallback={<div className="detail-loading"><LoaderCircle size={16} className="spin" /></div>}>
-                <WorkoutSocial kind="workout" workoutId={w.id} isOwner={!readOnly} onCount={onCommentCount} />
+                <WorkoutSocial
+                  kind="workout"
+                  workoutId={w.id}
+                  isOwner={!readOnly}
+                  onCount={onCommentCount}
+                  focusCommentId={focusComment}
+                  onFocused={() => setFocusComment(null)}
+                />
               </Suspense>
             )}
           </TabPanel>
@@ -2194,6 +2269,27 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
         mapHolder,
       )}
 
+      {/*
+        * The transport, docked above the bottom bar for the whole page.
+        *
+        * It used to be a card beside the map that a copy tried to follow you
+        * down the page, appearing and disappearing on scroll. That was fiddly
+        * to get right and worse to use — a control that comes and goes is one
+        * you have to hunt for — so on a phone there is now exactly one of
+        * them and it never moves. The map keeps the inline card on a desktop,
+        * where the charts sit beside it and it is always in view anyway.
+        *
+        * Fixed rather than portalled: this page is inside the swipe pager, but
+        * the bar is fixed to the viewport and is not an overlay competing with
+        * dialogs. `.page-content` reserves the height so the last card is not
+        * left underneath it.
+        */}
+      {playable && isMobile && (
+        <div className="playback-dock">
+          <PlaybackBar {...playbackProps} />
+        </div>
+      )}
+
       {sharing && (
         <ShareDialog
           kind="workout"
@@ -2210,6 +2306,24 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             accent: color,
           }}
           onClose={() => setSharing(false)}
+          /*
+           * Sharing a workout is what brings its Social tab into existence, so
+           * the page has to hear about it. Without this the tab appeared or
+           * vanished only on the next full read of the workout — go back, pull
+           * to refresh, open it again — which reads as the share not having
+           * taken.
+           *
+           * Adopted from the dialog's own response rather than refetched: the
+           * mutation has already been to the server and back, and `shared` is
+           * a rule over these two fields (workouts.go's handleGetWorkout
+           * computes exactly this) rather than a fact only the server holds.
+           */
+          onChange={next => setW(prev => ({
+            ...prev,
+            visibility: next.visibility,
+            sharedWithCount: next.sharedWith.length,
+            shared: next.sharedWith.length > 0 || next.visibility === 'public',
+          }))}
         />
       )}
 
@@ -2223,7 +2337,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
         <ExpandModal title="Route" onClose={() => setExpanded(null)} variant="map">
           <div ref={setModalHost} className="modal-immersive-map" />
           <div className="modal-immersive-foot">
-            <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onEnd={handleEnd} onScrub={handleScrub} />
+            <PlaybackBar {...playbackProps} />
           </div>
         </ExpandModal>
       )}
@@ -2253,7 +2367,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
           />
           </div>
           <div className="modal-immersive-foot">
-            <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onEnd={handleEnd} onScrub={handleScrub} />
+            <PlaybackBar {...playbackProps} />
           </div>
         </ExpandModal>
       )}
@@ -2261,7 +2375,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
         <ExpandModal title="Heart Rate" onClose={() => setExpanded(null)}>
           {hrChart(400)}
           <div style={{ marginTop: 12 }}>
-            <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onEnd={handleEnd} onScrub={handleScrub} />
+            <PlaybackBar {...playbackProps} />
           </div>
         </ExpandModal>
       )}
@@ -2269,7 +2383,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
         <ExpandModal title="Pace" onClose={() => setExpanded(null)}>
           {paceChart(400)}
           <div style={{ marginTop: 12 }}>
-            <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onEnd={handleEnd} onScrub={handleScrub} />
+            <PlaybackBar {...playbackProps} />
           </div>
         </ExpandModal>
       )}
@@ -2277,7 +2391,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
         <ExpandModal title="Speed" onClose={() => setExpanded(null)}>
           {speedChart(400)}
           <div style={{ marginTop: 12 }}>
-            <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onEnd={handleEnd} onScrub={handleScrub} />
+            <PlaybackBar {...playbackProps} />
           </div>
         </ExpandModal>
       )}
@@ -2285,7 +2399,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
         <ExpandModal title="Elevation" onClose={() => setExpanded(null)}>
           {elevChart(400)}
           <div style={{ marginTop: 12 }}>
-            <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onEnd={handleEnd} onScrub={handleScrub} />
+            <PlaybackBar {...playbackProps} />
           </div>
         </ExpandModal>
       )}
@@ -2293,7 +2407,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
         <ExpandModal title="Cadence" onClose={() => setExpanded(null)}>
           {cadenceChart(400)}
           <div style={{ marginTop: 12 }}>
-            <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onEnd={handleEnd} onScrub={handleScrub} />
+            <PlaybackBar {...playbackProps} />
           </div>
         </ExpandModal>
       )}
@@ -2304,7 +2418,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
         >
           {extraChart(expanded.slice(6), 400)}
           <div style={{ marginTop: 12 }}>
-            <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onEnd={handleEnd} onScrub={handleScrub} />
+            <PlaybackBar {...playbackProps} />
           </div>
         </ExpandModal>
       )}
@@ -2313,7 +2427,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
           {hrZoneChart(320)}
           {w.hrTimeline.length > 0 && (
             <div style={{ marginTop: 12 }}>
-              <PlaybackBar playing={playing} currentTime={currentTime} duration={w.duration} onPlayPause={handlePlayPause} onReset={handleReset} onEnd={handleEnd} onScrub={handleScrub} />
+              <PlaybackBar {...playbackProps} />
             </div>
           )}
         </ExpandModal>

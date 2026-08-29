@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { LOCATION_EVENT } from '../App'
+import { clearDeepLink, deepLinkFor } from '../lib/deepLink'
 import { Lock, MessageSquare, NotebookPen } from 'lucide-react'
 import { ApiError, type ShareKind } from '../lib/api'
 import TabStrip, { type TabStripItem } from './TabStrip'
@@ -44,22 +46,69 @@ export default function NotesAndSocial({
     ...(shared ? [{ id: 'social' as SectionTab, label: 'Social', icon: <MessageSquare size={14} /> }] : []),
   ]
 
-  const [tab, setTab] = useState<SectionTab>('notes')
+  const [tab, setTab] = useState<SectionTab>(() => deepLinkFor(id).tab === 'social' ? 'social' : 'notes')
   // A viewer has no Notes tab, and an unshared plan has no Social one, so the
   // remembered choice can be a tab this item does not offer.
   const active = tabs.some(t => t.id === tab) ? tab : tabs[0]?.id
+  /*
+   * The comment a notification pointed at, until the panel has found it.
+   * Same contract as the workout page's — see WorkoutDetail.
+   */
+  const [focusComment, setFocusComment] = useState<string | null>(() => deepLinkFor(id).commentId)
+  const onFocused = useCallback(() => setFocusComment(null), [])
+  const wrap = useRef<HTMLDivElement>(null)
+
+  /*
+   * Follows a notification's deep link, exactly as the workout page does.
+   *
+   * Plans and sessions carry the same conversations and the same
+   * notifications, so they need the same three things: a tab read from the URL
+   * rather than assumed, a re-read whenever the URL changes without a remount
+   * (which is what tapping a notification for the page you are already on
+   * does), and a scroll past the content to the thread.
+   *
+   * Scoped to this id. Every mounted detail page hears this event, and a page
+   * that reads a link meant for another one also clears it — see deepLinkFor.
+   */
+  useEffect(() => {
+    function follow() {
+      const { tab: asked, commentId } = deepLinkFor(id)
+      if (!asked && !commentId) return
+      if (asked === 'social') setTab('social')
+      setFocusComment(commentId)
+      clearDeepLink()
+      // The Social panel scrolls itself to a named comment; this is for the
+      // case with none to find — a deleted one — and for getting the reader
+      // past the content while the thread loads.
+      if (!commentId) wrap.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    }
+    follow()
+    window.addEventListener(LOCATION_EVENT, follow)
+    window.addEventListener('popstate', follow)
+    return () => {
+      window.removeEventListener(LOCATION_EVENT, follow)
+      window.removeEventListener('popstate', follow)
+    }
+  }, [id])
 
   if (!active) return null
 
   return (
-    <div className="detail-sections">
+    <div className="detail-sections" ref={wrap}>
       <TabStrip items={tabs} value={active} onChange={setTab} ariaLabel={`${noun.charAt(0).toUpperCase()}${noun.slice(1)} sections`} fill />
       <div className="card detail-tab-panel">
         {active === 'notes' && (
           <NotesPanel notes={notes ?? ''} onSave={onSaveNotes} placeholder={placeholder} />
         )}
         {active === 'social' && (
-          <WorkoutSocial kind={kind} workoutId={id} isOwner={isOwner} noun={noun} />
+          <WorkoutSocial
+            kind={kind}
+            workoutId={id}
+            isOwner={isOwner}
+            noun={noun}
+            focusCommentId={focusComment}
+            onFocused={onFocused}
+          />
         )}
       </div>
     </div>

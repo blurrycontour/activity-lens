@@ -228,6 +228,14 @@ type Workout struct {
 	// Owner is populated by the API layer on responses to someone other than
 	// the owner, and is nil on your own workouts.
 	Owner *OwnerRef `json:"owner,omitempty"`
+	// AthleteMaxHR is the maximum heart rate this workout's *owner* has set
+	// (or that their age implies), which is what the five-zone model is a
+	// percentage of. Populated by the API layer on the detail response only.
+	//
+	// It travels with the workout rather than being read from the viewer's own
+	// preferences because a shared workout belongs to someone else: measuring
+	// their effort against your ceiling describes neither of you.
+	AthleteMaxHR int `json:"athleteMaxHr,omitempty"`
 
 	// HasRoute reports whether this workout recorded a track, for list rows
 	// which carry no route of their own. Read from the stored point count, so

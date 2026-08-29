@@ -662,3 +662,38 @@ func boolToInt(b bool) int {
 	}
 	return 0
 }
+
+// AthleteMaxHR returns the maximum heart rate to measure userID's zones
+// against, or 0 when nothing is known about them.
+//
+// Zones are percentages of the *athlete's* ceiling, not of whatever the hardest
+// moment of one workout happened to be — measuring against the latter makes
+// every activity end in Zone 5 and none of them comparable. The configured
+// value wins because it is the only one the user has asserted; the age estimate
+// is the standard 220-minus-age convention, and is far closer to the truth than
+// a single workout's peak.
+//
+// One narrow query rather than UserPreferences: this runs on every workout
+// detail load, and the rest of that row (goals and notification JSON, both
+// unmarshalled) is nothing to do with the question.
+func (s *Store) AthleteMaxHR(ctx context.Context, userID int64) (int, error) {
+	var maxHR, birthYear int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT max_hr, birth_year FROM user_prefs WHERE user_id = ?`, userID).
+		Scan(&maxHR, &birthYear)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	if maxHR > 0 {
+		return maxHR, nil
+	}
+	if birthYear > 0 {
+		if age := time.Now().Year() - birthYear; age > 0 && age < 120 {
+			return 220 - age, nil
+		}
+	}
+	return 0, nil
+}

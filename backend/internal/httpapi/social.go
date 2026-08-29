@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/blurrycontour/activity-lens/backend/internal/workout"
 
@@ -72,6 +73,10 @@ type socialContext struct {
 	noun    string
 	isOwner bool
 	shared  bool
+	// audience answers "who did the owner send this to", so a notification can
+	// reach them. Each kind keeps its shares in its own table, so the resolver
+	// supplies the lookup rather than notifySocial branching on the subject.
+	audience func() ([]int64, error)
 }
 
 // resolveSocial establishes who is asking and whether there is anything to ask
@@ -105,6 +110,9 @@ func (s *Server) resolveSocial(w http.ResponseWriter, r *http.Request) (socialCo
 		noun:    "workout",
 		isOwner: isOwner,
 		shared:  shared,
+		audience: func() ([]int64, error) {
+			return s.workout.ShareRecipients(r.Context(), wk.UserID, wk.ID)
+		},
 	}, true
 }
 
@@ -138,6 +146,9 @@ func (s *Server) resolvePlanSocial(w http.ResponseWriter, r *http.Request) (soci
 		noun:    "plan",
 		isOwner: isOwner,
 		shared:  shared,
+		audience: func() ([]int64, error) {
+			return s.plans.PlanShareRecipients(r.Context(), p.UserID, p.ID)
+		},
 	}, true
 }
 
@@ -165,6 +176,9 @@ func (s *Server) resolveSessionSocial(w http.ResponseWriter, r *http.Request) (s
 		noun:    "session",
 		isOwner: isOwner,
 		shared:  shared,
+		audience: func() ([]int64, error) {
+			return s.plans.SessionShareRecipients(r.Context(), sess.UserID, sess.ID)
+		},
 	}, true
 }
 
@@ -240,6 +254,20 @@ type commentRequest struct {
 	Body string `json:"body"`
 }
 
+// commentAnchor points a notification at one comment rather than at the tab it
+// lives on.
+//
+// The fragment, not the query: it is an anchor within the page the link
+// already names. The page falls back to the tab on its own when the comment
+// has been deleted between the notification going out and being opened, which
+// is why the tab stays in the link rather than being implied by the anchor.
+func commentAnchor(link, commentID string) string {
+	if commentID == "" {
+		return link
+	}
+	return link + "#comment=" + commentID
+}
+
 // handleAddComment posts a message to a shared workout.
 func (s *Server) handleAddComment(resolve socialResolver) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -268,7 +296,7 @@ func (s *Server) handleAddComment(resolve socialResolver) http.HandlerFunc {
 		// After the comment is stored, so the author counts as a participant and a
 		// reply reaches everyone already in the thread. No dedupe key: every
 		// comment is a distinct thing somebody said.
-		s.notifySocial(r, *user, ctx.subject, ctx.ownerID, ctx.link,
+		s.notifySocial(r, *user, ctx.subject, ctx.ownerID, ctx.audience, commentAnchor(ctx.link, c.ID),
 			actorName(*user)+" commented on a "+ctx.noun, excerpt(c.Body), "")
 		writeJSON(w, http.StatusCreated, c)
 	}
@@ -302,11 +330,18 @@ func (s *Server) handleEditComment(resolve socialResolver) http.HandlerFunc {
 			c.Author = ref
 		}
 		// An edit is told to the thread, because on a shared page it changes what
-		// everyone else already read. Keyed on the comment, so correcting a typo
-		// three times in a row is one notification rather than three — the thread
-		// cares that the message changed, not how many passes it took.
-		s.notifySocial(r, *user, ctx.subject, ctx.ownerID, ctx.link,
-			actorName(*user)+" edited a comment", excerpt(c.Body), "social-edit:"+c.ID)
+		// everyone else already read. Keyed on the comment *and the day*, so
+		// correcting a typo three times in a row is one notification rather than
+		// three — the thread cares that the message changed, not how many passes
+		// it took — while a revision tomorrow is news again.
+		//
+		// The day is what this was missing. A dedupe key fires exactly once for
+		// all time, so keying on the comment alone meant the first edit notified
+		// and every later one was silently absorbed, however long afterwards. The
+		// same per-day convention the gallery uses for photo bursts.
+		day := time.Now().UTC().Format("2006-01-02")
+		s.notifySocial(r, *user, ctx.subject, ctx.ownerID, ctx.audience, commentAnchor(ctx.link, c.ID),
+			actorName(*user)+" edited a comment", excerpt(c.Body), "social-edit:"+c.ID+":"+day)
 		writeJSON(w, http.StatusOK, c)
 	}
 }
@@ -338,7 +373,7 @@ func (s *Server) handleDeleteComment(resolve socialResolver) http.HandlerFunc {
 		// to you, and announcing it to the thread would be a second copy of a
 		// message that was just withdrawn, which is why the body is not included.
 		if readErr == nil && gone.UserID != user.ID {
-			s.notifySocial(r, *user, ctx.subject, ctx.ownerID, ctx.link,
+			s.notifySocial(r, *user, ctx.subject, ctx.ownerID, ctx.audience, ctx.link,
 				actorName(*user)+" removed a comment", ctx.name, "social-remove:"+commentID)
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -380,7 +415,7 @@ func (s *Server) handleSetReaction(resolve socialResolver) http.HandlerFunc {
 			// Keyed on the person and the workout, so switching emoji or tapping
 			// twice tells everyone once. A reaction is a gesture, not a message;
 			// hearing about each revision of one would be noise.
-			s.notifySocial(r, *user, ctx.subject, ctx.ownerID, ctx.link,
+			s.notifySocial(r, *user, ctx.subject, ctx.ownerID, ctx.audience, ctx.link,
 				actorName(*user)+" reacted "+req.Emoji,
 				ctx.name,
 				fmt.Sprintf("social-reaction:%s:%d", ctx.subject.ID, user.ID))
