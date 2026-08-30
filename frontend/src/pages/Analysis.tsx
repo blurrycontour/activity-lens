@@ -13,6 +13,7 @@ import { EDGE_PADDING_Y, END_PADDING, KEEP_EMPTY_ROWS, denseXAxis, useChartSpace
 import ScatterDot, { ActiveScatterDot } from '../components/ScatterDot'
 import Dropdown from '../components/Dropdown'
 import { useLocalStorage } from '../lib/useLocalStorage'
+import { formatMeasuredNumber } from '../lib/formatNumber'
 import { filterByRange, rangeLabel, toDateKey } from '../lib/range'
 import { everyDayBetween, everyMonthBetween, everyWeekBetween, fillGaps, keySpan } from '../lib/timeGaps'
 import { AXIS_TICK, DATA_LINE, GRID_PROPS, HOVER_FILL, SERIES_COLORS, TREND_LINE } from '../lib/chartColors'
@@ -1067,8 +1068,8 @@ export default function Analysis() {
                         return (
                           <div className="custom-tooltip">
                             <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.full}</div>
-                            <div style={{ color: 'var(--primary)' }}>{d.value} {unit}</div>
-                            <div style={{ color: 'var(--text-3)' }}>4-bucket avg {d.avg} {unit}</div>
+                            <div style={{ color: 'var(--primary)' }}>{formatMeasuredNumber(d.value)} {unit}</div>
+                            <div style={{ color: 'var(--text-3)' }}>4-period avg {formatMeasuredNumber(d.avg)} {unit}</div>
                           </div>
                         )
                       }}

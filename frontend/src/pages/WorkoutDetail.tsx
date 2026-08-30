@@ -27,6 +27,7 @@ import { useIsMobile } from '../lib/useIsMobile'
 import { usePlayhead, useThrottledPlayhead } from '../lib/playhead'
 import { downsample, PLOT_POINTS } from '../lib/downsample'
 import { hrZoneBuckets, hrZoneCounter, hrZoneStops } from '../lib/hrZones'
+import { formatMeasuredNumber } from '../lib/formatNumber'
 import type { Shading } from '../components/RouteMap'
 
 /**
@@ -549,10 +550,11 @@ function xLabel(value: string) {
 
 function ChartTooltip({ active, payload, label, unit, valueFormatter }: { active?: boolean; payload?: any[]; label?: string; unit: string; valueFormatter?: (value: number) => string }) {
   if (!active || !payload?.length) return null
+  const value = Number(payload[0].value)
   return (
     <div className="custom-tooltip">
       <div style={{ color: 'var(--text-3)', marginBottom: 2 }}>{fmtClock(Number(label))}</div>
-      <div style={{ color: 'var(--text)', fontWeight: 600 }}>{valueFormatter ? valueFormatter(Number(payload[0].value)) : payload[0].value} {unit}</div>
+      <div style={{ color: 'var(--text)', fontWeight: 600 }}>{valueFormatter ? valueFormatter(value) : formatMeasuredNumber(value)} {unit}</div>
     </div>
   )
 }
@@ -1471,7 +1473,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
     return areaChart({ series: plots.speed, dataKey: 'speed', stroke: 'var(--blue)', gradId: 'speedGrad', unit: 'km/h', valueFormatter: value => value.toFixed(1), height })
   }
   function elevChart(height: number) {
-    return areaChart({ series: plots.elev, dataKey: 'elev', stroke: 'var(--hike)', gradId: 'elevGrad', unit: 'm', height })
+    return areaChart({ series: plots.elev, dataKey: 'elev', stroke: 'var(--hike)', gradId: 'elevGrad', unit: 'm', height, valueFormatter: v => formatMeasuredNumber(v, 0), yTickFormatter: v => formatMeasuredNumber(v, 0) })
   }
   function cadenceChart(height: number) {
     return areaChart({ series: plots.cad, dataKey: 'cad', stroke: CADENCE_COLOR, gradId: 'cadGrad', unit: cadenceUnit(w.type), height })
@@ -2090,7 +2092,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
               info={w.elevationLookup
                 ? "This workout recorded a route but no altitude, so the elevation here is the ground under that route, from a terrain model — that is what the Σ marks. The model has one height per 90 metres, which is wider than most trails, so read it as the shape of the hill rather than the shape of your ride. Total gain sums only the upward steps between consecutive samples."
                 : "Altitude recorded at each track point. Total gain sums only the upward steps between consecutive samples, so barometric noise on a flat route can inflate it slightly. Compare the shape against the heart-rate chart to see what the climbs actually cost you."}
-              stats={<>+{w.elevationGain} m gain · {derived.elevLoss} m loss</>}
+              stats={<>+{formatMeasuredNumber(w.elevationGain, 0)} m gain · {formatMeasuredNumber(derived.elevLoss, 0)} m loss</>}
               onExpand={() => setExpanded('elevation')}
             >
               {elevChart(180)}
