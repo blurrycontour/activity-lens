@@ -8,6 +8,7 @@ import Dropdown, { type DropdownOption } from '../../components/Dropdown'
 
 type Sex = 'male' | 'female' | ''
 type CalorieMethod = 'heart-rate' | 'distance'
+type HRZoneMethod = 'max' | 'reserve'
 
 const SEX_OPTIONS: DropdownOption<Sex>[] = [
   { value: '', label: 'Prefer not to say' },
@@ -18,6 +19,11 @@ const SEX_OPTIONS: DropdownOption<Sex>[] = [
 const CALORIE_OPTIONS: DropdownOption<CalorieMethod>[] = [
   { value: 'heart-rate', label: 'Heart rate, then distance' },
   { value: 'distance', label: 'Distance only' },
+]
+
+const HR_ZONE_OPTIONS: DropdownOption<HRZoneMethod>[] = [
+  { value: 'max', label: '% of max heart rate' },
+  { value: 'reserve', label: 'Heart-rate reserve (Karvonen)' },
 ]
 
 /**
@@ -38,6 +44,7 @@ export default function BodySettings() {
   const [calorieMethod, setCalorieMethod] = useState<CalorieMethod>('heart-rate')
   const [maxHr, setMaxHr] = useState('')
   const [restingHr, setRestingHr] = useState('')
+  const [hrZoneMethod, setHrZoneMethod] = useState<HRZoneMethod>('max')
   const [thresholdPace, setThresholdPace] = useState('')
   const [ftp, setFtp] = useState('')
 
@@ -56,6 +63,7 @@ export default function BodySettings() {
     setCalorieMethod(prefs.calorieMethod)
     setMaxHr(prefs.maxHr ? String(prefs.maxHr) : '')
     setRestingHr(prefs.restingHr ? String(prefs.restingHr) : '')
+    setHrZoneMethod(prefs.hrZoneMethod ?? 'max')
     setThresholdPace(prefs.thresholdPace ?? '')
     setFtp(prefs.ftp ? String(prefs.ftp) : '')
   }, [prefs])
@@ -72,6 +80,7 @@ export default function BodySettings() {
         calorieMethod,
         maxHr: Number(maxHr) || 0,
         restingHr: Number(restingHr) || 0,
+        hrZoneMethod,
         thresholdPace,
         ftp: Number(ftp) || 0,
       })
@@ -146,6 +155,15 @@ export default function BodySettings() {
 
       <SettingsCard title="Performance thresholds">
         <div className="field-grid">
+          <Field label="HR zone model" info="Max HR uses a percentage of your maximum. Karvonen uses your resting HR too.">
+            <Dropdown
+              block
+              value={hrZoneMethod}
+              options={HR_ZONE_OPTIONS}
+              onChange={setHrZoneMethod}
+              ariaLabel="Heart-rate zone model"
+            />
+          </Field>
           {units.map(f => (
             <Field key={f.label} label={f.label} info={'info' in f ? f.info : undefined}>
               <div className="input-unit">

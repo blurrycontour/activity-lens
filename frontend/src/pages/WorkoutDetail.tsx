@@ -817,7 +817,12 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
    * better than a chart with no zones at all.
    */
   const effectiveMaxHR = w.athleteMaxHr && w.athleteMaxHr > 0 ? w.athleteMaxHr : w.maxHR
-  const hrZones = useMemo(() => hrZoneBuckets(w.hrTimeline, effectiveMaxHR), [w.hrTimeline, effectiveMaxHR])
+  const effectiveRestingHR = w.athleteRestingHr ?? 0
+  const hrZoneMethod = w.athleteHrZoneMethod ?? 'max'
+  const hrZones = useMemo(
+    () => hrZoneBuckets(w.hrTimeline, effectiveMaxHR, undefined, effectiveRestingHR, hrZoneMethod),
+    [w.hrTimeline, effectiveMaxHR, effectiveRestingHR, hrZoneMethod],
+  )
 
   /**
    * What fills the panel beside the summary.
@@ -945,8 +950,8 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
    * array reads rather than another two passes over the samples.
    */
   const countZonesTo = useMemo(
-    () => hrZoneCounter(w.hrTimeline, effectiveMaxHR),
-    [w.hrTimeline, effectiveMaxHR],
+    () => hrZoneCounter(w.hrTimeline, effectiveMaxHR, effectiveRestingHR, hrZoneMethod),
+    [w.hrTimeline, effectiveMaxHR, effectiveRestingHR, hrZoneMethod],
   )
   const hrZonesPlayed = useMemo(() => countZonesTo(currentTime), [countZonesTo, currentTime])
   const [expanded, setExpanded] = useState<null | 'map' | 'session' | Metric | 'hrzones'>(null)
@@ -1355,7 +1360,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
       }
     }
     const strokeStops = hrZoneStroke && maxHRForZones && visible.length
-      ? hrZoneStops(visMin, visMax, maxHRForZones)
+      ? hrZoneStops(visMin, visMax, maxHRForZones, effectiveRestingHR, hrZoneMethod)
       : null
     const strokeColor = strokeStops ? `url(#${gradId}_stroke)` : stroke
     return (
@@ -1599,7 +1604,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
       // The fallback matches the frame the map will fill, so its arrival does
       // not reflow the cards underneath it.
       <Suspense fallback={<div className="route-map-loading" style={{ height }}>Loading map…</div>}>
-      <RouteMap route={w.route} color={trailColor} duration={w.duration} currentTime={currentTime} playhead={playhead} onScrub={handleScrub} height={height} distance={w.distance} hrTimeline={w.hrTimeline} paceTimeline={smoothPaceTimeline} elevTimeline={w.elevTimeline} cadenceTimeline={cadenceTimeline} cadenceLabel={cadenceUnit(w.type)} avatarUrl={routeAvatar} maxHR={effectiveMaxHR} shading={shading} onShadingChange={setShading} maximizeButton={maximizeButton} cooperativeGestures={isMobile && expanded !== 'map'} />
+      <RouteMap route={w.route} color={trailColor} duration={w.duration} currentTime={currentTime} playhead={playhead} onScrub={handleScrub} height={height} distance={w.distance} hrTimeline={w.hrTimeline} paceTimeline={smoothPaceTimeline} elevTimeline={w.elevTimeline} cadenceTimeline={cadenceTimeline} cadenceLabel={cadenceUnit(w.type)} avatarUrl={routeAvatar} maxHR={effectiveMaxHR} restingHR={effectiveRestingHR} hrZoneMethod={hrZoneMethod} shading={shading} onShadingChange={setShading} maximizeButton={maximizeButton} cooperativeGestures={isMobile && expanded !== 'map'} />
       </Suspense>
     )
   }
@@ -1853,6 +1858,8 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
                 hrTimeline={w.hrTimeline}
                 cadenceTimeline={cadenceTimeline}
                 maxHR={effectiveMaxHR}
+                restingHR={effectiveRestingHR}
+                hrZoneMethod={hrZoneMethod}
                 pauses={pauses}
                 playhead={playhead}
                 tint={tint}
@@ -2366,6 +2373,8 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             hrTimeline={w.hrTimeline}
             cadenceTimeline={cadenceTimeline}
             maxHR={effectiveMaxHR}
+            restingHR={effectiveRestingHR}
+            hrZoneMethod={hrZoneMethod}
             pauses={pauses}
             playhead={playhead}
             tint={tint}

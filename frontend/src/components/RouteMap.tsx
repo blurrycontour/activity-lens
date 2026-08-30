@@ -16,7 +16,7 @@ import {
 // needs to know the split exists.
 export { LayerSwitcher, MAP_LAYERS, MAP_LAYER_KEY, ResetViewControl, hasWebGL }
 export type { MapLayerId }
-import { HR_ZONE_COLORS, HR_ZONE_SHORT, hrZoneColor } from '../lib/hrZones'
+import { HR_ZONE_COLORS, HR_ZONE_SHORT, hrZoneColor, type HRZoneMethod } from '../lib/hrZones'
 import { fmtDist, fmtDuration, fmtPace, type Workout } from '../data/workouts'
 import type { Playhead } from '../lib/playhead'
 import { FINISH_FLAG_D, FINISH_POLE_D } from '../lib/mapMarkers'
@@ -265,7 +265,7 @@ function positionAt(route: Array<[number, number]>, fraction: number): [number, 
 }
 
 export default function RouteMap({
-  route, color, duration, currentTime, playhead, onScrub, height, distance, hrTimeline, paceTimeline, elevTimeline, cadenceTimeline, avatarUrl, maxHR, cadenceLabel,
+  route, color, duration, currentTime, playhead, onScrub, height, distance, hrTimeline, paceTimeline, elevTimeline, cadenceTimeline, avatarUrl, maxHR, restingHR, hrZoneMethod, cadenceLabel,
   shading, onShadingChange, maximizeButton, cooperativeGestures = false,
 }: {
   route: Array<[number, number]>
@@ -283,6 +283,8 @@ export default function RouteMap({
   cadenceTimeline: Array<{ t: number; cad: number }>
   avatarUrl?: string
   maxHR: number
+  restingHR: number
+  hrZoneMethod: HRZoneMethod
   cadenceLabel: string
   /**
    * Owned by the page, not by this component. The inline map and the maximized
@@ -359,7 +361,7 @@ export default function RouteMap({
     let cursor = 0
     const colorFor = (t: number) => {
       while (cursor < samples.length - 1 && Math.abs(samples[cursor + 1].t - t) <= Math.abs(samples[cursor].t - t)) cursor++
-      if (shading === 'hr') return hrZoneColor(values[cursor], maxHR)
+      if (shading === 'hr') return hrZoneColor(values[cursor], maxHR, restingHR, hrZoneMethod)
       const ratio = (values[cursor] - min) / span
       // Pace is time-per-distance, so a lower number is faster. Faster should
       // read as hotter (red), matching every other effort scale, so pace is
@@ -373,7 +375,7 @@ export default function RouteMap({
       segs.push({ positions: route.slice(i, end + 1), color: colorFor(i * segStep) })
     }
     return segs
-  }, [route, shading, hrTimeline, paceTimeline, elevTimeline, cadenceTimeline, duration, color, maxHR])
+  }, [route, shading, hrTimeline, paceTimeline, elevTimeline, cadenceTimeline, duration, color, maxHR, restingHR, hrZoneMethod])
 
   /**
    * What the colours on the track mean, or null when they mean nothing.

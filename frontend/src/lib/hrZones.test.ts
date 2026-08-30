@@ -49,6 +49,21 @@ describe('hrZoneCounter', () => {
   })
 })
 
+describe('heart-rate reserve zones', () => {
+  it('uses resting heart rate in the Karvonen intensity', () => {
+    const points = [{ t: 0, hr: 130 }, { t: 1, hr: 140 }]
+    expect(hrZoneBuckets(points, 200).map(z => z.value)).toEqual([0, 1, 1, 0, 0])
+    expect(hrZoneBuckets(points, 200, undefined, 50, 'reserve').map(z => z.value))
+      .toEqual([1, 1, 0, 0, 0])
+  })
+
+  it('falls back to max-HR zones without a usable resting HR', () => {
+    const points = [{ t: 0, hr: 130 }]
+    expect(hrZoneBuckets(points, 200, undefined, 0, 'reserve'))
+      .toEqual(hrZoneBuckets(points, 200))
+  })
+})
+
 // The stops are an objectBoundingBox gradient over the drawn line, so they must
 // span exactly the line's value range and never invent a zone above its peak —
 // that mismatch was what drew a Zone-4 peak in the Zone-5 colour with no Zone-5

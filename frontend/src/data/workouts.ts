@@ -120,6 +120,8 @@ export interface Workout {
    * because a shared workout belongs to someone else.
    */
   athleteMaxHr?: number
+  athleteRestingHr?: number
+  athleteHrZoneMethod?: 'max' | 'reserve'
   elevationGain: number // meters
   calories: number
   steps?: number

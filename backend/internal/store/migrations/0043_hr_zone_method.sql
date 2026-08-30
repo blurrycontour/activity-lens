@@ -1,0 +1,1 @@
+ALTER TABLE user_prefs ADD COLUMN hr_zone_method TEXT NOT NULL DEFAULT 'max';
