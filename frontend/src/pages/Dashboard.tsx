@@ -33,7 +33,7 @@ import {
   goalUnit, periodLabel, recentPersonalBests, recentWeekStarts, sparkAverages, sparkBuckets, totalsOf, weekdayMatrix,
   windowSlices, type Goal, type GoalProgress,
 } from '../lib/insights'
-import { claimGoalCelebration } from '../lib/goalCelebration'
+import { goalsAreComplete } from '../lib/goalCelebration'
 
 /** Weeks shown in the dashboard's compact weekly-trend chart. */
 const TREND_WEEKS = 3
@@ -732,7 +732,7 @@ export default function Dashboard({ onSelect, onResumeSession, onImport, onCreat
    */
   const [celebrating, setCelebrating] = useState(false)
   useEffect(() => {
-    if (!claimGoalCelebration(progress)) return
+    if (!goalsAreComplete(progress)) return
     setCelebrating(true)
     void buzz('complete')
   }, [progress])

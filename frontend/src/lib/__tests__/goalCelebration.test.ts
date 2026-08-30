@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { claimGoalCelebration, goalCelebrationSignature } from '../goalCelebration'
+import { goalsAreComplete } from '../goalCelebration'
 import type { GoalProgress } from '../insights'
 
 function progress(current = 2, period = '2026-08-24'): GoalProgress[] {
@@ -13,31 +13,14 @@ function progress(current = 2, period = '2026-08-24'): GoalProgress[] {
   }]
 }
 
-describe('goal celebration claims', () => {
-  it('claims a completed period once, including after Dashboard remounts', () => {
-    const storage = new MapStorage()
-    expect(claimGoalCelebration(progress(), storage)).toBe(true)
-    expect(claimGoalCelebration(progress(), storage)).toBe(false)
+describe('goal celebration eligibility', () => {
+  it('celebrates completed goals whenever Dashboard mounts', () => {
+    expect(goalsAreComplete(progress())).toBe(true)
+    expect(goalsAreComplete(progress())).toBe(true)
   })
 
-  it('claims the next period independently', () => {
-    const storage = new MapStorage()
-    expect(claimGoalCelebration(progress(), storage)).toBe(true)
-    expect(claimGoalCelebration(progress(2, '2026-08-31'), storage)).toBe(true)
-  })
-
-  it('does not claim incomplete or empty goal sets', () => {
-    expect(goalCelebrationSignature(progress(1))).toBeNull()
-    expect(goalCelebrationSignature([])).toBeNull()
+  it('does not celebrate incomplete or empty goal sets', () => {
+    expect(goalsAreComplete(progress(1))).toBe(false)
+    expect(goalsAreComplete([])).toBe(false)
   })
 })
-
-class MapStorage implements Storage {
-  private values = new Map<string, string>()
-  get length() { return this.values.size }
-  clear() { this.values.clear() }
-  getItem(key: string) { return this.values.get(key) ?? null }
-  key(index: number) { return [...this.values.keys()][index] ?? null }
-  removeItem(key: string) { this.values.delete(key) }
-  setItem(key: string, value: string) { this.values.set(key, value) }
-}
