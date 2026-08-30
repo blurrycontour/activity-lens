@@ -3072,6 +3072,7 @@ body:has(.overlay) .dial { display: none; }
 }
 .chart-card-title { font-size: 15px; font-weight: 600; }
 .chart-card-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.chart-card-controls { display: flex; justify-content: flex-start; margin-bottom: 12px; }
 .chart-card-desc {
   font-size: 11px;
   color: var(--text-3);

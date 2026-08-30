@@ -201,12 +201,6 @@ function fitsDaySlots(first: string, last: string): boolean {
   return (fromDateKey(last).getTime() - fromDateKey(first).getTime()) / 86400000 <= MAX_DAY_SLOTS
 }
 
-/** True when Gaps is on and the span is too long to honour it by day. */
-function gapsTooWide(rows: DatedRow[]): boolean {
-  const span = keySpan(rows, r => r.date)
-  return !!span && !fitsDaySlots(span[0], span[1])
-}
-
 /**
  * Gives a per-activity series one position per day between its first and last
  * activity, so time off shows as the distance it actually is.
@@ -974,8 +968,7 @@ export default function Analysis() {
             <ChartCard
               title="Performance Over Time"
               icon={<TrendingUp size={14} color="var(--primary)" />}
-              description={`One point per activity, with a dashed 3-activity moving average. ${series.length} activities.${
-                showGaps && gapsTooWide(series) ? ' Evenly spaced: the range is too long to give every day its own position.' : ''}`}
+              description={`${series.length} activities; dashed lines are 3-activity averages.`}
               info="Faint lines are individual activities; bold lines smooth them over three activities to show direction rather than noise. All selected metrics share one axis, so use it to read each line's shape and trend, not to compare their absolute heights. Filtering to a single sport makes pace and speed directly comparable. Starting the axis at zero keeps the proportions honest; fitting it to the data is the only way to see movement in a metric like heart rate, which never goes near zero."
               style={{ marginBottom: 16 }}
               actions={
@@ -1048,7 +1041,7 @@ export default function Analysis() {
             <ChartCard
               title="Training Volume"
               icon={<Activity size={14} color="var(--primary)" />}
-              description="Total volume per bucket, with a 4-bucket moving average over the bars."
+              description="Volume by period, with a 4-period moving average."
               info="Bars are the raw total for each week or month; the line averages the last four buckets so a single big weekend doesn't read as a trend. Both use the same unit and axis — steady growth in the line is what progressive overload looks like, while a sharp spike is where injuries usually start."
               actions={
                 <>
@@ -1186,11 +1179,9 @@ export default function Analysis() {
             <ChartCard
               title={`${effX.label} vs ${effY.label}`}
               icon={<Target size={14} color="var(--primary)" />}
-              description={effGroups.length > 1
-                ? 'Any measure against any other, one dot per activity coloured by sport — with a fitted line for each sport, never one through all of them.'
-                : 'Any measure against any other, one dot per activity.'}
+              description="One dot per activity; dotted fits are per sport."
               info="Pick any two figures and see whether they move together across your activities. The dotted line for each sport is a least-squares fit through its dots, and r is how tightly they follow it — near 0 means no relationship in this selection. A fit is only drawn where there are enough points to mean something. Everything here is observational: distance, terrain and training phase move together, so a relationship is not a cause."
-              actions={
+              controls={
                 <div className="explore-picks">
                   <Dropdown
                     value={effScatterX}
@@ -1294,7 +1285,7 @@ export default function Analysis() {
             <ChartCard
               title="Daily Training Load"
               icon={<Flame size={14} color="var(--blue)" />}
-              description="A TSS-equivalent score per day, from duration and heart-rate effort."
+              description="Daily effort from duration and heart rate."
               info="Each day's score is the sum of its activities, where one hour at 150 bpm scores about 100. It rewards both duration and intensity, so a short hard session and a long easy one can land in the same place. Gaps are rest days — they matter as much as the bars."
               style={{ marginBottom: 16 }}
             >
@@ -1319,7 +1310,7 @@ export default function Analysis() {
             <ChartCard
               title="Acute : Chronic Workload"
               icon={<Activity size={14} color="var(--purple)" />}
-              description="Last 7 days of load against the last 28. The shaded band (0.8–1.3) is the sweet spot."
+              description="7-day load versus the 28-day baseline; target 0.8–1.3."
               info="Divides your average daily load over the past week by the same average over the past four weeks. Around 1.0 means this week matches what your body is already used to. Below 0.8 you're detraining or tapering; above 1.5 (the dashed line) is the range most associated with injury, because you're loading faster than tissue adapts. The four weeks of history behind each point come from your full library, so this stays correct even on a short time range."
               actions={latestRatio != null && (
                 <span style={{
@@ -1363,9 +1354,7 @@ export default function Analysis() {
           <ChartCard
             title={`Temperature vs ${weatherMetric === 'pace' ? 'Pace' : 'Heart Rate'}`}
             icon={<CloudSun size={14} color="var(--primary)" />}
-            description={weatherGroups.length > 1
-              ? `One line per sport, in ${binWidth} °C bands — a run and a ride are never averaged together, because their pace means different things.`
-              : `Grouped into ${binWidth} °C bands.`}
+            description={`${binWidth} °C averages, separated by sport.`}
             info="Each point on the line is the average across every workout in that temperature band, with the individual workouts shown faintly behind it. The band width adapts to the range of temperatures you actually train in, so a mild climate is still resolved finely. Bands with fewer than three workouts are left out — one workout is not an average, though it stays visible as a dot. This is observational: distance, terrain, sleep and training phase all move with the seasons too, so treat it as a tendency rather than a cause."
             actions={
               <Segmented
@@ -1498,11 +1487,9 @@ export default function Analysis() {
           <ChartCard
             title={`${exploreField.label} vs ${exploreMetric.label}`}
             icon={<Sparkles size={14} color="var(--primary)" />}
-            description={exploreGroups.length > 1
-              ? 'Every workout in this period, one dot each, coloured by sport — and a fitted line for each, never one through all of them.'
-              : 'Every workout in this period, one dot each.'}
+            description="One dot per workout; dotted fits are per sport."
             info="Pick any weather value and any figure from your workouts and see whether they move together. Unbinned on purpose: with this many combinations most temperature bands would hold a single workout, and a line drawn through those would state far more than the data does. The fitted line is least squares over the dots, and r is how tightly they follow it — a value near 0 means no relationship in this data, not that there is none. Everything here is observational, and the seasons move distance, terrain and training phase along with the weather."
-            actions={
+            controls={
               <div className="explore-picks">
                 <Dropdown
                   value={exploreX}
