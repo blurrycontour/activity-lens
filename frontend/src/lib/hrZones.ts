@@ -24,38 +24,57 @@
 export const HR_ZONE_COLORS = ['#60a5fa', '#34d399', '#fbbf24', '#ef4444', '#a855f7']
 export const HR_ZONE_LABELS = ['Zone 1 (<60%)', 'Zone 2 (60-70%)', 'Zone 3 (70-80%)', 'Zone 4 (80-90%)', 'Zone 5 (90-100%)']
 export const HR_ZONE_SHORT = ['Z1', 'Z2', 'Z3', 'Z4', 'Z5']
+export type HRZoneMethod = 'max' | 'reserve'
+
+function reserveUsable(maxHR: number, restingHR: number, method: HRZoneMethod): boolean {
+  return method === 'reserve' && restingHR > 0 && restingHR < maxHR
+}
+
+function intensity(hr: number, maxHR: number, restingHR: number, method: HRZoneMethod): number {
+  if (reserveUsable(maxHR, restingHR, method)) {
+    return ((hr - restingHR) / (maxHR - restingHR)) * 100
+  }
+  return (hr / maxHR) * 100
+}
+
+function heartRateAt(fraction: number, maxHR: number, restingHR: number, method: HRZoneMethod): number {
+  if (reserveUsable(maxHR, restingHR, method)) {
+    return restingHR + fraction * (maxHR - restingHR)
+  }
+  return fraction * maxHR
+}
 
 /** Maps a heart rate (bpm) to its zone colour, given the user's max HR. */
-export function hrZoneColor(hr: number, maxHR: number): string {
+export function hrZoneColor(hr: number, maxHR: number, restingHR = 0, method: HRZoneMethod = 'max'): string {
   if (maxHR <= 0) return HR_ZONE_COLORS[0]
-  const pct = (hr / maxHR) * 100
+  const pct = intensity(hr, maxHR, restingHR, method)
   const idx = pct < 60 ? 0 : pct < 70 ? 1 : pct < 80 ? 2 : pct < 90 ? 3 : 4
   return HR_ZONE_COLORS[idx]
 }
 
 /** Builds vertical gradient stops (top→bottom) that colour an HR line by zone,
  * mapping bpm values within [yMin, yMax] to the 5-zone palette. */
-export function hrZoneStops(yMin: number, yMax: number, maxHR: number): { offset: number; color: string }[] | null {
+export function hrZoneStops(yMin: number, yMax: number, maxHR: number, restingHR = 0, method: HRZoneMethod = 'max'): { offset: number; color: string }[] | null {
   if (maxHR <= 0 || yMax <= yMin) return null
   const offAt = (v: number) => Math.min(1, Math.max(0, (yMax - v) / (yMax - yMin)))
-  const stops: { offset: number; color: string }[] = [{ offset: 0, color: hrZoneColor(yMax, maxHR) }]
+  const stops: { offset: number; color: string }[] = [{ offset: 0, color: hrZoneColor(yMax, maxHR, restingHR, method) }]
   for (const f of [0.9, 0.8, 0.7, 0.6]) {
-    const b = f * maxHR
+    const b = heartRateAt(f, maxHR, restingHR, method)
     if (b > yMin && b < yMax) {
       const off = offAt(b)
-      stops.push({ offset: off, color: hrZoneColor(b + 0.01, maxHR) })
-      stops.push({ offset: off, color: hrZoneColor(b - 0.01, maxHR) })
+      stops.push({ offset: off, color: hrZoneColor(b + 0.01, maxHR, restingHR, method) })
+      stops.push({ offset: off, color: hrZoneColor(b - 0.01, maxHR, restingHR, method) })
     }
   }
-  stops.push({ offset: 1, color: hrZoneColor(yMin, maxHR) })
+  stops.push({ offset: 1, color: hrZoneColor(yMin, maxHR, restingHR, method) })
   return stops
 }
 
-export function hrZoneBuckets(hrTimeline: { t: number; hr: number }[], maxHR: number, totalForPct?: number) {
+export function hrZoneBuckets(hrTimeline: { t: number; hr: number }[], maxHR: number, totalForPct?: number, restingHR = 0, method: HRZoneMethod = 'max') {
   if (hrTimeline.length === 0 || maxHR <= 0) return []
   const counts = [0, 0, 0, 0, 0]
   for (let i = 0; i < hrTimeline.length; i++) {
-    const pct = (hrTimeline[i].hr / maxHR) * 100
+    const pct = intensity(hrTimeline[i].hr, maxHR, restingHR, method)
     const idx = pct < 60 ? 0 : pct < 70 ? 1 : pct < 80 ? 2 : pct < 90 ? 3 : 4
     counts[idx]++
   }
@@ -84,12 +103,12 @@ export function hrZoneBuckets(hrTimeline: { t: number; hr: number }[], maxHR: nu
  * Returns a function rather than the table itself, so the caller cannot get the
  * binary search subtly wrong in three places.
  */
-export function hrZoneCounter(hrTimeline: { t: number; hr: number }[], maxHR: number) {
+export function hrZoneCounter(hrTimeline: { t: number; hr: number }[], maxHR: number, restingHR = 0, method: HRZoneMethod = 'max') {
   const total = hrTimeline.length
   // prefix[z][i] is how many samples of zone z fall in the first i samples.
   const prefix = [0, 1, 2, 3, 4].map(() => new Int32Array(total + 1))
   for (let i = 0; i < total; i++) {
-    const pct = maxHR > 0 ? (hrTimeline[i].hr / maxHR) * 100 : 0
+    const pct = maxHR > 0 ? intensity(hrTimeline[i].hr, maxHR, restingHR, method) : 0
     const zone = pct < 60 ? 0 : pct < 70 ? 1 : pct < 80 ? 2 : pct < 90 ? 3 : 4
     for (let z = 0; z < 5; z++) prefix[z][i + 1] = prefix[z][i] + (z === zone ? 1 : 0)
   }

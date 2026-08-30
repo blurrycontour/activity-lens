@@ -127,6 +127,7 @@ type UserPrefs struct {
 	HeightCm      int     `json:"heightCm"`
 	MaxHR         int     `json:"maxHr"`
 	RestingHR     int     `json:"restingHr"`
+	HRZoneMethod  string  `json:"hrZoneMethod"`
 	ThresholdPace string  `json:"thresholdPace"`
 	FTP           int     `json:"ftp"`
 	StepLengthCm  int     `json:"stepLengthCm"`
@@ -300,6 +301,7 @@ func DefaultUserPrefs() UserPrefs {
 	return UserPrefs{
 		CalorieMethod:  "heart-rate",
 		BodyWeightKg:   70,
+		HRZoneMethod:   "max",
 		Goals:          []Goal{},
 		WeatherEnabled: true,
 	}
@@ -319,10 +321,10 @@ func (s *Store) UserPreferences(ctx context.Context, userID int64) (UserPrefs, e
 		planWorkouts int
 	)
 	err := s.db.QueryRowContext(ctx,
-		`SELECT calorie_method, body_weight_kg, sex, birth_year, height_cm, max_hr, resting_hr, threshold_pace, ftp, step_length_cm,
+		`SELECT calorie_method, body_weight_kg, sex, birth_year, height_cm, max_hr, resting_hr, hr_zone_method, threshold_pace, ftp, step_length_cm,
 		        goals, notify_prefs, weekly_goal_count, weekly_goal_type, weekly_goal_min_km, weather_enabled, tagline,
 		        plan_workouts FROM user_prefs WHERE user_id = ?`, userID).
-		Scan(&v.CalorieMethod, &v.BodyWeightKg, &v.Sex, &v.BirthYear, &v.HeightCm, &v.MaxHR, &v.RestingHR, &v.ThresholdPace, &v.FTP, &v.StepLengthCm,
+		Scan(&v.CalorieMethod, &v.BodyWeightKg, &v.Sex, &v.BirthYear, &v.HeightCm, &v.MaxHR, &v.RestingHR, &v.HRZoneMethod, &v.ThresholdPace, &v.FTP, &v.StepLengthCm,
 			&goalsJSON, &notifyJSON, &legacyCount, &legacyType, &legacyMinKm, &weather, &v.Tagline, &planWorkouts)
 	if errors.Is(err, sql.ErrNoRows) {
 		return v, nil
@@ -360,9 +362,9 @@ func (s *Store) SaveUserPreferences(ctx context.Context, userID int64, v UserPre
 		return fmt.Errorf("encode goals: %w", err)
 	}
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO user_prefs (user_id, calorie_method, body_weight_kg, sex, birth_year, height_cm, max_hr, resting_hr, threshold_pace, ftp, step_length_cm,
+		`INSERT INTO user_prefs (user_id, calorie_method, body_weight_kg, sex, birth_year, height_cm, max_hr, resting_hr, hr_zone_method, threshold_pace, ftp, step_length_cm,
 		                         goals, notify_prefs, weather_enabled, tagline, plan_workouts, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(user_id) DO UPDATE SET
 		   calorie_method = excluded.calorie_method,
 		   body_weight_kg = excluded.body_weight_kg,
@@ -371,6 +373,7 @@ func (s *Store) SaveUserPreferences(ctx context.Context, userID int64, v UserPre
 		   height_cm = excluded.height_cm,
 		   max_hr = excluded.max_hr,
 		   resting_hr = excluded.resting_hr,
+		   hr_zone_method = excluded.hr_zone_method,
 		   threshold_pace = excluded.threshold_pace,
 		   ftp = excluded.ftp,
 		   step_length_cm = excluded.step_length_cm,
@@ -380,7 +383,7 @@ func (s *Store) SaveUserPreferences(ctx context.Context, userID int64, v UserPre
 		   tagline = excluded.tagline,
 		   plan_workouts = excluded.plan_workouts,
 		   updated_at = excluded.updated_at`,
-		userID, v.CalorieMethod, v.BodyWeightKg, v.Sex, v.BirthYear, v.HeightCm, v.MaxHR, v.RestingHR, v.ThresholdPace, v.FTP, v.StepLengthCm,
+		userID, v.CalorieMethod, v.BodyWeightKg, v.Sex, v.BirthYear, v.HeightCm, v.MaxHR, v.RestingHR, v.HRZoneMethod, v.ThresholdPace, v.FTP, v.StepLengthCm,
 		string(goalsJSON), string(v.Notify), boolToInt(v.WeatherEnabled), CleanTagline(v.Tagline),
 		boolToInt(v.PlanWorkouts), time.Now().UTC().Format(time.RFC3339))
 	return err
@@ -676,24 +679,36 @@ func boolToInt(b bool) int {
 // One narrow query rather than UserPreferences: this runs on every workout
 // detail load, and the rest of that row (goals and notification JSON, both
 // unmarshalled) is nothing to do with the question.
-func (s *Store) AthleteMaxHR(ctx context.Context, userID int64) (int, error) {
-	var maxHR, birthYear int
+type HRZoneSettings struct {
+	MaxHR     int
+	RestingHR int
+	Method    string
+}
+
+func (s *Store) AthleteHRZoneSettings(ctx context.Context, userID int64) (HRZoneSettings, error) {
+	var out HRZoneSettings
+	var birthYear int
 	err := s.db.QueryRowContext(ctx,
-		`SELECT max_hr, birth_year FROM user_prefs WHERE user_id = ?`, userID).
-		Scan(&maxHR, &birthYear)
+		`SELECT max_hr, birth_year, resting_hr, hr_zone_method FROM user_prefs WHERE user_id = ?`, userID).
+		Scan(&out.MaxHR, &birthYear, &out.RestingHR, &out.Method)
 	if errors.Is(err, sql.ErrNoRows) {
-		return 0, nil
+		return HRZoneSettings{Method: "max"}, nil
 	}
 	if err != nil {
-		return 0, err
+		return HRZoneSettings{}, err
 	}
-	if maxHR > 0 {
-		return maxHR, nil
-	}
-	if birthYear > 0 {
+	if out.MaxHR <= 0 && birthYear > 0 {
 		if age := time.Now().Year() - birthYear; age > 0 && age < 120 {
-			return 220 - age, nil
+			out.MaxHR = 220 - age
 		}
 	}
-	return 0, nil
+	if out.Method != "reserve" {
+		out.Method = "max"
+	}
+	return out, nil
+}
+
+func (s *Store) AthleteMaxHR(ctx context.Context, userID int64) (int, error) {
+	zones, err := s.AthleteHRZoneSettings(ctx, userID)
+	return zones.MaxHR, err
 }

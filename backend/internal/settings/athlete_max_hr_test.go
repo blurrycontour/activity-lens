@@ -54,3 +54,20 @@ func TestAthleteMaxHRNoRow(t *testing.T) {
 		t.Fatalf("AthleteMaxHR() = %d, %v; want 0, nil", got, err)
 	}
 }
+
+func TestAthleteHRZoneSettings(t *testing.T) {
+	ctx := context.Background()
+	st := newTestStore(t)
+	if err := st.SaveUserPreferences(ctx, 1, UserPrefs{
+		MaxHR: 190, RestingHR: 52, HRZoneMethod: "reserve",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.AthleteHRZoneSettings(ctx, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != (HRZoneSettings{MaxHR: 190, RestingHR: 52, Method: "reserve"}) {
+		t.Fatalf("AthleteHRZoneSettings() = %+v", got)
+	}
+}

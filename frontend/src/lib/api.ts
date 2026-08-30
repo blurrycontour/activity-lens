@@ -192,6 +192,7 @@ export interface UserPreferences {
   heightCm: number
   maxHr: number
   restingHr: number
+  hrZoneMethod: 'max' | 'reserve'
   thresholdPace: string
   ftp: number
   stepLengthCm: number

@@ -162,7 +162,7 @@ export default function WorkoutCard({
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
             <Mountain size={11} color="var(--text-3)" />
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-2)' }}>+{w.elevationGain}m</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-2)' }}>+{Math.round(w.elevationGain)}m</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
             <Flame size={11} color="var(--text-3)" />
@@ -211,7 +211,7 @@ export default function WorkoutCard({
             </div>
             <div className="workout-row-stat optional">
               <Mountain size={11} color="var(--text-3)" />
-              <span>+{w.elevationGain}m</span>
+              <span>+{Math.round(w.elevationGain)}m</span>
             </div>
             <div className="workout-row-stat optional">
               <Flame size={11} color="var(--text-3)" />

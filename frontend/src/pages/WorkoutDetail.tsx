@@ -27,6 +27,7 @@ import { useIsMobile } from '../lib/useIsMobile'
 import { usePlayhead, useThrottledPlayhead } from '../lib/playhead'
 import { downsample, PLOT_POINTS } from '../lib/downsample'
 import { hrZoneBuckets, hrZoneCounter, hrZoneStops } from '../lib/hrZones'
+import { formatMeasuredNumber } from '../lib/formatNumber'
 import type { Shading } from '../components/RouteMap'
 
 /**
@@ -549,10 +550,11 @@ function xLabel(value: string) {
 
 function ChartTooltip({ active, payload, label, unit, valueFormatter }: { active?: boolean; payload?: any[]; label?: string; unit: string; valueFormatter?: (value: number) => string }) {
   if (!active || !payload?.length) return null
+  const value = Number(payload[0].value)
   return (
     <div className="custom-tooltip">
       <div style={{ color: 'var(--text-3)', marginBottom: 2 }}>{fmtClock(Number(label))}</div>
-      <div style={{ color: 'var(--text)', fontWeight: 600 }}>{valueFormatter ? valueFormatter(Number(payload[0].value)) : payload[0].value} {unit}</div>
+      <div style={{ color: 'var(--text)', fontWeight: 600 }}>{valueFormatter ? valueFormatter(value) : formatMeasuredNumber(value)} {unit}</div>
     </div>
   )
 }
@@ -817,7 +819,12 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
    * better than a chart with no zones at all.
    */
   const effectiveMaxHR = w.athleteMaxHr && w.athleteMaxHr > 0 ? w.athleteMaxHr : w.maxHR
-  const hrZones = useMemo(() => hrZoneBuckets(w.hrTimeline, effectiveMaxHR), [w.hrTimeline, effectiveMaxHR])
+  const effectiveRestingHR = w.athleteRestingHr ?? 0
+  const hrZoneMethod = w.athleteHrZoneMethod ?? 'max'
+  const hrZones = useMemo(
+    () => hrZoneBuckets(w.hrTimeline, effectiveMaxHR, undefined, effectiveRestingHR, hrZoneMethod),
+    [w.hrTimeline, effectiveMaxHR, effectiveRestingHR, hrZoneMethod],
+  )
 
   /**
    * What fills the panel beside the summary.
@@ -945,8 +952,8 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
    * array reads rather than another two passes over the samples.
    */
   const countZonesTo = useMemo(
-    () => hrZoneCounter(w.hrTimeline, effectiveMaxHR),
-    [w.hrTimeline, effectiveMaxHR],
+    () => hrZoneCounter(w.hrTimeline, effectiveMaxHR, effectiveRestingHR, hrZoneMethod),
+    [w.hrTimeline, effectiveMaxHR, effectiveRestingHR, hrZoneMethod],
   )
   const hrZonesPlayed = useMemo(() => countZonesTo(currentTime), [countZonesTo, currentTime])
   const [expanded, setExpanded] = useState<null | 'map' | 'session' | Metric | 'hrzones'>(null)
@@ -1338,7 +1345,25 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
       ? [0, series.count ? Math.ceil(series.max * 1.05) || 1 : 1]
       : padDomain(series.min, series.max, series.count)
     const cursorVal = valueAtTime(data, dataKey as any, currentTime)
-    const strokeStops = hrZoneStroke && maxHRForZones ? hrZoneStops(yDomain[0], yDomain[1], maxHRForZones) : null
+    // The zone gradient is an SVG linear gradient in objectBoundingBox units,
+    // so it maps to the *stroke path's* bounding box — the value range of the
+    // line actually drawn — not to the padded axis domain. Computing the stops
+    // against the axis domain painted the peak with the colour meant for the
+    // padded top of the chart, so a Zone-4 peak drew as Zone 5 with no Zone-5
+    // sample behind it. Measure the visible line's own range so the offsets
+    // line up, and it stays right as the line grows during playback.
+    let visMin = Infinity
+    let visMax = -Infinity
+    if (hrZoneStroke) {
+      for (const p of visible) {
+        const v = (p as Record<string, number>)[dataKey]
+        if (v < visMin) visMin = v
+        if (v > visMax) visMax = v
+      }
+    }
+    const strokeStops = hrZoneStroke && maxHRForZones && visible.length
+      ? hrZoneStops(visMin, visMax, maxHRForZones, effectiveRestingHR, hrZoneMethod)
+      : null
     const strokeColor = strokeStops ? `url(#${gradId}_stroke)` : stroke
     return (
       <ResponsiveContainer width="100%" height={height}>
@@ -1448,7 +1473,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
     return areaChart({ series: plots.speed, dataKey: 'speed', stroke: 'var(--blue)', gradId: 'speedGrad', unit: 'km/h', valueFormatter: value => value.toFixed(1), height })
   }
   function elevChart(height: number) {
-    return areaChart({ series: plots.elev, dataKey: 'elev', stroke: 'var(--hike)', gradId: 'elevGrad', unit: 'm', height })
+    return areaChart({ series: plots.elev, dataKey: 'elev', stroke: 'var(--hike)', gradId: 'elevGrad', unit: 'm', height, valueFormatter: v => formatMeasuredNumber(v, 0), yTickFormatter: v => formatMeasuredNumber(v, 0) })
   }
   function cadenceChart(height: number) {
     return areaChart({ series: plots.cad, dataKey: 'cad', stroke: CADENCE_COLOR, gradId: 'cadGrad', unit: cadenceUnit(w.type), height })
@@ -1581,7 +1606,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
       // The fallback matches the frame the map will fill, so its arrival does
       // not reflow the cards underneath it.
       <Suspense fallback={<div className="route-map-loading" style={{ height }}>Loading map…</div>}>
-      <RouteMap route={w.route} color={trailColor} duration={w.duration} currentTime={currentTime} playhead={playhead} onScrub={handleScrub} height={height} distance={w.distance} hrTimeline={w.hrTimeline} paceTimeline={smoothPaceTimeline} elevTimeline={w.elevTimeline} cadenceTimeline={cadenceTimeline} cadenceLabel={cadenceUnit(w.type)} avatarUrl={routeAvatar} maxHR={effectiveMaxHR} shading={shading} onShadingChange={setShading} maximizeButton={maximizeButton} />
+      <RouteMap route={w.route} color={trailColor} duration={w.duration} currentTime={currentTime} playhead={playhead} onScrub={handleScrub} height={height} distance={w.distance} hrTimeline={w.hrTimeline} paceTimeline={smoothPaceTimeline} elevTimeline={w.elevTimeline} cadenceTimeline={cadenceTimeline} cadenceLabel={cadenceUnit(w.type)} avatarUrl={routeAvatar} maxHR={effectiveMaxHR} restingHR={effectiveRestingHR} hrZoneMethod={hrZoneMethod} shading={shading} onShadingChange={setShading} maximizeButton={maximizeButton} cooperativeGestures={isMobile && expanded !== 'map'} />
       </Suspense>
     )
   }
@@ -1835,6 +1860,8 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
                 hrTimeline={w.hrTimeline}
                 cadenceTimeline={cadenceTimeline}
                 maxHR={effectiveMaxHR}
+                restingHR={effectiveRestingHR}
+                hrZoneMethod={hrZoneMethod}
                 pauses={pauses}
                 playhead={playhead}
                 tint={tint}
@@ -2065,7 +2092,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
               info={w.elevationLookup
                 ? "This workout recorded a route but no altitude, so the elevation here is the ground under that route, from a terrain model — that is what the Σ marks. The model has one height per 90 metres, which is wider than most trails, so read it as the shape of the hill rather than the shape of your ride. Total gain sums only the upward steps between consecutive samples."
                 : "Altitude recorded at each track point. Total gain sums only the upward steps between consecutive samples, so barometric noise on a flat route can inflate it slightly. Compare the shape against the heart-rate chart to see what the climbs actually cost you."}
-              stats={<>+{w.elevationGain} m gain · {derived.elevLoss} m loss</>}
+              stats={<>+{formatMeasuredNumber(w.elevationGain, 0)} m gain · {formatMeasuredNumber(derived.elevLoss, 0)} m loss</>}
               onExpand={() => setExpanded('elevation')}
             >
               {elevChart(180)}
@@ -2348,6 +2375,8 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             hrTimeline={w.hrTimeline}
             cadenceTimeline={cadenceTimeline}
             maxHR={effectiveMaxHR}
+            restingHR={effectiveRestingHR}
+            hrZoneMethod={hrZoneMethod}
             pauses={pauses}
             playhead={playhead}
             tint={tint}

@@ -235,7 +235,9 @@ type Workout struct {
 	// It travels with the workout rather than being read from the viewer's own
 	// preferences because a shared workout belongs to someone else: measuring
 	// their effort against your ceiling describes neither of you.
-	AthleteMaxHR int `json:"athleteMaxHr,omitempty"`
+	AthleteMaxHR        int    `json:"athleteMaxHr,omitempty"`
+	AthleteRestingHR    int    `json:"athleteRestingHr,omitempty"`
+	AthleteHRZoneMethod string `json:"athleteHrZoneMethod,omitempty"`
 
 	// HasRoute reports whether this workout recorded a track, for list rows
 	// which carry no route of their own. Read from the stored point count, so

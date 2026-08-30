@@ -152,8 +152,10 @@ func (s *Server) handleGetWorkout(w http.ResponseWriter, r *http.Request) {
 	// The ceiling the HR zones on this page are a percentage of. Always the
 	// owner's, never the viewer's — see Workout.AthleteMaxHR. Best effort: a
 	// missing value leaves the page to fall back on its own.
-	if maxHR, merr := s.settings.AthleteMaxHR(r.Context(), wk.UserID); merr == nil {
-		wk.AthleteMaxHR = maxHR
+	if zones, merr := s.settings.AthleteHRZoneSettings(r.Context(), wk.UserID); merr == nil {
+		wk.AthleteMaxHR = zones.MaxHR
+		wk.AthleteRestingHR = zones.RestingHR
+		wk.AthleteHRZoneMethod = zones.Method
 	} else {
 		slog.Warn("could not read athlete max HR", "user_id", wk.UserID, "error", merr)
 	}
@@ -804,6 +806,7 @@ type savePrefsRequest struct {
 	HeightCm      int     `json:"heightCm"`
 	MaxHR         int     `json:"maxHr"`
 	RestingHR     int     `json:"restingHr"`
+	HRZoneMethod  string  `json:"hrZoneMethod"`
 	ThresholdPace string  `json:"thresholdPace"`
 	FTP           int     `json:"ftp"`
 	StepLengthCm  int     `json:"stepLengthCm"`
@@ -875,6 +878,10 @@ func (s *Server) handleSavePreferences(w http.ResponseWriter, r *http.Request) {
 	if birthYear != 0 && (birthYear < 1900 || birthYear > time.Now().UTC().Year()) {
 		birthYear = 0
 	}
+	hrZoneMethod := req.HRZoneMethod
+	if hrZoneMethod != "reserve" {
+		hrZoneMethod = "max"
+	}
 	// Goals are validated individually and silently dropped when they could
 	// never be met, so one bad row can't reject an otherwise valid save.
 	goals := make([]settings.Goal, 0, len(req.Goals))
@@ -902,6 +909,7 @@ func (s *Server) handleSavePreferences(w http.ResponseWriter, r *http.Request) {
 		HeightCm:      clampNonNeg(req.HeightCm),
 		MaxHR:         clampNonNeg(req.MaxHR),
 		RestingHR:     clampNonNeg(req.RestingHR),
+		HRZoneMethod:  hrZoneMethod,
 		ThresholdPace: strings.TrimSpace(req.ThresholdPace),
 		FTP:           clampNonNeg(req.FTP),
 		StepLengthCm:  clampStepLength(req.StepLengthCm),

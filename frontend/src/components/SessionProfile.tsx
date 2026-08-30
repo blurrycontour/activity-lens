@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Activity, Heart, Maximize2, Sparkles } from 'lucide-react'
 import Dropdown from './Dropdown'
-import { HR_ZONE_COLORS, HR_ZONE_SHORT, hrZoneColor } from '../lib/hrZones'
+import { HR_ZONE_COLORS, HR_ZONE_SHORT, hrZoneColor, type HRZoneMethod } from '../lib/hrZones'
 import { FIELD_H, FIELD_W, buildConstellation, normalise, pointAt } from '../lib/constellation'
 import type { Playhead } from '../lib/playhead'
 import type { CadencePoint, HeartRatePoint, Pause } from '../data/workouts'
@@ -43,6 +43,8 @@ interface SessionProfileProps {
   hrTimeline: HeartRatePoint[]
   cadenceTimeline: CadencePoint[]
   maxHR: number
+  restingHR: number
+  hrZoneMethod: HRZoneMethod
   pauses: Pause[]
   /**
    * The exact playback position, subscribed to rather than rendered from.
@@ -72,7 +74,7 @@ function widthAt(depth: number): number {
 }
 
 export default function SessionProfile({
-  id, duration, hrTimeline, cadenceTimeline, maxHR, pauses, playhead,
+  id, duration, hrTimeline, cadenceTimeline, maxHR, restingHR, hrZoneMethod, pauses, playhead,
   tint, onTintChange, onScrub, avatarUrl, cadenceLabel = 'spm', onExpand, hideHeader,
 }: SessionProfileProps) {
   // Unique per mounted panel: two of these on one page would otherwise share a
@@ -183,7 +185,7 @@ export default function SessionProfile({
       if (series.length > 0) {
         while (cursor < series.length - 1 && Math.abs(series[cursor + 1].t - mid) <= Math.abs(series[cursor].t - mid)) cursor++
         color = useHR
-          ? hrZoneColor(values[cursor], maxHR)
+          ? hrZoneColor(values[cursor], maxHR, restingHR, hrZoneMethod)
           // The same 210°→20° sweep the map uses for its non-zone shadings.
           : `hsl(${210 - ((values[cursor] - min) / span) * 190} 78% 55%)`
       }
@@ -203,7 +205,7 @@ export default function SessionProfile({
     // Drawn far-to-near, so the wider near segments overlap the finer far ones
     // where the path folds back over itself.
     return out.reverse()
-  }, [sky, effective, hrTimeline, cadenceTimeline, maxHR, duration, pauses])
+  }, [sky, effective, hrTimeline, cadenceTimeline, maxHR, restingHR, hrZoneMethod, duration, pauses])
 
   /**
    * What the colours mean, in the map's own vocabulary.

@@ -16,7 +16,7 @@ import {
 // needs to know the split exists.
 export { LayerSwitcher, MAP_LAYERS, MAP_LAYER_KEY, ResetViewControl, hasWebGL }
 export type { MapLayerId }
-import { HR_ZONE_COLORS, HR_ZONE_SHORT, hrZoneColor } from '../lib/hrZones'
+import { HR_ZONE_COLORS, HR_ZONE_SHORT, hrZoneColor, type HRZoneMethod } from '../lib/hrZones'
 import { fmtDist, fmtDuration, fmtPace, type Workout } from '../data/workouts'
 import type { Playhead } from '../lib/playhead'
 import { FINISH_FLAG_D, FINISH_POLE_D } from '../lib/mapMarkers'
@@ -265,8 +265,8 @@ function positionAt(route: Array<[number, number]>, fraction: number): [number, 
 }
 
 export default function RouteMap({
-  route, color, duration, currentTime, playhead, onScrub, height, distance, hrTimeline, paceTimeline, elevTimeline, cadenceTimeline, avatarUrl, maxHR, cadenceLabel,
-  shading, onShadingChange, maximizeButton,
+  route, color, duration, currentTime, playhead, onScrub, height, distance, hrTimeline, paceTimeline, elevTimeline, cadenceTimeline, avatarUrl, maxHR, restingHR, hrZoneMethod, cadenceLabel,
+  shading, onShadingChange, maximizeButton, cooperativeGestures = false,
 }: {
   route: Array<[number, number]>
   color: string
@@ -283,6 +283,8 @@ export default function RouteMap({
   cadenceTimeline: Array<{ t: number; cad: number }>
   avatarUrl?: string
   maxHR: number
+  restingHR: number
+  hrZoneMethod: HRZoneMethod
   cadenceLabel: string
   /**
    * Owned by the page, not by this component. The inline map and the maximized
@@ -297,6 +299,13 @@ export default function RouteMap({
    *  switcher then takes the corner instead of leaving a hole where the button
    *  would have been. */
   maximizeButton?: React.ReactNode
+  /**
+   * Require two fingers to pan, so a one-finger drag scrolls the page instead
+   * and MapLibre shows its "use two fingers" hint. On for the inline map on a
+   * phone, where the map sits mid-scroll; off once it is maximized, where the
+   * map is the whole screen and there is nothing to scroll past.
+   */
+  cooperativeGestures?: boolean
 }) {
   const [layer, setLayer] = useState<MapLayerId>(() => {
     const stored = localStorage.getItem(MAP_LAYER_KEY)
@@ -352,9 +361,13 @@ export default function RouteMap({
     let cursor = 0
     const colorFor = (t: number) => {
       while (cursor < samples.length - 1 && Math.abs(samples[cursor + 1].t - t) <= Math.abs(samples[cursor].t - t)) cursor++
-      if (shading === 'hr') return hrZoneColor(values[cursor], maxHR)
+      if (shading === 'hr') return hrZoneColor(values[cursor], maxHR, restingHR, hrZoneMethod)
       const ratio = (values[cursor] - min) / span
-      return `hsl(${210 - ratio * 190} 78% 52%)`
+      // Pace is time-per-distance, so a lower number is faster. Faster should
+      // read as hotter (red), matching every other effort scale, so pace is
+      // inverted; elevation and cadence keep higher = hotter.
+      const warmth = shading === 'pace' ? 1 - ratio : ratio
+      return `hsl(${210 - warmth * 190} 78% 52%)`
     }
     const segs: Array<{ positions: Array<[number, number]>; color: string }> = []
     for (let i = 0; i < route.length - 1; i += step) {
@@ -362,7 +375,7 @@ export default function RouteMap({
       segs.push({ positions: route.slice(i, end + 1), color: colorFor(i * segStep) })
     }
     return segs
-  }, [route, shading, hrTimeline, paceTimeline, elevTimeline, cadenceTimeline, duration, color, maxHR])
+  }, [route, shading, hrTimeline, paceTimeline, elevTimeline, cadenceTimeline, duration, color, maxHR, restingHR, hrZoneMethod])
 
   /**
    * What the colours on the track mean, or null when they mean nothing.
@@ -396,15 +409,18 @@ export default function RouteMap({
     // gradient. Kept in step by hand, which is safe because both live in this
     // file and there is nowhere else for either to be used.
     const ramp = `linear-gradient(to right, hsl(210 78% 52%), hsl(115 78% 52%), hsl(20 78% 52%))`
-    // Faster is a lower number, so the pace ramp reads high-to-low; labelling
-    // the ends by value rather than by "min"/"max" is what keeps that honest.
     const fmt = shading === 'pace'
       ? (v: number) => `${fmtPace(v)}/km`
       : shading === 'elevation'
         ? (v: number) => `${Math.round(v)} m`
         : (v: number) => `${Math.round(v)} ${cadenceLabel}`
     const title = shading === 'pace' ? 'Pace' : shading === 'elevation' ? 'Elevation' : 'Cadence'
-    return { title, ramp, low: fmt(min), high: fmt(max) }
+    // The ramp's left end is the coolest (blue) and its right end the hottest
+    // (red). Pace inverts value-to-warmth, so its ends swap: the fastest pace
+    // (smallest number) sits under the red end.
+    const coolVal = shading === 'pace' ? max : min
+    const warmVal = shading === 'pace' ? min : max
+    return { title, ramp, low: fmt(coolVal), high: fmt(warmVal) }
   }, [shading, hrTimeline, paceTimeline, elevTimeline, cadenceTimeline, cadenceLabel])
 
   /**
@@ -449,6 +465,11 @@ export default function RouteMap({
   const clickData = useRef({ route, duration, onScrub, selected: selectedPoint })
   clickData.current = { route, duration, onScrub, selected: selectedPoint }
 
+  // Read by the map constructor, which runs once and must not close over a
+  // stale first-render value; the effect below owns every change after that.
+  const coopRef = useRef(cooperativeGestures)
+  coopRef.current = cooperativeGestures
+
   /**
    * The playback time this component last asked for, so a move it did not cause
    * can be told apart from one it did.
@@ -480,6 +501,9 @@ export default function RouteMap({
       pitchWithRotate: false,
       dragRotate: false,
       touchZoomRotate: true,
+      // Initial value only; the effect below keeps it in step as the map is
+      // maximized and restored without rebuilding the instance.
+      cooperativeGestures: coopRef.current,
     })
     map.touchZoomRotate.disableRotation()
     // Before the zoom buttons, so it sits on top of them: MapLibre stacks a
@@ -512,6 +536,17 @@ export default function RouteMap({
     // data changes are handled by the effects below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapBuildable])
+
+  // Two-finger panning is a per-view choice, not a per-instance one: the same
+  // map is inline (cooperative) and then maximized (free), so the handler is
+  // toggled rather than the map rebuilt. mapBuildable is a dependency so this
+  // also runs on the render that finishes building the map.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map?.cooperativeGestures) return
+    if (cooperativeGestures) map.cooperativeGestures.enable()
+    else map.cooperativeGestures.disable()
+  }, [cooperativeGestures, mapBuildable])
 
   useEffect(() => {
     const map = mapRef.current

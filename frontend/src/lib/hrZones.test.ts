@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { hrZoneBuckets, hrZoneCounter } from './hrZones'
+import { HR_ZONE_COLORS, hrZoneBuckets, hrZoneCounter, hrZoneStops } from './hrZones'
 
 const MAX = 200
 // One sample per zone: 50%, 65%, 75%, 85%, 95% of a 200bpm maximum.
@@ -46,5 +46,48 @@ describe('hrZoneCounter', () => {
   it('returns nothing without a usable maximum or samples', () => {
     expect(hrZoneCounter(timeline, 0)(40)).toEqual([])
     expect(hrZoneCounter([], MAX)(40)).toEqual([])
+  })
+})
+
+describe('heart-rate reserve zones', () => {
+  it('uses resting heart rate in the Karvonen intensity', () => {
+    const points = [{ t: 0, hr: 130 }, { t: 1, hr: 140 }]
+    expect(hrZoneBuckets(points, 200).map(z => z.value)).toEqual([0, 1, 1, 0, 0])
+    expect(hrZoneBuckets(points, 200, undefined, 50, 'reserve').map(z => z.value))
+      .toEqual([1, 1, 0, 0, 0])
+  })
+
+  it('falls back to max-HR zones without a usable resting HR', () => {
+    const points = [{ t: 0, hr: 130 }]
+    expect(hrZoneBuckets(points, 200, undefined, 0, 'reserve'))
+      .toEqual(hrZoneBuckets(points, 200))
+  })
+})
+
+// The stops are an objectBoundingBox gradient over the drawn line, so they must
+// span exactly the line's value range and never invent a zone above its peak —
+// that mismatch was what drew a Zone-4 peak in the Zone-5 colour with no Zone-5
+// sample behind it.
+describe('hrZoneStops', () => {
+  const [Z1, , , Z4, Z5] = HR_ZONE_COLORS
+
+  it('never colours above the data peak with a higher zone', () => {
+    // Peak 173 of a 195 ceiling is 88.7% — Zone 4, not Zone 5.
+    const stops = hrZoneStops(79, 173, 195)!
+    expect(stops).not.toBeNull()
+    expect(stops[0].color).toBe(Z4)
+    expect(stops.some(s => s.color === Z5)).toBe(false)
+    expect(stops[stops.length - 1].color).toBe(Z1)
+  })
+
+  it('spans the whole line range, top zone at the top', () => {
+    // 190 of 195 is 97% — Zone 5 genuinely present.
+    const stops = hrZoneStops(90, 190, 195)!
+    expect(stops[0].color).toBe(Z5)
+  })
+
+  it('gives up on a flat line or a missing maximum', () => {
+    expect(hrZoneStops(150, 150, 195)).toBeNull()
+    expect(hrZoneStops(80, 170, 0)).toBeNull()
   })
 })

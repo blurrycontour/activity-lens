@@ -9,6 +9,8 @@ interface ChartCardProps {
   icon?: React.ReactNode
   /** Right-aligned controls in the title row (toggles, readouts). */
   actions?: React.ReactNode
+  /** Left-aligned controls below the heading, for wider choice sets. */
+  controls?: React.ReactNode
   children: React.ReactNode
   style?: React.CSSProperties
 }
@@ -18,7 +20,7 @@ interface ChartCardProps {
  * icon, info tip and controls, a short always-on description, then the plot.
  * Using one component keeps spacing and typography identical across pages.
  */
-export default function ChartCard({ title, description, info, icon, actions, children, style }: ChartCardProps) {
+export default function ChartCard({ title, description, info, icon, actions, controls, children, style }: ChartCardProps) {
   return (
     <div className="card chart-card" style={style}>
       <div className="chart-card-head">
@@ -28,6 +30,7 @@ export default function ChartCard({ title, description, info, icon, actions, chi
         {actions && <div className="chart-card-actions">{actions}</div>}
       </div>
       {description && <p className="chart-card-desc">{description}</p>}
+      {controls && <div className="chart-card-controls">{controls}</div>}
       {children}
     </div>
   )

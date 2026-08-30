@@ -33,11 +33,10 @@ import {
   goalUnit, periodLabel, recentPersonalBests, recentWeekStarts, sparkAverages, sparkBuckets, totalsOf, weekdayMatrix,
   windowSlices, type Goal, type GoalProgress,
 } from '../lib/insights'
+import { goalsAreComplete } from '../lib/goalCelebration'
 
 /** Weeks shown in the dashboard's compact weekly-trend chart. */
 const TREND_WEEKS = 3
-/** Marks that this app session already celebrated a full set of goals. */
-const CELEBRATED_KEY = 'al_goals_celebrated'
 /** Replacement distance per equipment type; mirrors the backend default. */
 const DEFAULT_RETIRE_KM: Record<string, number> = { shoes: 600 }
 
@@ -731,22 +730,12 @@ export default function Dashboard({ onSelect, onResumeSession, onImport, onCreat
    * Needs at least one goal: "all zero of your goals are met" is not a thing to
    * celebrate, and would rain on everyone who has never set one.
    */
-  const allGoalsMet = progress.length > 0 && progress.every(p => p.current >= p.goal.target)
   const [celebrating, setCelebrating] = useState(false)
   useEffect(() => {
-    if (!allGoalsMet) return
-    // Once per app open rather than once per visit to this page: the dashboard
-    // is the app's home and mounts again every time you navigate back to it,
-    // and a confetti burst on each of those turns a reward into an obstacle.
-    // sessionStorage is exactly the lifetime wanted — it ends with the tab, and
-    // on Android the WebView starts a fresh one each launch.
-    if (sessionStorage.getItem(CELEBRATED_KEY)) return
-    sessionStorage.setItem(CELEBRATED_KEY, '1')
+    if (!goalsAreComplete(progress)) return
     setCelebrating(true)
-    // The confetti is silent on a phone in a pocket. `complete` is the pattern
-    // the session runner uses for finishing one, which is the same event.
     void buzz('complete')
-  }, [allGoalsMet])
+  }, [progress])
   const bests = useMemo(() => recentPersonalBests(workouts), [workouts])
   /**
    * The same records, grouped into the activity that set them.
