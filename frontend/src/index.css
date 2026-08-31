@@ -1278,6 +1278,22 @@ body {
 .tag-plan     { background: color-mix(in srgb, var(--plan) 14%, transparent); color: var(--plan); }
 .tag-session  { background: color-mix(in srgb, var(--session) 14%, transparent); color: var(--session); }
 
+/* Which HR-zone model drew a workout's zones chart. A quiet pill, not a status:
+   it names a setting, so it recedes into the header rather than competing with
+   the sport tag beside the title. */
+.zone-method-badge {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  color: var(--text-3);
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  padding: 1px 7px;
+  border-radius: 99px;
+}
+
 .stat-chip { display: flex; flex-direction: column; gap: 2px; }
 .stat-chip .label { font-size: 11px; color: var(--text-3); font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.06em; }
 .stat-chip .value { font-size: 18px; font-weight: 700; font-family: var(--font-mono); color: var(--text); letter-spacing: -0.03em; }

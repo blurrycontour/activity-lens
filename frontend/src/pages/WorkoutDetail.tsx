@@ -94,6 +94,21 @@ function ManualIcon() {
   )
 }
 
+/** Which HR-zone model drew this chart, set in Body & performance settings. */
+function ZoneMethodBadge({ method }: { method: 'max' | 'reserve' }) {
+  const reserve = method === 'reserve'
+  return (
+    <span
+      className="zone-method-badge"
+      title={reserve
+        ? 'Zones from heart-rate reserve (Karvonen), using your resting and max HR — set in Body & performance'
+        : 'Zones from a percentage of your max HR — set in Body & performance'}
+    >
+      {reserve ? 'Karvonen' : '% max'}
+    </span>
+  )
+}
+
 function StatChip({ icon, label, value, calculated, manual }: { icon?: React.ReactNode; label: string; value: string; calculated?: boolean; manual?: boolean }) {
   return (
     <div className="stat-grid-item">
@@ -2046,7 +2061,8 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             <MetricPanel
               icon={<Heart size={14} color="var(--metric-hr)" />}
               title="Heart Rate Zones"
-              info="How the activity's time split across the five effort zones, as a share of recorded samples. Zones are percentages of your max HR: under 60% is recovery, 60-70% endurance, 70-80% tempo, 80-90% threshold, and above 90% is maximal. Switch between the histogram and donut under Settings → Charts."
+              badge={<ZoneMethodBadge method={hrZoneMethod} />}
+              info="How the activity's time split across the five effort zones, as a share of recorded samples. The badge shows which model drew them — a percentage of your max HR, or heart-rate reserve (Karvonen), chosen under Settings → Body & performance. Zones are: under 60% is recovery, 60-70% endurance, 70-80% tempo, 80-90% threshold, and above 90% is maximal. Switch between the histogram and donut under Settings → Charts."
               onExpand={() => setExpanded('hrzones')}
             >
               {hrZoneChart(190)}

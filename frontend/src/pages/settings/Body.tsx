@@ -155,7 +155,7 @@ export default function BodySettings() {
 
       <SettingsCard title="Performance thresholds">
         <div className="field-grid">
-          <Field label="HR zone model" info="Max HR uses a percentage of your maximum. Karvonen uses your resting HR too.">
+          <Field label="HR zone model" info="Max HR uses a percentage of your maximum. Karvonen uses your resting HR too. Each workout's zones chart shows a badge naming the model used.">
             <Dropdown
               block
               value={hrZoneMethod}
