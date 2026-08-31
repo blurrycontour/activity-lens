@@ -87,6 +87,17 @@
   --danger-border: rgba(239, 68, 68, 0.35);
   --success: #22c55e;
   --warning: #f59e0b;
+  /* Workout-detail metric lines. A dedicated five-hue set rather than the sport
+     and status tokens they used to borrow: pace took the workout's own sport
+     colour, which on a Hike is identical to --hike used for elevation, and HR
+     (red) sat beside cadence on --strength (pink). Fixed and mutually ≥20 ΔE —
+     chartMetricSeparation.test.ts holds the floor — so the five lines never
+     read as two. HR stays red because HR is red. */
+  --metric-hr: #ef4444;
+  --metric-pace: #14b8a6;
+  --metric-speed: #3b82f6;
+  --metric-elev: #f59e0b;
+  --metric-cadence: #a855f7;
   --radius: 0.5rem;
   --sidebar-w: 240px;
   --bottombar-h: 0px;
@@ -167,6 +178,13 @@
   --other: #57534e;
   --plan: #5b21b6;
   --session: #9f1239;
+  /* Deepened for a white ground, same hues as the dark set — chart lines want
+     ≥3:1 to read as a line rather than a tint. */
+  --metric-hr: #dc2626;
+  --metric-pace: #0d9488;
+  --metric-speed: #2563eb;
+  --metric-elev: #b45309;
+  --metric-cadence: #9333ea;
 }
 
 * {
