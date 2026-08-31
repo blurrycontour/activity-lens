@@ -46,6 +46,9 @@ const ITEMS: SettingsSearchItem[] = [
   { section: 'profile', label: 'Profile', keywords: 'name email picture tagline avatar' },
   { section: 'security', label: 'Security', keywords: 'password change devices sessions sign out' },
   { section: 'feedback', label: 'Send feedback', keywords: 'bug report suggest contact' },
+  { section: 'autoimport', label: 'Auto import', keywords: 'watch folder new activity files this device' },
+  { section: 'app', label: 'App version', keywords: 'version updates about build this device' },
+  { section: 'server', label: 'Server', keywords: 'instance connection url disconnect this device' },
 ]
 
 /** Items whose label, keywords or category name match every word in `query`. */

@@ -6,6 +6,7 @@ import SearchInput from '../../components/SearchInput'
 import { isNative } from '../../lib/serverConfig'
 import type { SettingsSection } from '../../lib/nav'
 import { searchSettings } from '../../lib/settingsSearch'
+import useDismissOnBack from '../../lib/useDismissOnBack'
 import { SETTINGS_GROUPS, SETTINGS_META, sectionMeta } from './sections'
 
 /** The settings landing page: categories grouped, each opening its own page. */
@@ -19,8 +20,14 @@ export default function SettingsHub({ onOpen, onOpenField }: {
 
   const [searching, setSearching] = useState(false)
   const [query, setQuery] = useState('')
-  const results = searchSettings(query)
+  // Only what this platform actually shows: the native-only pages are absent on
+  // the web, so their settings must not surface in its search either.
+  const results = searchSettings(query).filter(r => visible.some(v => v.id === r.section))
   const showResults = searching && query.trim() !== ''
+
+  // Back and Escape leave search rather than the page, so the gesture undoes
+  // opening search rather than dropping a level out of Settings.
+  useDismissOnBack(searching, () => { setSearching(false); setQuery('') })
 
   return (
     <>
