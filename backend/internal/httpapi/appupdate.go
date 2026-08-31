@@ -82,8 +82,8 @@ func (s *Server) announceAppUpdate(ctx context.Context) {
 			// No product name in the title: Android already puts the app's own
 			// name above the notification, so "Activity Lens 2.1.0 is
 			// available" arrived as Activity Lens saying its own name twice.
-			Title: fmt.Sprintf("Update %s available", version),
-			Body:  "A new version of app is ready. Don't be a dinosaur and Update now!",
+			Title: fmt.Sprintf("Update %s ready", version),
+			Body:  "A new version of app is here. Update now!",
 			Link:  AppUpdateLink,
 			// Keyed on the version, so this is at most one notification per
 			// user per release however many times the server restarts.
