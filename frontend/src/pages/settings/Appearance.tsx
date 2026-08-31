@@ -1,7 +1,7 @@
 import { Check, Monitor, Moon, Sun } from 'lucide-react'
 import { ACCENTS, applyAccent, type DisplayPrefs } from '../../lib/theme'
 import { useLocalStorage } from '../../lib/useLocalStorage'
-import { DEFAULT_HR_ZONE_CHART, HR_ZONE_CHART_KEY, type HRZoneChart } from '../../lib/dashboardConfig'
+import { DEFAULT_HR_ZONE_CHART, HR_ZONE_CHART_KEY, type HRZoneChart, CHART_PEAKS_WORKOUT_KEY, CHART_PEAKS_ANALYSIS_KEY, DEFAULT_CHART_PEAKS } from '../../lib/dashboardConfig'
 import SettingsCard from '../../components/SettingsCard'
 import Field from '../../components/Field'
 
@@ -33,6 +33,8 @@ const THEMES: { id: ThemeMode; label: string; hint: string; icon: React.ReactNod
 /** Theme, accent colour and chart style. */
 export default function AppearanceSettings({ accent, onAccentChange, themeMode, onThemeChange, display, onDisplayChange }: AppearanceProps) {
   const [hrZoneChart, setHrZoneChart] = useLocalStorage<HRZoneChart>(HR_ZONE_CHART_KEY, DEFAULT_HR_ZONE_CHART)
+  const [peaksWorkout, setPeaksWorkout] = useLocalStorage<boolean>(CHART_PEAKS_WORKOUT_KEY, DEFAULT_CHART_PEAKS)
+  const [peaksAnalysis, setPeaksAnalysis] = useLocalStorage<boolean>(CHART_PEAKS_ANALYSIS_KEY, DEFAULT_CHART_PEAKS)
 
   function pick(value: string) {
     onAccentChange(value)
@@ -146,6 +148,27 @@ export default function AppearanceSettings({ accent, onAccentChange, themeMode, 
             ))}
           </div>
         </Field>
+
+        <label className="switch display-pref">
+          <input type="checkbox" checked={peaksWorkout} onChange={e => setPeaksWorkout(e.target.checked)} />
+          <span className="switch-track" />
+          <span className="display-pref-body">
+            <span className="display-pref-label">Mark peaks on workout charts</span>
+            <span className="display-pref-hint">
+              A small triangle at the highest and lowest point of each series on a workout.
+            </span>
+          </span>
+        </label>
+        <label className="switch display-pref">
+          <input type="checkbox" checked={peaksAnalysis} onChange={e => setPeaksAnalysis(e.target.checked)} />
+          <span className="switch-track" />
+          <span className="display-pref-body">
+            <span className="display-pref-label">Mark peaks on Analysis charts</span>
+            <span className="display-pref-hint">
+              The same markers on the Trends and Efficiency lines, where several share one axis.
+            </span>
+          </span>
+        </label>
       </SettingsCard>
     </>
   )

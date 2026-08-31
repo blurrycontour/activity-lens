@@ -18,7 +18,8 @@ import { downloadWorkoutOriginal } from '../lib/download'
 import { extraSeriesMeta, extraSeriesStats, type ExtraSeriesMeta } from '../lib/extraSeries'
 import { lazyChunk } from '../lib/lazyChunk'
 import { useLocalStorage } from '../lib/useLocalStorage'
-import { DEFAULT_HR_ZONE_CHART, HR_ZONE_CHART_KEY, type HRZoneChart } from '../lib/dashboardConfig'
+import { DEFAULT_HR_ZONE_CHART, HR_ZONE_CHART_KEY, type HRZoneChart, CHART_PEAKS_WORKOUT_KEY, DEFAULT_CHART_PEAKS } from '../lib/dashboardConfig'
+import { PeakGlyph } from '../components/PeakMarker'
 import InfoTip from '../components/InfoTip'
 import WeatherCard from '../components/WeatherCard'
 import WorkoutInfoDialog from '../components/WorkoutInfoDialog'
@@ -599,6 +600,9 @@ interface PlotSeries {
   points: Array<{ t: number;[k: string]: number }>
   min: number
   max: number
+  /** Elapsed time of the min and max, so a marker can sit on the extreme. */
+  minT: number
+  maxT: number
   count: number
 }
 
@@ -606,15 +610,19 @@ function preparePlot<T extends { t: number }>(data: T[], key: string): PlotSerie
   const rows = data as unknown as Array<{ t: number;[k: string]: number }>
   let min = Infinity
   let max = -Infinity
+  let minT = 0
+  let maxT = 0
   for (const row of rows) {
     const v = row[key]
-    if (v < min) min = v
-    if (v > max) max = v
+    if (v < min) { min = v; minT = row.t }
+    if (v > max) { max = v; maxT = row.t }
   }
   return {
     points: downsample(rows, d => d[key], PLOT_POINTS),
     min: rows.length ? min : 0,
     max: rows.length ? max : 1,
+    minT,
+    maxT,
     count: rows.length,
   }
 }
@@ -768,6 +776,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
   const [yFromZero, setYFromZero] = useLocalStorage<boolean>('al_y0', false)
   const [showPauses, setShowPauses] = useLocalStorage<boolean>('al_show_pauses', true)
   const [hrZoneStyle] = useLocalStorage<HRZoneChart>(HR_ZONE_CHART_KEY, DEFAULT_HR_ZONE_CHART)
+  const [showPeaks] = useLocalStorage<boolean>(CHART_PEAKS_WORKOUT_KEY, DEFAULT_CHART_PEAKS)
 
   // Equipment editing
   const [allEquipment, setAllEquipment] = useState<import('../lib/api').Equipment[]>([])
@@ -1470,6 +1479,15 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
           />
           <Tooltip content={<ChartTooltip unit={unit} valueFormatter={valueFormatter} />} />
           <Area type="monotone" dataKey={dataKey} stroke={strokeColor} strokeWidth={2} fill={`url(#${gradId})`} dot={false} isAnimationActive={false} />
+          {/* Min/max markers on the smoothed line. Off during playback's draw,
+              when the far extreme may be past the point reached; the whole line
+              is what they belong to. */}
+          {showPeaks && series.count > 1 && visible.length === data.length && (
+            <>
+              <ReferenceDot x={series.maxT} y={series.max} r={0} ifOverflow="extendDomain" shape={<PeakGlyph dir="up" color={stroke} />} />
+              <ReferenceDot x={series.minT} y={series.min} r={0} ifOverflow="extendDomain" shape={<PeakGlyph dir="down" color={stroke} />} />
+            </>
+          )}
           {currentTime > 0 && <ReferenceLine x={currentTime} stroke="var(--text-2)" strokeDasharray="3 3" />}
           {cursorVal != null && <ReferenceDot x={currentTime} y={cursorVal} r={4} fill={stroke} stroke="var(--bg-2)" strokeWidth={2} />}
         </AreaChart>
