@@ -87,6 +87,17 @@
   --danger-border: rgba(239, 68, 68, 0.35);
   --success: #22c55e;
   --warning: #f59e0b;
+  /* Workout-detail metric lines. A dedicated five-hue set rather than the sport
+     and status tokens they used to borrow: pace took the workout's own sport
+     colour, which on a Hike is identical to --hike used for elevation, and HR
+     (red) sat beside cadence on --strength (pink). Fixed and mutually ≥20 ΔE —
+     chartMetricSeparation.test.ts holds the floor — so the five lines never
+     read as two. HR stays red because HR is red. */
+  --metric-hr: #ef4444;
+  --metric-pace: #14b8a6;
+  --metric-speed: #3b82f6;
+  --metric-elev: #f59e0b;
+  --metric-cadence: #a855f7;
   --radius: 0.5rem;
   --sidebar-w: 240px;
   --bottombar-h: 0px;
@@ -167,6 +178,13 @@
   --other: #57534e;
   --plan: #5b21b6;
   --session: #9f1239;
+  /* Deepened for a white ground, same hues as the dark set — chart lines want
+     ≥3:1 to read as a line rather than a tint. */
+  --metric-hr: #dc2626;
+  --metric-pace: #0d9488;
+  --metric-speed: #2563eb;
+  --metric-elev: #b45309;
+  --metric-cadence: #9333ea;
 }
 
 * {
@@ -408,6 +426,21 @@ body {
 
 .settings-groups { display: flex; flex-direction: column; gap: 26px; }
 .settings-group { display: flex; flex-direction: column; gap: 8px; }
+
+/* Settings search: the field, its results, and the flash on the setting a
+   result opens — a brief outline so the eye lands on the right control after
+   the page scrolls to it. */
+.settings-search { display: flex; flex-direction: column; gap: 14px; margin-bottom: 20px; }
+.settings-search-results { margin-top: 0; }
+.settings-search-empty { font-size: 13px; color: var(--text-3); padding: 4px 2px; }
+.setting-flash { animation: setting-flash 1.8s ease; border-radius: calc(var(--radius) * 1.5); }
+@keyframes setting-flash {
+  0%, 70% { box-shadow: 0 0 0 2px var(--primary), 0 0 0 6px var(--primary-dim); }
+  100% { box-shadow: 0 0 0 2px transparent, 0 0 0 6px transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .setting-flash { animation: none; }
+}
 .settings-group-title {
   font-family: var(--font-mono);
   font-size: 10px;
@@ -1259,6 +1292,22 @@ body {
    three kinds in a mixed feed is an icon. */
 .tag-plan     { background: color-mix(in srgb, var(--plan) 14%, transparent); color: var(--plan); }
 .tag-session  { background: color-mix(in srgb, var(--session) 14%, transparent); color: var(--session); }
+
+/* Which HR-zone model drew a workout's zones chart. A quiet pill, not a status:
+   it names a setting, so it recedes into the header rather than competing with
+   the sport tag beside the title. */
+.zone-method-badge {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  color: var(--text-3);
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  padding: 1px 7px;
+  border-radius: 99px;
+}
 
 .stat-chip { display: flex; flex-direction: column; gap: 2px; }
 .stat-chip .label { font-size: 11px; color: var(--text-3); font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.06em; }

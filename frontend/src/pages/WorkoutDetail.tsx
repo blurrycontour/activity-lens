@@ -18,7 +18,8 @@ import { downloadWorkoutOriginal } from '../lib/download'
 import { extraSeriesMeta, extraSeriesStats, type ExtraSeriesMeta } from '../lib/extraSeries'
 import { lazyChunk } from '../lib/lazyChunk'
 import { useLocalStorage } from '../lib/useLocalStorage'
-import { DEFAULT_HR_ZONE_CHART, HR_ZONE_CHART_KEY, type HRZoneChart } from '../lib/dashboardConfig'
+import { DEFAULT_HR_ZONE_CHART, HR_ZONE_CHART_KEY, type HRZoneChart, CHART_PEAKS_WORKOUT_KEY, DEFAULT_CHART_PEAKS } from '../lib/dashboardConfig'
+import { PeakGlyph } from '../components/PeakMarker'
 import InfoTip from '../components/InfoTip'
 import WeatherCard from '../components/WeatherCard'
 import WorkoutInfoDialog from '../components/WorkoutInfoDialog'
@@ -90,6 +91,21 @@ function ManualIcon() {
   return (
     <span title="Entered manually" style={{ display: 'inline-flex', opacity: 0.55 }}>
       <Pencil size={10} />
+    </span>
+  )
+}
+
+/** Which HR-zone model drew this chart, set in Body & performance settings. */
+function ZoneMethodBadge({ method }: { method: 'max' | 'reserve' }) {
+  const reserve = method === 'reserve'
+  return (
+    <span
+      className="zone-method-badge"
+      title={reserve
+        ? 'Zones from heart-rate reserve (Karvonen), using your resting and max HR — set in Body & performance'
+        : 'Zones from a percentage of your max HR — set in Body & performance'}
+    >
+      {reserve ? 'Karvonen' : '% max'}
     </span>
   )
 }
@@ -264,11 +280,10 @@ function NotesPanel({ workout: w, onSaved }: { workout: Workout; onSaved: (w: Wo
  */
 type Metric = 'hr' | 'pace' | 'speed' | 'elevation' | 'cadence' | `extra:${string}`
 
-/* A token rather than the literal #ec4899 it was, which followed neither theme.
-   --strength is that pink and carries a light-mode variant; cadence is not a
-   sport, but this chart never shows a sport beside it, and the alternative is a
-   hex that is right in one of the eighteen theme-and-accent combinations. */
-const CADENCE_COLOR = 'var(--strength)'
+/* The dedicated metric-line tokens (see index.css). A fixed five-hue set so the
+   charts on this page never read as two — pace no longer borrows the sport
+   colour that collided with elevation, and cadence is off HR's red. */
+const CADENCE_COLOR = 'var(--metric-cadence)'
 
 /**
  * The mark for a named series.
@@ -585,6 +600,9 @@ interface PlotSeries {
   points: Array<{ t: number;[k: string]: number }>
   min: number
   max: number
+  /** Elapsed time of the min and max, so a marker can sit on the extreme. */
+  minT: number
+  maxT: number
   count: number
 }
 
@@ -592,15 +610,19 @@ function preparePlot<T extends { t: number }>(data: T[], key: string): PlotSerie
   const rows = data as unknown as Array<{ t: number;[k: string]: number }>
   let min = Infinity
   let max = -Infinity
+  let minT = 0
+  let maxT = 0
   for (const row of rows) {
     const v = row[key]
-    if (v < min) min = v
-    if (v > max) max = v
+    if (v < min) { min = v; minT = row.t }
+    if (v > max) { max = v; maxT = row.t }
   }
   return {
     points: downsample(rows, d => d[key], PLOT_POINTS),
     min: rows.length ? min : 0,
     max: rows.length ? max : 1,
+    minT,
+    maxT,
     count: rows.length,
   }
 }
@@ -754,6 +776,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
   const [yFromZero, setYFromZero] = useLocalStorage<boolean>('al_y0', false)
   const [showPauses, setShowPauses] = useLocalStorage<boolean>('al_show_pauses', true)
   const [hrZoneStyle] = useLocalStorage<HRZoneChart>(HR_ZONE_CHART_KEY, DEFAULT_HR_ZONE_CHART)
+  const [showPeaks] = useLocalStorage<boolean>(CHART_PEAKS_WORKOUT_KEY, DEFAULT_CHART_PEAKS)
 
   // Equipment editing
   const [allEquipment, setAllEquipment] = useState<import('../lib/api').Equipment[]>([])
@@ -1456,6 +1479,15 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
           />
           <Tooltip content={<ChartTooltip unit={unit} valueFormatter={valueFormatter} />} />
           <Area type="monotone" dataKey={dataKey} stroke={strokeColor} strokeWidth={2} fill={`url(#${gradId})`} dot={false} isAnimationActive={false} />
+          {/* Min/max markers on the smoothed line. Off during playback's draw,
+              when the far extreme may be past the point reached; the whole line
+              is what they belong to. */}
+          {showPeaks && series.count > 1 && visible.length === data.length && (
+            <>
+              <ReferenceDot x={series.maxT} y={series.max} r={0} ifOverflow="extendDomain" shape={<PeakGlyph dir="up" color={stroke} />} />
+              <ReferenceDot x={series.minT} y={series.min} r={0} ifOverflow="extendDomain" shape={<PeakGlyph dir="down" color={stroke} />} />
+            </>
+          )}
           {currentTime > 0 && <ReferenceLine x={currentTime} stroke="var(--text-2)" strokeDasharray="3 3" />}
           {cursorVal != null && <ReferenceDot x={currentTime} y={cursorVal} r={4} fill={stroke} stroke="var(--bg-2)" strokeWidth={2} />}
         </AreaChart>
@@ -1464,16 +1496,16 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
   }
 
   function hrChart(height: number) {
-    return areaChart({ series: plots.hr, dataKey: 'hr', stroke: 'var(--danger)', gradId: 'hrGrad', unit: 'bpm', height, hrZoneStroke: true, maxHRForZones: effectiveMaxHR })
+    return areaChart({ series: plots.hr, dataKey: 'hr', stroke: 'var(--metric-hr)', gradId: 'hrGrad', unit: 'bpm', height, hrZoneStroke: true, maxHRForZones: effectiveMaxHR })
   }
   function paceChart(height: number) {
-    return areaChart({ series: plots.pace, dataKey: 'pace', stroke: color, gradId: 'paceGrad', unit: '/km', valueFormatter: fmtPace, reversed: true, yTickFormatter: v => fmtPace(v), height })
+    return areaChart({ series: plots.pace, dataKey: 'pace', stroke: 'var(--metric-pace)', gradId: 'paceGrad', unit: '/km', valueFormatter: fmtPace, reversed: true, yTickFormatter: v => fmtPace(v), height })
   }
   function speedChart(height: number) {
-    return areaChart({ series: plots.speed, dataKey: 'speed', stroke: 'var(--blue)', gradId: 'speedGrad', unit: 'km/h', valueFormatter: value => value.toFixed(1), height })
+    return areaChart({ series: plots.speed, dataKey: 'speed', stroke: 'var(--metric-speed)', gradId: 'speedGrad', unit: 'km/h', valueFormatter: value => value.toFixed(1), height })
   }
   function elevChart(height: number) {
-    return areaChart({ series: plots.elev, dataKey: 'elev', stroke: 'var(--hike)', gradId: 'elevGrad', unit: 'm', height, valueFormatter: v => formatMeasuredNumber(v, 0), yTickFormatter: v => formatMeasuredNumber(v, 0) })
+    return areaChart({ series: plots.elev, dataKey: 'elev', stroke: 'var(--metric-elev)', gradId: 'elevGrad', unit: 'm', height, valueFormatter: v => formatMeasuredNumber(v, 0), yTickFormatter: v => formatMeasuredNumber(v, 0) })
   }
   function cadenceChart(height: number) {
     return areaChart({ series: plots.cad, dataKey: 'cad', stroke: CADENCE_COLOR, gradId: 'cadGrad', unit: cadenceUnit(w.type), height })
@@ -1926,9 +1958,9 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
 
             {(w.hrTimeline.length > 0 || w.avgHR > 0) && (
               <div className="stat-grid-3">
-                <StatChip icon={<Heart size={12} color="var(--danger)" />} label="Min HR" value={derived.hrMin != null ? `${derived.hrMin} bpm` : '—'} />
-                <StatChip icon={<Heart size={12} color="var(--danger)" />} label="Avg HR" value={derived.hrAvg != null ? `${derived.hrAvg} bpm` : '—'} />
-                <StatChip icon={<Heart size={12} color="var(--danger)" />} label="Max HR" value={derived.hrMax != null ? `${derived.hrMax} bpm` : '—'} />
+                <StatChip icon={<Heart size={12} color="var(--metric-hr)" />} label="Min HR" value={derived.hrMin != null ? `${derived.hrMin} bpm` : '—'} />
+                <StatChip icon={<Heart size={12} color="var(--metric-hr)" />} label="Avg HR" value={derived.hrAvg != null ? `${derived.hrAvg} bpm` : '—'} />
+                <StatChip icon={<Heart size={12} color="var(--metric-hr)" />} label="Max HR" value={derived.hrMax != null ? `${derived.hrMax} bpm` : '—'} />
               </div>
             )}
 
@@ -1941,17 +1973,17 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
                 so with a dash when it is missing. */}
             {(w.paceTimeline.length > 0 || w.avgPace > 0) && (
               <div className="stat-grid-3">
-                <StatChip icon={<TrendingUp size={12} color={color} />} label="Min Pace" value={derived.paceMin != null ? `${fmtPace(derived.paceMin)} /km` : '—'} calculated={derived.paceMin != null} />
-                <StatChip icon={<TrendingUp size={12} color={color} />} label="Avg Pace" value={w.avgPace ? `${fmtPace(w.avgPace)} /km` : '—'} calculated />
-                <StatChip icon={<TrendingUp size={12} color={color} />} label="Max Pace" value={derived.paceMax != null ? `${fmtPace(derived.paceMax)} /km` : '—'} calculated={derived.paceMax != null} />
+                <StatChip icon={<TrendingUp size={12} color="var(--metric-pace)" />} label="Min Pace" value={derived.paceMin != null ? `${fmtPace(derived.paceMin)} /km` : '—'} calculated={derived.paceMin != null} />
+                <StatChip icon={<TrendingUp size={12} color="var(--metric-pace)" />} label="Avg Pace" value={w.avgPace ? `${fmtPace(w.avgPace)} /km` : '—'} calculated />
+                <StatChip icon={<TrendingUp size={12} color="var(--metric-pace)" />} label="Max Pace" value={derived.paceMax != null ? `${fmtPace(derived.paceMax)} /km` : '—'} calculated={derived.paceMax != null} />
               </div>
             )}
 
             {(speedTimeline.length > 0 || w.avgSpeed > 0) && (
               <div className="stat-grid-3">
-                <StatChip icon={<Gauge size={12} color="var(--blue)" />} label="Min Speed" value={derived.speedMin != null ? `${derived.speedMin.toFixed(1)} km/h` : '—'} calculated={derived.speedMin != null} />
-                <StatChip icon={<Gauge size={12} color="var(--blue)" />} label="Avg Speed" value={w.avgSpeed > 0 ? `${w.avgSpeed.toFixed(1)} km/h` : '—'} calculated />
-                <StatChip icon={<Gauge size={12} color="var(--blue)" />} label="Max Speed" value={derived.speedMax != null ? `${derived.speedMax.toFixed(1)} km/h` : '—'} calculated={derived.speedMax != null} />
+                <StatChip icon={<Gauge size={12} color="var(--metric-speed)" />} label="Min Speed" value={derived.speedMin != null ? `${derived.speedMin.toFixed(1)} km/h` : '—'} calculated={derived.speedMin != null} />
+                <StatChip icon={<Gauge size={12} color="var(--metric-speed)" />} label="Avg Speed" value={w.avgSpeed > 0 ? `${w.avgSpeed.toFixed(1)} km/h` : '—'} calculated />
+                <StatChip icon={<Gauge size={12} color="var(--metric-speed)" />} label="Max Speed" value={derived.speedMax != null ? `${derived.speedMax.toFixed(1)} km/h` : '—'} calculated={derived.speedMax != null} />
               </div>
             )}
 
@@ -1964,8 +1996,8 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
             )}
 
             <div className="stat-grid-3">
-              <StatChip icon={<Mountain size={12} color="var(--hike)" />} label="Elev. Gain" value={w.elevTimeline.length > 0 ? `${Math.round(w.elevationGain)} m` : '—'} />
-              <StatChip icon={<Mountain size={12} color="var(--hike)" />} label="Elev. Loss" value={w.elevTimeline.length > 0 ? `${derived.elevLoss} m` : '—'} calculated={w.elevTimeline.length > 0} />
+              <StatChip icon={<Mountain size={12} color="var(--metric-elev)" />} label="Elev. Gain" value={w.elevTimeline.length > 0 ? `${Math.round(w.elevationGain)} m` : '—'} />
+              <StatChip icon={<Mountain size={12} color="var(--metric-elev)" />} label="Elev. Loss" value={w.elevTimeline.length > 0 ? `${derived.elevLoss} m` : '—'} calculated={w.elevTimeline.length > 0} />
             </div>
           </div>
         </div>
@@ -1975,10 +2007,10 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
         {hasSeries && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
           {([
-            { id: 'hr', label: 'Heart Rate', color: 'var(--danger)', available: w.hrTimeline.length > 0, on: selectedMetrics.includes('hr'), toggle: () => toggleMetric('hr') },
-            { id: 'pace', label: 'Pace', color: color, available: w.paceTimeline.length > 0, on: selectedMetrics.includes('pace'), toggle: () => toggleMetric('pace') },
-            { id: 'speed', label: 'Speed', color: 'var(--blue)', available: speedTimeline.length > 0, on: selectedMetrics.includes('speed'), toggle: () => toggleMetric('speed') },
-            { id: 'elevation', label: 'Elevation', color: 'var(--hike)', available: w.elevTimeline.length > 0, on: selectedMetrics.includes('elevation'), toggle: () => toggleMetric('elevation') },
+            { id: 'hr', label: 'Heart Rate', color: 'var(--metric-hr)', available: w.hrTimeline.length > 0, on: selectedMetrics.includes('hr'), toggle: () => toggleMetric('hr') },
+            { id: 'pace', label: 'Pace', color: 'var(--metric-pace)', available: w.paceTimeline.length > 0, on: selectedMetrics.includes('pace'), toggle: () => toggleMetric('pace') },
+            { id: 'speed', label: 'Speed', color: 'var(--metric-speed)', available: speedTimeline.length > 0, on: selectedMetrics.includes('speed'), toggle: () => toggleMetric('speed') },
+            { id: 'elevation', label: 'Elevation', color: 'var(--metric-elev)', available: w.elevTimeline.length > 0, on: selectedMetrics.includes('elevation'), toggle: () => toggleMetric('elevation') },
             { id: 'cadence', label: 'Cadence', color: CADENCE_COLOR, available: cadenceTimeline.length > 0, on: selectedMetrics.includes('cadence'), toggle: () => toggleMetric('cadence') },
             // Whatever else the file recorded. These only ever appear on a
             // workout that has them, so the row grows for a FIT import and
@@ -2033,7 +2065,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
           )}
           {selectedMetrics.includes('hr') && w.hrTimeline.length > 0 && (
             <MetricPanel
-              icon={<Heart size={14} color="var(--danger)" />}
+              icon={<Heart size={14} color="var(--metric-hr)" />}
               title="Heart Rate"
               info="Every heart-rate sample the file recorded, plotted against elapsed time. The line is coloured by training zone using your max HR — from Settings when the activity doesn't report its own. Hover or tap the line to read a moment; the playback cursor is moved from the scrub bar or the map."
               stats={<>Min {derived.hrMin ?? '—'} · Avg {w.avgHR} · Max {w.maxHR} bpm</>}
@@ -2045,9 +2077,10 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
 
           {selectedMetrics.includes('hr') && hrZones.length > 0 && (
             <MetricPanel
-              icon={<Heart size={14} color="var(--danger)" />}
+              icon={<Heart size={14} color="var(--metric-hr)" />}
               title="Heart Rate Zones"
-              info="How the activity's time split across the five effort zones, as a share of recorded samples. Zones are percentages of your max HR: under 60% is recovery, 60-70% endurance, 70-80% tempo, 80-90% threshold, and above 90% is maximal. Switch between the histogram and donut under Settings → Charts."
+              badge={<ZoneMethodBadge method={hrZoneMethod} />}
+              info="How the activity's time split across the five effort zones, as a share of recorded samples. The badge shows which model drew them — a percentage of your max HR, or heart-rate reserve (Karvonen), chosen under Settings → Body & performance. Zones are: under 60% is recovery, 60-70% endurance, 70-80% tempo, 80-90% threshold, and above 90% is maximal. Switch between the histogram and donut under Settings → Charts."
               onExpand={() => setExpanded('hrzones')}
             >
               {hrZoneChart(190)}
@@ -2056,7 +2089,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
 
           {selectedMetrics.includes('pace') && w.paceTimeline.length > 0 && (
             <MetricPanel
-              icon={<TrendingUp size={14} color={color} />}
+              icon={<TrendingUp size={14} color="var(--metric-pace)" />}
               title="Pace"
               badge={<CalcIcon />}
               info="Pace derived from the distance and time between consecutive GPS fixes, then smoothed — very few files record pace directly, which is what the Σ marks. Segments shorter than three metres are skipped so standing still doesn't produce wild spikes. Lower on the chart is faster. The average is over moving time: shaded bands mark the stretches where the recording stopped, and those are left out of it."
@@ -2069,7 +2102,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
 
           {selectedMetrics.includes('speed') && speedTimeline.length > 0 && (
             <MetricPanel
-              icon={<Gauge size={14} color="var(--blue)" />}
+              icon={<Gauge size={14} color="var(--metric-speed)" />}
               title="Speed"
               badge={<CalcIcon />}
               info="The same GPS-derived measurement as the pace chart, expressed as km/h instead of minutes per kilometre. It's the more natural read for rides; pace is the more natural read for runs."
@@ -2082,7 +2115,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
 
           {selectedMetrics.includes('elevation') && w.elevTimeline.length > 0 && (
             <MetricPanel
-              icon={<Mountain size={14} color="var(--hike)" />}
+              icon={<Mountain size={14} color="var(--metric-elev)" />}
               title="Elevation"
               /* Only when it was looked up. A device's own altitude is a
                  measurement and wants no mark; this one is the ground under

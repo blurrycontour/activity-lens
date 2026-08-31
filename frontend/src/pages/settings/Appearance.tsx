@@ -1,7 +1,7 @@
 import { Check, Monitor, Moon, Sun } from 'lucide-react'
 import { ACCENTS, applyAccent, type DisplayPrefs } from '../../lib/theme'
 import { useLocalStorage } from '../../lib/useLocalStorage'
-import { DEFAULT_HR_ZONE_CHART, HR_ZONE_CHART_KEY, type HRZoneChart } from '../../lib/dashboardConfig'
+import { DEFAULT_HR_ZONE_CHART, HR_ZONE_CHART_KEY, type HRZoneChart, CHART_PEAKS_WORKOUT_KEY, CHART_PEAKS_ANALYSIS_KEY, DEFAULT_CHART_PEAKS } from '../../lib/dashboardConfig'
 import SettingsCard from '../../components/SettingsCard'
 import Field from '../../components/Field'
 
@@ -33,6 +33,8 @@ const THEMES: { id: ThemeMode; label: string; hint: string; icon: React.ReactNod
 /** Theme, accent colour and chart style. */
 export default function AppearanceSettings({ accent, onAccentChange, themeMode, onThemeChange, display, onDisplayChange }: AppearanceProps) {
   const [hrZoneChart, setHrZoneChart] = useLocalStorage<HRZoneChart>(HR_ZONE_CHART_KEY, DEFAULT_HR_ZONE_CHART)
+  const [peaksWorkout, setPeaksWorkout] = useLocalStorage<boolean>(CHART_PEAKS_WORKOUT_KEY, DEFAULT_CHART_PEAKS)
+  const [peaksAnalysis, setPeaksAnalysis] = useLocalStorage<boolean>(CHART_PEAKS_ANALYSIS_KEY, DEFAULT_CHART_PEAKS)
 
   function pick(value: string) {
     onAccentChange(value)
@@ -41,7 +43,7 @@ export default function AppearanceSettings({ accent, onAccentChange, themeMode, 
 
   return (
     <>
-      <SettingsCard title="Theme" description="Also on the top bar, which cycles through these in order.">
+      <SettingsCard title="Theme" description="Also on the top bar, which cycles through these in order." anchorId="theme">
         <div className="theme-choices">
           {THEMES.map(t => {
             const on = themeMode === t.id
@@ -66,7 +68,7 @@ export default function AppearanceSettings({ accent, onAccentChange, themeMode, 
           compose with it: high contrast on light is the reading-outdoors case,
           pure black on dark is the 6am one, and folding either into the theme
           list would have cost the system-follows behaviour. */}
-      <SettingsCard title="Readability" description="Adjusts the surfaces and the text, not the colours.">
+      <SettingsCard title="Readability" description="Adjusts the surfaces and the text, not the colours." anchorId="readability">
         <label className="switch display-pref">
           <input
             type="checkbox"
@@ -97,7 +99,7 @@ export default function AppearanceSettings({ accent, onAccentChange, themeMode, 
         </label>
       </SettingsCard>
 
-      <SettingsCard title="Accent colour" description="Used for highlights, active states and charts.">
+      <SettingsCard title="Accent colour" description="Used for highlights, active states and charts." anchorId="accent">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8 }}>
           {ACCENTS.map(a => {
             const on = accent === a.value
@@ -128,7 +130,7 @@ export default function AppearanceSettings({ accent, onAccentChange, themeMode, 
         </div>
       </SettingsCard>
 
-      <SettingsCard title="Charts">
+      <SettingsCard title="Charts" anchorId="charts">
         <Field
           label="Heart-rate zones"
           info="The histogram makes zones easier to compare; the donut emphasises each one's share of the whole."
@@ -146,6 +148,27 @@ export default function AppearanceSettings({ accent, onAccentChange, themeMode, 
             ))}
           </div>
         </Field>
+
+        <label className="switch display-pref">
+          <input type="checkbox" checked={peaksWorkout} onChange={e => setPeaksWorkout(e.target.checked)} />
+          <span className="switch-track" />
+          <span className="display-pref-body">
+            <span className="display-pref-label">Mark peaks on workout charts</span>
+            <span className="display-pref-hint">
+              A small triangle at the highest and lowest point of each series on a workout.
+            </span>
+          </span>
+        </label>
+        <label className="switch display-pref">
+          <input type="checkbox" checked={peaksAnalysis} onChange={e => setPeaksAnalysis(e.target.checked)} />
+          <span className="switch-track" />
+          <span className="display-pref-body">
+            <span className="display-pref-label">Mark peaks on Analysis charts</span>
+            <span className="display-pref-hint">
+              The same markers on the Trends and Efficiency lines, where several share one axis.
+            </span>
+          </span>
+        </label>
       </SettingsCard>
     </>
   )

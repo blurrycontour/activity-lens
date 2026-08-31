@@ -23,13 +23,29 @@ import {
   type PerfKey, type WeatherKey, type WeatherMetric,
 } from '../lib/weather'
 import { usePreferences } from '../context/PreferencesContext'
+import { PeakGlyph } from '../components/PeakMarker'
+import { CHART_PEAKS_ANALYSIS_KEY, DEFAULT_CHART_PEAKS } from '../lib/dashboardConfig'
 import {
   Scatter, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
-  BarChart, Bar, Cell, LineChart, Line, ComposedChart, ReferenceArea, ReferenceLine,
+  BarChart, Bar, Cell, LineChart, Line, ComposedChart, ReferenceArea, ReferenceLine, ReferenceDot,
 } from 'recharts'
 import { Award, Target, Zap, Activity, TrendingUp, Gauge, Flame, CloudSun, Sparkles, CalendarRange, ChevronLeft, ChevronRight } from 'lucide-react'
 
 type PR = { longest: Workout; longestTime: Workout; fastest: Workout | null; highest: Workout }
+
+/** The axis keys and values of the min and max of `key` across `rows`, for the
+    triangle markers. Rows are the withSlots output, so each carries axisKey. */
+function peaksByAxis(rows: Array<Record<string, unknown>>, key: string):
+  { minKey: string; minVal: number; maxKey: string; maxVal: number } | null {
+  let min = Infinity, max = -Infinity, minKey = '', maxKey = ''
+  for (const row of rows) {
+    const v = row[key]
+    if (typeof v !== 'number' || Number.isNaN(v)) continue
+    if (v < min) { min = v; minKey = String(row.axisKey) }
+    if (v > max) { max = v; maxKey = String(row.axisKey) }
+  }
+  return min === Infinity ? null : { minKey, minVal: min, maxKey, maxVal: max }
+}
 
 type TabId = 'records' | 'trends' | 'efficiency' | 'load' | 'weather'
 
@@ -457,6 +473,7 @@ export default function Analysis() {
   // The Efficiency scatter's two axes, any measure against any other.
   const [effScatterX, setEffScatterX] = useLocalStorage<string>('al_an_eff_x', 'pace')
   const [effScatterY, setEffScatterY] = useLocalStorage<string>('al_an_eff_y', 'hr')
+  const [showPeaks] = useLocalStorage<boolean>(CHART_PEAKS_ANALYSIS_KEY, DEFAULT_CHART_PEAKS)
   const { prefs } = usePreferences()
   const space = useChartSpace()
 
@@ -669,6 +686,16 @@ export default function Analysis() {
     }).filter(Boolean) as (typeof METRICS[number] & { avg: number; min: number; max: number; trend: number })[]
   }, [series, selectedMetrics])
 
+  // The min/max markers per selected metric, on the same rows the lines draw.
+  const trendPeaks = useMemo(() => {
+    if (!showPeaks) return []
+    return selectedMetrics.flatMap(id => {
+      const m = METRICS.find(x => x.id === id)
+      const p = m ? peaksByAxis(seriesWithMA as unknown as Array<Record<string, unknown>>, id) : null
+      return p && m ? [{ id, color: m.color, ...p }] : []
+    })
+  }, [showPeaks, selectedMetrics, seriesWithMA])
+
   // Bars per bucket with a moving average over them. Both are the same measure
   // on one axis — a second scale for the trend line would only invite misreading.
   const volume = useMemo(() => {
@@ -746,6 +773,15 @@ export default function Analysis() {
     }))
     return { refHr, rows: withSlots(showGaps ? withEmptyDays(rows) : rows) }
   }, [series, showGaps])
+
+  // Markers for the two single-line efficiency charts.
+  const effPeaks = useMemo(() => {
+    const rows = efficiency.rows as unknown as Array<Record<string, unknown>>
+    return {
+      hrPerSpeed: showPeaks ? peaksByAxis(rows, 'hrPerSpeed') : null,
+      adjPace: showPeaks ? peaksByAxis(rows, 'adjPace') : null,
+    }
+  }, [showPeaks, efficiency.rows])
 
   // ── Load ─────────────────────────────────────────────────────────────────
   const { trainingLoad, acwr } = useMemo(() => {
@@ -1034,6 +1070,10 @@ export default function Analysis() {
                         <Line key={`${metricId}_ma`} type="monotone" dataKey={`${metricId}_ma`} stroke={m.color} {...TREND_LINE} connectNulls isAnimationActive={false} />,
                       ]
                     })}
+                    {trendPeaks.flatMap(p => [
+                      <ReferenceDot key={`${p.id}_mx`} x={p.maxKey} y={p.maxVal} r={0} ifOverflow="extendDomain" shape={<PeakGlyph dir="up" color={p.color} />} />,
+                      <ReferenceDot key={`${p.id}_mn`} x={p.minKey} y={p.minVal} r={0} ifOverflow="extendDomain" shape={<PeakGlyph dir="down" color={p.color} />} />,
+                    ])}
                   </LineChart>
                 </ResponsiveContainer>
               )}
@@ -1128,6 +1168,10 @@ export default function Analysis() {
                           white, which is invisible in light mode and wrong in
                           both. Every other line on this page names its own. */}
                       <Line type="monotone" dataKey="hrPerSpeed" stroke={SERIES_COLORS[1]} strokeWidth={2} dot={{ r: 2.5, strokeWidth: 0, fill: SERIES_COLORS[1] }} connectNulls isAnimationActive={false} />
+                      {effPeaks.hrPerSpeed && [
+                        <ReferenceDot key="hps_mx" x={effPeaks.hrPerSpeed.maxKey} y={effPeaks.hrPerSpeed.maxVal} r={0} ifOverflow="extendDomain" shape={<PeakGlyph dir="up" color={SERIES_COLORS[1]} />} />,
+                        <ReferenceDot key="hps_mn" x={effPeaks.hrPerSpeed.minKey} y={effPeaks.hrPerSpeed.minVal} r={0} ifOverflow="extendDomain" shape={<PeakGlyph dir="down" color={SERIES_COLORS[1]} />} />,
+                      ]}
                     </LineChart>
                   </ResponsiveContainer>
                 )}
@@ -1171,6 +1215,10 @@ export default function Analysis() {
                         }}
                       />
                       <Line type="monotone" dataKey="adjPace" stroke="var(--blue)" strokeWidth={2} dot={{ r: 2.5, strokeWidth: 0, fill: 'var(--blue)' }} connectNulls isAnimationActive={false} />
+                      {effPeaks.adjPace && [
+                        <ReferenceDot key="adj_mx" x={effPeaks.adjPace.maxKey} y={effPeaks.adjPace.maxVal} r={0} ifOverflow="extendDomain" shape={<PeakGlyph dir="up" color="var(--blue)" />} />,
+                        <ReferenceDot key="adj_mn" x={effPeaks.adjPace.minKey} y={effPeaks.adjPace.minVal} r={0} ifOverflow="extendDomain" shape={<PeakGlyph dir="down" color="var(--blue)" />} />,
+                      ]}
                     </LineChart>
                   </ResponsiveContainer>
                 )}

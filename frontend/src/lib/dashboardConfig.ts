@@ -75,6 +75,13 @@ export type HRZoneChart = 'histogram' | 'pie'
 export const HR_ZONE_CHART_KEY = 'al_hrzone_chart'
 export const DEFAULT_HR_ZONE_CHART: HRZoneChart = 'histogram'
 
+/** Whether series charts mark their min and max points with a small triangle.
+    Two keys — the workout page draws one series per chart, the Analysis page
+    stacks several on one — so each is turned on or off on its own. */
+export const CHART_PEAKS_WORKOUT_KEY = 'al_chart_peaks_workout'
+export const CHART_PEAKS_ANALYSIS_KEY = 'al_chart_peaks_analysis'
+export const DEFAULT_CHART_PEAKS = true
+
 export const DASHBOARD_CFG_KEY = 'al_dash_cfg'
 
 /**
