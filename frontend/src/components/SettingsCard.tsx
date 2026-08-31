@@ -6,6 +6,8 @@ interface SettingsCardProps {
   /** Red border and title — destructive areas only. */
   danger?: boolean
   actions?: React.ReactNode
+  /** Deep-link target for settings search; rendered as id="setting-<anchorId>". */
+  anchorId?: string
   children: React.ReactNode
 }
 
@@ -16,10 +18,10 @@ interface SettingsCardProps {
  * blocks that had drifted into three slightly different sizes and spacings.
  */
 export default function SettingsCard({
-  title, icon, description, danger, actions, children,
+  title, icon, description, danger, actions, anchorId, children,
 }: SettingsCardProps) {
   return (
-    <section className={`settings-card${danger ? ' danger' : ''}`}>
+    <section className={`settings-card${danger ? ' danger' : ''}`} id={anchorId ? `setting-${anchorId}` : undefined}>
       {(title || description) && (
         <div className="settings-card-head">
           {title && (

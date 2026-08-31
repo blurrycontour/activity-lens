@@ -8,6 +8,8 @@ interface FieldProps {
   hint?: string
   /** The value comes from the environment and can't be edited here. */
   overridden?: boolean
+  /** Deep-link target for settings search; rendered as id="setting-<anchorId>". */
+  anchorId?: string
   children: React.ReactNode
 }
 
@@ -19,9 +21,9 @@ interface FieldProps {
  * paragraph above the control: settings pages were carrying more prose than
  * controls, and a tooltip puts the answer next to the question.
  */
-export default function Field({ label, info, hint, overridden, children }: FieldProps) {
+export default function Field({ label, info, hint, overridden, anchorId, children }: FieldProps) {
   return (
-    <div className="field">
+    <div className="field" id={anchorId ? `setting-${anchorId}` : undefined}>
       <span className="field-label">
         {label}
         {info && <InfoTip text={info} />}

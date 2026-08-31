@@ -426,6 +426,21 @@ body {
 
 .settings-groups { display: flex; flex-direction: column; gap: 26px; }
 .settings-group { display: flex; flex-direction: column; gap: 8px; }
+
+/* Settings search: the field, its results, and the flash on the setting a
+   result opens — a brief outline so the eye lands on the right control after
+   the page scrolls to it. */
+.settings-search { display: flex; flex-direction: column; gap: 14px; margin-bottom: 20px; }
+.settings-search-results { margin-top: 0; }
+.settings-search-empty { font-size: 13px; color: var(--text-3); padding: 4px 2px; }
+.setting-flash { animation: setting-flash 1.8s ease; border-radius: calc(var(--radius) * 1.5); }
+@keyframes setting-flash {
+  0%, 70% { box-shadow: 0 0 0 2px var(--primary), 0 0 0 6px var(--primary-dim); }
+  100% { box-shadow: 0 0 0 2px transparent, 0 0 0 6px transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .setting-flash { animation: none; }
+}
 .settings-group-title {
   font-family: var(--font-mono);
   font-size: 10px;

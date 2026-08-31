@@ -101,7 +101,7 @@ export default function BodySettings() {
 
   return (
     <>
-      <SettingsCard title="About you" description="Private to your account. Used to personalise estimates.">
+      <SettingsCard title="About you" description="Private to your account. Used to personalise estimates." anchorId="about-you">
         <div className="field-grid">
           <Field label="Sex">
             <Dropdown
@@ -136,7 +136,7 @@ export default function BodySettings() {
         </div>
       </SettingsCard>
 
-      <SettingsCard title="Calorie estimation">
+      <SettingsCard title="Calorie estimation" anchorId="calories">
         <Field
           label="Method"
           info="Only used when an imported workout does not already report calories. The heart-rate method draws on your sex, age and weight above."
@@ -153,9 +153,9 @@ export default function BodySettings() {
         </Field>
       </SettingsCard>
 
-      <SettingsCard title="Performance thresholds">
+      <SettingsCard title="Performance thresholds" anchorId="thresholds">
         <div className="field-grid">
-          <Field label="HR zone model" info="Max HR uses a percentage of your maximum. Karvonen uses your resting HR too. Each workout's zones chart shows a badge naming the model used.">
+          <Field label="HR zone model" anchorId="hr-zone-model" info="Max HR uses a percentage of your maximum. Karvonen uses your resting HR too. Each workout's zones chart shows a badge naming the model used.">
             <Dropdown
               block
               value={hrZoneMethod}

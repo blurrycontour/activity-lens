@@ -43,7 +43,7 @@ export default function AppearanceSettings({ accent, onAccentChange, themeMode, 
 
   return (
     <>
-      <SettingsCard title="Theme" description="Also on the top bar, which cycles through these in order.">
+      <SettingsCard title="Theme" description="Also on the top bar, which cycles through these in order." anchorId="theme">
         <div className="theme-choices">
           {THEMES.map(t => {
             const on = themeMode === t.id
@@ -68,7 +68,7 @@ export default function AppearanceSettings({ accent, onAccentChange, themeMode, 
           compose with it: high contrast on light is the reading-outdoors case,
           pure black on dark is the 6am one, and folding either into the theme
           list would have cost the system-follows behaviour. */}
-      <SettingsCard title="Readability" description="Adjusts the surfaces and the text, not the colours.">
+      <SettingsCard title="Readability" description="Adjusts the surfaces and the text, not the colours." anchorId="readability">
         <label className="switch display-pref">
           <input
             type="checkbox"
@@ -99,7 +99,7 @@ export default function AppearanceSettings({ accent, onAccentChange, themeMode, 
         </label>
       </SettingsCard>
 
-      <SettingsCard title="Accent colour" description="Used for highlights, active states and charts.">
+      <SettingsCard title="Accent colour" description="Used for highlights, active states and charts." anchorId="accent">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8 }}>
           {ACCENTS.map(a => {
             const on = accent === a.value
@@ -130,7 +130,7 @@ export default function AppearanceSettings({ accent, onAccentChange, themeMode, 
         </div>
       </SettingsCard>
 
-      <SettingsCard title="Charts">
+      <SettingsCard title="Charts" anchorId="charts">
         <Field
           label="Heart-rate zones"
           info="The histogram makes zones easier to compare; the donut emphasises each one's share of the whole."

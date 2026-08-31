@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import PageHeader from '../../components/PageHeader'
 import AutoImportCard from '../../components/AutoImportCard'
 import type { SettingsSection } from '../../lib/nav'
@@ -41,7 +42,28 @@ interface SettingsProps {
  * share a single code path.
  */
 export default function Settings({ section, onOpen, onBack, accent, onAccentChange, themeMode, onThemeChange, display, onDisplayChange, onViewProfile }: SettingsProps) {
-  if (!section) return <SettingsHub onOpen={onOpen} />
+  // Set when a search result is chosen, read once the target page has rendered.
+  const focus = useRef<string | null>(null)
+  useEffect(() => {
+    const anchor = focus.current
+    if (!anchor || !section) return
+    focus.current = null
+    const t = window.setTimeout(() => {
+      const el = document.getElementById(`setting-${anchor}`)
+      if (!el) return
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el.classList.add('setting-flash')
+      window.setTimeout(() => el.classList.remove('setting-flash'), 1800)
+    }, 80)
+    return () => window.clearTimeout(t)
+  }, [section])
+
+  if (!section) return (
+    <SettingsHub
+      onOpen={onOpen}
+      onOpenField={(s, anchor) => { focus.current = anchor ?? null; onOpen(s) }}
+    />
+  )
 
   const meta = sectionMeta(section)
 
