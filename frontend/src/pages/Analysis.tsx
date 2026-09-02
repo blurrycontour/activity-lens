@@ -24,6 +24,7 @@ import {
 } from '../lib/weather'
 import { usePreferences } from '../context/PreferencesContext'
 import { PeakGlyph } from '../components/PeakMarker'
+import Segmented from '../components/Segmented'
 import { CHART_PEAKS_ANALYSIS_KEY, DEFAULT_CHART_PEAKS } from '../lib/dashboardConfig'
 import {
   Scatter, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
@@ -402,28 +403,6 @@ function MetricChips({ selected, onToggle }: {
       >
         <ChevronRight size={15} />
       </button>
-    </div>
-  )
-}
-
-/** Two-option segmented control used by the volume chart's toggles. */
-function Segmented<T extends string>({ value, onChange, options }: {
-  value: T
-  onChange: (v: T) => void
-  options: { id: T; label: string }[]
-}) {
-  return (
-    <div className="segmented">
-      {options.map(o => (
-        <button
-          key={o.id}
-          className={value === o.id ? 'active' : undefined}
-          aria-pressed={value === o.id}
-          onClick={() => onChange(o.id)}
-        >
-          {o.label}
-        </button>
-      ))}
     </div>
   )
 }

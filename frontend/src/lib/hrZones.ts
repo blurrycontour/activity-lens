@@ -108,6 +108,38 @@ export function hrZoneBuckets(hrTimeline: { t: number; hr: number }[], maxHR: nu
 }
 
 /**
+ * A fine-grained bpm histogram: many small bins across the recorded range,
+ * each coloured by the zone its centre falls in. The detailed view of the zone
+ * breakdown, where the shape of the distribution within a zone shows too.
+ */
+export function hrZoneHistogram(hrTimeline: { t: number; hr: number }[], maxHR: number, restingHR = 0, method: HRZoneMethod = 'max', binBpm = 5) {
+  if (hrTimeline.length === 0 || maxHR <= 0) return []
+  let lo = Infinity
+  let hi = -Infinity
+  for (const p of hrTimeline) {
+    if (p.hr < lo) lo = p.hr
+    if (p.hr > hi) hi = p.hr
+  }
+  if (!isFinite(lo)) return []
+  const start = Math.floor(lo / binBpm) * binBpm
+  const n = Math.max(1, Math.ceil((hi + 1 - start) / binBpm))
+  const counts = new Array(n).fill(0)
+  for (const p of hrTimeline) {
+    const i = Math.min(n - 1, Math.max(0, Math.floor((p.hr - start) / binBpm)))
+    counts[i]++
+  }
+  const total = hrTimeline.length
+  return counts.map((c, i) => {
+    const from = start + i * binBpm
+    return {
+      name: `${from}\u2013${from + binBpm} bpm`, label: String(from),
+      value: c, pct: Math.round((c / total) * 1000) / 10,
+      color: hrZoneColor(from + binBpm / 2, maxHR, restingHR, method),
+    }
+  })
+}
+
+/**
  * Zone counts up to any point in time, in constant time.
  *
  * Playback asks "how much of each zone has been played" on every frame, and

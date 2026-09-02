@@ -7,6 +7,16 @@ import NumberField from '../../components/NumberField'
 import MenuButton from '../../components/MenuButton'
 import ExerciseNameInput from './ExerciseNameInput'
 import { adoptIds, withoutDrafts } from './draftPlan'
+
+/** Scroll a just-moved row back into view once React has committed the reorder.
+    The element is keyed, so its DOM node follows the move and this ref stays
+    valid — which is why it works without knowing the new index. */
+function scrollIntoViewSoon(el: HTMLElement | null) {
+  if (!el) return
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }))
+}
 import { api } from '../../lib/api'
 import {
   SECTIONS, blockRequired, newBlock, newDay, newExercise, requiredPhrase,
@@ -385,8 +395,10 @@ function BlockEditor({
 }: BlockProps) {
   const group = block.options.length > 1
 
+  const blockRef = useRef<HTMLDivElement>(null)
+
   return (
-    <div className={block.section ? 'plan-group plan-section' : group ? 'plan-group' : 'plan-edit-block'}>
+    <div ref={blockRef} className={block.section ? 'plan-group plan-section' : group ? 'plan-group' : 'plan-edit-block'}>
       {(group || block.section) && (
         <div className="plan-block-head">
           {block.section && (
@@ -414,7 +426,7 @@ function BlockEditor({
             label="Block options"
             first={first}
             last={last}
-            onMove={onMove}
+            onMove={by => { onMove(by); scrollIntoViewSoon(blockRef.current) }}
             onRemove={onRemove}
             removeLabel="Remove block"
           />
@@ -529,8 +541,9 @@ function ExerciseFields({ ex, suggestions, first, last, timedOnly, onMove, onPat
 }) {
   const timed = timedOnly || ex.kind === 'time'
   const distance = !timedOnly && ex.kind === 'distance'
+  const rowRef = useRef<HTMLDivElement>(null)
   return (
-    <div className="plan-erow">
+    <div className="plan-erow" ref={rowRef}>
       {/* Every other field on this row is labelled; the one that says what the
           exercise *is* was the only bare box on the screen. */}
       <label className="plan-ename-field">
@@ -548,7 +561,7 @@ function ExerciseFields({ ex, suggestions, first, last, timedOnly, onMove, onPat
           label={`Options for ${ex.name || 'this exercise'}`}
           first={first}
           last={last}
-          onMove={onMove}
+          onMove={by => { onMove(by); scrollIntoViewSoon(rowRef.current) }}
           onRemove={onRemove}
           removeLabel="Remove"
         />

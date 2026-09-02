@@ -20,6 +20,7 @@ export default function ExerciseNameInput({ value, onChange, suggestions, classN
   const [open, setOpen] = useState(false)
   const [highlight, setHighlight] = useState(-1)
   const wrap = useRef<HTMLDivElement>(null)
+  const input = useRef<HTMLInputElement>(null)
   const listId = useId()
 
   const matches = useMemo(() => {
@@ -66,9 +67,22 @@ export default function ExerciseNameInput({ value, onChange, suggestions, classN
     }
   }
 
+  function onFocus() {
+    setOpen(true)
+    // On a phone, focusing this field raises the keyboard and opens the
+    // suggestion list at once, and between them the browser's own scroll leaves
+    // the field behind the keyboard — unlike the plain number fields beside it.
+    // Once both have settled, bring the input itself back into view. Guarded to
+    // touch pointers so a desktop click does not jump the page.
+    if (window.matchMedia('(pointer: coarse)').matches) {
+      setTimeout(() => input.current?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 300)
+    }
+  }
+
   return (
     <div className="plan-name-field" ref={wrap}>
       <input
+        ref={input}
         className={className ?? 'input'}
         value={value}
         placeholder="Bench press"
@@ -79,7 +93,7 @@ export default function ExerciseNameInput({ value, onChange, suggestions, classN
         aria-autocomplete="list"
         autoComplete="off"
         onChange={e => { onChange(e.target.value); setOpen(true); setHighlight(-1) }}
-        onFocus={() => setOpen(true)}
+        onFocus={onFocus}
         onKeyDown={onKeyDown}
       />
       {open && matches.length > 0 && (

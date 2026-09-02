@@ -20,6 +20,7 @@ import { lazyChunk } from '../lib/lazyChunk'
 import { useLocalStorage } from '../lib/useLocalStorage'
 import { DEFAULT_HR_ZONE_CHART, HR_ZONE_CHART_KEY, type HRZoneChart, CHART_PEAKS_WORKOUT_KEY, DEFAULT_CHART_PEAKS } from '../lib/dashboardConfig'
 import { PeakGlyph } from '../components/PeakMarker'
+import Segmented from '../components/Segmented'
 import InfoTip from '../components/InfoTip'
 import WeatherCard from '../components/WeatherCard'
 import WorkoutInfoDialog from '../components/WorkoutInfoDialog'
@@ -27,7 +28,7 @@ import { usePreferences } from '../context/PreferencesContext'
 import { useIsMobile } from '../lib/useIsMobile'
 import { usePlayhead, useThrottledPlayhead } from '../lib/playhead'
 import { downsample, PLOT_POINTS } from '../lib/downsample'
-import { hrZoneBuckets, hrZoneCounter, hrZoneStops } from '../lib/hrZones'
+import { hrZoneBuckets, hrZoneCounter, hrZoneHistogram, hrZoneStops } from '../lib/hrZones'
 import { formatMeasuredNumber } from '../lib/formatNumber'
 import type { Shading } from '../components/RouteMap'
 
@@ -504,7 +505,7 @@ function TabPanel({ children }: { children: React.ReactNode }) {
   )
 }
 
-function MetricPanel({ icon, title, badge, info, stats, onExpand, children }: {
+function MetricPanel({ icon, title, badge, info, stats, actions, onExpand, children }: {
   icon: React.ReactNode
   title: string
   /** Marker between title and info tip — the Σ for a derived series. */
@@ -512,6 +513,8 @@ function MetricPanel({ icon, title, badge, info, stats, onExpand, children }: {
   info: string
   /** Min/avg/max line. Omitted by charts that have nothing to summarise. */
   stats?: React.ReactNode
+  /** A control on the header row, e.g. a per-chart toggle. */
+  actions?: React.ReactNode
   onExpand: () => void
   children: React.ReactNode
 }) {
@@ -529,6 +532,7 @@ function MetricPanel({ icon, title, badge, info, stats, onExpand, children }: {
           {badge}
           <InfoTip label={title} text={info} />
         </h3>
+        {actions}
         <button className="btn-icon" onClick={onExpand} title="Expand" aria-label={`Expand ${title}`}>
           <Maximize2 size={13} />
         </button>
@@ -782,6 +786,10 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
   const [yFromZero, setYFromZero] = useLocalStorage<boolean>('al_y0', false)
   const [showPauses, setShowPauses] = useLocalStorage<boolean>('al_show_pauses', true)
   const [hrZoneStyle] = useLocalStorage<HRZoneChart>(HR_ZONE_CHART_KEY, DEFAULT_HR_ZONE_CHART)
+  // Simple = the five zone bars; detailed = many small bpm bins coloured by
+  // zone, so the shape within a zone shows too. Only meaningful for the
+  // histogram, not the donut.
+  const [hrHistoDetail, setHrHistoDetail] = useLocalStorage<boolean>('al_hrzone_detail', false)
   const [showPeaks] = useLocalStorage<boolean>(CHART_PEAKS_WORKOUT_KEY, DEFAULT_CHART_PEAKS)
 
   // Equipment editing
@@ -852,6 +860,13 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
   const hrZoneMethod = w.athleteHrZoneMethod ?? 'max'
   const hrZones = useMemo(
     () => hrZoneBuckets(w.hrTimeline, effectiveMaxHR, undefined, effectiveRestingHR, hrZoneMethod),
+    [w.hrTimeline, effectiveMaxHR, effectiveRestingHR, hrZoneMethod],
+  )
+  // The detailed bins are over the whole activity, not playback-limited: it is
+  // the shape of the distribution, and recomputing many bins per frame is not
+  // worth it for a view that reads the same at any cut point.
+  const hrHistogram = useMemo(
+    () => hrZoneHistogram(w.hrTimeline, effectiveMaxHR, effectiveRestingHR, hrZoneMethod),
     [w.hrTimeline, effectiveMaxHR, effectiveRestingHR, hrZoneMethod],
   )
 
@@ -1542,6 +1557,31 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
 
   function hrZoneChart(height: number) {
     if (hrZoneStyle === 'histogram') {
+      // The detailed view: many small bpm bins over the whole activity, each
+      // coloured by the zone its centre falls in. The simple view keeps the
+      // five zone bars, which do animate with playback.
+      if (hrHistoDetail) {
+        return (
+          <ResponsiveContainer width="100%" height={height}>
+            <BarChart data={hrHistogram} accessibilityLayer={false} margin={{ top: 4, right: 18, left: -24, bottom: 14 }} barCategoryGap={1}>
+              <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
+              <XAxis
+                dataKey="label" tick={{ fontSize: 9, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}
+                axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={18}
+                label={xLabel('Heart rate (bpm)')}
+              />
+              <YAxis
+                tick={{ fontSize: 10, fill: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}
+                axisLine={false} tickLine={false} tickFormatter={v => `${v}%`}
+              />
+              <Tooltip cursor={{ fill: 'var(--bg-3)' }} content={<HRZoneTooltip />} />
+              <Bar dataKey="pct" isAnimationActive={false}>
+                {hrHistogram.map(b => <Cell key={b.label} fill={b.color} />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        )
+      }
       return (
         <ResponsiveContainer width="100%" height={height}>
           {/* accessibilityLayer off for the same reason as the area charts —
@@ -2086,7 +2126,15 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
               icon={<Heart size={14} color="var(--metric-hr)" />}
               title="Heart Rate Zones"
               badge={<ZoneMethodBadge method={hrZoneMethod} />}
-              info="How the activity's time split across the five effort zones, as a share of recorded samples. The badge shows which model drew them — a percentage of your max HR, or heart-rate reserve (Karvonen), chosen under Settings → Body & performance. Zones are: under 60% is recovery, 60-70% endurance, 70-80% tempo, 80-90% threshold, and above 90% is maximal. Switch between the histogram and donut under Settings → Charts."
+              actions={hrZoneStyle === 'histogram'
+                ? <Segmented
+                    value={hrHistoDetail ? 'detailed' : 'simple'}
+                    onChange={v => setHrHistoDetail(v === 'detailed')}
+                    ariaLabel="Histogram detail"
+                    options={[{ id: 'simple', label: 'Simple' }, { id: 'detailed', label: 'Detailed' }]}
+                  />
+                : undefined}
+              info="How the activity's time split across the five effort zones, as a share of recorded samples. The badge shows which model drew them — a percentage of your max HR, or heart-rate reserve (Karvonen), chosen under Settings → Body & performance. Simple shows one bar per zone; Detailed splits the range into fine bpm bins so the shape within a zone shows too. Zones are: under 60% is recovery, 60-70% endurance, 70-80% tempo, 80-90% threshold, and above 90% is maximal. Switch between the histogram and donut under Settings → Charts."
               onExpand={() => setExpanded('hrzones')}
             >
               {hrZoneChart(190)}
