@@ -10,7 +10,7 @@ import ShareBadge from '../../components/ShareBadge'
 import UserAvatar, { userLabel } from '../../components/UserAvatar'
 import { api, ApiError } from '../../lib/api'
 import {
-  blockLabel, durationShort, isBareSection, sectionLabel, trimNum,
+  blockLabel, distanceLabel, durationShort, isBareSection, sectionLabel, trimNum,
   type PlanDay, type TrainingPlan,
 } from '../../data/plans'
 
@@ -223,10 +223,12 @@ export default function PlanView({ plan, onBack, onEdit, onRename, onStart, onDe
                           <Stat label="Sets" value={String(ex.sets)} />
                           {ex.kind === 'time'
                             ? <Stat label="Duration" value={durationShort(ex.durationSec)} />
-                            : <Stat label="Reps" value={ex.reps || '—'} />}
+                            : ex.kind === 'distance'
+                              ? <Stat label="Distance" value={distanceLabel(ex)} />
+                              : <Stat label="Reps" value={ex.reps || '—'} />}
                           {ex.kind !== 'time' && (
                             <Stat
-                              label={ex.kind === 'body' ? 'Added' : 'Weight'}
+                              label={ex.kind === 'weight' ? 'Weight' : 'Added'}
                               value={ex.weightKg > 0 ? `${trimNum(ex.weightKg)} kg` : ex.kind === 'body' ? 'body' : '—'}
                             />
                           )}

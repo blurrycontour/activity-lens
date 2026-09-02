@@ -181,17 +181,23 @@ func normalizeDays(days []Day) ([]Day, error) {
 				if section != SectionNone {
 					kind = KindTime
 				}
+				unit := e.DistanceUnit
+				if unit != "km" {
+					unit = "m"
+				}
 				block.Options = append(block.Options, Exercise{
-					ID:          idOr(e.ID, "pe"),
-					Name:        clip(exName, MaxNameLen),
-					Kind:        kind,
-					Sets:        sets,
-					Reps:        clip(strings.TrimSpace(e.Reps), 32),
-					DurationSec: min(max(e.DurationSec, 0), 24*3600),
-					WeightKg:    max(e.WeightKg, 0),
-					RestSec:     min(max(e.RestSec, 0), 3600),
-					BreakSec:    min(max(e.BreakSec, 0), 3600),
-					Note:        clip(e.Note, MaxNoteLen),
+					ID:           idOr(e.ID, "pe"),
+					Name:         clip(exName, MaxNameLen),
+					Kind:         kind,
+					Sets:         sets,
+					Reps:         clip(strings.TrimSpace(e.Reps), 32),
+					DurationSec:  min(max(e.DurationSec, 0), 24*3600),
+					DistanceM:    min(max(e.DistanceM, 0), 1000000),
+					DistanceUnit: unit,
+					WeightKg:     max(e.WeightKg, 0),
+					RestSec:      min(max(e.RestSec, 0), 3600),
+					BreakSec:     min(max(e.BreakSec, 0), 3600),
+					Note:         clip(e.Note, MaxNoteLen),
 				})
 			}
 			// A section carrying only a duration is a real block — "warm up for

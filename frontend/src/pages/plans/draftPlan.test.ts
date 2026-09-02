@@ -3,7 +3,7 @@ import { adoptIds, isDraft, namesIn, withoutDrafts } from './draftPlan'
 import type { PlanBlock, PlanDay, PlanExercise } from '../../data/plans'
 
 function ex(name: string, id = ''): PlanExercise {
-  return { id, name, kind: 'weight', sets: 3, reps: '10', durationSec: 0, weightKg: 0, restSec: 0, breakSec: 0, note: '' }
+  return { id, name, kind: 'weight', sets: 3, reps: '10', durationSec: 0, distanceM: 0, distanceUnit: 'm', weightKg: 0, restSec: 0, breakSec: 0, note: '' }
 }
 
 describe('withoutDrafts', () => {

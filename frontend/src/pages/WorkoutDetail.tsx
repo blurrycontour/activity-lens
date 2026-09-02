@@ -577,9 +577,15 @@ function ChartTooltip({ active, payload, label, unit, valueFormatter }: { active
 function HRZoneTooltip({ active, payload }: { active?: boolean; payload?: any[] }) {
   if (!active || !payload?.length) return null
   const d = payload[0].payload
+  // The actual bpm the zone covers for this athlete, so "Zone 2 (60-70%)" also
+  // says what that was in beats. Z1 has no real floor and Z5 no ceiling.
+  const range = d.loHR != null && d.hiHR != null
+    ? (d.short === 'Z1' ? `< ${d.hiHR} bpm` : d.short === 'Z5' ? `≥ ${d.loHR} bpm` : `${d.loHR}–${d.hiHR} bpm`)
+    : null
   return (
     <div className="custom-tooltip">
       <div style={{ color: 'var(--text-3)', marginBottom: 2 }}>{d.name}</div>
+      {range && <div style={{ color: d.color, marginBottom: 2 }}>{range}</div>}
       <div style={{ color: 'var(--text)', fontWeight: 600 }}>{d.value} samples ({d.pct}%)</div>
     </div>
   )

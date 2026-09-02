@@ -44,6 +44,20 @@ function heartRateAt(fraction: number, maxHR: number, restingHR: number, method:
   return fraction * maxHR
 }
 
+/** The bpm span of each of the five zones, given the user's numbers. Zone 1
+ * runs from the floor (resting HR under Karvonen, else 0) and zone 5 to max. */
+export function hrZoneBpm(maxHR: number, restingHR = 0, method: HRZoneMethod = 'max'): [number, number][] {
+  const at = (f: number) => Math.round(heartRateAt(f, maxHR, restingHR, method))
+  const floor = reserveUsable(maxHR, restingHR, method) ? Math.round(restingHR) : 0
+  return [
+    [floor, at(0.6)],
+    [at(0.6), at(0.7)],
+    [at(0.7), at(0.8)],
+    [at(0.8), at(0.9)],
+    [at(0.9), Math.round(maxHR)],
+  ]
+}
+
 /** Maps a heart rate (bpm) to its zone colour, given the user's max HR. */
 export function hrZoneColor(hr: number, maxHR: number, restingHR = 0, method: HRZoneMethod = 'max'): string {
   if (maxHR <= 0) return HR_ZONE_COLORS[0]
@@ -83,11 +97,13 @@ export function hrZoneBuckets(hrTimeline: { t: number; hr: number }[], maxHR: nu
   // chart shows its share of the total rather than of what has played.
   const total = totalForPct ?? counted
   if (total === 0) return []
+  const bpm = hrZoneBpm(maxHR, restingHR, method)
   // Every zone is returned, including empty ones: the histogram wants the gaps
   // to be visible. The donut filters them out at render time instead.
   return counts.map((c, i) => ({
     name: HR_ZONE_LABELS[i], short: HR_ZONE_SHORT[i],
     value: c, pct: Math.round((c / total) * 100), color: HR_ZONE_COLORS[i],
+    loHR: bpm[i][0], hiHR: bpm[i][1],
   }))
 }
 
@@ -115,6 +131,7 @@ export function hrZoneCounter(hrTimeline: { t: number; hr: number }[], maxHR: nu
 
   return (t: number) => {
     if (total === 0 || maxHR <= 0) return []
+    const bpm = hrZoneBpm(maxHR, restingHR, method)
     // Samples are in time order, so the cut point is a binary search.
     let lo = 0
     let hi = total
@@ -128,6 +145,7 @@ export function hrZoneCounter(hrTimeline: { t: number; hr: number }[], maxHR: nu
     return [0, 1, 2, 3, 4].map(z => ({
       name: HR_ZONE_LABELS[z], short: HR_ZONE_SHORT[z],
       value: prefix[z][lo], pct: Math.round((prefix[z][lo] / total) * 100), color: HR_ZONE_COLORS[z],
+      loHR: bpm[z][0], hiHR: bpm[z][1],
     }))
   }
 }

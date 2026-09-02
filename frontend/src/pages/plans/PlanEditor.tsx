@@ -528,6 +528,7 @@ function ExerciseFields({ ex, suggestions, first, last, timedOnly, onMove, onPat
   onRemove: () => void
 }) {
   const timed = timedOnly || ex.kind === 'time'
+  const distance = !timedOnly && ex.kind === 'distance'
   return (
     <div className="plan-erow">
       {/* Every other field on this row is labelled; the one that says what the
@@ -568,6 +569,7 @@ function ExerciseFields({ ex, suggestions, first, last, timedOnly, onMove, onPat
               { value: 'weight', label: 'Weight' },
               { value: 'body', label: 'Bodyweight' },
               { value: 'time', label: 'Time' },
+              { value: 'distance', label: 'Distance' },
             ]}
           />
         </label>}
@@ -590,6 +592,26 @@ function ExerciseFields({ ex, suggestions, first, last, timedOnly, onMove, onPat
               ariaLabel="Seconds per set"
             />
           </label>
+        ) : distance ? (
+          <label>
+            <span className="field-label">Distance</span>
+            {/* Stored in metres; the unit beside it is only how it's written. */}
+            <div className="plan-distance-field">
+              <NumberField
+                value={ex.distanceUnit === 'km' ? ex.distanceM / 1000 : ex.distanceM}
+                onChange={n => onPatch({ distanceM: Math.round(ex.distanceUnit === 'km' ? n * 1000 : n) })}
+                min={0} step={ex.distanceUnit === 'km' ? 0.1 : 10} decimal={ex.distanceUnit === 'km'}
+                placeholder={ex.distanceUnit === 'km' ? '1' : '400'}
+                ariaLabel={`Distance per set in ${ex.distanceUnit === 'km' ? 'kilometres' : 'metres'}`}
+              />
+              <Dropdown
+                value={ex.distanceUnit}
+                onChange={(u: 'm' | 'km') => onPatch({ distanceUnit: u })}
+                ariaLabel="Distance unit"
+                options={[{ value: 'm', label: 'm' }, { value: 'km', label: 'km' }]}
+              />
+            </div>
+          </label>
         ) : (
           <label>
             <span className="field-label">Reps</span>
@@ -601,14 +623,14 @@ function ExerciseFields({ ex, suggestions, first, last, timedOnly, onMove, onPat
           </label>
         )}
 
-        {!timed && (
+        {!timedOnly && (
           <label>
-            <span className="field-label">{ex.kind === 'body' ? '+kg' : 'kg'}</span>
+            <span className="field-label">{ex.kind === 'weight' ? 'kg' : '+kg'}</span>
             <NumberField
               value={ex.weightKg}
               onChange={n => onPatch({ weightKg: n })}
-              min={0} decimal placeholder={ex.kind === 'body' ? '0' : '—'}
-              ariaLabel={ex.kind === 'body' ? 'Added weight in kilograms' : 'Weight in kilograms'}
+              min={0} decimal placeholder={ex.kind === 'weight' ? '—' : '0'}
+              ariaLabel={ex.kind === 'weight' ? 'Weight in kilograms' : 'Added weight in kilograms'}
             />
           </label>
         )}

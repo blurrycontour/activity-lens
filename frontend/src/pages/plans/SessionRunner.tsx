@@ -10,7 +10,7 @@ import { api } from '../../lib/api'
 import { LOCATION_EVENT } from '../../App'
 import {
   blockComplete, blockLabel, blockProgress, chosenExercises, clockLabel, currentBlockId,
-  currentExercise, doneSetsFor, durationShort, effectivePicks, elapsedSec, exerciseComplete, nextExercise,
+  currentExercise, distanceLabel, doneSetsFor, durationShort, effectivePicks, elapsedSec, exerciseComplete, nextExercise,
   isBareSection, leadingDone, sectionExercise, sectionLabel, sessionTally, setState, setTappable, setsFor,
   targetLabel, trimNum,
   type BlockProgress, type PlanBlock, type PlanExercise, type PlanSession, type SessionProgress,
@@ -1017,12 +1017,12 @@ function ExerciseDetail({ ex, sets, heading, running, left, onStartRest, onTap, 
           <span className="value">{ex.sets}</span>
         </div>
         <div className="stat-chip">
-          <span className="label">{timed ? 'Duration' : 'Reps'}</span>
-          <span className="value">{timed ? durationShort(ex.durationSec) : ex.reps || '—'}</span>
+          <span className="label">{timed ? 'Duration' : ex.kind === 'distance' ? 'Distance' : 'Reps'}</span>
+          <span className="value">{timed ? durationShort(ex.durationSec) : ex.kind === 'distance' ? distanceLabel(ex) : ex.reps || '—'}</span>
         </div>
         {!timed && (
           <div className="stat-chip">
-            <span className="label">{ex.kind === 'body' ? 'Added' : 'Target'}</span>
+            <span className="label">{ex.kind === 'weight' ? 'Target' : 'Added'}</span>
             <span className="value">
               {ex.weightKg <= 0
                 ? (ex.kind === 'body' ? 'body' : '—')
@@ -1062,7 +1062,7 @@ function ExerciseDetail({ ex, sets, heading, running, left, onStartRest, onTap, 
                 </label>
               ) : (
                 <>
-                  <span className="plan-setrow-reps plan-num">{ex.reps}</span>
+                  <span className="plan-setrow-reps plan-num">{ex.kind === 'distance' ? distanceLabel(ex) : ex.reps}</span>
                   {/* The actual weight, defaulting to the target. The last set
                       is often lighter, and a plan that can only hold the plan
                       turns a drop set into a lie. Bodyweight rows carry added

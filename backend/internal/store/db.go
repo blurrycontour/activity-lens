@@ -141,6 +141,9 @@ var userPresenceSchema string
 //go:embed migrations/0043_hr_zone_method.sql
 var hrZoneMethodSchema string
 
+//go:embed migrations/0044_plan_exercise_distance.sql
+var planExerciseDistanceSchema string
+
 // maxOpenConns is how many connections the pool will open.
 //
 // It was 1, which made every request in the process queue behind every other
@@ -258,6 +261,7 @@ func MigrateApp(ctx context.Context, db *sql.DB) error {
 		{"workout elevation lookup", workoutElevationLookupSchema},
 		{"user presence", userPresenceSchema},
 		{"HR zone method", hrZoneMethodSchema},
+		{"plan exercise distance", planExerciseDistanceSchema},
 	} {
 		if err := applyAlters(ctx, db, m.schema); err != nil {
 			return fmt.Errorf("apply %s schema: %w", m.name, err)
