@@ -11,7 +11,7 @@ import UserAvatar, { userLabel } from '../../components/UserAvatar'
 import { Check, History, MoreVertical, Share2, Timer, Trash2 } from 'lucide-react'
 import { api } from '../../lib/api'
 import {
-  blockLabel, blockProgress, chosenExercises, clockLabel, doneSetsFor, durationShort,
+  blockLabel, blockProgress, chosenExercises, clockLabel, distanceLabel, doneSetsFor, durationShort,
   elapsedSec, sectionLabel, sessionWhen, setsFor, trimNum,
   type BlockSection, type PlanExercise, type PlanSession, type SetLog,
 } from '../../data/plans'
@@ -354,10 +354,12 @@ function SetChip({ n, ex, log, prevAt }: DoneSet & { ex: PlanExercise }) {
   }
   const load = ex.kind === 'time'
     ? durationShort(log.durationSec || ex.durationSec)
-    : (log.weightKg || ex.weightKg) > 0
-      ? `${trimNum(log.weightKg || ex.weightKg)} kg`
-      : 'body'
-  const reps = ex.kind === 'time' ? '' : ` × ${log.reps || ex.reps}`
+    : ex.kind === 'distance'
+      ? distanceLabel(ex) + ((log.weightKg || ex.weightKg) > 0 ? ` +${trimNum(log.weightKg || ex.weightKg)} kg` : '')
+      : (log.weightKg || ex.weightKg) > 0
+        ? `${trimNum(log.weightKg || ex.weightKg)} kg`
+        : 'body'
+  const reps = ex.kind === 'time' || ex.kind === 'distance' ? '' : ` × ${log.reps || ex.reps}`
   const gap = gapSec(prevAt, log.at)
 
   return (

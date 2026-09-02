@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { CheckCheck, History, Loader2 } from 'lucide-react'
 import ConfirmDialog from '../../components/ConfirmDialog'
+import ShareBadge from '../../components/ShareBadge'
 import ListTools from './ListTools'
 import { useLongPress } from '../../lib/useLongPress'
 import { useSelection } from '../../lib/useSelection'
@@ -192,6 +193,7 @@ function SessionRow({ session: s, selecting, picked, canSelect, onOpen, onToggle
         <strong className="plan-card-name">
           {s.dayName}
           {!finished && <span className="plan-badge running">In progress</span>}
+          <ShareBadge workout={s} />
         </strong>
         {/* Three lines, narrowing: which day, which plan, when. They were two,
             with the plan name tacked onto the end of the date, where the one

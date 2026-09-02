@@ -5,7 +5,7 @@ import {
 } from './plans'
 
 function ex(name: string): PlanExercise {
-  return { id: name, name, kind: 'weight', sets: 3, reps: '10', durationSec: 0, weightKg: 0, restSec: 0, breakSec: 0, note: '' }
+  return { id: name, name, kind: 'weight', sets: 3, reps: '10', durationSec: 0, distanceM: 0, weightKg: 0, restSec: 0, breakSec: 0, note: '' }
 }
 
 function block(required: number, ...names: string[]): PlanBlock {

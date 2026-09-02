@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { LOCATION_EVENT } from '../App'
 import { clearDeepLink, deepLinkFor } from '../lib/deepLink'
 import { Lock, MessageSquare, NotebookPen } from 'lucide-react'
-import { ApiError, type ShareKind } from '../lib/api'
+import { api, ApiError, type ShareKind } from '../lib/api'
 import TabStrip, { type TabStripItem } from './TabStrip'
 import WorkoutSocial from './WorkoutSocial'
 
@@ -41,9 +41,21 @@ export default function NotesAndSocial({
 }) {
   const noun = kind === 'plan' ? 'plan' : kind === 'session' ? 'session' : 'workout'
 
+  // The comment count for the Social tab's badge, so it says whether the thread
+  // is worth opening before it is opened — as the workout tab does from its
+  // server-provided count. Plans and sessions carry no such field, so it is
+  // read once here and then kept live by the panel while it is open.
+  const [commentCount, setCommentCount] = useState<number | null>(null)
+  useEffect(() => {
+    if (!shared) { setCommentCount(null); return }
+    let cancelled = false
+    api.workoutSocial(kind, id).then(s => { if (!cancelled) setCommentCount(s.comments.length) }).catch(() => {})
+    return () => { cancelled = true }
+  }, [shared, kind, id])
+
   const tabs: TabStripItem<SectionTab>[] = [
     ...(isOwner ? [{ id: 'notes' as SectionTab, label: 'Notes', icon: <NotebookPen size={14} /> }] : []),
-    ...(shared ? [{ id: 'social' as SectionTab, label: 'Social', icon: <MessageSquare size={14} /> }] : []),
+    ...(shared ? [{ id: 'social' as SectionTab, label: 'Social', icon: <MessageSquare size={14} />, count: commentCount ?? undefined }] : []),
   ]
 
   const [tab, setTab] = useState<SectionTab>(() => deepLinkFor(id).tab === 'social' ? 'social' : 'notes')
@@ -106,6 +118,7 @@ export default function NotesAndSocial({
             workoutId={id}
             isOwner={isOwner}
             noun={noun}
+            onCount={setCommentCount}
             focusCommentId={focusComment}
             onFocused={onFocused}
           />

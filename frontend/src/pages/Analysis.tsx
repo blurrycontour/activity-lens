@@ -1,5 +1,5 @@
 import type React from 'react'
-import { useLayoutEffect, useMemo } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import { ALL_WORKOUT_TYPES, TYPE_COLOR, fmtDuration, fmtPace, type WorkoutType, type Workout } from '../data/workouts'
 import { dayMonth, fromDateKey, shortDate } from '../lib/date'
 import { centreInScroller, useEdgeFades } from '../lib/useEdgeFades'
@@ -24,12 +24,16 @@ import {
 } from '../lib/weather'
 import { usePreferences } from '../context/PreferencesContext'
 import { PeakGlyph } from '../components/PeakMarker'
+import Segmented from '../components/Segmented'
+import ZoneMethodBadge from '../components/ZoneMethodBadge'
+import { api } from '../lib/api'
+import { HR_ZONE_COLORS, HR_ZONE_LABELS, HR_ZONE_SHORT, hrZoneBpm } from '../lib/hrZones'
 import { CHART_PEAKS_ANALYSIS_KEY, DEFAULT_CHART_PEAKS } from '../lib/dashboardConfig'
 import {
   Scatter, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   BarChart, Bar, Cell, LineChart, Line, ComposedChart, ReferenceArea, ReferenceLine, ReferenceDot,
 } from 'recharts'
-import { Award, Target, Zap, Activity, TrendingUp, Gauge, Flame, CloudSun, Sparkles, CalendarRange, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Award, Target, Zap, Activity, TrendingUp, Gauge, Flame, CloudSun, Sparkles, CalendarRange, ChevronLeft, ChevronRight, Heart } from 'lucide-react'
 
 type PR = { longest: Workout; longestTime: Workout; fastest: Workout | null; highest: Workout }
 
@@ -406,28 +410,6 @@ function MetricChips({ selected, onToggle }: {
   )
 }
 
-/** Two-option segmented control used by the volume chart's toggles. */
-function Segmented<T extends string>({ value, onChange, options }: {
-  value: T
-  onChange: (v: T) => void
-  options: { id: T; label: string }[]
-}) {
-  return (
-    <div className="segmented">
-      {options.map(o => (
-        <button
-          key={o.id}
-          className={value === o.id ? 'active' : undefined}
-          aria-pressed={value === o.id}
-          onClick={() => onChange(o.id)}
-        >
-          {o.label}
-        </button>
-      ))}
-    </div>
-  )
-}
-
 export default function Analysis() {
   const { workouts: allWorkouts } = useWorkouts()
   const [tab, setTab] = useLocalStorage<TabId>('al_an_tab', 'records')
@@ -484,6 +466,36 @@ export default function Analysis() {
     () => typeFilter === 'All' ? inRange : inRange.filter(w => w.type === typeFilter),
     [inRange, typeFilter],
   )
+
+  // Per-workout zone counts for the whole library, fetched once and filtered
+  // client-side — see api.hrZonesSummary. Refetched only when the athlete's own
+  // zone settings change, since the server computes against them.
+  const [zoneCounts, setZoneCounts] = useState<Record<string, number[]> | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    api.hrZonesSummary().then(r => { if (!cancelled) setZoneCounts(r.zones) }).catch(() => {})
+    return () => { cancelled = true }
+  }, [prefs?.maxHr, prefs?.restingHr, prefs?.hrZoneMethod])
+
+  // The combined breakdown across the current selection: sum each filtered
+  // workout's zone counts, then share them out. The bpm range on each bar comes
+  // from the reader's own settings, as the per-workout chart's does.
+  const zoneBreakdown = useMemo(() => {
+    if (!zoneCounts) return []
+    const totals = [0, 0, 0, 0, 0]
+    for (const w of workouts) {
+      const c = zoneCounts[w.id]
+      if (c) for (let i = 0; i < 5; i++) totals[i] += c[i] ?? 0
+    }
+    const sum = totals.reduce((a, b) => a + b, 0)
+    if (sum === 0) return []
+    const bpm = hrZoneBpm(prefs?.maxHr ?? 0, prefs?.restingHr ?? 0, prefs?.hrZoneMethod ?? 'max')
+    return totals.map((v, i) => ({
+      name: HR_ZONE_LABELS[i], short: HR_ZONE_SHORT[i], color: HR_ZONE_COLORS[i],
+      value: v, pct: Math.round((v / sum) * 100),
+      loHR: bpm[i][0], hiHR: bpm[i][1],
+    }))
+  }, [zoneCounts, workouts, prefs?.maxHr, prefs?.restingHr, prefs?.hrZoneMethod])
 
   // ── Weather ──────────────────────────────────────────────────────────────
   //
@@ -1331,6 +1343,43 @@ export default function Analysis() {
         {/* ── Load: how hard you're pushing, and whether it's sustainable ── */}
         {tab === 'load' && (
           <>
+            {zoneBreakdown.length > 0 && (
+              <ChartCard
+                title="Time in Heart-rate Zones"
+                icon={<Heart size={14} color="var(--metric-hr)" />}
+                description={`Combined across the activities in the ${scope}.`}
+                info="How the recorded heart-rate samples across the current selection split between the five zones, using your max HR and model from Settings → Body & performance. It combines every filtered activity that has heart rate, so it answers where your training time actually goes rather than where one session did."
+                badge={<ZoneMethodBadge method={prefs?.hrZoneMethod ?? 'max'} />}
+                style={{ marginBottom: 16 }}
+              >
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={zoneBreakdown} margin={space.margin(18, 4)}>
+                    <CartesianGrid {...GRID_PROPS} />
+                    <XAxis dataKey="short" tick={AXIS_TICK} axisLine={false} tickLine={false} label={xLabel('Heart-rate zone')} />
+                    <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width="auto" tickFormatter={v => `${v}%`} label={space.yLabel('Share of samples')} />
+                    <Tooltip
+                      cursor={{ fill: HOVER_FILL, opacity: 0.6 }}
+                      content={({ active, payload }) => {
+                        if (!active || !payload?.length) return null
+                        const d = payload[0].payload
+                        const range = d.short === 'Z1' ? `< ${d.hiHR} bpm` : d.short === 'Z5' ? `≥ ${d.loHR} bpm` : `${d.loHR}–${d.hiHR} bpm`
+                        return (
+                          <div className="custom-tooltip">
+                            <div style={{ color: 'var(--text-2)', fontWeight: 600 }}>{d.name}</div>
+                            <div style={{ color: d.color }}>{range}</div>
+                            <div style={{ color: 'var(--text-3)' }}>{d.pct}% of samples</div>
+                          </div>
+                        )
+                      }}
+                    />
+                    <Bar dataKey="pct" radius={[2, 2, 0, 0]} isAnimationActive={false}>
+                      {zoneBreakdown.map(z => <Cell key={z.short} fill={z.color} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartCard>
+            )}
+
             <ChartCard
               title="Daily Training Load"
               icon={<Flame size={14} color="var(--blue)" />}

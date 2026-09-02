@@ -14,6 +14,9 @@ export type ExerciseKind =
   | 'body'
   /** Sets × a duration — planks, dead hangs, carries. */
   | 'time'
+  /** Sets × a distance — intervals, carries, sled pushes. weightKg is any
+      *added* load, e.g. a weighted carry. */
+  | 'distance'
 
 /** One option inside a block, with its own targets. */
 export interface PlanExercise {
@@ -28,6 +31,9 @@ export interface PlanExercise {
   reps: string
   /** Seconds per set, for a timed exercise. */
   durationSec: number
+  /** Metres per set, for a distance exercise. Shown as metres or kilometres in
+      read views depending on the size. */
+  distanceM: number
   /** The load, or the added load for a bodyweight exercise. */
   weightKg: number
   /** Rest between sets of this exercise. */
@@ -254,6 +260,7 @@ export function sectionExercise(block: PlanBlock): PlanExercise {
     sets: 1,
     reps: '',
     durationSec: block.durationSec,
+    distanceM: 0,
     weightKg: 0,
     restSec: 0,
     breakSec: 0,
@@ -391,12 +398,24 @@ export function nextExercise(session: PlanSession, progress: SessionProgress): s
   return ''
 }
 
-/** "4 × 8 · 60 kg", "3 × 8 · body", "3 × 45 s" — whatever the kind calls for. */
+/** "4 × 8 · 60 kg", "3 × 8 · body", "3 × 45 s", "6 × 400 m" — whatever the kind calls for. */
 export function targetLabel(ex: PlanExercise): string {
-  if (ex.kind === 'time') return `${ex.sets} × ${durationShort(ex.durationSec)}`
+  if (ex.kind === 'time') {
+    const t = `${ex.sets} × ${durationShort(ex.durationSec)}`
+    return ex.weightKg > 0 ? `${t} · +${trimNum(ex.weightKg)} kg` : t
+  }
+  if (ex.kind === 'distance') {
+    const d = `${ex.sets} × ${distanceLabel(ex)}`
+    return ex.weightKg > 0 ? `${d} · +${trimNum(ex.weightKg)} kg` : d
+  }
   const base = `${ex.sets} × ${ex.reps || '—'}`
   if (ex.kind === 'body') return ex.weightKg > 0 ? `${base} · +${trimNum(ex.weightKg)} kg` : `${base} · body`
   return ex.weightKg > 0 ? `${base} · ${trimNum(ex.weightKg)} kg` : base
+}
+
+/** "400 m", "1.5 km" — a distance target, in km once it reaches a kilometre. */
+export function distanceLabel(ex: PlanExercise): string {
+  return ex.distanceM >= 1000 ? `${trimNum(ex.distanceM / 1000)} km` : `${Math.round(ex.distanceM)} m`
 }
 
 /**
@@ -485,7 +504,7 @@ export function sessionWhen(iso: string): string {
 export function newExercise(): PlanExercise {
   // No id: the server issues one on save and hands it back. Inventing one
   // here would mean two sources of ids that have to agree on a format.
-  return { id: '', name: '', kind: 'weight', sets: 3, reps: '10', durationSec: 0, weightKg: 0, restSec: 0, breakSec: 0, note: '' }
+  return { id: '', name: '', kind: 'weight', sets: 3, reps: '10', durationSec: 0, distanceM: 0, weightKg: 0, restSec: 0, breakSec: 0, note: '' }
 }
 
 export function newBlock(section: BlockSection = ''): PlanBlock {

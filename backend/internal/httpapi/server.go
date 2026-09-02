@@ -234,6 +234,7 @@ func (s *Server) apiRoutes() http.Handler {
 	mux.Handle("POST /api/workouts/import/finalize", s.authedCSRF(s.handleFinalizeImport))
 	mux.Handle("POST /api/workouts/preview", s.authedCSRF(s.handlePreviewWorkout))
 	mux.Handle("GET /api/stats", s.authed(s.handleStats))
+	mux.Handle("GET /api/analysis/hr-zones", s.authed(s.handleHRZonesSummary))
 	mux.Handle("GET /api/preferences", s.authed(s.handleGetPreferences))
 	mux.Handle("PUT /api/preferences", s.authedCSRF(s.handleSavePreferences))
 

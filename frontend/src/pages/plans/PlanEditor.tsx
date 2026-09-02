@@ -7,6 +7,16 @@ import NumberField from '../../components/NumberField'
 import MenuButton from '../../components/MenuButton'
 import ExerciseNameInput from './ExerciseNameInput'
 import { adoptIds, withoutDrafts } from './draftPlan'
+
+/** Scroll a just-moved row back into view once React has committed the reorder.
+    The element is keyed, so its DOM node follows the move and this ref stays
+    valid — which is why it works without knowing the new index. */
+function scrollIntoViewSoon(el: HTMLElement | null) {
+  if (!el) return
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }))
+}
 import { api } from '../../lib/api'
 import {
   SECTIONS, blockRequired, newBlock, newDay, newExercise, requiredPhrase,
@@ -385,8 +395,10 @@ function BlockEditor({
 }: BlockProps) {
   const group = block.options.length > 1
 
+  const blockRef = useRef<HTMLDivElement>(null)
+
   return (
-    <div className={block.section ? 'plan-group plan-section' : group ? 'plan-group' : 'plan-edit-block'}>
+    <div ref={blockRef} className={block.section ? 'plan-group plan-section' : group ? 'plan-group' : 'plan-edit-block'}>
       {(group || block.section) && (
         <div className="plan-block-head">
           {block.section && (
@@ -414,7 +426,7 @@ function BlockEditor({
             label="Block options"
             first={first}
             last={last}
-            onMove={onMove}
+            onMove={by => { onMove(by); scrollIntoViewSoon(blockRef.current) }}
             onRemove={onRemove}
             removeLabel="Remove block"
           />
@@ -528,8 +540,10 @@ function ExerciseFields({ ex, suggestions, first, last, timedOnly, onMove, onPat
   onRemove: () => void
 }) {
   const timed = timedOnly || ex.kind === 'time'
+  const distance = !timedOnly && ex.kind === 'distance'
+  const rowRef = useRef<HTMLDivElement>(null)
   return (
-    <div className="plan-erow">
+    <div className="plan-erow" ref={rowRef}>
       {/* Every other field on this row is labelled; the one that says what the
           exercise *is* was the only bare box on the screen. */}
       <label className="plan-ename-field">
@@ -547,7 +561,7 @@ function ExerciseFields({ ex, suggestions, first, last, timedOnly, onMove, onPat
           label={`Options for ${ex.name || 'this exercise'}`}
           first={first}
           last={last}
-          onMove={onMove}
+          onMove={by => { onMove(by); scrollIntoViewSoon(rowRef.current) }}
           onRemove={onRemove}
           removeLabel="Remove"
         />
@@ -568,6 +582,7 @@ function ExerciseFields({ ex, suggestions, first, last, timedOnly, onMove, onPat
               { value: 'weight', label: 'Weight' },
               { value: 'body', label: 'Bodyweight' },
               { value: 'time', label: 'Time' },
+              { value: 'distance', label: 'Distance' },
             ]}
           />
         </label>}
@@ -582,12 +597,22 @@ function ExerciseFields({ ex, suggestions, first, last, timedOnly, onMove, onPat
 
         {timed ? (
           <label>
-            <span className="field-label">Duration</span>
+            <span className="field-label">Duration (s)</span>
             <NumberField
               value={ex.durationSec}
               onChange={n => onPatch({ durationSec: n })}
               min={0} max={24 * 3600} step={5} placeholder="45"
               ariaLabel="Seconds per set"
+            />
+          </label>
+        ) : distance ? (
+          <label className="plan-distance-field">
+            <span className="field-label">Distance (m)</span>
+            <NumberField
+              value={ex.distanceM}
+              onChange={n => onPatch({ distanceM: Math.round(n) })}
+              min={0} max={1000000} step={10} placeholder="400"
+              ariaLabel="Distance per set, in metres"
             />
           </label>
         ) : (
@@ -601,20 +626,20 @@ function ExerciseFields({ ex, suggestions, first, last, timedOnly, onMove, onPat
           </label>
         )}
 
-        {!timed && (
+        {!timedOnly && (
           <label>
-            <span className="field-label">{ex.kind === 'body' ? '+kg' : 'kg'}</span>
+            <span className="field-label">{ex.kind === 'weight' ? 'kg' : '+kg'}</span>
             <NumberField
               value={ex.weightKg}
               onChange={n => onPatch({ weightKg: n })}
-              min={0} decimal placeholder={ex.kind === 'body' ? '0' : '—'}
-              ariaLabel={ex.kind === 'body' ? 'Added weight in kilograms' : 'Weight in kilograms'}
+              min={0} decimal placeholder={ex.kind === 'weight' ? '—' : '0'}
+              ariaLabel={ex.kind === 'weight' ? 'Weight in kilograms' : 'Added weight in kilograms'}
             />
           </label>
         )}
 
         <label>
-          <span className="field-label">Rest</span>
+          <span className="field-label">Rest (s)</span>
           {/* Between sets of this exercise, as opposed to the break between
               exercises on the rule below the card. Ticking a set starts it. */}
           <NumberField

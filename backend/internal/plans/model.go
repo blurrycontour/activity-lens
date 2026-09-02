@@ -140,11 +140,14 @@ const (
 	KindBody Kind = "body"
 	// KindTime is sets × a duration: planks, dead hangs, carries.
 	KindTime Kind = "time"
+	// KindDistance is sets × a distance: intervals, weighted carries, sled
+	// pushes. WeightKg stays meaningful as *added* load.
+	KindDistance Kind = "distance"
 )
 
 // ValidKind reports whether k is one this package knows.
 func ValidKind(k Kind) bool {
-	return k == KindWeight || k == KindBody || k == KindTime
+	return k == KindWeight || k == KindBody || k == KindTime || k == KindDistance
 }
 
 // Exercise is one option inside a block, with its own targets: swapping to
@@ -160,6 +163,10 @@ type Exercise struct {
 	Reps string `json:"reps"`
 	// DurationSec is the length of one set when Kind is KindTime.
 	DurationSec int `json:"durationSec"`
+	// DistanceM is the distance of one set, in metres, when Kind is
+	// KindDistance. DistanceUnit is only how it is written and edited.
+	DistanceM    int    `json:"distanceM"`
+	DistanceUnit string `json:"distanceUnit"`
 	// WeightKg is the load for KindWeight, and the *added* load for KindBody.
 	WeightKg float64 `json:"weightKg"`
 	RestSec  int     `json:"restSec"`

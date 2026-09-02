@@ -3074,6 +3074,14 @@ body:has(.overlay) .dial { display: none; }
   margin: 4px 0 10px;
 }
 
+/* A per-chart control on its own row below the header, right-aligned, so it
+   does not squeeze the title and its badge onto a cramped line. */
+.metric-panel-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin: 8px 0 4px;
+}
+
 /* The plot runs to the card's own edges while the header keeps its padding.
 
    Negative margins rather than an unpadded card with a padded header, because
@@ -7168,6 +7176,7 @@ body:has(.overlay) .dial { display: none; }
    switching to the exercise accent. */
 .plan-ex.plan-ex-section.current {
   border-color: var(--hike);
+  background: color-mix(in srgb, var(--hike) 12%, var(--bg-2));
   box-shadow: 0 0 0 1px var(--hike), 0 6px 22px color-mix(in srgb, var(--hike) 30%, transparent);
 }
 .plan-ex.done .plan-ex-title { color: var(--text-3); text-decoration: line-through; }
@@ -7461,6 +7470,9 @@ body:has(.overlay) .dial { display: none; }
 .plan-erow-menu { flex: 0 0 auto; }
 .plan-efields { display: flex; gap: 7px; flex: 0 0 auto; align-items: flex-end; }
 .plan-efields label { display: flex; flex-direction: column; gap: 3px; }
+/* Labels name a unit now — "Duration (s)", "Rest (s)" — and must not wrap onto
+   a second line, which pushed the inputs out of alignment. */
+.plan-efields .field-label { white-space: nowrap; }
 .plan-efields .input {
   width: 62px;
   text-align: center;
@@ -7471,6 +7483,11 @@ body:has(.overlay) .dial { display: none; }
 /* Wide enough to read the word: "Weight" and "Bodyweight" clipped to "We" and
    "Bo" tell you nothing. */
 .plan-kind-field { min-width: 118px; }
+/* Wide enough for its label to stay on one line — "Distance (m)" wraps in the
+   62px other fields use. The row lets the rest shrink to make room. */
+.plan-efields .plan-distance-field { flex: 1 1 auto; min-width: 88px; }
+.plan-efields .plan-distance-field .field-label { white-space: nowrap; }
+.plan-efields .plan-distance-field .input { width: 100%; }
 
 /* The choose-one group. */
 .plan-group {

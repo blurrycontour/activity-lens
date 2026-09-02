@@ -7,6 +7,8 @@ interface ChartCardProps {
   /** Longer explanation, tucked behind the info icon next to the title. */
   info?: string
   icon?: React.ReactNode
+  /** A quiet marker beside the title, before the info tip (e.g. a zone model). */
+  badge?: React.ReactNode
   /** Right-aligned controls in the title row (toggles, readouts). */
   actions?: React.ReactNode
   /** Left-aligned controls below the heading, for wider choice sets. */
@@ -20,12 +22,13 @@ interface ChartCardProps {
  * icon, info tip and controls, a short always-on description, then the plot.
  * Using one component keeps spacing and typography identical across pages.
  */
-export default function ChartCard({ title, description, info, icon, actions, controls, children, style }: ChartCardProps) {
+export default function ChartCard({ title, description, info, icon, badge, actions, controls, children, style }: ChartCardProps) {
   return (
     <div className="card chart-card" style={style}>
       <div className="chart-card-head">
         {icon && <span style={{ display: 'inline-flex', flexShrink: 0 }}>{icon}</span>}
         <h3 className="chart-card-title">{title}</h3>
+        {badge}
         {info && <InfoTip text={info} label={title} />}
         {actions && <div className="chart-card-actions">{actions}</div>}
       </div>

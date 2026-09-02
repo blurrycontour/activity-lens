@@ -834,6 +834,12 @@ export const api = {
    * rather than three copies of five.
    */
   workoutSocial: (kind: ShareKind, id: string) => request<WorkoutSocial>(`${shareBase(kind, id)}/social`),
+  /**
+   * Per-workout heart-rate zone sample counts for the whole library, keyed by
+   * workout id. The Analysis page fetches this once and filters it client-side,
+   * so changing the range or type never calls the server.
+   */
+  hrZonesSummary: () => request<{ zones: Record<string, [number, number, number, number, number]> }>('/api/analysis/hr-zones'),
   addComment: (kind: ShareKind, id: string, body: string) =>
     request<WorkoutComment>(`${shareBase(kind, id)}/comments`, { method: 'POST', body: { body } }),
   editComment: (kind: ShareKind, id: string, commentID: string, body: string) =>

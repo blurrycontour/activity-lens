@@ -240,7 +240,7 @@ func (r *SQLiteRepository) loadDays(ctx context.Context, planID string) ([]Day, 
 
 	exRows, err := r.db.QueryContext(ctx,
 		`SELECT e.id, e.block_id, e.name, e.sets, e.reps, e.weight_kg, e.rest_sec, e.note,
-		        e.kind, e.duration_sec, e.break_sec
+		        e.kind, e.duration_sec, e.break_sec, e.distance_m, e.distance_unit
 		   FROM plan_exercises e
 		   JOIN plan_blocks b ON b.id = e.block_id
 		   JOIN plan_days d ON d.id = b.day_id
@@ -254,7 +254,7 @@ func (r *SQLiteRepository) loadDays(ctx context.Context, planID string) ([]Day, 
 		var e Exercise
 		var blockID string
 		if err := exRows.Scan(&e.ID, &blockID, &e.Name, &e.Sets, &e.Reps, &e.WeightKg, &e.RestSec, &e.Note,
-			&e.Kind, &e.DurationSec, &e.BreakSec); err != nil {
+			&e.Kind, &e.DurationSec, &e.BreakSec, &e.DistanceM, &e.DistanceUnit); err != nil {
 			return nil, fmt.Errorf("scan exercise: %w", err)
 		}
 		pos, ok := byBlock[blockID]
@@ -370,10 +370,10 @@ func (r *SQLiteRepository) ReplaceDays(ctx context.Context, userID int64, planID
 				if _, err := tx.ExecContext(ctx,
 					`INSERT INTO plan_exercises
 					   (id, block_id, position, name, sets, reps, weight_kg, rest_sec, note, kind,
-					    duration_sec, break_sec)
-					 VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+					    duration_sec, break_sec, distance_m, distance_unit)
+					 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 					e.ID, b.ID, ei, e.Name, e.Sets, e.Reps, e.WeightKg, e.RestSec, e.Note,
-					string(e.Kind), e.DurationSec, e.BreakSec); err != nil {
+					string(e.Kind), e.DurationSec, e.BreakSec, e.DistanceM, e.DistanceUnit); err != nil {
 					return fmt.Errorf("insert exercise: %w", err)
 				}
 			}

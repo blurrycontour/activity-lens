@@ -35,6 +35,13 @@ func (s *Server) handleListPlans(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "could not load plans")
 		return
 	}
+	// One grouped query annotates the whole library, so the list can badge
+	// shared plans without a per-row lookup — the same as the workouts list.
+	if counts, cerr := s.plans.PlanShareCounts(r.Context(), user.ID); cerr == nil {
+		for i := range list {
+			list[i].SharedWithCount = counts[list[i].ID]
+		}
+	}
 	writeJSON(w, http.StatusOK, list)
 }
 
@@ -205,6 +212,11 @@ func (s *Server) handleListPlanSessions(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not load sessions")
 		return
+	}
+	if counts, cerr := s.plans.SessionShareCounts(r.Context(), user.ID); cerr == nil {
+		for i := range list {
+			list[i].SharedWithCount = counts[list[i].ID]
+		}
 	}
 	writeJSON(w, http.StatusOK, list)
 }

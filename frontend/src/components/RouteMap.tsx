@@ -266,7 +266,7 @@ function positionAt(route: Array<[number, number]>, fraction: number): [number, 
 
 export default function RouteMap({
   route, color, duration, currentTime, playhead, onScrub, height, distance, hrTimeline, paceTimeline, elevTimeline, cadenceTimeline, avatarUrl, maxHR, restingHR, hrZoneMethod, cadenceLabel,
-  shading, onShadingChange, maximizeButton, cooperativeGestures = false,
+  shading, onShadingChange, maximizeButton, cooperativeGestures = false, maximized = false,
 }: {
   route: Array<[number, number]>
   color: string
@@ -306,6 +306,12 @@ export default function RouteMap({
    * map is the whole screen and there is nothing to scroll past.
    */
   cooperativeGestures?: boolean
+  /**
+   * Whether the map is currently the maximized one. Toggling it re-frames the
+   * route: the container resized, but MapLibre keeps its camera, so the route
+   * was left off-centre until Reset view was pressed by hand.
+   */
+  maximized?: boolean
 }) {
   const [layer, setLayer] = useState<MapLayerId>(() => {
     const stored = localStorage.getItem(MAP_LAYER_KEY)
@@ -629,6 +635,16 @@ export default function RouteMap({
 
   // Frame the whole route when it changes.
   useEffect(() => { fitRoute(false) }, [route, fitRoute])
+
+  // And re-frame it when the map is maximized or restored, once the container
+  // has taken its new size. Skips the first run so opening the page does not
+  // animate a fit the initial framing already did.
+  const didMaximizeToggle = useRef(false)
+  useEffect(() => {
+    if (!didMaximizeToggle.current) { didMaximizeToggle.current = true; return }
+    const id = setTimeout(() => fitRef.current(true), 60)
+    return () => clearTimeout(id)
+  }, [maximized])
 
   const fraction = duration > 0 ? Math.max(0, Math.min(1, currentTime / duration)) : 0
   // Where playback is between two fixes, not at the nearer of the two.
