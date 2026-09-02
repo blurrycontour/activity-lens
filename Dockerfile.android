@@ -26,7 +26,7 @@ RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
 # rather than left to corepack: corepack would download it on first use, which
 # means writing to a read-only location as the unprivileged build user, and a
 # network fetch inside a build that should not need one.
-RUN npm install -g pnpm@11.22.0 && pnpm --version
+RUN npm install -g pnpm@11.25.0 && pnpm --version
 
 # jq is here for CI's benefit: the workflow reads mobile/dist/apk.json to publish
 # the version and checksum, and it now runs *inside* this image, so anything the
