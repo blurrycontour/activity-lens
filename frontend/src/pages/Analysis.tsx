@@ -25,6 +25,7 @@ import {
 import { usePreferences } from '../context/PreferencesContext'
 import { PeakGlyph } from '../components/PeakMarker'
 import Segmented from '../components/Segmented'
+import ZoneMethodBadge from '../components/ZoneMethodBadge'
 import { api } from '../lib/api'
 import { HR_ZONE_COLORS, HR_ZONE_LABELS, HR_ZONE_SHORT, hrZoneBpm } from '../lib/hrZones'
 import { CHART_PEAKS_ANALYSIS_KEY, DEFAULT_CHART_PEAKS } from '../lib/dashboardConfig'
@@ -1348,6 +1349,7 @@ export default function Analysis() {
                 icon={<Heart size={14} color="var(--metric-hr)" />}
                 description={`Combined across the activities in the ${scope}.`}
                 info="How the recorded heart-rate samples across the current selection split between the five zones, using your max HR and model from Settings → Body & performance. It combines every filtered activity that has heart rate, so it answers where your training time actually goes rather than where one session did."
+                actions={<ZoneMethodBadge method={prefs?.hrZoneMethod ?? 'max'} />}
                 style={{ marginBottom: 16 }}
               >
                 <ResponsiveContainer width="100%" height={220}>

@@ -31,11 +31,9 @@ export interface PlanExercise {
   reps: string
   /** Seconds per set, for a timed exercise. */
   durationSec: number
-  /** Metres per set, for a distance exercise. Canonical unit is metres; the
-      unit below is only how it is written and edited. */
+  /** Metres per set, for a distance exercise. Shown as metres or kilometres in
+      read views depending on the size. */
   distanceM: number
-  /** How the distance is shown and entered: metres or kilometres. */
-  distanceUnit: 'm' | 'km'
   /** The load, or the added load for a bodyweight exercise. */
   weightKg: number
   /** Rest between sets of this exercise. */
@@ -263,7 +261,6 @@ export function sectionExercise(block: PlanBlock): PlanExercise {
     reps: '',
     durationSec: block.durationSec,
     distanceM: 0,
-    distanceUnit: 'm',
     weightKg: 0,
     restSec: 0,
     breakSec: 0,
@@ -416,10 +413,9 @@ export function targetLabel(ex: PlanExercise): string {
   return ex.weightKg > 0 ? `${base} · ${trimNum(ex.weightKg)} kg` : base
 }
 
-/** "400 m", "1.5 km" — a distance target in its chosen unit. */
+/** "400 m", "1.5 km" — a distance target, in km once it reaches a kilometre. */
 export function distanceLabel(ex: PlanExercise): string {
-  if (ex.distanceUnit === 'km') return `${trimNum(ex.distanceM / 1000)} km`
-  return `${Math.round(ex.distanceM)} m`
+  return ex.distanceM >= 1000 ? `${trimNum(ex.distanceM / 1000)} km` : `${Math.round(ex.distanceM)} m`
 }
 
 /**
@@ -508,7 +504,7 @@ export function sessionWhen(iso: string): string {
 export function newExercise(): PlanExercise {
   // No id: the server issues one on save and hands it back. Inventing one
   // here would mean two sources of ids that have to agree on a format.
-  return { id: '', name: '', kind: 'weight', sets: 3, reps: '10', durationSec: 0, distanceM: 0, distanceUnit: 'm', weightKg: 0, restSec: 0, breakSec: 0, note: '' }
+  return { id: '', name: '', kind: 'weight', sets: 3, reps: '10', durationSec: 0, distanceM: 0, weightKg: 0, restSec: 0, breakSec: 0, note: '' }
 }
 
 export function newBlock(section: BlockSection = ''): PlanBlock {

@@ -607,23 +607,13 @@ function ExerciseFields({ ex, suggestions, first, last, timedOnly, onMove, onPat
           </label>
         ) : distance ? (
           <label>
-            <span className="field-label">Distance</span>
-            {/* Stored in metres; the unit beside it is only how it's written. */}
-            <div className="plan-distance-field">
-              <NumberField
-                value={ex.distanceUnit === 'km' ? ex.distanceM / 1000 : ex.distanceM}
-                onChange={n => onPatch({ distanceM: Math.round(ex.distanceUnit === 'km' ? n * 1000 : n) })}
-                min={0} step={ex.distanceUnit === 'km' ? 0.1 : 10} decimal={ex.distanceUnit === 'km'}
-                placeholder={ex.distanceUnit === 'km' ? '1' : '400'}
-                ariaLabel={`Distance per set in ${ex.distanceUnit === 'km' ? 'kilometres' : 'metres'}`}
-              />
-              <Dropdown
-                value={ex.distanceUnit}
-                onChange={(u: 'm' | 'km') => onPatch({ distanceUnit: u })}
-                ariaLabel="Distance unit"
-                options={[{ value: 'm', label: 'm' }, { value: 'km', label: 'km' }]}
-              />
-            </div>
+            <span className="field-label">Distance (m)</span>
+            <NumberField
+              value={ex.distanceM}
+              onChange={n => onPatch({ distanceM: Math.round(n) })}
+              min={0} max={1000000} step={10} placeholder="400"
+              ariaLabel="Distance per set, in metres"
+            />
           </label>
         ) : (
           <label>

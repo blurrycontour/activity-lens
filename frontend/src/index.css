@@ -3074,6 +3074,14 @@ body:has(.overlay) .dial { display: none; }
   margin: 4px 0 10px;
 }
 
+/* A per-chart control on its own row below the header, right-aligned, so it
+   does not squeeze the title and its badge onto a cramped line. */
+.metric-panel-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin: 8px 0 4px;
+}
+
 /* The plot runs to the card's own edges while the header keeps its padding.
 
    Negative margins rather than an unpadded card with a padded header, because
@@ -7168,6 +7176,7 @@ body:has(.overlay) .dial { display: none; }
    switching to the exercise accent. */
 .plan-ex.plan-ex-section.current {
   border-color: var(--hike);
+  background: color-mix(in srgb, var(--hike) 12%, var(--bg-2));
   box-shadow: 0 0 0 1px var(--hike), 0 6px 22px color-mix(in srgb, var(--hike) 30%, transparent);
 }
 .plan-ex.done .plan-ex-title { color: var(--text-3); text-decoration: line-through; }
@@ -8062,13 +8071,6 @@ body:has(.overlay) .dial { display: none; }
 .plan-ex-section .plan-read-kind,
 .plan-section .plan-block-head .al-dropdown-trigger { color: var(--hike); }
 .plan-add-section:hover { border-color: var(--hike); }
-/* The editor block also wears .plan-group, whose accent tint would otherwise
-   show through the section's faint amber. A stronger, more specific fill so the
-   background reads amber like its dashed border rather than accent. */
-.plan-group.plan-section {
-  background: color-mix(in srgb, var(--hike) 14%, var(--bg-2));
-  border-color: color-mix(in srgb, var(--hike) 55%, var(--border));
-}
 
 /* An exercise inside a block: its own name, then its own row of squares.
    The name used to sit to the left of the squares, which left a superset's
@@ -8205,10 +8207,6 @@ body.session-full .plan-player { bottom: 0; padding-bottom: var(--safe-bottom); 
 /* A section that is only a length of time. */
 .plan-section-duration { display: flex; flex-direction: column; gap: 3px; }
 .plan-section-duration .input { width: 100%; }
-/* A distance value with its unit picker beside it, in one editor field. */
-.plan-distance-field { display: flex; gap: 4px; align-items: stretch; }
-.plan-distance-field .al-dropdown { flex: 0 0 auto; }
-.plan-distance-field .al-dropdown-trigger { padding: 4px 8px; }
 
 /* --- The timer bar's controls --- */
 

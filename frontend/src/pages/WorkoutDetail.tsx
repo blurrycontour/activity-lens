@@ -21,6 +21,7 @@ import { useLocalStorage } from '../lib/useLocalStorage'
 import { DEFAULT_HR_ZONE_CHART, HR_ZONE_CHART_KEY, type HRZoneChart, CHART_PEAKS_WORKOUT_KEY, DEFAULT_CHART_PEAKS } from '../lib/dashboardConfig'
 import { PeakGlyph } from '../components/PeakMarker'
 import Segmented from '../components/Segmented'
+import ZoneMethodBadge from '../components/ZoneMethodBadge'
 import InfoTip from '../components/InfoTip'
 import WeatherCard from '../components/WeatherCard'
 import WorkoutInfoDialog from '../components/WorkoutInfoDialog'
@@ -92,21 +93,6 @@ function ManualIcon() {
   return (
     <span title="Entered manually" style={{ display: 'inline-flex', opacity: 0.55 }}>
       <Pencil size={10} />
-    </span>
-  )
-}
-
-/** Which HR-zone model drew this chart, set in Body & performance settings. */
-function ZoneMethodBadge({ method }: { method: 'max' | 'reserve' }) {
-  const reserve = method === 'reserve'
-  return (
-    <span
-      className="zone-method-badge"
-      title={reserve
-        ? 'Zones from heart-rate reserve (Karvonen), using your resting and max HR — set in Body & performance'
-        : 'Zones from a percentage of your max HR — set in Body & performance'}
-    >
-      {reserve ? 'Karvonen' : '% max'}
     </span>
   )
 }
@@ -505,7 +491,7 @@ function TabPanel({ children }: { children: React.ReactNode }) {
   )
 }
 
-function MetricPanel({ icon, title, badge, info, stats, actions, onExpand, children }: {
+function MetricPanel({ icon, title, badge, info, stats, toolbar, onExpand, children }: {
   icon: React.ReactNode
   title: string
   /** Marker between title and info tip — the Σ for a derived series. */
@@ -513,8 +499,8 @@ function MetricPanel({ icon, title, badge, info, stats, actions, onExpand, child
   info: string
   /** Min/avg/max line. Omitted by charts that have nothing to summarise. */
   stats?: React.ReactNode
-  /** A control on the header row, e.g. a per-chart toggle. */
-  actions?: React.ReactNode
+  /** A control on its own row below the header, e.g. a per-chart toggle. */
+  toolbar?: React.ReactNode
   onExpand: () => void
   children: React.ReactNode
 }) {
@@ -532,11 +518,11 @@ function MetricPanel({ icon, title, badge, info, stats, actions, onExpand, child
           {badge}
           <InfoTip label={title} text={info} />
         </h3>
-        {actions}
         <button className="btn-icon" onClick={onExpand} title="Expand" aria-label={`Expand ${title}`}>
           <Maximize2 size={13} />
         </button>
       </div>
+      {toolbar && <div className="metric-panel-toolbar">{toolbar}</div>}
       {stats && <div className="metric-panel-stats">{stats}</div>}
       <div className="metric-panel-plot">{children}</div>
     </div>
@@ -2126,7 +2112,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
               icon={<Heart size={14} color="var(--metric-hr)" />}
               title="Heart Rate Zones"
               badge={<ZoneMethodBadge method={hrZoneMethod} />}
-              actions={hrZoneStyle === 'histogram'
+              toolbar={hrZoneStyle === 'histogram'
                 ? <Segmented
                     value={hrHistoDetail ? 'detailed' : 'simple'}
                     onChange={v => setHrHistoDetail(v === 'detailed')}

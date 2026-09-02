@@ -6,6 +6,7 @@ import { RefreshProvider } from './context/RefreshContext'
 import { startNetworkMonitor } from './lib/network'
 import { needsServerConfig, onServerForgotten } from './lib/serverConfig'
 import UpdatePrompt from './components/UpdatePrompt'
+import UpdatedNotice from './components/UpdatedNotice'
 
 /**
  * Decides whether the app can start yet.
@@ -46,6 +47,7 @@ export default function Root() {
             about who is signed in, and the login screen is exactly where
             someone stuck on an old build is most likely to be sitting. */}
         <UpdatePrompt />
+        <UpdatedNotice />
         <App />
       </RefreshProvider>
     </AuthProvider>

@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import PageHeader from '../../components/PageHeader'
 import TabStrip from '../../components/TabStrip'
+import ShareBadge from '../../components/ShareBadge'
 import ViewSwitcher, { readView, writeView, type ListView } from '../../components/ViewSwitcher'
 import Modal from '../../components/Modal'
 import ListTools from './ListTools'
@@ -628,6 +629,7 @@ function PlanRow({ plan, selecting, picked, onOpen, onStart, onToggle, onLongPre
           <strong className="plan-card-name">
             {plan.name}
             {plan.archived && <span className="plan-badge">Archived</span>}
+            <ShareBadge workout={plan} />
           </strong>
           {/* What the plan holds, under its name: the two numbers that say how
               big a thing you are about to start. */}
