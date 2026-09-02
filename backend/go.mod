@@ -5,10 +5,10 @@ go 1.26.6
 require (
 	github.com/SherClockHolmes/webpush-go v1.4.0
 	github.com/blurrycontour/go-authkit v1.0.0
-	github.com/klauspost/compress v1.19.1
+	github.com/klauspost/compress v1.19.2
 	github.com/wneessen/go-mail v0.8.1
-	golang.org/x/image v0.44.0
-	modernc.org/sqlite v1.56.0
+	golang.org/x/image v0.45.0
+	modernc.org/sqlite v1.57.0
 )
 
 require (
@@ -23,7 +23,7 @@ require (
 	golang.org/x/crypto v0.54.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/text v0.40.0 // indirect
+	golang.org/x/text v0.41.0 // indirect
 	modernc.org/libc v1.74.4 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
