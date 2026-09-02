@@ -37,7 +37,7 @@ export default function UpdatedNotice() {
   const close = () => setVersion(null)
   return (
     <Modal dismissable onClose={close} label="App updated">
-      <div className="modal-box" style={{ maxWidth: 340 }}>
+      <div className="modal-box" style={{ maxWidth: 380 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 14 }}>
           <div style={{
             width: 36, height: 36, borderRadius: 'var(--radius)', flexShrink: 0,
@@ -48,12 +48,13 @@ export default function UpdatedNotice() {
           <div style={{ minWidth: 0, flex: 1 }}>
             <h3 style={{ fontSize: 15, fontWeight: 600 }}>App updated</h3>
             <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 3, lineHeight: 1.5 }}>
-              You&rsquo;re now on version <span style={{ fontFamily: 'var(--font-mono)' }}>{version}</span>.
+              You&rsquo;re now on version <span style={{ fontFamily: 'var(--font-mono)' }}>{version}</span>,
+              matching the server this app is connected to.
             </p>
           </div>
           <button className="btn-icon" onClick={close} aria-label="Close"><X size={15} /></button>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button className="btn btn-primary" onClick={close}>Done</button>
         </div>
       </div>

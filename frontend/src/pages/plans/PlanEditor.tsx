@@ -597,7 +597,7 @@ function ExerciseFields({ ex, suggestions, first, last, timedOnly, onMove, onPat
 
         {timed ? (
           <label>
-            <span className="field-label">Duration</span>
+            <span className="field-label">Duration (s)</span>
             <NumberField
               value={ex.durationSec}
               onChange={n => onPatch({ durationSec: n })}
@@ -639,7 +639,7 @@ function ExerciseFields({ ex, suggestions, first, last, timedOnly, onMove, onPat
         )}
 
         <label>
-          <span className="field-label">Rest</span>
+          <span className="field-label">Rest (s)</span>
           {/* Between sets of this exercise, as opposed to the break between
               exercises on the rule below the card. Ticking a set starts it. */}
           <NumberField

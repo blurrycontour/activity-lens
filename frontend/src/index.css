@@ -7470,6 +7470,9 @@ body:has(.overlay) .dial { display: none; }
 .plan-erow-menu { flex: 0 0 auto; }
 .plan-efields { display: flex; gap: 7px; flex: 0 0 auto; align-items: flex-end; }
 .plan-efields label { display: flex; flex-direction: column; gap: 3px; }
+/* Labels name a unit now — "Duration (s)", "Rest (s)" — and must not wrap onto
+   a second line, which pushed the inputs out of alignment. */
+.plan-efields .field-label { white-space: nowrap; }
 .plan-efields .input {
   width: 62px;
   text-align: center;
