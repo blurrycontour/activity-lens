@@ -62,6 +62,9 @@ func (unimplementedSharing) SetTrack(context.Context, string, []LatLng) error {
 func (unimplementedSharing) CountMissingTracks(context.Context, int64) (int, error) {
 	panic("track storage is exercised against the real schema; see tracks_test.go")
 }
+func (unimplementedSharing) HRZoneCounts(context.Context, int64, [4]int) (map[string][5]int, error) {
+	panic("zone counting is exercised against the real schema; see hrzones_test.go")
+}
 func (unimplementedSharing) ListPublicSummary(context.Context, int64) ([]Workout, error) {
 	panic("sharing is only exercised against the real schema; see sharing_test.go")
 }

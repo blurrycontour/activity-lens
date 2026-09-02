@@ -179,6 +179,9 @@ type Repository interface {
 	SetTrack(ctx context.Context, workoutID string, route []LatLng) error
 	// CountMissingTracks reports how much of the backfill is left.
 	CountMissingTracks(ctx context.Context, userID int64) (int, error)
+	// HRZoneCounts buckets every workout's heart-rate samples into the five
+	// zones, given the four bpm boundaries between them, keyed by workout id.
+	HRZoneCounts(ctx context.Context, userID int64, bounds [4]int) (map[string][5]int, error)
 	// CountCadence settles the cadence sample count for rows that predate the
 	// column, in batches, and reports how many it did.
 	CountCadence(ctx context.Context, limit int) (int, error)
