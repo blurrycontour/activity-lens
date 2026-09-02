@@ -1684,7 +1684,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
       // The fallback matches the frame the map will fill, so its arrival does
       // not reflow the cards underneath it.
       <Suspense fallback={<div className="route-map-loading" style={{ height }}>Loading map…</div>}>
-      <RouteMap route={w.route} color={trailColor} duration={w.duration} currentTime={currentTime} playhead={playhead} onScrub={handleScrub} height={height} distance={w.distance} hrTimeline={w.hrTimeline} paceTimeline={smoothPaceTimeline} elevTimeline={w.elevTimeline} cadenceTimeline={cadenceTimeline} cadenceLabel={cadenceUnit(w.type)} avatarUrl={routeAvatar} maxHR={effectiveMaxHR} restingHR={effectiveRestingHR} hrZoneMethod={hrZoneMethod} shading={shading} onShadingChange={setShading} maximizeButton={maximizeButton} cooperativeGestures={isMobile && expanded !== 'map'} />
+      <RouteMap route={w.route} color={trailColor} duration={w.duration} currentTime={currentTime} playhead={playhead} onScrub={handleScrub} height={height} distance={w.distance} hrTimeline={w.hrTimeline} paceTimeline={smoothPaceTimeline} elevTimeline={w.elevTimeline} cadenceTimeline={cadenceTimeline} cadenceLabel={cadenceUnit(w.type)} avatarUrl={routeAvatar} maxHR={effectiveMaxHR} restingHR={effectiveRestingHR} hrZoneMethod={hrZoneMethod} shading={shading} onShadingChange={setShading} maximizeButton={maximizeButton} cooperativeGestures={isMobile && expanded !== 'map'} maximized={expanded === 'map'} />
       </Suspense>
     )
   }

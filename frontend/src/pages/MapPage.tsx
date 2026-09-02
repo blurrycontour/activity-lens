@@ -247,6 +247,7 @@ export default function MapPage() {
     return () => cancelAnimationFrame(id)
   }, [mapH])
 
+
   const shown = useMemo(
     () => typeFilter === 'All' ? tracks : tracks.filter(t => t.type === typeFilter),
     [tracks, typeFilter],
@@ -264,6 +265,20 @@ export default function MapPage() {
     for (const t of shownRef.current) for (const [lat, lon] of t.points) b.extend([lon, lat])
     return b.isEmpty() ? null : b
   }, [])
+
+  // Re-frame the routes when the map is maximized or restored: the box resized,
+  // but MapLibre keeps its camera, so the routes were left off-centre until
+  // Reset view was pressed by hand. Skips the first run.
+  const didFullToggle = useRef(false)
+  useEffect(() => {
+    if (!didFullToggle.current) { didFullToggle.current = true; return }
+    const id = setTimeout(() => {
+      mapRef.current?.resize()
+      const b = routeBounds()
+      if (b) mapRef.current?.fitBounds(b, { padding: 48, maxZoom: 14, duration: 400 })
+    }, 60)
+    return () => clearTimeout(id)
+  }, [full, routeBounds])
 
   // ── The map ────────────────────────────────────────────────────────────────
   // Torn down when the page goes away, and only then. Keeping this out of the
