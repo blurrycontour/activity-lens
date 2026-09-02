@@ -35,9 +35,9 @@ func TestHRZoneCountsBucketsSamples(t *testing.T) {
 		MaxHR:     200,
 		HRTimeline: []HRPoint{
 			{T: 0, HR: 100}, {T: 1, HR: 110}, // zone 1 (< 120)
-			{T: 2, HR: 130}, // zone 2
-			{T: 3, HR: 150}, // zone 3
-			{T: 4, HR: 170}, // zone 4
+			{T: 2, HR: 130},                  // zone 2
+			{T: 3, HR: 150},                  // zone 3
+			{T: 4, HR: 170},                  // zone 4
 			{T: 5, HR: 190}, {T: 6, HR: 200}, // zone 5 (>= 180)
 		},
 	}
