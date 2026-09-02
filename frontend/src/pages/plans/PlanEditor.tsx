@@ -606,7 +606,7 @@ function ExerciseFields({ ex, suggestions, first, last, timedOnly, onMove, onPat
             />
           </label>
         ) : distance ? (
-          <label>
+          <label className="plan-distance-field">
             <span className="field-label">Distance (m)</span>
             <NumberField
               value={ex.distanceM}

@@ -132,9 +132,10 @@ export function hrZoneHistogram(hrTimeline: { t: number; hr: number }[], maxHR: 
   return counts.map((c, i) => {
     const from = start + i * binBpm
     return {
-      name: `${from}\u2013${from + binBpm} bpm`, label: String(from),
+      label: String(from),
       value: c, pct: Math.round((c / total) * 1000) / 10,
       color: hrZoneColor(from + binBpm / 2, maxHR, restingHR, method),
+      loHR: from, hiHR: from + binBpm,
     }
   })
 }

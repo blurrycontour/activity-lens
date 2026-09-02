@@ -226,7 +226,7 @@ export default function PlanView({ plan, onBack, onEdit, onRename, onStart, onDe
                             : ex.kind === 'distance'
                               ? <Stat label="Distance" value={distanceLabel(ex)} />
                               : <Stat label="Reps" value={ex.reps || '—'} />}
-                          {ex.kind !== 'time' && (
+                          {(ex.kind !== 'time' || ex.weightKg > 0) && (
                             <Stat
                               label={ex.kind === 'weight' ? 'Weight' : 'Added'}
                               value={ex.weightKg > 0 ? `${trimNum(ex.weightKg)} kg` : ex.kind === 'body' ? 'body' : '—'}

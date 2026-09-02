@@ -574,7 +574,7 @@ function HRZoneTooltip({ active, payload }: { active?: boolean; payload?: any[] 
     : null
   return (
     <div className="custom-tooltip">
-      <div style={{ color: 'var(--text-3)', marginBottom: 2 }}>{d.name}</div>
+      {d.name && <div style={{ color: 'var(--text-3)', marginBottom: 2 }}>{d.name}</div>}
       {range && <div style={{ color: d.color, marginBottom: 2 }}>{range}</div>}
       <div style={{ color: 'var(--text)', fontWeight: 600 }}>{d.value} samples ({d.pct}%)</div>
     </div>

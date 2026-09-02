@@ -1020,7 +1020,7 @@ function ExerciseDetail({ ex, sets, heading, running, left, onStartRest, onTap, 
           <span className="label">{timed ? 'Duration' : ex.kind === 'distance' ? 'Distance' : 'Reps'}</span>
           <span className="value">{timed ? durationShort(ex.durationSec) : ex.kind === 'distance' ? distanceLabel(ex) : ex.reps || '—'}</span>
         </div>
-        {!timed && (
+        {(!timed || ex.weightKg > 0) && (
           <div className="stat-chip">
             <span className="label">{ex.kind === 'weight' ? 'Target' : 'Added'}</span>
             <span className="value">

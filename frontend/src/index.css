@@ -7480,6 +7480,11 @@ body:has(.overlay) .dial { display: none; }
 /* Wide enough to read the word: "Weight" and "Bodyweight" clipped to "We" and
    "Bo" tell you nothing. */
 .plan-kind-field { min-width: 118px; }
+/* Wide enough for its label to stay on one line — "Distance (m)" wraps in the
+   62px other fields use. The row lets the rest shrink to make room. */
+.plan-efields .plan-distance-field { flex: 1 1 auto; min-width: 88px; }
+.plan-efields .plan-distance-field .field-label { white-space: nowrap; }
+.plan-efields .plan-distance-field .input { width: 100%; }
 
 /* The choose-one group. */
 .plan-group {

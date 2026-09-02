@@ -1349,7 +1349,7 @@ export default function Analysis() {
                 icon={<Heart size={14} color="var(--metric-hr)" />}
                 description={`Combined across the activities in the ${scope}.`}
                 info="How the recorded heart-rate samples across the current selection split between the five zones, using your max HR and model from Settings → Body & performance. It combines every filtered activity that has heart rate, so it answers where your training time actually goes rather than where one session did."
-                actions={<ZoneMethodBadge method={prefs?.hrZoneMethod ?? 'max'} />}
+                badge={<ZoneMethodBadge method={prefs?.hrZoneMethod ?? 'max'} />}
                 style={{ marginBottom: 16 }}
               >
                 <ResponsiveContainer width="100%" height={220}>
