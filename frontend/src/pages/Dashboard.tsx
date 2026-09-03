@@ -34,6 +34,7 @@ import {
   windowSlices, type Goal, type GoalProgress,
 } from '../lib/insights'
 import { goalsAreComplete } from '../lib/goalCelebration'
+import { overlaysOpen, OVERLAY_EVENT } from '../lib/useDismissOnBack'
 
 /** Weeks shown in the dashboard's compact weekly-trend chart. */
 const TREND_WEEKS = 3
@@ -733,9 +734,20 @@ export default function Dashboard({ onSelect, onResumeSession, onImport, onCreat
   const [celebrating, setCelebrating] = useState(false)
   useEffect(() => {
     if (!goalsAreComplete(progress)) return
+    // Not behind a dialog: the update prompt and other overlays open over the
+    // dashboard at launch, and confetti raining behind them reads as a glitch.
+    if (overlaysOpen()) return
     setCelebrating(true)
     void buzz('complete')
   }, [progress])
+  // Stop mid-celebration if a dialog opens over it — the launch update prompt
+  // arrives a moment after the dashboard mounts.
+  useEffect(() => {
+    if (!celebrating) return
+    const onOverlay = () => { if (overlaysOpen()) setCelebrating(false) }
+    window.addEventListener(OVERLAY_EVENT, onOverlay)
+    return () => window.removeEventListener(OVERLAY_EVENT, onOverlay)
+  }, [celebrating])
   const bests = useMemo(() => recentPersonalBests(workouts), [workouts])
   /**
    * The same records, grouped into the activity that set them.

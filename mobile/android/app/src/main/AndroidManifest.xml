@@ -71,24 +71,22 @@
                  here. `application/*` likewise matches every `application/…`
                  below.
 
-                 The aliases do need declaring. `.zip` and `.gz` have one
-                 registered type each and several in circulation, and a manager
-                 that hands out `application/x-gzip` matches nothing above no
-                 matter how close it is. -->
+                 A shared file rides in EXTRA_STREAM, not in the intent's own
+                 data, so only its MIME type can be matched here — a pathPattern
+                 like the "Open with" filters use would never fire. Exporters
+                 type a workout file every way imaginable
+                 (application/vnd.garmin.tcx+xml, application/octet-stream,
+                 application/tcx, even application/fits for a .fit), so this
+                 matches every application subtype and text/xml rather than
+                 chase a list that kept missing one. A manager sharing as */*
+                 still matches, and files that are not workouts are dropped by
+                 name in IncomingFiles. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <action android:name="android.intent.action.SEND_MULTIPLE" />
                 <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="application/gpx+xml" />
-                <data android:mimeType="application/vnd.garmin.tcx+xml" />
-                <data android:mimeType="application/vnd.ant.fit" />
-                <data android:mimeType="application/zip" />
-                <data android:mimeType="application/x-zip-compressed" />
-                <data android:mimeType="application/gzip" />
-                <data android:mimeType="application/x-gzip" />
-                <data android:mimeType="application/xml" />
+                <data android:mimeType="application/*" />
                 <data android:mimeType="text/xml" />
-                <data android:mimeType="application/octet-stream" />
             </intent-filter>
 
             <!-- The same share, from an app that set no type at all.
