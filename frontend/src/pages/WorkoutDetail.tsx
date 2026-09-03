@@ -9,7 +9,7 @@ import SportDropdown from '../components/SportDropdown'
 import Dropdown from '../components/Dropdown'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ReferenceDot, ReferenceArea, BarChart, Bar } from 'recharts'
 import {
-  Heart, Mountain, Zap, Clock, TrendingUp, Navigation, Pencil, Trash2, Gauge,
+  Heart, Mountain, Zap, Flame, Clock, TrendingUp, Navigation, Pencil, Trash2, Gauge,
   Check, X as XIcon, Play, Pause as PauseIcon, LoaderCircle, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, AlertTriangle, Activity, Share2, Lock, FileDown, Plus, Image as ImageIcon, NotebookPen, Images, MessageSquare, ClipboardList, Watch, Undo2, ChevronDown, Thermometer, LineChart, Info } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useAuth } from '../context/AuthContext'
@@ -1987,7 +1987,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
               {/* Calories are only badged as computed when we estimated them
                   ourselves — TCX files state them outright, and those are as
                   good as any other reported field. */}
-              <StatChip icon={<Zap size={12} />} label="Calories" value={w.calories > 0 ? `${w.calories} kcal` : '—'} manual={w.caloriesManual} calculated={!w.caloriesManual && !w.caloriesReported && w.calories > 0} />
+              <StatChip icon={<Flame size={12} />} label="Calories" value={w.calories > 0 ? `${w.calories} kcal` : '—'} manual={w.caloriesManual} calculated={!w.caloriesManual && !w.caloriesReported && w.calories > 0} />
               {/* The Σ marks an estimate, and steps counted from a recorded
                   cadence are not one — the watch counted them. It belongs only
                   on the fallback, which divides distance by an assumed stride. */}
