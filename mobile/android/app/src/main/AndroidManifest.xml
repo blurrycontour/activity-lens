@@ -67,26 +67,51 @@
 
                  An intent whose own type is `*/*` matches any filter that
                  declares at least one type — IntentFilter.findMimeType says so
-                 explicitly — so the "shared as anything" case needs nothing
-                 here. `application/*` likewise matches every `application/…`
-                 below.
+                 explicitly — so the "shared as anything" case (a manager like
+                 Google Files) needs nothing here.
 
                  A shared file rides in EXTRA_STREAM, not in the intent's own
                  data, so only its MIME type can be matched here — a pathPattern
-                 like the "Open with" filters use would never fire. Exporters
-                 type a workout file every way imaginable
-                 (application/vnd.garmin.tcx+xml, application/octet-stream,
-                 application/tcx, even application/fits for a .fit), so this
-                 matches every application subtype and text/xml rather than
-                 chase a list that kept missing one. A manager sharing as */*
-                 still matches, and files that are not workouts are dropped by
-                 name in IncomingFiles. -->
+                 like the "Open with" filters use would never fire. The standard
+                 types are listed alongside the non-standard variants file
+                 managers and watch apps actually emit (Solid Explorer types a
+                 .fit as application/fits; Notify for Xiaomi types a .tcx its
+                 own way), plus the octet-stream / plain-text / xml fallbacks
+                 for when an exporter gives up on a type. A wildcard
+                 (application/*) would also work but would offer Activity Lens
+                 for every PDF and zip too, so this stays enumerated. Whatever
+                 slips through and is not a workout file is dropped by name in
+                 IncomingFiles. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <action android:name="android.intent.action.SEND_MULTIPLE" />
                 <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="application/*" />
+                <!-- GPX -->
+                <data android:mimeType="application/gpx+xml" />
+                <data android:mimeType="application/gpx" />
+                <data android:mimeType="application/x-gpx" />
+                <!-- TCX -->
+                <data android:mimeType="application/vnd.garmin.tcx+xml" />
+                <data android:mimeType="application/tcx+xml" />
+                <data android:mimeType="application/tcx" />
+                <data android:mimeType="application/x-tcx" />
+                <data android:mimeType="application/x-garmin-tcx" />
+                <!-- FIT -->
+                <data android:mimeType="application/vnd.ant.fit" />
+                <data android:mimeType="application/fit" />
+                <data android:mimeType="application/fits" />
+                <data android:mimeType="application/x-fit" />
+                <data android:mimeType="application/x-fits" />
+                <data android:mimeType="application/x-garmin-fit" />
+                <!-- Archives and the generic fallbacks exporters reach for -->
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip-compressed" />
+                <data android:mimeType="application/gzip" />
+                <data android:mimeType="application/x-gzip" />
+                <data android:mimeType="application/xml" />
                 <data android:mimeType="text/xml" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="application/octet-stream" />
             </intent-filter>
 
             <!-- The same share, from an app that set no type at all.
@@ -114,8 +139,13 @@
                 <data android:scheme="content" />
                 <data android:scheme="file" />
                 <data android:mimeType="application/gpx+xml" />
+                <data android:mimeType="application/gpx" />
                 <data android:mimeType="application/vnd.garmin.tcx+xml" />
+                <data android:mimeType="application/tcx+xml" />
+                <data android:mimeType="application/tcx" />
                 <data android:mimeType="application/vnd.ant.fit" />
+                <data android:mimeType="application/fit" />
+                <data android:mimeType="application/fits" />
                 <data android:mimeType="application/zip" />
                 <data android:mimeType="application/x-zip-compressed" />
                 <data android:mimeType="application/gzip" />
