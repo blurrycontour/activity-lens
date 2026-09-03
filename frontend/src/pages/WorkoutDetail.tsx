@@ -9,13 +9,14 @@ import SportDropdown from '../components/SportDropdown'
 import Dropdown from '../components/Dropdown'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ReferenceDot, ReferenceArea, BarChart, Bar } from 'recharts'
 import {
-  Heart, Mountain, Zap, Clock, TrendingUp, Navigation, Pencil, Trash2, Gauge,
+  Heart, Mountain, Zap, Flame, Clock, TrendingUp, Navigation, Pencil, Trash2, Gauge,
   Check, X as XIcon, Play, Pause as PauseIcon, LoaderCircle, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, AlertTriangle, Activity, Share2, Lock, FileDown, Plus, Image as ImageIcon, NotebookPen, Images, MessageSquare, ClipboardList, Watch, Undo2, ChevronDown, Thermometer, LineChart, Info } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
 import { downloadWorkoutOriginal } from '../lib/download'
 import { extraSeriesMeta, extraSeriesStats, type ExtraSeriesMeta } from '../lib/extraSeries'
+import { estimateAvgCyclingPower } from '../lib/power'
 import { lazyChunk } from '../lib/lazyChunk'
 import { useLocalStorage } from '../lib/useLocalStorage'
 import { DEFAULT_HR_ZONE_CHART, HR_ZONE_CHART_KEY, type HRZoneChart, CHART_PEAKS_WORKOUT_KEY, DEFAULT_CHART_PEAKS } from '../lib/dashboardConfig'
@@ -944,6 +945,17 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
       steps,
     }
   }, [w, speedTimeline, cadenceTimeline])
+
+  // Power for a ride, where steps mean nothing: the meter's average when one
+  // recorded it, otherwise an estimate from the ride's own figures and the
+  // rider's weight. Null for every other sport, which keeps its step count.
+  const ridePower = useMemo(() => {
+    if (w.type !== 'Ride') return null
+    const recorded = w.extraSeries?.power?.length ? extraSeriesStats(w.extraSeries.power) : null
+    if (recorded) return { watts: Math.round(recorded.avg), estimated: false }
+    const est = estimateAvgCyclingPower(w.distance, w.movingTime || w.duration, w.elevationGain, prefs?.bodyWeightKg ?? 0)
+    return { watts: est, estimated: true }
+  }, [w.type, w.extraSeries, w.distance, w.movingTime, w.duration, w.elevationGain, prefs?.bodyWeightKg])
 
   const smoothPaceTimeline = useMemo(
     () => smoothTimeline(w.paceTimeline.filter(point => point.pace > 0).map(point => ({ t: point.t, value: point.pace })), 10).map(point => ({ t: point.t, pace: point.value })),
@@ -1975,17 +1987,28 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
               {/* Calories are only badged as computed when we estimated them
                   ourselves — TCX files state them outright, and those are as
                   good as any other reported field. */}
-              <StatChip icon={<Zap size={12} />} label="Calories" value={w.calories > 0 ? `${w.calories} kcal` : '—'} manual={w.caloriesManual} calculated={!w.caloriesManual && !w.caloriesReported && w.calories > 0} />
+              <StatChip icon={<Flame size={12} />} label="Calories" value={w.calories > 0 ? `${w.calories} kcal` : '—'} manual={w.caloriesManual} calculated={!w.caloriesManual && !w.caloriesReported && w.calories > 0} />
               {/* The Σ marks an estimate, and steps counted from a recorded
                   cadence are not one — the watch counted them. It belongs only
                   on the fallback, which divides distance by an assumed stride. */}
-              <StatChip
-                icon={<Footprints size={12} />}
-                label="Steps"
-                value={(w.steps ?? 0) > 0 ? w.steps!.toLocaleString() : (derived.steps != null ? derived.steps.toLocaleString() : '—')}
-                manual={w.stepsManual}
-                calculated={!w.stepsManual && cadenceTimeline.length === 0 && ((w.steps ?? 0) > 0 || derived.steps != null)}
-              />
+              {ridePower ? (
+                /* Steps are meaningless on a bike; power is the figure that
+                   belongs here. Estimated ones carry the Σ. */
+                <StatChip
+                  icon={<Zap size={12} color="var(--purple)" />}
+                  label={ridePower.estimated ? 'Est. Power' : 'Avg Power'}
+                  value={ridePower.watts != null ? `${ridePower.watts.toLocaleString()} W` : '—'}
+                  calculated={ridePower.estimated && ridePower.watts != null}
+                />
+              ) : (
+                <StatChip
+                  icon={<Footprints size={12} />}
+                  label="Steps"
+                  value={(w.steps ?? 0) > 0 ? w.steps!.toLocaleString() : (derived.steps != null ? derived.steps.toLocaleString() : '—')}
+                  manual={w.stepsManual}
+                  calculated={!w.stepsManual && cadenceTimeline.length === 0 && ((w.steps ?? 0) > 0 || derived.steps != null)}
+                />
+              )}
             </div>
 
             {(w.hrTimeline.length > 0 || w.avgHR > 0) && (

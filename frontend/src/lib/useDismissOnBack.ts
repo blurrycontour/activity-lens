@@ -20,6 +20,19 @@ import { useEffect, useRef } from 'react'
 let stack: symbol[] = []
 let guarded = false
 
+/** Fired whenever the overlay stack changes, so other UI (e.g. the dashboard
+ *  confetti) can stay out of the way of an open dialog. */
+export const OVERLAY_EVENT = 'al-overlay-change'
+
+/** Whether any Modal-backed overlay is currently open. */
+export function overlaysOpen(): boolean {
+  return stack.length > 0
+}
+
+function notifyOverlayChange() {
+  window.dispatchEvent(new Event(OVERLAY_EVENT))
+}
+
 /**
  * The pending removal of the guard entry, if the last overlay has just closed.
  *
@@ -69,6 +82,7 @@ export default function useDismissOnBack(open: boolean, onDismiss: () => void) {
 
     const id = Symbol('overlay')
     stack.push(id)
+    notifyOverlayChange()
     // Taking over from a surface that closed in this same commit: its entry is
     // still armed, so inherit it rather than letting it be popped.
     if (unguard !== null) {
@@ -82,6 +96,7 @@ export default function useDismissOnBack(open: boolean, onDismiss: () => void) {
     const onPop = () => {
       if (!topmost()) return
       stack.pop()
+      notifyOverlayChange()
       // Another layer is still up, so the guard has to go back on for it. When
       // this was the last one the entry has served its purpose and is spent.
       if (stack.length > 0) arm()
@@ -106,6 +121,7 @@ export default function useDismissOnBack(open: boolean, onDismiss: () => void) {
       const i = stack.indexOf(id)
       if (i === -1) return
       stack.splice(i, 1)
+      notifyOverlayChange()
 
       // The last one out takes the guard entry with it — after a tick, so a
       // surface opening in its place can claim it instead.
