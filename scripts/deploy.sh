@@ -104,6 +104,7 @@ fi
 
 echo "==> Step 2/2: server image"
 docker compose down && docker compose up -d --build
+docker buildx prune -f
 
 echo
 echo "==> Running on http://localhost:9090"
