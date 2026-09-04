@@ -11,6 +11,7 @@ import BottomBar from './components/BottomBar'
 import UserMenu from './components/UserMenu'
 import ImportModal from './components/ImportModal'
 import ImportIntro, { hasSeenImportIntro, markImportIntroSeen } from './components/ImportIntro'
+import AccentTip, { hasDismissedAccentTip, markAccentTipDismissed } from './components/AccentTip'
 import OfflineBar from './components/OfflineBar'
 import PullToRefresh from './components/PullToRefresh'
 import SwipePager from './components/SwipePager'
@@ -166,6 +167,7 @@ export default function App() {
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const [showImportIntro, setShowImportIntro] = useState(false)
+  const [showAccentTip, setShowAccentTip] = useState(false)
   // Files handed to the app from outside: the Android share sheet, or a
   // desktop "Open with". Both land in the import modal the same way.
   const [incomingFiles, setIncomingFiles] = useState<File[] | null>(null)
@@ -340,6 +342,22 @@ export default function App() {
     // can reappear is a welcome that will.
     markImportIntroSeen(user.id)
     setShowImportIntro(true)
+  }, [user])
+
+  // The "you can change how this looks" nudge, for as long as the accent is
+  // still the shipped default. Re-checked on every load rather than marked
+  // seen up front like the import welcome above: "never touched" is a fact
+  // about the current accent, not a one-time event, so picking a colour any
+  // other way — including reverting to the default on purpose — is as good an
+  // answer as clicking Close.
+  useEffect(() => {
+    if (!user || accent !== ACCENTS[0].value || hasDismissedAccentTip(user.id)) return
+    setShowAccentTip(true)
+  }, [user, accent])
+
+  const dismissAccentTip = useCallback(() => {
+    if (user) markAccentTipDismissed(user.id)
+    setShowAccentTip(false)
   }, [user])
 
   // "Open with" on desktop. An installed PWA that declares file_handlers is
@@ -974,6 +992,12 @@ export default function App() {
       )}
       {showImportIntro && user && (
         <ImportIntro onClose={() => setShowImportIntro(false)} />
+      )}
+      {showAccentTip && user && !showImportIntro && (
+        <AccentTip
+          onClose={dismissAccentTip}
+          onTry={() => { dismissAccentTip(); openSection('settings', 'appearance') }}
+        />
       )}
       {showImport && (
         <ImportModal
