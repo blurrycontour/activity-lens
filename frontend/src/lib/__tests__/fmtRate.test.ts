@@ -3,11 +3,11 @@ import { fmtClock, fmtRate } from '../../data/workouts'
 
 describe('fmtRate', () => {
   it('reports pace where a pace was measured', () => {
-    expect(fmtRate({ avgPace: 330, avgSpeed: 10.9 })).toEqual({ value: '5:30', unit: '/km' })
+    expect(fmtRate({ type: 'Run', avgPace: 330, avgSpeed: 10.9 })).toEqual({ value: '5:30', unit: '/km' })
   })
 
-  it('falls back to speed when there is no pace', () => {
-    expect(fmtRate({ avgPace: 0, avgSpeed: 28.4 })).toEqual({ value: '28.4', unit: 'km/h' })
+  it('keeps cycling speed-based when pace is also available', () => {
+    expect(fmtRate({ type: 'Ride', avgPace: 127, avgSpeed: 28.4 })).toEqual({ value: '28.4', unit: 'km/h' })
   })
 
   /**
@@ -16,7 +16,7 @@ describe('fmtRate', () => {
    * "0.0 km/h" — a measurement that was never taken.
    */
   it('reports nothing when neither was measured', () => {
-    expect(fmtRate({ avgPace: 0, avgSpeed: 0 })).toEqual({ value: '—', unit: '' })
+    expect(fmtRate({ type: 'Strength', avgPace: 0, avgSpeed: 0 })).toEqual({ value: '—', unit: '' })
   })
 })
 

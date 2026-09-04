@@ -598,8 +598,9 @@ function bestsFor(latest: Workout, workouts: Workout[], minSameType: number): Pe
   if (latest.duration > 0 && peers.every(w => latest.duration > w.duration)) {
     out.push({ workout: latest, kind: 'duration', label: `Longest ${latest.type} time`, value: `${Math.floor(latest.duration / 3600)}h ${Math.round((latest.duration % 3600) / 60)}m` })
   }
+  const usesPace = latest.type === 'Run' || latest.type === 'Hike' || latest.type === 'Other'
   const paced = peers.filter(w => w.avgPace > 0)
-  if (latest.avgPace > 0 && paced.length >= minSameType && paced.every(w => latest.avgPace < w.avgPace)) {
+  if (usesPace && latest.avgPace > 0 && paced.length >= minSameType && paced.every(w => latest.avgPace < w.avgPace)) {
     const mins = Math.floor(latest.avgPace / 60)
     const secs = Math.round(latest.avgPace % 60)
     out.push({ workout: latest, kind: 'pace', label: `Fastest ${latest.type} pace`, value: `${mins}:${String(secs).padStart(2, '0')} /km` })
@@ -614,8 +615,8 @@ function bestsFor(latest: Workout, workouts: Workout[], minSameType: number): Pe
    * type, so the two can never both fire for one workout and claim the same
    * thing twice in different units.
    */
-  const bySpeed = peers.filter(w => w.avgSpeed > 0 && w.avgPace === 0)
-  if (latest.avgSpeed > 0 && latest.avgPace === 0 && bySpeed.length >= minSameType
+  const bySpeed = peers.filter(w => w.avgSpeed > 0)
+  if (!usesPace && latest.avgSpeed > 0 && bySpeed.length >= minSameType
       && bySpeed.every(w => latest.avgSpeed > w.avgSpeed)) {
     out.push({ workout: latest, kind: 'speed', label: `Fastest ${latest.type}`, value: `${latest.avgSpeed.toFixed(1)} km/h` })
   }

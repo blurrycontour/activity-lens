@@ -111,16 +111,16 @@ func bestsFor(w *Workout, all []Workout) []Record {
 	if w.Duration > 0 && bestBy(peers, func(p *Workout) bool { return w.Duration > p.Duration }) {
 		add(RecordDuration, "Longest "+sport+" time", fmtDurationShort(w.Duration))
 	}
-	// Pace and speed are the same claim in different units, so a workout that
-	// reports a pace is never also judged on speed. A ride and a swim report
-	// only speed, which is why speed is here at all.
-	if w.AvgPace > 0 {
+	// Pace and speed are the same claim in different units. Foot activities are
+	// naturally read as pace; rides and swims remain speed-based even though a
+	// ride also stores pace for its detail statistics.
+	if onFoot(w.Type) && w.AvgPace > 0 {
 		paced := filter(peers, func(p *Workout) bool { return p.AvgPace > 0 })
 		if len(paced) >= MinSameType && bestBy(paced, func(p *Workout) bool { return w.AvgPace < p.AvgPace }) {
 			add(RecordPace, "Fastest "+sport+" pace", fmtPace(w.AvgPace))
 		}
 	} else if w.AvgSpeed > 0 {
-		fast := filter(peers, func(p *Workout) bool { return p.AvgSpeed > 0 && p.AvgPace == 0 })
+		fast := filter(peers, func(p *Workout) bool { return p.AvgSpeed > 0 })
 		if len(fast) >= MinSameType && bestBy(fast, func(p *Workout) bool { return w.AvgSpeed > p.AvgSpeed }) {
 			add(RecordSpeed, "Fastest "+sport, fmt.Sprintf("%.1f km/h", w.AvgSpeed))
 		}

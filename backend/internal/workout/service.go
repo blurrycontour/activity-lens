@@ -560,7 +560,7 @@ func derivePaceSpeed(w *Workout) {
 	}
 	km := w.Distance / 1000
 	w.AvgSpeed = km / (float64(w.MovingTime) / 3600)
-	if onFoot(w.Type) {
+	if onFoot(w.Type) || w.Type == TypeRide {
 		w.AvgPace = float64(w.MovingTime) / km // seconds per km
 	}
 }
@@ -630,14 +630,12 @@ func stepsFromCadence(w *Workout) (int, bool) {
 // typed where metres were wanted — is caught rather than stored.
 const maxDistanceMeters = 1000 * 1000
 
-// onFoot reports whether pace and a step count mean anything for this activity.
+// onFoot reports whether cadence represents steps for this activity.
 //
 // TypeOther is included deliberately. It is not a sport someone picks — it is
 // where an import lands when the file named no sport and its free text named
 // none — and in practice that is a walk, a hike or a treadmill session from a
-// device that writes "Other" into the field. Rides are the case pace is
-// withheld from, and a ride is never misfiled here: a file that knows enough to
-// record cycling says so.
+// device that writes "Other" into the field.
 //
 // The cost of being wrong is a step estimate on a row or a paddle. That is the
 // same class of estimate the app already makes for a hike, and it is visible

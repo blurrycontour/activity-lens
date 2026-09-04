@@ -70,10 +70,10 @@ func TestRecordsFromEveryWorkoutOnTheLatestDay(t *testing.T) {
 // half the sports the app supports no record at all.
 func TestSpeedRecordForSportsWithoutPace(t *testing.T) {
 	ws := []Workout{
-		rec("new", "2026-08-24", TypeRide, func(w *Workout) { w.AvgSpeed = 31; w.Distance = 100 }),
-		rec("a", "2026-08-01", TypeRide, func(w *Workout) { w.AvgSpeed = 26; w.Distance = 100 }),
-		rec("b", "2026-07-01", TypeRide, func(w *Workout) { w.AvgSpeed = 28; w.Distance = 100 }),
-		rec("c", "2026-06-01", TypeRide, func(w *Workout) { w.AvgSpeed = 24; w.Distance = 100 }),
+		rec("new", "2026-08-24", TypeRide, func(w *Workout) { w.AvgSpeed = 31; w.AvgPace = 116; w.Distance = 100 }),
+		rec("a", "2026-08-01", TypeRide, func(w *Workout) { w.AvgSpeed = 26; w.AvgPace = 138; w.Distance = 100 }),
+		rec("b", "2026-07-01", TypeRide, func(w *Workout) { w.AvgSpeed = 28; w.AvgPace = 129; w.Distance = 100 }),
+		rec("c", "2026-06-01", TypeRide, func(w *Workout) { w.AvgSpeed = 24; w.AvgPace = 150; w.Distance = 100 }),
 	}
 	got := labels(RecentPersonalBests(ws, recordsNow))
 	if got["Fastest Ride"] != "31.0 km/h" {
