@@ -179,6 +179,8 @@ regenerated.
 | `java/.../IncomingFiles.java`, `java/.../IncomingFilesPlugin.java` | new | Copies a shared file out of its `content://` URI while the read grant is still valid, and hands the page a path. See below. |
 | `java/.../SessionNoticePlugin.java` | new | The ongoing notification for a training session: a progress bar, a chronometer that counts the rest down and the session up, and Finish / Discard actions that open the app on the session. Both actions route through the same `EXTRA_LINK` extra a tapped push uses, so a cold start and a running app are handled by one path. |
 | `AndroidManifest.xml` | `VIBRATE` | What makes `navigator.vibrate()` do anything inside the WebView. Without it the call is silently ignored — the function exists and still returns true — so a session that buzzed in the phone's browser did nothing whatsoever in the installed app. |
+| `AndroidManifest.xml` | six `activity-alias` entries on `MainActivity`, one per accent | The launcher icon follows the accent the web app applies, the same technique Google Calendar uses for the day-of-month. Only one alias is ever enabled; see `LauncherIcon.java`. |
+| `java/.../LauncherIcon.java` | new | Enables the alias matching the current accent and disables the other five, from `ShellPlugin.setAccent()`. |
 
 ## Distribution and updating
 
