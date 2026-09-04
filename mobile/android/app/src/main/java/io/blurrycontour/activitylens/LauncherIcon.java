@@ -51,7 +51,7 @@ final class LauncherIcon {
         ALIAS_BY_COLOR.put("#f3d124", "LauncherOrange");
         ALIAS_BY_COLOR.put("#a855f7", "LauncherViolet");
         ALIAS_BY_COLOR.put("#06b6d4", "LauncherCyan");
-        ALIAS_BY_COLOR.put("#f9386f", "LauncherRose");
+        ALIAS_BY_COLOR.put("#fb7185", "LauncherRose");
     }
 
     private LauncherIcon() {}

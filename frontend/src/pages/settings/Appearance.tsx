@@ -1,5 +1,6 @@
 import { Check, Monitor, Moon, Sun } from 'lucide-react'
 import { ACCENTS, applyAccent, type DisplayPrefs } from '../../lib/theme'
+import { isNative } from '../../lib/serverConfig'
 import { useLocalStorage } from '../../lib/useLocalStorage'
 import { DEFAULT_HR_ZONE_CHART, HR_ZONE_CHART_KEY, type HRZoneChart, CHART_PEAKS_WORKOUT_KEY, CHART_PEAKS_ANALYSIS_KEY, DEFAULT_CHART_PEAKS } from '../../lib/dashboardConfig'
 import SettingsCard from '../../components/SettingsCard'
@@ -128,6 +129,14 @@ export default function AppearanceSettings({ accent, onAccentChange, themeMode, 
             )
           })}
         </div>
+        {isNative() && (
+          // Picking a colour flips the launcher-icon activity-alias to match, and
+          // Android kills the running process when the alias hosting it is
+          // disabled — there is no way to swap it without that happening.
+          <p style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 10 }}>
+            Picking a colour closes the app for a moment to update the home-screen icon.
+          </p>
+        )}
       </SettingsCard>
 
       <SettingsCard title="Charts" anchorId="charts">

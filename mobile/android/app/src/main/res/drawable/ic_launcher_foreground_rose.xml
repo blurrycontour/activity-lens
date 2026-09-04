@@ -15,13 +15,13 @@
 
         <path
             android:pathData="M 121.65,390.35 A 190,190 0 1 1 390.35,390.35"
-            android:strokeColor="#f9386f"
+            android:strokeColor="#fb7185"
             android:strokeWidth="40"
             android:strokeLineCap="round" />
 
         <path
             android:pathData="M 380,256 H 319 L 287,360 L 224,151 L 193,256 H 130"
-            android:strokeColor="#f9386f"
+            android:strokeColor="#fb7185"
             android:strokeWidth="32"
             android:strokeLineCap="round"
             android:strokeLineJoin="round" />

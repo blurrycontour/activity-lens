@@ -22,7 +22,7 @@ const DARK = ['#e8eaed', '#9ca3af', '#6b7280']
 const LIGHT = ['#0f1117', '#374151', '#9ca3af']
 
 // The six accents a user can pick, from lib/theme.ts.
-const ACCENTS = ['#00e87a', '#3b82f6', '#f3d124', '#a855f7', '#06b6d4', '#f9386f']
+const ACCENTS = ['#00e87a', '#3b82f6', '#f3d124', '#a855f7', '#06b6d4', '#fb7185']
 
 describe('rampFrom', () => {
   it('returns the accent alone for a single series', () => {

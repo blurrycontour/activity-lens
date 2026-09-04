@@ -99,7 +99,7 @@ function applyTheme(mode: ThemeMode, prefs = readDisplayPrefs()) {
   applySystemBars(background, resolved === 'dark')
 }
 
-export default function App() {
+export default function App({ deferAccentTip = false }: { deferAccentTip?: boolean }) {
   const { user, loading, logout } = useAuth()
   /**
    * The session, readable from callbacks that must not be rebuilt when it
@@ -993,7 +993,7 @@ export default function App() {
       {showImportIntro && user && (
         <ImportIntro onClose={() => setShowImportIntro(false)} />
       )}
-      {showAccentTip && user && !showImportIntro && (
+      {showAccentTip && user && !showImportIntro && !deferAccentTip && (
         <AccentTip
           onClose={dismissAccentTip}
           onTry={() => { dismissAccentTip(); openSection('settings', 'appearance') }}

@@ -18,7 +18,7 @@ const VERSION_KEY = 'al_installed_version'
  * Native only: the web app has no APK version to move between, and updates by
  * being reloaded.
  */
-export default function UpdatedNotice() {
+export default function UpdatedNotice({ onVisibleChange }: { onVisibleChange?: (visible: boolean) => void }) {
   const [version, setVersion] = useState<string | null>(null)
 
   useEffect(() => {
@@ -32,6 +32,8 @@ export default function UpdatedNotice() {
     }).catch(() => {})
     return () => { cancelled = true }
   }, [])
+
+  useEffect(() => { onVisibleChange?.(version !== null) }, [version, onVisibleChange])
 
   if (!version) return null
   const close = () => setVersion(null)

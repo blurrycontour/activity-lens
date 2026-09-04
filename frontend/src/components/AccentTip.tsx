@@ -53,7 +53,7 @@ export default function AccentTip({ onTry, onClose }: AccentTipProps) {
         </p>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button className="btn btn-ghost" onClick={onClose}>Close</button>
-          <button className="btn btn-primary" onClick={onTry}>Try</button>
+          <button className="btn btn-primary" onClick={onTry}>Show me</button>
         </div>
       </div>
     </Modal>
