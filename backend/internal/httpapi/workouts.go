@@ -152,13 +152,7 @@ func (s *Server) handleGetWorkout(w http.ResponseWriter, r *http.Request) {
 	// The ceiling the HR zones on this page are a percentage of. Always the
 	// owner's, never the viewer's — see Workout.AthleteMaxHR. Best effort: a
 	// missing value leaves the page to fall back on its own.
-	if zones, merr := s.settings.AthleteHRZoneSettings(r.Context(), wk.UserID); merr == nil {
-		wk.AthleteMaxHR = zones.MaxHR
-		wk.AthleteRestingHR = zones.RestingHR
-		wk.AthleteHRZoneMethod = zones.Method
-	} else {
-		slog.Warn("could not read athlete max HR", "user_id", wk.UserID, "error", merr)
-	}
+	s.attachAthleteHRZones(r, wk)
 
 	writeJSON(w, http.StatusOK, workoutDetailResponse{
 		Workout: wk, IsOwner: isOwner, HasOriginal: wk.RawFilename != "",
@@ -283,6 +277,7 @@ func (s *Server) handleCreateWorkout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.linkEquipment(r, user.ID, wk, req.EquipmentIDs)
+	s.attachAthleteHRZones(r, wk)
 	slog.Info("workout created", "workout_id", wk.ID, "user_id", user.ID, "source", "manual")
 	s.afterWorkoutRecorded(r, user.ID)
 	writeJSON(w, http.StatusCreated, wk)
@@ -399,6 +394,7 @@ func (s *Server) handleImportWorkout(w http.ResponseWriter, r *http.Request) {
 	// original bytes are already archived.
 	if !created {
 		s.attachEquipment(r, user.ID, wk)
+		s.attachAthleteHRZones(r, wk)
 		slog.Info("workout import skipped (duplicate)", "workout_id", wk.ID, "user_id", user.ID, "filename", header.Filename)
 		writeJSON(w, http.StatusOK, importResponse{Workout: wk, Duplicate: true})
 		return
@@ -436,7 +432,18 @@ func (s *Server) handleImportWorkout(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	s.attachAthleteHRZones(r, wk)
 	writeJSON(w, http.StatusCreated, importResponse{Workout: wk})
+}
+
+func (s *Server) attachAthleteHRZones(r *http.Request, wk *workout.Workout) {
+	if zones, err := s.settings.AthleteHRZoneSettings(r.Context(), wk.UserID); err == nil {
+		wk.AthleteMaxHR = zones.MaxHR
+		wk.AthleteRestingHR = zones.RestingHR
+		wk.AthleteHRZoneMethod = zones.Method
+	} else {
+		slog.Warn("could not read athlete HR zones", "user_id", wk.UserID, "error", err)
+	}
 }
 
 // formBool reads a multipart form value as a boolean. Absent, "", "0" and
