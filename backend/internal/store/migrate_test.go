@@ -76,6 +76,30 @@ func TestUserPresenceBackfillUsesNewestObservation(t *testing.T) {
 	}
 }
 
+func TestRideAveragePaceBackfill(t *testing.T) {
+	ctx := context.Background()
+	db := openTemp(t)
+	if err := MigrateApp(ctx, db); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `
+		INSERT INTO workouts (id, user_id, name, type, start_time, duration, moving_time, distance, avg_pace, created_at, updated_at)
+		VALUES ('ride', 1, 'Ride', 'Ride', '2026-09-02T10:00:00Z', 3600, 3000, 20000, 0, '2026-09-02T10:00:00Z', '2026-09-02T10:00:00Z')
+	`); err != nil {
+		t.Fatal(err)
+	}
+	if err := MigrateApp(ctx, db); err != nil {
+		t.Fatal(err)
+	}
+	var pace float64
+	if err := db.QueryRowContext(ctx, `SELECT avg_pace FROM workouts WHERE id = 'ride'`).Scan(&pace); err != nil {
+		t.Fatal(err)
+	}
+	if pace != 150 {
+		t.Fatalf("avg_pace = %v, want 150 seconds/km", pace)
+	}
+}
+
 // Every migration file must be reachable from MigrateApp. A new .sql that is
 // written but never embedded silently does nothing, which is the kind of thing
 // that only surfaces weeks later.

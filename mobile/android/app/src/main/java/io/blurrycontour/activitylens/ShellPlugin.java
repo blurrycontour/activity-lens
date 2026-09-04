@@ -142,7 +142,8 @@ public class ShellPlugin extends Plugin {
      * Records the accent the user picked, for the parts of the app Java draws.
      *
      * See Accent: notifications are built without a WebView in sight, so the
-     * colour has to be somewhere that outlives the page.
+     * colour has to be somewhere that outlives the page. The launcher icon is
+     * the other one — see LauncherIcon.
      */
     @PluginMethod
     public void setAccent(PluginCall call) {
@@ -152,6 +153,7 @@ public class ShellPlugin extends Plugin {
             return;
         }
         Accent.set(getContext(), color);
+        LauncherIcon.apply(getContext(), color);
         call.resolve();
     }
 

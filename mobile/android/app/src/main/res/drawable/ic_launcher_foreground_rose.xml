@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Accent variant of ic_launcher_foreground.xml (Bold Rose); same geometry,
+     different stroke colour. See that file for the full rationale. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+
+    <group
+        android:pivotX="256"
+        android:pivotY="256"
+        android:scaleX="0.67"
+        android:scaleY="0.67">
+
+        <path
+            android:pathData="M 121.65,390.35 A 190,190 0 1 1 390.35,390.35"
+            android:strokeColor="#fb7185"
+            android:strokeWidth="40"
+            android:strokeLineCap="round" />
+
+        <path
+            android:pathData="M 380,256 H 319 L 287,360 L 224,151 L 193,256 H 130"
+            android:strokeColor="#fb7185"
+            android:strokeWidth="32"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+    </group>
+</vector>

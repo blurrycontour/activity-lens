@@ -284,7 +284,8 @@ export function fmtPace(secPerKm: number): string {
  * without distance, has no rate — and falling through to `avgSpeed.toFixed(1)`
  * stated "0.0 km/h", which reads as a measurement rather than as its absence.
  */
-export function fmtRate(w: Pick<Workout, 'avgPace' | 'avgSpeed'>): { value: string; unit: string } {
+export function fmtRate(w: Pick<Workout, 'type' | 'avgPace' | 'avgSpeed'>): { value: string; unit: string } {
+  if ((w.type === 'Ride' || w.type === 'Swim') && w.avgSpeed > 0) return { value: w.avgSpeed.toFixed(1), unit: 'km/h' }
   if (w.avgPace > 0) return { value: fmtPace(w.avgPace), unit: '/km' }
   if (w.avgSpeed > 0) return { value: w.avgSpeed.toFixed(1), unit: 'km/h' }
   return { value: '—', unit: '' }

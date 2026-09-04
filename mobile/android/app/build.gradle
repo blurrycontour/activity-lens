@@ -42,7 +42,7 @@ android {
         applicationId "io.blurrycontour.activitylens" + alAppIdSuffix
         // Two identical "Activity Lens" icons in the launcher would be worse
         // than one, so a suffixed build says what it is.
-        resValue "string", "app_name", alAppIdSuffix ? "Activity Lens Dev" : "Activity Lens"
+        resValue "string", "app_name", alAppIdSuffix ? "AL Dev" : "Activity Lens"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode alVersionCode

@@ -297,6 +297,7 @@ describe('recentPersonalBests', () => {
     const ride = (date: string, avgSpeed: number): Workout =>
       ({ ...workout(date, 20000, 'Ride'), id: date + avgSpeed, avgPace: 0, avgSpeed })
     const rides = [ride('2026-08-24', 31), ride('2026-08-10', 26), ride('2026-07-02', 28), ride('2026-06-01', 24)]
+      .map(w => ({ ...w, avgPace: 3600 / w.avgSpeed }))
     const best = recentPersonalBests(rides, 3, 14, NOW).find(b => b.kind === 'speed')
     expect(best?.label).toBe('Fastest Ride')
     expect(best?.value).toBe('31.0 km/h')

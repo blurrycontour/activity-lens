@@ -2,15 +2,19 @@
 import { setNativeAccent } from './native/shell'
 
 export const ACCENTS: { name: string; value: string; dim: string; glow: string }[] = [
-  { name: 'Electric Green', value: '#00e87a', dim: 'rgba(0,232,122,0.15)', glow: 'rgba(0,232,122,0.3)' },
-  { name: 'Electric Blue',  value: '#3b82f6', dim: 'rgba(59,130,246,0.15)', glow: 'rgba(59,130,246,0.3)' },
-  { name: 'Vivid Orange',   value: '#ff6b35', dim: 'rgba(255,107,53,0.15)', glow: 'rgba(255,107,53,0.3)' },
-  { name: 'Violet',         value: '#a855f7', dim: 'rgba(168,85,247,0.15)', glow: 'rgba(168,85,247,0.3)' },
-  { name: 'Cyan',           value: '#06b6d4', dim: 'rgba(6,182,212,0.15)',  glow: 'rgba(6,182,212,0.3)'  },
+  { name: 'Electric Green',   value: '#00e87a', dim: 'rgba(0,232,122,0.15)', glow: 'rgba(0,232,122,0.3)' },
+  { name: 'Cobalt Blue',      value: '#3b82f6', dim: 'rgba(59,130,246,0.15)', glow: 'rgba(59,130,246,0.3)' },
+  /* Not #f59e0b: that is the exact hex of --warning, and nothing within about
+     30° of true amber clears the palette test's 20 ΔE floor against it — an
+     amber accent and the warning colour would read as the same hue. Marigold
+     is the nearest gold that actually stays apart from it. */
+  { name: 'Blazing Marigold', value: '#f3d124', dim: 'rgba(243,209,36,0.15)', glow: 'rgba(243,209,36,0.3)' },
+  { name: 'Deep Violet',      value: '#a855f7', dim: 'rgba(168,85,247,0.15)', glow: 'rgba(168,85,247,0.3)' },
+  { name: 'Bright Cyan',      value: '#06b6d4', dim: 'rgba(6,182,212,0.15)',  glow: 'rgba(6,182,212,0.3)'  },
   /* Lifted off #f43f5e, which sat 14.7 ΔE from --danger — close enough that on
      Rose a delete button and the accent were the same colour, and the one thing
      the status palette exists to keep separate was not. */
-  { name: 'Rose',           value: '#fb7185', dim: 'rgba(251,113,133,0.15)', glow: 'rgba(251,113,133,0.3)' },
+  { name: 'Bold Rose',        value: '#fb7185', dim: 'rgba(251,113,133,0.15)', glow: 'rgba(251,113,133,0.3)' },
 ]
 
 export function applyAccent(value: string) {

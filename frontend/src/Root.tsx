@@ -22,6 +22,9 @@ import UpdatedNotice from './components/UpdatedNotice'
  */
 export default function Root() {
   const [needsServer, setNeedsServer] = useState(needsServerConfig)
+  // Whether the "app updated" notice is up, so the accent tip below it can
+  // wait its turn rather than stack on top.
+  const [justUpdated, setJustUpdated] = useState(false)
 
   // Started here rather than at boot because the reachability probe is a
   // request like any other, and there is nowhere to send it until a server is
@@ -47,8 +50,8 @@ export default function Root() {
             about who is signed in, and the login screen is exactly where
             someone stuck on an old build is most likely to be sitting. */}
         <UpdatePrompt />
-        <UpdatedNotice />
-        <App />
+        <UpdatedNotice onVisibleChange={setJustUpdated} />
+        <App deferAccentTip={justUpdated} />
       </RefreshProvider>
     </AuthProvider>
   )

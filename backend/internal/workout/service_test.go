@@ -268,7 +268,7 @@ func TestOtherIsTreatedAsAFootActivity(t *testing.T) {
 		{TypeRun, true, 5000},
 		{TypeHike, true, 6667},
 		{TypeOther, true, 6667},
-		{TypeRide, false, 0},
+		{TypeRide, true, 0},
 		{TypeSwim, false, 0},
 		{TypeStrength, false, 0},
 	} {

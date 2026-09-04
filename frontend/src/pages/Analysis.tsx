@@ -66,8 +66,11 @@ type Metric = 'pace' | 'hr' | 'maxHr' | 'distance' | 'duration' | 'elevation' | 
 const METRICS: { id: Metric; label: string; color: string; unit: string; format?: (v: number) => string }[] = [
   /* Not var(--primary). Every other entry here is a fixed hue, so the accent was
      the one series whose colour moved when the reader changed a setting — and it
-     moved *onto* its neighbours: Electric Blue is Distance, Violet is Duration,
-     Vivid Orange is Calories. Two selected metrics could come out the same. */
+     moved *onto* its neighbours: Cobalt Blue is Distance, Deep Violet is Duration,
+     the old Vivid Orange accent (before it was renamed Blazing Marigold) is
+     Calories — --accent kept its original orange rather than following the
+     rename, since it was never actually a picker option here. Two selected
+     metrics could come out the same. */
   { id: 'pace', label: 'Avg Pace', color: 'var(--run)', unit: '/km', format: fmtPace },
   { id: 'hr', label: 'Avg HR', color: 'var(--danger)', unit: 'bpm' },
   /* Derived from the average-HR red rather than given a hue of its own: the two
