@@ -1,8 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
     <!-- app_name is not here: build.gradle sets it per build type, so a local
-         debug build is "Activity Lens Dev" and can sit beside the real one. -->
-    <string name="title_activity_main">Activity Lens</string>
+         debug build is "AL Dev" and can sit beside the real one. -->
     <string name="package_name">io.blurrycontour.activitylens</string>
     <string name="custom_url_scheme">io.blurrycontour.activitylens</string>
     <!-- Shown in Android's per-app notification settings. -->
