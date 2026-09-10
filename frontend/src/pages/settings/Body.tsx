@@ -133,6 +133,25 @@ export default function BodySettings() {
               <span>kg</span>
             </div>
           </Field>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <Field label="Weight source">
+              <Dropdown
+                block
+                value={weightManual ? 'manual' : 'logged'}
+                options={[
+                  { value: 'logged', label: 'Latest logged weigh-in' },
+                  { value: 'manual', label: 'Enter manually' },
+                ]}
+                onChange={v => setWeightManual(v === 'manual')}
+                ariaLabel="Weight source"
+              />
+              <p className="field-hint">
+                {weightManual
+                  ? 'Manual weight is used for estimates only — it is not added to your weight chart.'
+                  : 'Body weight follows your latest weigh-in from Analysis → Vitals. Log a new one there to update it.'}
+              </p>
+            </Field>
+          </div>
           <Field label="Target weight" info="Optional. Drawn as a reference line on the weight chart under Analysis → Vitals.">
             <div className="input-unit">
               <input className="input" type="number" min="25" max="300" placeholder="—" value={targetWeightKg} onChange={e => setTargetWeightKg(e.target.value)} />
@@ -146,23 +165,6 @@ export default function BodySettings() {
             </div>
           </Field>
         </div>
-        <Field label="Weight source">
-          <Dropdown
-            block
-            value={weightManual ? 'manual' : 'logged'}
-            options={[
-              { value: 'logged', label: 'Latest logged weigh-in' },
-              { value: 'manual', label: 'Enter manually' },
-            ]}
-            onChange={v => setWeightManual(v === 'manual')}
-            ariaLabel="Weight source"
-          />
-          <p className="field-hint">
-            {weightManual
-              ? 'Manual weight is used for estimates only — it is not added to your weight chart.'
-              : 'Body weight follows your latest weigh-in from Analysis → Vitals. Log a new one there to update it.'}
-          </p>
-        </Field>
       </SettingsCard>
 
       <SettingsCard title="Calorie estimation" anchorId="calories">

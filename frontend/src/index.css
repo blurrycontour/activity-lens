@@ -5687,6 +5687,13 @@ body:has(.overlay) .dial { display: none; }
 }
 .vitals-row-del { margin-left: auto; color: var(--text-3); flex-shrink: 0; }
 .vitals-row-del:hover { color: var(--danger); }
+.vitals-show-more {
+  width: 100%;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 12px;
+}
 
 /* Add-measurement sheet. */
 .vital-add-title { font-size: 16px; font-weight: 700; margin-bottom: 14px; }
@@ -5738,6 +5745,18 @@ body:has(.overlay) .dial { display: none; }
 }
 @media (max-width: 420px) {
   .vital-bp-grid { grid-template-columns: 1fr; }
+}
+.vital-datetime { display: grid; grid-template-columns: 1.3fr 1fr; gap: 10px; }
+.vital-datetime .input { width: 100%; }
+/* The native calendar/clock glyph sits flush against the field's own edge
+   with no breathing room of its own; padding-right gives it the same margin
+   every other icon in the app gets. Chrome (desktop and Android's WebView)
+   is the only engine exposing this pseudo-element to style. */
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
+  margin-left: 6px;
+  padding: 2px;
+  opacity: 0.75;
 }
 /* The track-shading picker, pinned inside the map. Above Leaflet's own panes
    and controls, which top out around 1000. */
@@ -5905,10 +5924,18 @@ body:has(.overlay) .dial { display: none; }
 
   /* Anything pinned just above the bottom bar drops with it, so a hidden menu
      leaves no dead strip beneath the player. These sit at bottom:
-     var(--bottombar-h); the override sends them to the safe-area edge. */
-  body[data-bottombar-hidden] .playback-dock,
+     var(--bottombar-h); the override drops them to the true bottom, with the
+     safe-area inset added back as padding rather than as empty space below
+     them — the system's own gesture bar is transparent, so a gap there let the
+     page peek through underneath the player. Padding keeps the bar's own
+     background under the gesture handle instead. */
+  body[data-bottombar-hidden] .playback-dock {
+    bottom: 0;
+    padding-bottom: max(6px, var(--safe-bottom));
+  }
   body[data-bottombar-hidden] .plan-player {
-    bottom: var(--safe-bottom);
+    bottom: 0;
+    padding-bottom: var(--safe-bottom);
   }
 
   .bottom-bar-item {

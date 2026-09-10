@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine,
+  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine, ReferenceDot,
 } from 'recharts'
-import { Scale, HeartPulse, Trash2 } from 'lucide-react'
+import { Scale, HeartPulse, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
 import ChartCard, { EmptyPlot } from './ChartCard'
 import Segmented from './Segmented'
 import SpeedDial from './SpeedDial'
+import ConfirmDialog from './ConfirmDialog'
+import { PeakGlyph } from './PeakMarker'
 import VitalQuickAdd, { type VitalMode } from './VitalQuickAdd'
 import { AXIS_TICK, GRID_PROPS, DATA_LINE, TREND_LINE, HOVER_FILL } from '../lib/chartColors'
 import { api, type Vital } from '../lib/api'
@@ -60,6 +62,19 @@ function axisDomain(values: number[], mode: YMode): [number, number] {
 /** Groups readings by calendar day and averages each field, ascending by day. */
 const mean = (a: number[]) => a.reduce((s, v) => s + v, 0) / a.length
 
+/** The min and max of one field across rows carrying a `label` x-position. */
+function peaks(rows: Array<{ label: string }>, get: (r: { label: string }) => number | undefined):
+  { minKey: string; minVal: number; maxKey: string; maxVal: number } | null {
+  let min = Infinity, max = -Infinity, minKey = '', maxKey = ''
+  for (const row of rows) {
+    const v = get(row)
+    if (typeof v !== 'number' || Number.isNaN(v)) continue
+    if (v < min) { min = v; minKey = row.label }
+    if (v > max) { max = v; maxKey = row.label }
+  }
+  return min === Infinity ? null : { minKey, minVal: min, maxKey, maxVal: max }
+}
+
 /**
  * Body vitals: manually logged weight and blood pressure over time.
  *
@@ -75,7 +90,11 @@ export default function VitalsSection({ openAdd, onAddHandled }: {
   const { prefs } = usePreferences()
   const [vitals, setVitals] = useState<Vital[] | null>(null)
   const [adding, setAdding] = useState<VitalMode | null>(null)
-  const [yMode, setYMode] = useState<YMode>('fit')
+  const [weightYMode, setWeightYMode] = useState<YMode>('fit')
+  const [bpYMode, setBpYMode] = useState<YMode>('fit')
+  const [showAllRecent, setShowAllRecent] = useState(false)
+  const [deleting, setDeleting] = useState<Vital | null>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -103,6 +122,14 @@ export default function VitalsSection({ openAdd, onAddHandled }: {
     } catch {
       setVitals(prev) // put it back on failure
     }
+  }
+
+  async function confirmDelete() {
+    if (!deleting) return
+    setDeleteBusy(true)
+    await onDelete(deleting.id)
+    setDeleteBusy(false)
+    setDeleting(null)
   }
 
   const target = prefs?.targetWeightKg ?? 0
@@ -142,16 +169,21 @@ export default function VitalsSection({ openAdd, onAddHandled }: {
   }, [vitals])
 
   const weightDomain = useMemo(
-    () => axisDomain([...weightData.map(d => d.weight), ...(target > 0 ? [target] : [])], yMode),
-    [weightData, target, yMode],
+    () => axisDomain([...weightData.map(d => d.weight), ...(target > 0 ? [target] : [])], weightYMode),
+    [weightData, target, weightYMode],
   )
   const bpDomain = useMemo(
-    () => axisDomain(bpData.flatMap(d => [d.systolic, d.diastolic, d.pulse].filter((v): v is number => Number.isFinite(v))), yMode),
-    [bpData, yMode],
+    () => axisDomain(bpData.flatMap(d => [d.systolic, d.diastolic, d.pulse].filter((v): v is number => Number.isFinite(v))), bpYMode),
+    [bpData, bpYMode],
   )
 
-  const recent = (vitals ?? []).slice(0, 12)
-  const yToggle = <Segmented value={yMode} onChange={setYMode} options={[{ id: 'fit', label: 'Fit' }, { id: 'zero', label: 'Zero' }]} />
+  const weightPeaks = useMemo(() => peaks(weightData, r => (r as typeof weightData[number]).weight), [weightData])
+  const systolicPeaks = useMemo(() => peaks(bpData, r => (r as typeof bpData[number]).systolic), [bpData])
+  const diastolicPeaks = useMemo(() => peaks(bpData, r => (r as typeof bpData[number]).diastolic), [bpData])
+
+  const RECENT_PAGE = 10
+  const allRecent = vitals ?? []
+  const recent = showAllRecent ? allRecent : allRecent.slice(0, RECENT_PAGE)
 
   return (
     <>
@@ -161,7 +193,7 @@ export default function VitalsSection({ openAdd, onAddHandled }: {
           icon={<Scale size={14} color={WEIGHT_COLOR} />}
           description="Every weigh-in, with your target and a trend line."
           info="Days with more than one weigh-in are averaged. The dashed line is the direction of travel; the flat line is your target. Log a new weight with the + button."
-          actions={yToggle}
+          actions={<Segmented value={weightYMode} onChange={setWeightYMode} options={[{ id: 'fit', label: 'Fit' }, { id: 'zero', label: 'Zero' }]} />}
         >
           {weightData.length === 0 ? (
             <EmptyPlot height={220}>No weight logged yet</EmptyPlot>
@@ -190,6 +222,10 @@ export default function VitalsSection({ openAdd, onAddHandled }: {
                 )}
                 <Line type="monotone" dataKey="weight" stroke={WEIGHT_COLOR} {...DATA_LINE} dot={{ r: 3, fill: WEIGHT_COLOR, strokeWidth: 0 }} isAnimationActive={false} />
                 <Line type="monotone" dataKey="trend" stroke={WEIGHT_COLOR} {...TREND_LINE} connectNulls isAnimationActive={false} />
+                {weightPeaks && [
+                  <ReferenceDot key="w_mx" x={weightPeaks.maxKey} y={weightPeaks.maxVal} r={0} ifOverflow="extendDomain" shape={<PeakGlyph dir="up" color={WEIGHT_COLOR} />} />,
+                  <ReferenceDot key="w_mn" x={weightPeaks.minKey} y={weightPeaks.minVal} r={0} ifOverflow="extendDomain" shape={<PeakGlyph dir="down" color={WEIGHT_COLOR} />} />,
+                ]}
               </LineChart>
             </ResponsiveContainer>
           )}
@@ -200,7 +236,7 @@ export default function VitalsSection({ openAdd, onAddHandled }: {
           icon={<HeartPulse size={14} color={SYSTOLIC_COLOR} />}
           description="Systolic and diastolic, with pulse when recorded."
           info="Each point is a day's average. The two lines are the pressures in mmHg; pulse, when you entered it, shares the axis in bpm."
-          actions={yToggle}
+          actions={<Segmented value={bpYMode} onChange={setBpYMode} options={[{ id: 'fit', label: 'Fit' }, { id: 'zero', label: 'Zero' }]} />}
         >
           {bpData.length === 0 ? (
             <EmptyPlot height={220}>No blood pressure logged yet</EmptyPlot>
@@ -227,13 +263,21 @@ export default function VitalsSection({ openAdd, onAddHandled }: {
                 <Line type="monotone" dataKey="systolic" stroke={SYSTOLIC_COLOR} {...DATA_LINE} dot={{ r: 3, fill: SYSTOLIC_COLOR, strokeWidth: 0 }} isAnimationActive={false} />
                 <Line type="monotone" dataKey="diastolic" stroke={DIASTOLIC_COLOR} {...DATA_LINE} dot={{ r: 3, fill: DIASTOLIC_COLOR, strokeWidth: 0 }} isAnimationActive={false} />
                 <Line type="monotone" dataKey="pulse" stroke={PULSE_COLOR} {...DATA_LINE} dot={{ r: 2, fill: PULSE_COLOR, strokeWidth: 0 }} connectNulls isAnimationActive={false} />
+                {systolicPeaks && [
+                  <ReferenceDot key="s_mx" x={systolicPeaks.maxKey} y={systolicPeaks.maxVal} r={0} ifOverflow="extendDomain" shape={<PeakGlyph dir="up" color={SYSTOLIC_COLOR} />} />,
+                  <ReferenceDot key="s_mn" x={systolicPeaks.minKey} y={systolicPeaks.minVal} r={0} ifOverflow="extendDomain" shape={<PeakGlyph dir="down" color={SYSTOLIC_COLOR} />} />,
+                ]}
+                {diastolicPeaks && [
+                  <ReferenceDot key="d_mx" x={diastolicPeaks.maxKey} y={diastolicPeaks.maxVal} r={0} ifOverflow="extendDomain" shape={<PeakGlyph dir="up" color={DIASTOLIC_COLOR} />} />,
+                  <ReferenceDot key="d_mn" x={diastolicPeaks.minKey} y={diastolicPeaks.minVal} r={0} ifOverflow="extendDomain" shape={<PeakGlyph dir="down" color={DIASTOLIC_COLOR} />} />,
+                ]}
               </LineChart>
             </ResponsiveContainer>
           )}
         </ChartCard>
       </div>
 
-      {recent.length > 0 && (
+      {allRecent.length > 0 && (
         <ChartCard title="Recent readings" description="Your latest measurements.">
           <div className="vitals-list">
             {recent.map(v => (
@@ -246,12 +290,17 @@ export default function VitalsSection({ openAdd, onAddHandled }: {
                   )}
                 </span>
                 {v.note && <span className="vitals-row-note">{v.note}</span>}
-                <button className="btn-icon vitals-row-del" onClick={() => onDelete(v.id)} aria-label="Delete measurement" title="Delete">
+                <button className="btn-icon vitals-row-del" onClick={() => setDeleting(v)} aria-label="Delete measurement" title="Delete">
                   <Trash2 size={14} />
                 </button>
               </div>
             ))}
           </div>
+          {allRecent.length > RECENT_PAGE && (
+            <button className="btn vitals-show-more" onClick={() => setShowAllRecent(s => !s)}>
+              {showAllRecent ? <><ChevronUp size={14} /> Show less</> : <><ChevronDown size={14} /> Show all {allRecent.length}</>}
+            </button>
+          )}
         </ChartCard>
       )}
 
@@ -265,6 +314,19 @@ export default function VitalsSection({ openAdd, onAddHandled }: {
 
       {adding && (
         <VitalQuickAdd mode={adding} onClose={() => setAdding(null)} onAdded={onAdded} />
+      )}
+
+      {deleting && (
+        <ConfirmDialog
+          title="Delete this measurement?"
+          message="This reading will be removed permanently."
+          confirmLabel="Delete"
+          danger
+          busy={deleteBusy}
+          busyLabel="Deleting…"
+          onCancel={() => setDeleting(null)}
+          onConfirm={() => void confirmDelete()}
+        />
       )}
     </>
   )

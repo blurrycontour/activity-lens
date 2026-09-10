@@ -6,11 +6,14 @@ import { api, ApiError, type Vital } from '../lib/api'
 
 export type VitalMode = 'weight' | 'bp'
 
-/** A datetime-local string for the current local minute. */
-function nowLocal(): string {
+/** Today and the current local minute, as separate date and time-input strings. */
+function nowParts(): { date: string; time: string } {
   const d = new Date()
   const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  return {
+    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+    time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+  }
 }
 
 const TABS: [VitalMode, string, React.ReactNode][] = [
@@ -30,7 +33,9 @@ export default function VitalQuickAdd({ mode: initialMode, onClose, onAdded }: {
   onAdded?: (v: Vital) => void
 }) {
   const [mode, setMode] = useState<VitalMode>(initialMode ?? 'weight')
-  const [when, setWhen] = useState(nowLocal())
+  const [{ date: today, time: nowTime }] = useState(nowParts)
+  const [whenDate, setWhenDate] = useState(today)
+  const [whenTime, setWhenTime] = useState(nowTime)
   const [weight, setWeight] = useState('')
   const [systolic, setSystolic] = useState('')
   const [diastolic, setDiastolic] = useState('')
@@ -46,7 +51,7 @@ export default function VitalQuickAdd({ mode: initialMode, onClose, onAdded }: {
   async function onSave() {
     setBusy(true); setMsg(null)
     try {
-      const measuredAt = when ? new Date(when).toISOString() : undefined
+      const measuredAt = whenDate ? new Date(`${whenDate}T${whenTime || '00:00'}`).toISOString() : undefined
       const payload = mode === 'weight'
         ? { measuredAt, weightKg: Number(weight), note: note.trim() }
         : {
@@ -122,7 +127,10 @@ export default function VitalQuickAdd({ mode: initialMode, onClose, onAdded }: {
 
           <div className="vital-field">
             <label className="form-label">When</label>
-            <input className="input" style={{ width: '100%' }} type="datetime-local" max={nowLocal()} value={when} onChange={e => setWhen(e.target.value)} />
+            <div className="vital-datetime">
+              <input className="input" type="date" max={today} value={whenDate} onChange={e => setWhenDate(e.target.value)} />
+              <input className="input" type="time" value={whenTime} onChange={e => setWhenTime(e.target.value)} />
+            </div>
           </div>
 
           <div className="vital-field">

@@ -22,4 +22,3 @@ the launcher here is one of six activity-aliases swapped at runtime — static
 shortcuts would attach to a moving target. Each launches `MainActivity` with a
 private action that `ShellPlugin.getLaunchAction` hands to the web app, which
 opens `/analysis?logVital=weight|bp` (see `frontend/src/lib/native/shell.ts`).
-
