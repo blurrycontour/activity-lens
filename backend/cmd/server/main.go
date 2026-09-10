@@ -23,6 +23,7 @@ import (
 	"github.com/blurrycontour/activity-lens/backend/internal/sessions"
 	"github.com/blurrycontour/activity-lens/backend/internal/settings"
 	"github.com/blurrycontour/activity-lens/backend/internal/store"
+	"github.com/blurrycontour/activity-lens/backend/internal/vitals"
 	"github.com/blurrycontour/activity-lens/backend/internal/weather"
 	"github.com/blurrycontour/activity-lens/backend/internal/workout"
 
@@ -141,6 +142,8 @@ func run() error {
 	apiServer.UseAdminStats(httpapi.NewAdminStatsStore(db, cfg.DataDir))
 	// Training plans and the sessions run against them.
 	apiServer.UsePlans(plans.NewService(plans.NewSQLiteRepository(db)))
+	// Body vitals: manually logged weight and blood pressure.
+	apiServer.UseVitals(vitals.NewService(vitals.NewSQLiteRepository(db)))
 
 	handler, err := apiServer.Handler()
 	if err != nil {

@@ -12,6 +12,7 @@ import (
 	"github.com/blurrycontour/activity-lens/backend/internal/plans"
 	"github.com/blurrycontour/activity-lens/backend/internal/sessions"
 	"github.com/blurrycontour/activity-lens/backend/internal/settings"
+	"github.com/blurrycontour/activity-lens/backend/internal/vitals"
 	"github.com/blurrycontour/activity-lens/backend/internal/weather"
 	"github.com/blurrycontour/activity-lens/backend/internal/web"
 	"github.com/blurrycontour/activity-lens/backend/internal/workout"
@@ -29,6 +30,9 @@ type Server struct {
 	oidc      *oidc.Handler
 	workout   *workout.Service
 	equipment *equipment.Service
+	// vitals is body vitals (weight, blood pressure), or nil when this server
+	// was built without them — see UseVitals.
+	vitals *vitals.Service
 	// plans is training plans, or nil when this server was built without
 	// them — see UsePlans.
 	plans      *plans.Service
@@ -127,6 +131,11 @@ func (s *Server) UseAdminStats(store *AdminStatsStore) { s.adminStats = store }
 // existing test's Server valid — the routes then answer 404, which is what a
 // client that asks for a feature this server does not have should hear.
 func (s *Server) UsePlans(svc *plans.Service) { s.plans = svc }
+
+// UseVitals wires body vitals. Optional for the same reason UsePlans is:
+// leaving it unset keeps every existing test's Server valid and the routes then
+// answer 404.
+func (s *Server) UseVitals(svc *vitals.Service) { s.vitals = svc }
 
 // Handler builds the top-level http.Handler: API routes plus the SPA.
 func (s *Server) Handler() (http.Handler, error) {
@@ -272,6 +281,11 @@ func (s *Server) apiRoutes() http.Handler {
 	mux.Handle("GET /api/equipment/{id}", s.authed(s.handleGetEquipment))
 	mux.Handle("PATCH /api/equipment/{id}", s.authedCSRF(s.handlePatchEquipment))
 	mux.Handle("DELETE /api/equipment/{id}", s.authedCSRF(s.handleDeleteEquipment))
+
+	// --- Body vitals (authenticated) ---
+	mux.Handle("GET /api/vitals", s.authed(s.handleListVitals))
+	mux.Handle("POST /api/vitals", s.authedCSRF(s.handleCreateVital))
+	mux.Handle("DELETE /api/vitals/{id}", s.authedCSRF(s.handleDeleteVital))
 	// --- Training plans (authenticated) ---
 	mux.Handle("GET /api/plans", s.authed(s.withPlans(s.handleListPlans)))
 	mux.Handle("POST /api/plans", s.authedCSRF(s.withPlans(s.handleCreatePlan)))

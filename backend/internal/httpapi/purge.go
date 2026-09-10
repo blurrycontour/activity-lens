@@ -97,6 +97,11 @@ func (s *Server) purgeUserData(ctx context.Context, user auth.User) {
 			slog.Error("purge training plans", "user_id", user.ID, "error", err)
 		}
 	}
+	if s.vitals != nil {
+		if err := s.vitals.PurgeUser(ctx, user.ID); err != nil {
+			slog.Error("purge vitals", "user_id", user.ID, "error", err)
+		}
+	}
 	if err := s.notify.PurgeUser(ctx, user.ID); err != nil {
 		fail("notifications", err)
 	}
