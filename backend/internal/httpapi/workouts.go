@@ -1083,6 +1083,10 @@ func (s *Server) handleRestoreWorkout(w http.ResponseWriter, r *http.Request) {
 // having been thrown away. Nothing had touched it; the response simply did not
 // mention it.
 func (s *Server) writeOwnedWorkout(w http.ResponseWriter, r *http.Request, wk *workout.Workout) {
+	// The page replaces what it is showing with this response, so the athlete's
+	// HR-zone ceiling and method must ride along or an edit (e.g. distance)
+	// would blank them and the zones would silently fall back to % max.
+	s.attachAthleteHRZones(r, wk)
 	shared := wk.Visibility == workout.VisibilityPublic
 	// One query for both answers: the client splices this back into its cached
 	// list, so the share count has to come along or an unrelated edit would

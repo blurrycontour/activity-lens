@@ -115,6 +115,26 @@ function pinElement(html: string, cls = 'route-pin'): HTMLElement {
   return el
 }
 
+/** Great-circle distance between two lat/lng points, in metres. */
+function haversineMeters(a: [number, number], b: [number, number]): number {
+  const R = 6371000
+  const dLat = ((b[0] - a[0]) * Math.PI) / 180
+  const dLng = ((b[1] - a[1]) * Math.PI) / 180
+  const lat1 = (a[0] * Math.PI) / 180
+  const lat2 = (b[0] * Math.PI) / 180
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)))
+}
+
+/** A small numbered dot for a per-kilometre marker, coloured by the metric. */
+function kmMarkerElement(label: string, color: string): HTMLElement {
+  const el = document.createElement('div')
+  el.className = 'route-km-marker'
+  el.style.background = color
+  el.textContent = label
+  return el
+}
+
 const START_SVG = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-label="Start"><circle cx="12" cy="12" r="7" fill="var(--success)" stroke="#fff" stroke-width="2.5"/></svg>'
 const FINISH_SVG = `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-label="Finish"><path d="${FINISH_POLE_D}" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><path d="${FINISH_FLAG_D}" fill="var(--danger)" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>`
 
@@ -384,6 +404,61 @@ export default function RouteMap({
   }, [route, shading, hrTimeline, paceTimeline, elevTimeline, cadenceTimeline, duration, color, maxHR, restingHR, hrZoneMethod])
 
   /**
+   * Per-kilometre markers along the track, each coloured by the metric value at
+   * the nearest data point — so under HR-zone shading the 1 km dot is the same
+   * green the track is there, the 2 km dot the same red, and so on.
+   *
+   * The interval widens on long activities so a century ride is not buried
+   * under a hundred dots: the label is always the true kilometre, only some are
+   * drawn. Distance is measured along the geometry rather than assumed uniform
+   * per sample, so a marker lands where that kilometre actually is.
+   */
+  const kmMarkers = useMemo(() => {
+    if (route.length < 2 || distance < 1000) return []
+    const cum = new Array<number>(route.length)
+    cum[0] = 0
+    for (let i = 1; i < route.length; i++) cum[i] = cum[i - 1] + haversineMeters(route[i - 1], route[i])
+    const total = cum[route.length - 1] || distance
+    // At most ~40 dots: 1 km up to 40 km, 2 km to 80 km, and so on.
+    const stepKm = Math.max(1, Math.ceil(total / 1000 / 40))
+
+    const series: { samples: Array<{ t: number }>; values: number[] } | null =
+      shading === 'accent' ? null : {
+        hr: { samples: hrTimeline, values: hrTimeline.map(p => p.hr) },
+        pace: { samples: paceTimeline, values: paceTimeline.map(p => p.pace) },
+        elevation: { samples: elevTimeline, values: elevTimeline.map(p => p.elev) },
+        cadence: { samples: cadenceTimeline, values: cadenceTimeline.map(p => p.cad) },
+      }[shading]
+    const [min, max] = series && series.values.length ? range(series.values) : [0, 1]
+    const span = Math.max(max - min, 1)
+    const colorAt = (index: number): string => {
+      if (!series || series.samples.length === 0) return color
+      const t = timeAt(index)
+      let best = 0
+      let bestD = Infinity
+      for (let j = 0; j < series.samples.length; j++) {
+        const d = Math.abs(series.samples[j].t - t)
+        if (d < bestD) { bestD = d; best = j }
+      }
+      const v = series.values[best]
+      if (shading === 'hr') return hrZoneColor(v, maxHR, restingHR, hrZoneMethod)
+      const ratio = (v - min) / span
+      const warmth = shading === 'pace' ? 1 - ratio : ratio
+      return `hsl(${210 - warmth * 190} 78% 52%)`
+    }
+
+    const markers: Array<{ label: string; position: [number, number]; color: string }> = []
+    let idx = 1
+    for (let km = stepKm; km * 1000 < total; km += stepKm) {
+      const target = km * 1000
+      while (idx < route.length - 1 && cum[idx] < target) idx++
+      markers.push({ label: String(km), position: route[idx], color: colorAt(idx) })
+    }
+    return markers
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route, distance, shading, hrTimeline, paceTimeline, elevTimeline, cadenceTimeline, duration, color, maxHR, restingHR, hrZoneMethod])
+
+  /**
    * What the colours on the track mean, or null when they mean nothing.
    *
    * Only for the non-default shadings. On "Default" the track is one accent
@@ -607,6 +682,20 @@ export default function RouteMap({
     markerRef.current = marker
     return () => { start.remove(); finish.remove(); marker.remove(); markerRef.current = null }
   }, [route, markerElement])
+
+  // Per-kilometre markers, recreated whenever the interval or the shading
+  // colours change. Kept separate from the start/finish/playback markers so a
+  // shading switch does not rebuild those.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    const markers = kmMarkers.map(m =>
+      new maplibregl.Marker({ element: kmMarkerElement(m.label, m.color), anchor: 'center' })
+        .setLngLat([m.position[1], m.position[0]])
+        .addTo(map),
+    )
+    return () => { markers.forEach(mk => mk.remove()) }
+  }, [kmMarkers])
 
   // The current route, for the handlers below that are bound once — the reset
   // control and the per-frame playback subscriber. Both are built when the map

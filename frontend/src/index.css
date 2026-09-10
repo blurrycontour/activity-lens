@@ -5637,6 +5637,26 @@ body:has(.overlay) .dial { display: none; }
 .workout-row-pace small { font-family: var(--font-mono); font-size: 10px; color: var(--text-3); }
 .route-pin { background: none !important; border: none !important; display: grid; place-items: center; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5)); }
 .route-avatar { background: none !important; border: none !important; }
+/* Per-kilometre dots: a small colour-of-the-metric disc with the km number.
+   The white ring keeps it legible over both the track and the basemap. */
+.route-km-marker {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border-radius: 9px;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.55);
+  cursor: default;
+}
 /* The track-shading picker, pinned inside the map. Above Leaflet's own panes
    and controls, which top out around 1000. */
 .map-shade-picker {
@@ -5705,8 +5725,10 @@ body:has(.overlay) .dial { display: none; }
      Capped in pixels as well as in vh so a tall phone does not give the map the
      whole screen and push everything else below the fold. */
   /* Stacked, both are a row of their own rather than a column matching a
-     summary beside them, so both take a share of the screen instead. */
-  .detail-map-card,
+     summary beside them, so both take a share of the screen instead. The map
+     gets ~30% more than the other heroes — it is the thing you came to look at
+     — but stays capped in vh so it never grows past the viewport. */
+  .detail-map-card { min-height: min(73vh, 546px); }
   .detail-hero-card { min-height: min(56vh, 420px); }
   /* Except the standing panel, which is words rather than a drawing. A map or
      an elevation profile is worth a share of the screen because it is the
@@ -5789,6 +5811,14 @@ body:has(.overlay) .dial { display: none; }
     align-items: center;
     justify-content: space-around;
     padding: 0 8px;
+    transition: transform 0.25s ease;
+  }
+
+  /* Standard mobile pattern: scrolling down tucks the bar away to hand the
+     screenful to the content; scrolling up (or reaching the top) brings it
+     back. The attribute is toggled by useHideOnScroll. */
+  body[data-bottombar-hidden] .bottom-bar {
+    transform: translateY(100%);
   }
 
   .bottom-bar-item {
