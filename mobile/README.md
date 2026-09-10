@@ -15,7 +15,7 @@ scripts/build-apk.sh release  # release build
 
 ## Home-screen shortcuts
 
-Long-pressing the app icon offers **Log weight** and **Blood pressure**, which
+Long-pressing the app icon offers **Weight** and **Blood pressure**, which
 jump straight to the body-vitals quick-add. They are *dynamic* shortcuts
 registered in code (`VitalShortcuts.java`), not static `res/xml` ones, because
 the launcher here is one of six activity-aliases swapped at runtime — static

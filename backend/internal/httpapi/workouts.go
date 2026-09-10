@@ -19,7 +19,6 @@ import (
 	"github.com/blurrycontour/activity-lens/backend/internal/ingest"
 	"github.com/blurrycontour/activity-lens/backend/internal/notify"
 	"github.com/blurrycontour/activity-lens/backend/internal/settings"
-	"github.com/blurrycontour/activity-lens/backend/internal/vitals"
 	"github.com/blurrycontour/activity-lens/backend/internal/workout"
 
 	"github.com/blurrycontour/go-authkit/httpmw"
@@ -810,15 +809,18 @@ type savePrefsRequest struct {
 	CalorieMethod  string  `json:"calorieMethod"`
 	BodyWeightKg   float64 `json:"bodyWeightKg"`
 	TargetWeightKg float64 `json:"targetWeightKg"`
-	Sex            string  `json:"sex"`
-	BirthYear      int     `json:"birthYear"`
-	HeightCm       int     `json:"heightCm"`
-	MaxHR          int     `json:"maxHr"`
-	RestingHR      int     `json:"restingHr"`
-	HRZoneMethod   string  `json:"hrZoneMethod"`
-	ThresholdPace  string  `json:"thresholdPace"`
-	FTP            int     `json:"ftp"`
-	StepLengthCm   int     `json:"stepLengthCm"`
+	// Whether BodyWeightKg is hand-entered (kept off the chart) or mirrors the
+	// latest logged weigh-in. See settings.UserPrefs.BodyWeightManual.
+	BodyWeightManual bool   `json:"bodyWeightManual"`
+	Sex              string `json:"sex"`
+	BirthYear        int    `json:"birthYear"`
+	HeightCm         int    `json:"heightCm"`
+	MaxHR            int    `json:"maxHr"`
+	RestingHR        int    `json:"restingHr"`
+	HRZoneMethod     string `json:"hrZoneMethod"`
+	ThresholdPace    string `json:"thresholdPace"`
+	FTP              int    `json:"ftp"`
+	StepLengthCm     int    `json:"stepLengthCm"`
 
 	// settings.Goal rather than a struct of its own, so there is one definition
 	// of a goal's wire shape instead of two that have to be kept in step.
@@ -872,12 +874,15 @@ func (s *Server) handleSavePreferences(w http.ResponseWriter, r *http.Request) {
 	if weight <= 0 {
 		weight = 70
 	}
-	// The most recent weight logged before this save, so a changed value can be
-	// recorded as a dated vitals entry — profile weight and the weight log are
-	// one and the same (see UseVitals / syncBodyWeightToLatest).
-	prevWeight := 0.0
-	if before, err := s.settings.UserPreferences(r.Context(), user.ID); err == nil {
-		prevWeight = before.BodyWeightKg
+	// In "logged" mode the profile weight is not hand-entered at all: it mirrors
+	// the latest weigh-in from the vitals log, so the submitted number is
+	// ignored in favour of that. In "manual" mode the submitted number stands
+	// and is never written to the chart. Either way nothing here logs a
+	// weigh-in — that is the quick-add's job now.
+	if !req.BodyWeightManual && s.vitals != nil {
+		if latest, err := s.vitals.LatestWeight(r.Context(), user.ID); err == nil && latest != nil {
+			weight = *latest
+		}
 	}
 	targetWeight := req.TargetWeightKg
 	if targetWeight < 0 || targetWeight > 500 {
@@ -922,18 +927,19 @@ func (s *Server) handleSavePreferences(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	prefs := settings.UserPrefs{
-		CalorieMethod:  method,
-		BodyWeightKg:   weight,
-		TargetWeightKg: targetWeight,
-		Sex:            sex,
-		BirthYear:      birthYear,
-		HeightCm:       clampNonNeg(req.HeightCm),
-		MaxHR:          clampNonNeg(req.MaxHR),
-		RestingHR:      clampNonNeg(req.RestingHR),
-		HRZoneMethod:   hrZoneMethod,
-		ThresholdPace:  strings.TrimSpace(req.ThresholdPace),
-		FTP:            clampNonNeg(req.FTP),
-		StepLengthCm:   clampStepLength(req.StepLengthCm),
+		CalorieMethod:    method,
+		BodyWeightKg:     weight,
+		TargetWeightKg:   targetWeight,
+		BodyWeightManual: req.BodyWeightManual,
+		Sex:              sex,
+		BirthYear:        birthYear,
+		HeightCm:         clampNonNeg(req.HeightCm),
+		MaxHR:            clampNonNeg(req.MaxHR),
+		RestingHR:        clampNonNeg(req.RestingHR),
+		HRZoneMethod:     hrZoneMethod,
+		ThresholdPace:    strings.TrimSpace(req.ThresholdPace),
+		FTP:              clampNonNeg(req.FTP),
+		StepLengthCm:     clampStepLength(req.StepLengthCm),
 
 		Goals:          goals,
 		WeatherEnabled: req.WeatherEnabled == nil || *req.WeatherEnabled,
@@ -959,15 +965,6 @@ func (s *Server) handleSavePreferences(w http.ResponseWriter, r *http.Request) {
 	if err := s.settings.SaveUserPreferences(r.Context(), user.ID, prefs); err != nil {
 		writeError(w, http.StatusInternalServerError, "could not save preferences")
 		return
-	}
-	// A changed profile weight is a new weigh-in: record it in the vitals log so
-	// the chart and the profile never disagree. Best-effort; the preferences are
-	// already saved.
-	if s.vitals != nil && weight > 0 && weight != prevWeight {
-		kg := weight
-		if _, err := s.vitals.Create(r.Context(), user.ID, vitals.Input{WeightKg: &kg}); err != nil {
-			slog.Warn("could not log weight from preferences", "user_id", user.ID, "error", err)
-		}
 	}
 	writeJSON(w, http.StatusOK, prefs)
 }

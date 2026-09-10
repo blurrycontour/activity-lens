@@ -150,6 +150,9 @@ var rideAvgPaceSchema string
 //go:embed migrations/0046_body_vitals.sql
 var bodyVitalsSchema string
 
+//go:embed migrations/0047_body_weight_manual.sql
+var bodyWeightManualSchema string
+
 // maxOpenConns is how many connections the pool will open.
 //
 // It was 1, which made every request in the process queue behind every other
@@ -270,6 +273,7 @@ func MigrateApp(ctx context.Context, db *sql.DB) error {
 		{"plan exercise distance", planExerciseDistanceSchema},
 		{"ride average pace", rideAvgPaceSchema},
 		{"body vitals", bodyVitalsSchema},
+		{"body weight manual", bodyWeightManualSchema},
 	} {
 		if err := applyAlters(ctx, db, m.schema); err != nil {
 			return fmt.Errorf("apply %s schema: %w", m.name, err)

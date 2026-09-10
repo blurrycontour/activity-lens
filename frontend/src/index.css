@@ -4291,6 +4291,7 @@ body:has(.overlay) .dial { display: none; }
   left: 0;
   right: 0;
   bottom: var(--bottombar-h);
+  transition: bottom 0.25s ease;
   padding: 6px max(10px, var(--safe-left)) 6px max(10px, var(--safe-right));
   /* A drawn edge, not a shadow. A shadow separates this from the page in light
      mode and is invisible in dark, where the page behind it is nearly black
@@ -5645,7 +5646,7 @@ body:has(.overlay) .dial { display: none; }
   padding: 0 4px;
   box-sizing: border-box;
   border-radius: 9px;
-  border: 2px solid #fff;
+  border: 1px solid #fff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
   color: #fff;
   font-size: 10px;
@@ -5686,6 +5687,58 @@ body:has(.overlay) .dial { display: none; }
 }
 .vitals-row-del { margin-left: auto; color: var(--text-3); flex-shrink: 0; }
 .vitals-row-del:hover { color: var(--danger); }
+
+/* Add-measurement sheet. */
+.vital-add-title { font-size: 16px; font-weight: 700; margin-bottom: 14px; }
+.vital-add-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-3);
+  border-radius: 10px;
+  padding: 4px;
+  margin-bottom: 18px;
+}
+.vital-add-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.vital-add-tab.active {
+  background: var(--bg-2);
+  color: var(--text);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+.vital-add-body { display: flex; flex-direction: column; gap: 14px; }
+.vital-bp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.vital-field .input-unit { width: 100%; }
+.form-label-opt {
+  font-family: var(--font-sans);
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-4, var(--text-3));
+  font-size: 10px;
+  opacity: 0.75;
+}
+.vital-add-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+@media (max-width: 420px) {
+  .vital-bp-grid { grid-template-columns: 1fr; }
+}
 /* The track-shading picker, pinned inside the map. Above Leaflet's own panes
    and controls, which top out around 1000. */
 .map-shade-picker {
@@ -5848,6 +5901,14 @@ body:has(.overlay) .dial { display: none; }
      back. The attribute is toggled by useHideOnScroll. */
   body[data-bottombar-hidden] .bottom-bar {
     transform: translateY(100%);
+  }
+
+  /* Anything pinned just above the bottom bar drops with it, so a hidden menu
+     leaves no dead strip beneath the player. These sit at bottom:
+     var(--bottombar-h); the override sends them to the safe-area edge. */
+  body[data-bottombar-hidden] .playback-dock,
+  body[data-bottombar-hidden] .plan-player {
+    bottom: var(--safe-bottom);
   }
 
   .bottom-bar-item {
@@ -8003,6 +8064,7 @@ body:has(.overlay) .dial { display: none; }
   left: 0;
   right: 0;
   bottom: var(--bottombar-h);
+  transition: bottom 0.25s ease;
   z-index: var(--z-chrome);
   background: var(--bg-2);
   border-top: 1px solid var(--border);

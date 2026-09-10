@@ -189,6 +189,12 @@ export interface UserPreferences {
   bodyWeightKg: number
   /** Desired body weight, drawn as a reference line on the vitals chart. 0 = unset. */
   targetWeightKg: number
+  /**
+   * Whether the profile weight is hand-entered (used for estimates but kept off
+   * the weight chart) or mirrors the latest logged weigh-in. Absent on records
+   * saved before the toggle existed, which read as false (mirror the log).
+   */
+  bodyWeightManual?: boolean
   sex: 'male' | 'female' | ''
   birthYear: number
   heightCm: number

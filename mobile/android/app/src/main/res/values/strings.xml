@@ -14,8 +14,8 @@
     <string name="session_action_finish">Finish</string>
     <string name="session_action_discard">Discard</string>
     <!-- Home-screen (long-press) app shortcuts for logging a body vital. -->
-    <string name="shortcut_weight_short">Log weight</string>
-    <string name="shortcut_weight_long">Log body weight</string>
+    <string name="shortcut_weight_short">Weight</string>
+    <string name="shortcut_weight_long">Weight</string>
     <string name="shortcut_bp_short">Blood pressure</string>
-    <string name="shortcut_bp_long">Log blood pressure</string>
+    <string name="shortcut_bp_long">Blood pressure</string>
 </resources>

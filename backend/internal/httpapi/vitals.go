@@ -104,12 +104,17 @@ func (s *Server) handleDeleteVital(w http.ResponseWriter, r *http.Request) {
 // on. Best-effort: a failure here leaves the last-known weight in place rather
 // than failing the measurement the user just saved.
 func (s *Server) syncBodyWeightToLatest(r *http.Request, userID int64) {
-	latest, err := s.vitals.LatestWeight(r.Context(), userID)
-	if err != nil || latest == nil {
+	prefs, err := s.settings.UserPreferences(r.Context(), userID)
+	if err != nil {
 		return
 	}
-	prefs, err := s.settings.UserPreferences(r.Context(), userID)
-	if err != nil || prefs.BodyWeightKg == *latest {
+	// A hand-entered profile weight is deliberately independent of the log, so
+	// a new weigh-in must not overwrite it.
+	if prefs.BodyWeightManual {
+		return
+	}
+	latest, err := s.vitals.LatestWeight(r.Context(), userID)
+	if err != nil || latest == nil || prefs.BodyWeightKg == *latest {
 		return
 	}
 	prefs.BodyWeightKg = *latest

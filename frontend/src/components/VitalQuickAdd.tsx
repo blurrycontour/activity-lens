@@ -1,16 +1,28 @@
 import { useState } from 'react'
+import { Scale, HeartPulse } from 'lucide-react'
 import Modal from './Modal'
-import Segmented from './Segmented'
-import Field from './Field'
 import StatusMsg, { type Msg } from './StatusMsg'
 import { api, ApiError, type Vital } from '../lib/api'
 
 export type VitalMode = 'weight' | 'bp'
 
+/** A datetime-local string for the current local minute. */
+function nowLocal(): string {
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+const TABS: [VitalMode, string, React.ReactNode][] = [
+  ['weight', 'Weight', <Scale size={14} key="w" />],
+  ['bp', 'Blood pressure', <HeartPulse size={14} key="b" />],
+]
+
 /**
- * A fast "log a measurement" sheet, opened from the Vitals section or straight
- * from an Android home-screen shortcut. One dialog serves both readings — a
- * toggle picks which — so there is a single place to add anything.
+ * A fast "log a measurement" sheet, opened from the Vitals section, the
+ * dashboard speed-dial, or an Android home-screen shortcut. One dialog serves
+ * both readings — a tab picks which — and the time defaults to now but can be
+ * moved back for a reading taken earlier.
  */
 export default function VitalQuickAdd({ mode: initialMode, onClose, onAdded }: {
   mode?: VitalMode
@@ -18,6 +30,7 @@ export default function VitalQuickAdd({ mode: initialMode, onClose, onAdded }: {
   onAdded?: (v: Vital) => void
 }) {
   const [mode, setMode] = useState<VitalMode>(initialMode ?? 'weight')
+  const [when, setWhen] = useState(nowLocal())
   const [weight, setWeight] = useState('')
   const [systolic, setSystolic] = useState('')
   const [diastolic, setDiastolic] = useState('')
@@ -33,9 +46,11 @@ export default function VitalQuickAdd({ mode: initialMode, onClose, onAdded }: {
   async function onSave() {
     setBusy(true); setMsg(null)
     try {
+      const measuredAt = when ? new Date(when).toISOString() : undefined
       const payload = mode === 'weight'
-        ? { weightKg: Number(weight), note: note.trim() }
+        ? { measuredAt, weightKg: Number(weight), note: note.trim() }
         : {
+            measuredAt,
             systolic: Number(systolic),
             diastolic: Number(diastolic),
             pulse: Number(pulse) || undefined,
@@ -53,67 +68,72 @@ export default function VitalQuickAdd({ mode: initialMode, onClose, onAdded }: {
 
   return (
     <Modal onClose={busy ? undefined : onClose} dismissable={!busy} label="Add measurement">
-      <div className="modal-box" style={{ maxWidth: 360 }}>
-        <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 14 }}>Add measurement</h3>
+      <div className="modal-box vital-add" style={{ maxWidth: 380 }}>
+        <h3 className="vital-add-title">Add measurement</h3>
 
-        <div style={{ marginBottom: 16 }}>
-          <Segmented
-            value={mode}
-            onChange={setMode}
-            options={[
-              { id: 'weight', label: 'Weight' },
-              { id: 'bp', label: 'Blood pressure' },
-            ]}
-          />
+        <div className="vital-add-tabs">
+          {TABS.map(([t, label, icon]) => (
+            <button
+              key={t}
+              type="button"
+              className={`vital-add-tab${mode === t ? ' active' : ''}`}
+              onClick={() => setMode(t)}
+            >
+              {icon}
+              {label}
+            </button>
+          ))}
         </div>
 
-        {mode === 'weight' ? (
-          <Field label="Weight">
-            <div className="input-unit">
-              <input
-                className="input"
-                type="number"
-                inputMode="decimal"
-                min="1"
-                max="500"
-                autoFocus
-                placeholder="70"
-                value={weight}
-                onChange={e => setWeight(e.target.value)}
-              />
-              <span>kg</span>
+        <div className="vital-add-body">
+          {mode === 'weight' ? (
+            <div className="vital-field">
+              <label className="form-label">Weight</label>
+              <div className="input-unit">
+                <input className="input" type="number" inputMode="decimal" min="1" max="500" autoFocus placeholder="70" value={weight} onChange={e => setWeight(e.target.value)} />
+                <span>kg</span>
+              </div>
             </div>
-          </Field>
-        ) : (
-          <div className="field-grid">
-            <Field label="Systolic">
-              <div className="input-unit">
-                <input className="input" type="number" inputMode="numeric" min="40" max="300" autoFocus placeholder="120" value={systolic} onChange={e => setSystolic(e.target.value)} />
-                <span>mmHg</span>
+          ) : (
+            <div className="vital-bp-grid">
+              <div className="vital-field">
+                <label className="form-label">Systolic</label>
+                <div className="input-unit">
+                  <input className="input" type="number" inputMode="numeric" min="40" max="300" autoFocus placeholder="120" value={systolic} onChange={e => setSystolic(e.target.value)} />
+                  <span>mmHg</span>
+                </div>
               </div>
-            </Field>
-            <Field label="Diastolic">
-              <div className="input-unit">
-                <input className="input" type="number" inputMode="numeric" min="20" max="200" placeholder="80" value={diastolic} onChange={e => setDiastolic(e.target.value)} />
-                <span>mmHg</span>
+              <div className="vital-field">
+                <label className="form-label">Diastolic</label>
+                <div className="input-unit">
+                  <input className="input" type="number" inputMode="numeric" min="20" max="200" placeholder="80" value={diastolic} onChange={e => setDiastolic(e.target.value)} />
+                  <span>mmHg</span>
+                </div>
               </div>
-            </Field>
-            <Field label="Pulse" info="Optional.">
-              <div className="input-unit">
-                <input className="input" type="number" inputMode="numeric" min="20" max="250" placeholder="60" value={pulse} onChange={e => setPulse(e.target.value)} />
-                <span>bpm</span>
+              <div className="vital-field">
+                <label className="form-label">Pulse <span className="form-label-opt">optional</span></label>
+                <div className="input-unit">
+                  <input className="input" type="number" inputMode="numeric" min="20" max="250" placeholder="60" value={pulse} onChange={e => setPulse(e.target.value)} />
+                  <span>bpm</span>
+                </div>
               </div>
-            </Field>
+            </div>
+          )}
+
+          <div className="vital-field">
+            <label className="form-label">When</label>
+            <input className="input" style={{ width: '100%' }} type="datetime-local" max={nowLocal()} value={when} onChange={e => setWhen(e.target.value)} />
           </div>
-        )}
 
-        <Field label="Note" info="Optional — e.g. time of day or which arm.">
-          <input className="input" type="text" maxLength={200} placeholder="" value={note} onChange={e => setNote(e.target.value)} style={{ width: '100%' }} />
-        </Field>
+          <div className="vital-field">
+            <label className="form-label">Note <span className="form-label-opt">optional</span></label>
+            <input className="input" style={{ width: '100%' }} type="text" maxLength={200} placeholder="e.g. after coffee, left arm" value={note} onChange={e => setNote(e.target.value)} />
+          </div>
+        </div>
 
-        {msg && <div style={{ marginTop: 10 }}><StatusMsg msg={msg} /></div>}
+        {msg && <div style={{ marginTop: 4 }}><StatusMsg msg={msg} /></div>}
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
+        <div className="vital-add-actions">
           <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
           <button className="btn btn-primary" onClick={onSave} disabled={busy || !canSave}>
             {busy ? 'Saving…' : 'Save'}

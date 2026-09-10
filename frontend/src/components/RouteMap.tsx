@@ -404,9 +404,11 @@ export default function RouteMap({
   }, [route, shading, hrTimeline, paceTimeline, elevTimeline, cadenceTimeline, duration, color, maxHR, restingHR, hrZoneMethod])
 
   /**
-   * Per-kilometre markers along the track, each coloured by the metric value at
-   * the nearest data point — so under HR-zone shading the 1 km dot is the same
-   * green the track is there, the 2 km dot the same red, and so on.
+   * Per-kilometre markers along the track, in the accent colour.
+   *
+   * Only on "Default" shading: a coloured track already carries a value, and
+   * numbered dots on top of it fight the gradient for the same pixels, so they
+   * are shown when the track is a single colour and hidden otherwise.
    *
    * The interval widens on long activities so a century ride is not buried
    * under a hundred dots: the label is always the true kilometre, only some are
@@ -414,7 +416,7 @@ export default function RouteMap({
    * per sample, so a marker lands where that kilometre actually is.
    */
   const kmMarkers = useMemo(() => {
-    if (route.length < 2 || distance < 1000) return []
+    if (route.length < 2 || distance < 1000 || shading !== 'accent') return []
     const cum = new Array<number>(route.length)
     cum[0] = 0
     for (let i = 1; i < route.length; i++) cum[i] = cum[i - 1] + haversineMeters(route[i - 1], route[i])
@@ -422,41 +424,15 @@ export default function RouteMap({
     // At most ~40 dots: 1 km up to 40 km, 2 km to 80 km, and so on.
     const stepKm = Math.max(1, Math.ceil(total / 1000 / 40))
 
-    const series: { samples: Array<{ t: number }>; values: number[] } | null =
-      shading === 'accent' ? null : {
-        hr: { samples: hrTimeline, values: hrTimeline.map(p => p.hr) },
-        pace: { samples: paceTimeline, values: paceTimeline.map(p => p.pace) },
-        elevation: { samples: elevTimeline, values: elevTimeline.map(p => p.elev) },
-        cadence: { samples: cadenceTimeline, values: cadenceTimeline.map(p => p.cad) },
-      }[shading]
-    const [min, max] = series && series.values.length ? range(series.values) : [0, 1]
-    const span = Math.max(max - min, 1)
-    const colorAt = (index: number): string => {
-      if (!series || series.samples.length === 0) return color
-      const t = timeAt(index)
-      let best = 0
-      let bestD = Infinity
-      for (let j = 0; j < series.samples.length; j++) {
-        const d = Math.abs(series.samples[j].t - t)
-        if (d < bestD) { bestD = d; best = j }
-      }
-      const v = series.values[best]
-      if (shading === 'hr') return hrZoneColor(v, maxHR, restingHR, hrZoneMethod)
-      const ratio = (v - min) / span
-      const warmth = shading === 'pace' ? 1 - ratio : ratio
-      return `hsl(${210 - warmth * 190} 78% 52%)`
-    }
-
     const markers: Array<{ label: string; position: [number, number]; color: string }> = []
     let idx = 1
     for (let km = stepKm; km * 1000 < total; km += stepKm) {
       const target = km * 1000
       while (idx < route.length - 1 && cum[idx] < target) idx++
-      markers.push({ label: String(km), position: route[idx], color: colorAt(idx) })
+      markers.push({ label: String(km), position: route[idx], color })
     }
     return markers
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [route, distance, shading, hrTimeline, paceTimeline, elevTimeline, cadenceTimeline, duration, color, maxHR, restingHR, hrZoneMethod])
+  }, [route, distance, shading, color])
 
   /**
    * What the colours on the track mean, or null when they mean nothing.

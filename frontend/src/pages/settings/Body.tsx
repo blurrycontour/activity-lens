@@ -42,6 +42,7 @@ export default function BodySettings() {
   const [stepLengthCm, setStepLengthCm] = useState('')
   const [bodyWeightKg, setBodyWeightKg] = useState('70')
   const [targetWeightKg, setTargetWeightKg] = useState('')
+  const [weightManual, setWeightManual] = useState(false)
   const [calorieMethod, setCalorieMethod] = useState<CalorieMethod>('heart-rate')
   const [maxHr, setMaxHr] = useState('')
   const [restingHr, setRestingHr] = useState('')
@@ -62,6 +63,7 @@ export default function BodySettings() {
     setStepLengthCm(prefs.stepLengthCm ? String(prefs.stepLengthCm) : '')
     setBodyWeightKg(String(prefs.bodyWeightKg ?? 70))
     setTargetWeightKg(prefs.targetWeightKg ? String(prefs.targetWeightKg) : '')
+    setWeightManual(prefs.bodyWeightManual ?? false)
     setCalorieMethod(prefs.calorieMethod)
     setMaxHr(prefs.maxHr ? String(prefs.maxHr) : '')
     setRestingHr(prefs.restingHr ? String(prefs.restingHr) : '')
@@ -80,6 +82,7 @@ export default function BodySettings() {
         stepLengthCm: Number(stepLengthCm) || 0,
         bodyWeightKg: Number(bodyWeightKg) || 70,
         targetWeightKg: Number(targetWeightKg) || 0,
+        bodyWeightManual: weightManual,
         calorieMethod,
         maxHr: Number(maxHr) || 0,
         restingHr: Number(restingHr) || 0,
@@ -124,9 +127,9 @@ export default function BodySettings() {
               <span>cm</span>
             </div>
           </Field>
-          <Field label="Body weight" info="Your current weight, used for calorie and power estimates. Changing it here also records a weigh-in you can track under Analysis → Vitals.">
+          <Field label="Body weight" info="Used for calorie and power estimates.">
             <div className="input-unit">
-              <input className="input" type="number" min="25" max="300" placeholder="70" value={bodyWeightKg} onChange={e => setBodyWeightKg(e.target.value)} />
+              <input className="input" type="number" min="25" max="300" placeholder="70" value={bodyWeightKg} onChange={e => setBodyWeightKg(e.target.value)} readOnly={!weightManual} disabled={!weightManual} />
               <span>kg</span>
             </div>
           </Field>
@@ -143,6 +146,23 @@ export default function BodySettings() {
             </div>
           </Field>
         </div>
+        <Field label="Weight source">
+          <Dropdown
+            block
+            value={weightManual ? 'manual' : 'logged'}
+            options={[
+              { value: 'logged', label: 'Latest logged weigh-in' },
+              { value: 'manual', label: 'Enter manually' },
+            ]}
+            onChange={v => setWeightManual(v === 'manual')}
+            ariaLabel="Weight source"
+          />
+          <p className="field-hint">
+            {weightManual
+              ? 'Manual weight is used for estimates only — it is not added to your weight chart.'
+              : 'Body weight follows your latest weigh-in from Analysis → Vitals. Log a new one there to update it.'}
+          </p>
+        </Field>
       </SettingsCard>
 
       <SettingsCard title="Calorie estimation" anchorId="calories">
