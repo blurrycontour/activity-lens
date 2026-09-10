@@ -169,6 +169,24 @@ public class ShellPlugin extends Plugin {
     }
 
     /**
+     * The action a home-screen shortcut launched with, consumed once.
+     *
+     * The shortcut sets a private action on the launch intent, which MainActivity
+     * stashes; the page asks for it after booting and jumps to the matching
+     * quick-add. Returns an empty object when there is nothing pending, which is
+     * the normal case.
+     */
+    @PluginMethod
+    public void getLaunchAction(PluginCall call) {
+        JSObject result = new JSObject();
+        String action = VitalShortcuts.consume();
+        if (action != null) {
+            result.put("action", action);
+        }
+        call.resolve(result);
+    }
+
+    /**
      * Hands a file to the Android share sheet.
      *
      * Distinct from saveFile, and both are needed: saving answers "keep this",

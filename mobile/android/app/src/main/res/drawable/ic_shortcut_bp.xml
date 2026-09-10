@@ -1,0 +1,13 @@
+<!-- Home-screen shortcut icon: a heart with a pulse line on the app's ink circle. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp" android:height="48dp"
+    android:viewportWidth="48" android:viewportHeight="48">
+    <path android:fillColor="#14161C"
+        android:pathData="M24,2C11.85,2 2,11.85 2,24s9.85,22 22,22 22,-9.85 22,-22S36.15,2 24,2z" />
+    <!-- Heart -->
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M24,35l-1.45,-1.32C17.4,29.01 14,25.93 14,22.16 14,19.08 16.42,16.66 19.5,16.66c1.74,0 3.41,0.81 4.5,2.09 1.09,-1.28 2.76,-2.09 4.5,-2.09 3.08,0 5.5,2.42 5.5,5.5 0,3.77 -3.4,6.85 -8.55,11.53z" />
+    <!-- Pulse line -->
+    <path android:fillColor="#14161C"
+        android:pathData="M17,24h3l1.5,-3 2,5 1.5,-2h4v1.6h-3.2l-2.3,3 -2,-5 -0.9,1.4H17z" />
+</vector>
