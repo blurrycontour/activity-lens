@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { usePreferences } from '../../context/PreferencesContext'
-import { ApiError } from '../../lib/api'
+import { api, ApiError } from '../../lib/api'
 import SettingsCard from '../../components/SettingsCard'
 import Field from '../../components/Field'
 import StatusMsg, { type Msg } from '../../components/StatusMsg'
@@ -49,9 +49,17 @@ export default function BodySettings() {
   const [hrZoneMethod, setHrZoneMethod] = useState<HRZoneMethod>('max')
   const [thresholdPace, setThresholdPace] = useState('')
   const [ftp, setFtp] = useState('')
+  /** Fetched once, so "logged" mode can show what it would actually apply. */
+  const [latestLoggedWeight, setLatestLoggedWeight] = useState<number | null>(null)
 
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<Msg | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    api.latestLoggedWeight().then(r => { if (alive) setLatestLoggedWeight(r.weightKg) }).catch(() => {})
+    return () => { alive = false }
+  }, [])
 
   // Seed the inputs once the record arrives. Inputs stay strings so a
   // half-typed number is not coerced to 0 under the user's cursor.
@@ -128,10 +136,28 @@ export default function BodySettings() {
             </div>
           </Field>
           <Field label="Body weight" info="Used for calorie and power estimates.">
-            <div className="input-unit">
-              <input className="input" type="number" min="25" max="300" placeholder="70" value={bodyWeightKg} onChange={e => setBodyWeightKg(e.target.value)} readOnly={!weightManual} disabled={!weightManual} />
-              <span>kg</span>
-            </div>
+            {weightManual ? (
+              <div className="input-unit">
+                <input className="input" type="number" min="25" max="300" placeholder="70" value={bodyWeightKg} onChange={e => setBodyWeightKg(e.target.value)} />
+                <span>kg</span>
+              </div>
+            ) : (
+              <div className="weight-logged-display">
+                {latestLoggedWeight == null ? (
+                  <>
+                    <span className="weight-logged-value">{(Number(bodyWeightKg) || 0).toFixed(1)} kg</span>
+                    <span className="field-hint-inline">no weigh-ins logged yet</span>
+                  </>
+                ) : Number(bodyWeightKg) !== latestLoggedWeight ? (
+                  <>
+                    <span className="weight-logged-old">{(Number(bodyWeightKg) || 0).toFixed(1)} kg</span>
+                    <span className="weight-logged-value">{latestLoggedWeight.toFixed(1)} kg</span>
+                  </>
+                ) : (
+                  <span className="weight-logged-value">{latestLoggedWeight.toFixed(1)} kg</span>
+                )}
+              </div>
+            )}
           </Field>
           <div style={{ gridColumn: '1 / -1' }}>
             <Field label="Weight source">

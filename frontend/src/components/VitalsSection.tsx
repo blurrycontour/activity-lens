@@ -297,7 +297,7 @@ export default function VitalsSection({ openAdd, onAddHandled }: {
             ))}
           </div>
           {allRecent.length > RECENT_PAGE && (
-            <button className="btn vitals-show-more" onClick={() => setShowAllRecent(s => !s)}>
+            <button className="btn btn-ghost vitals-show-more" onClick={() => setShowAllRecent(s => !s)}>
               {showAllRecent ? <><ChevronUp size={14} /> Show less</> : <><ChevronDown size={14} /> Show all {allRecent.length}</>}
             </button>
           )}
@@ -319,7 +319,11 @@ export default function VitalsSection({ openAdd, onAddHandled }: {
       {deleting && (
         <ConfirmDialog
           title="Delete this measurement?"
-          message="This reading will be removed permanently."
+          message={
+            typeof deleting.weightKg === 'number'
+              ? <>Delete this weight reading: <strong>{deleting.weightKg.toFixed(1)} kg</strong> on {fmtDay(deleting.measuredAt)}?</>
+              : <>Delete this blood pressure reading: <strong>{deleting.systolic}/{deleting.diastolic} mmHg</strong> on {fmtDay(deleting.measuredAt)}?</>
+          }
           confirmLabel="Delete"
           danger
           busy={deleteBusy}

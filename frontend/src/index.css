@@ -611,6 +611,27 @@ body {
   color: var(--text-3);
 }
 .field-hint { font-size: 11px; color: var(--text-3); line-height: 1.45; }
+.field-hint-inline { font-size: 11px; color: var(--text-3); }
+.weight-logged-display {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-3);
+  color: var(--text-2);
+}
+.weight-logged-old {
+  color: var(--text-4);
+  text-decoration: line-through;
+  opacity: 0.8;
+}
+.weight-logged-value {
+  font-weight: 600;
+  color: var(--text);
+}
 /* Marks a value the environment has taken over, so the disabled input has a
    reason next to it rather than looking broken. */
 .field-badge {
@@ -4291,8 +4312,8 @@ body:has(.overlay) .dial { display: none; }
   left: 0;
   right: 0;
   bottom: var(--bottombar-h);
-  transition: bottom 0.25s ease;
-  padding: 6px max(10px, var(--safe-left)) 6px max(10px, var(--safe-right));
+  transition: bottom 0.25s ease, padding-bottom 0.25s ease;
+  padding: 6px max(10px, var(--safe-left)) max(6px, var(--safe-bottom)) max(10px, var(--safe-right));
   /* A drawn edge, not a shadow. A shadow separates this from the page in light
      mode and is invisible in dark, where the page behind it is nearly black
      already — the same thing the FAB's comment records. So the line is what
@@ -5693,6 +5714,8 @@ body:has(.overlay) .dial { display: none; }
   gap: 6px;
   margin-top: 10px;
   font-size: 12px;
+  border: 1px solid var(--border);
+  background: transparent;
 }
 
 /* Add-measurement sheet. */
@@ -5755,8 +5778,12 @@ body:has(.overlay) .dial { display: none; }
 input[type="date"]::-webkit-calendar-picker-indicator,
 input[type="time"]::-webkit-calendar-picker-indicator {
   margin-left: 6px;
-  padding: 2px;
+  padding: 2px 4px 2px 2px;
   opacity: 0.75;
+}
+input[type="date"],
+input[type="time"] {
+  padding-right: 10px;
 }
 /* The track-shading picker, pinned inside the map. Above Leaflet's own panes
    and controls, which top out around 1000. */
@@ -5931,11 +5958,9 @@ input[type="time"]::-webkit-calendar-picker-indicator {
      background under the gesture handle instead. */
   body[data-bottombar-hidden] .playback-dock {
     bottom: 0;
-    padding-bottom: max(6px, var(--safe-bottom));
   }
   body[data-bottombar-hidden] .plan-player {
     bottom: 0;
-    padding-bottom: var(--safe-bottom);
   }
 
   .bottom-bar-item {
@@ -8091,12 +8116,13 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   left: 0;
   right: 0;
   bottom: var(--bottombar-h);
-  transition: bottom 0.25s ease;
+  transition: bottom 0.25s ease, padding-bottom 0.25s ease;
   z-index: var(--z-chrome);
   background: var(--bg-2);
   border-top: 1px solid var(--border);
   padding-left: var(--safe-left);
   padding-right: var(--safe-right);
+  padding-bottom: var(--safe-bottom);
 }
 /* Above the bar on a desktop there is no navigation to sit on, so the safe
    inset is the bar's own. */

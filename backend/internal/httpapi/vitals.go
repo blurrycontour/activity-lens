@@ -99,6 +99,25 @@ func (s *Server) handleDeleteVital(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// handleLatestWeight answers the single number Settings needs to show what
+// "logged" weight mode would apply, without the page fetching the whole
+// vitals history for it.
+func (s *Server) handleLatestWeight(w http.ResponseWriter, r *http.Request) {
+	if s.vitals == nil {
+		writeError(w, http.StatusNotFound, "vitals are not enabled")
+		return
+	}
+	user := httpmw.UserFrom(r)
+	kg, err := s.vitals.LatestWeight(r.Context(), user.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load latest weight")
+		return
+	}
+	writeJSON(w, http.StatusOK, struct {
+		WeightKg *float64 `json:"weightKg"`
+	}{kg})
+}
+
 // syncBodyWeightToLatest keeps the profile's body weight equal to the most
 // recent logged weight, the single source of truth the unified design settles
 // on. Best-effort: a failure here leaves the last-known weight in place rather

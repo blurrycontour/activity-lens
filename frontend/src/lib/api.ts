@@ -729,6 +729,9 @@ export const api = {
     request<Vital>('/api/vitals', { method: 'POST', body: payload }),
   deleteVital: (id: string) =>
     request<unknown>(`/api/vitals/${id}`, { method: 'DELETE' }),
+  /** The single number Settings needs for "mirror the log" mode, without fetching the whole history. */
+  latestLoggedWeight: () =>
+    request<{ weightKg: number | null }>('/api/vitals/weight/latest'),
 
   // --- Admin ---
   getAdminSettings: () => request<AdminSettings>('/api/admin/settings'),

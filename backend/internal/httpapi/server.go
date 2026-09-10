@@ -286,6 +286,7 @@ func (s *Server) apiRoutes() http.Handler {
 	mux.Handle("GET /api/vitals", s.authed(s.handleListVitals))
 	mux.Handle("POST /api/vitals", s.authedCSRF(s.handleCreateVital))
 	mux.Handle("DELETE /api/vitals/{id}", s.authedCSRF(s.handleDeleteVital))
+	mux.Handle("GET /api/vitals/weight/latest", s.authed(s.handleLatestWeight))
 	// --- Training plans (authenticated) ---
 	mux.Handle("GET /api/plans", s.authed(s.withPlans(s.handleListPlans)))
 	mux.Handle("POST /api/plans", s.authedCSRF(s.withPlans(s.handleCreatePlan)))
