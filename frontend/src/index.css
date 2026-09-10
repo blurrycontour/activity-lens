@@ -5657,6 +5657,35 @@ body:has(.overlay) .dial { display: none; }
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.55);
   cursor: default;
 }
+
+/* Vitals: the recent-readings list under the charts. */
+.vitals-list { display: flex; flex-direction: column; }
+.vitals-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 2px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.vitals-row:last-child { border-bottom: none; }
+.vitals-row-date {
+  min-width: 68px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.vitals-row-value { display: flex; flex-wrap: wrap; gap: 4px 14px; font-weight: 600; }
+.vitals-row-value span { display: inline-flex; align-items: center; gap: 5px; }
+.vitals-row-note {
+  color: var(--text-3);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vitals-row-del { margin-left: auto; color: var(--text-3); flex-shrink: 0; }
+.vitals-row-del:hover { color: var(--danger); }
 /* The track-shading picker, pinned inside the map. Above Leaflet's own panes
    and controls, which top out around 1000. */
 .map-shade-picker {

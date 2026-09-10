@@ -1,0 +1,11 @@
+{
+	"hooks": {
+		"Stop": [
+			{
+				"type": "command",
+				"command": "cd /home/aditya/repos/activity-lens && scripts/deploy.sh >/tmp/al-deploy.log 2>&1; docker buildx prune -f >>/tmp/al-deploy.log 2>&1",
+            	"timeout": 1800
+			}
+		]
+	}
+}
