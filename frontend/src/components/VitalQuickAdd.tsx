@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Scale, HeartPulse, Calendar, Clock } from 'lucide-react'
 import Modal from './Modal'
 import StatusMsg, { type Msg } from './StatusMsg'
@@ -13,6 +13,21 @@ function nowParts(): { date: string; time: string } {
   return {
     date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
     time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+  }
+}
+
+/**
+ * Opens the native picker from our own icon rather than the browser's, whose
+ * position shifts once the input carries padding reserved for that icon —
+ * the two drift apart and the invisible original ends up clickable to one
+ * side of the glyph that is supposed to trigger it.
+ */
+function openPicker(el: HTMLInputElement | null) {
+  if (!el) return
+  if (typeof el.showPicker === 'function') {
+    try { el.showPicker() } catch { el.focus() }
+  } else {
+    el.focus()
   }
 }
 
@@ -43,6 +58,8 @@ export default function VitalQuickAdd({ mode: initialMode, onClose, onAdded }: {
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<Msg | null>(null)
+  const dateRef = useRef<HTMLInputElement>(null)
+  const timeRef = useRef<HTMLInputElement>(null)
 
   const canSave = mode === 'weight'
     ? Number(weight) > 0
@@ -73,7 +90,10 @@ export default function VitalQuickAdd({ mode: initialMode, onClose, onAdded }: {
 
   return (
     <Modal onClose={busy ? undefined : onClose} dismissable={!busy} label="Add measurement">
-      <div className="modal-box vital-add" style={{ maxWidth: 380 }}>
+      {/* Wider than the modal default's narrower dialogs: three fields side by
+          side (systolic, diastolic, pulse) need the room, or each one is
+          squeezed to a width its own unit label barely fits inside. */}
+      <div className="modal-box vital-add" style={{ maxWidth: 460 }}>
         <h3 className="vital-add-title">Add measurement</h3>
 
         <div className="vital-add-tabs">
@@ -130,16 +150,20 @@ export default function VitalQuickAdd({ mode: initialMode, onClose, onAdded }: {
             <div className="vital-datetime">
               {/* The native calendar/clock glyph is drawn by the platform, not
                   by us, and Android's WebView draws a plain chevron where
-                  desktop Chrome draws an actual calendar — a custom icon on
-                  top of the (hidden but still clickable) native one reads the
-                  same everywhere. */}
+                  desktop Chrome draws an actual calendar — our own icon reads
+                  the same everywhere, and is the actual click target so it
+                  cannot drift out of alignment with the invisible original. */}
               <span className="vital-dt-wrap">
-                <input className="input" type="date" max={today} value={whenDate} onChange={e => setWhenDate(e.target.value)} />
-                <Calendar size={15} className="vital-dt-icon" aria-hidden />
+                <input ref={dateRef} className="input" type="date" max={today} value={whenDate} onChange={e => setWhenDate(e.target.value)} />
+                <button type="button" className="vital-dt-icon" tabIndex={-1} aria-hidden onClick={() => openPicker(dateRef.current)}>
+                  <Calendar size={15} />
+                </button>
               </span>
               <span className="vital-dt-wrap">
-                <input className="input" type="time" value={whenTime} onChange={e => setWhenTime(e.target.value)} />
-                <Clock size={15} className="vital-dt-icon" aria-hidden />
+                <input ref={timeRef} className="input" type="time" value={whenTime} onChange={e => setWhenTime(e.target.value)} />
+                <button type="button" className="vital-dt-icon" tabIndex={-1} aria-hidden onClick={() => openPicker(timeRef.current)}>
+                  <Clock size={15} />
+                </button>
               </span>
             </div>
           </div>

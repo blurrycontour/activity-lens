@@ -5779,24 +5779,40 @@ body:has(.overlay) .dial { display: none; }
 .vital-datetime .input { width: 100%; }
 .vital-dt-wrap { position: relative; display: block; }
 .vital-dt-wrap .input { width: 100%; padding-right: 34px; }
-/* Sits over the native indicator, which is left in place — invisible but
-   still the thing that actually opens the picker on click. */
+/* The real trigger for the native picker — see openPicker in VitalQuickAdd.
+   The browser's own indicator, underneath, is inert: reserving this padding
+   for the icon shifts that indicator with it, so a click landing on the icon
+   would otherwise miss it by exactly the width of the shift. */
 .vital-dt-icon {
   position: absolute;
   right: 10px;
   top: 50%;
   transform: translateY(-50%);
   color: var(--text-3);
-  pointer-events: none;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
 }
 /* The native calendar/clock glyph differs by platform — Android's WebView
    draws a plain chevron where desktop Chrome draws an actual calendar — so it
-   is hidden here and a consistent icon of our own sits on top (.vital-dt-icon).
-   The native button stays in place and still opens the picker on click. */
+   is hidden and inert here, and a consistent, actually-clickable icon of our
+   own sits on top (.vital-dt-icon). */
 input[type="date"]::-webkit-calendar-picker-indicator,
 input[type="time"]::-webkit-calendar-picker-indicator {
   opacity: 0;
-  cursor: pointer;
+  pointer-events: none;
+}
+/* Android's WebView draws its own dropdown chevron as part of the control's
+   default chrome, outside the indicator pseudo-element above, so hiding that
+   alone still leaves a second glyph showing. Dropping the native appearance
+   removes it; tapping the field still opens Android's date/time picker, which
+   is a whole-field gesture there rather than one aimed at a specific icon. */
+@media (max-width: 768px) {
+  .vital-dt-wrap .input {
+    -webkit-appearance: none;
+    appearance: none;
+  }
 }
 /* The track-shading picker, pinned inside the map. Above Leaflet's own panes
    and controls, which top out around 1000. */
