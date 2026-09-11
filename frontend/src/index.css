@@ -1649,18 +1649,14 @@ body {
   color: var(--text-3);
   margin-top: 3px;
 }
-/* The reading: the big animated condition glyph to the left of the label and
-   the five metric values. It wraps under the glyph only if the card is very
-   narrow. */
+/* The reading: the big animated condition glyph, vertically centred against
+   the label and the five metric values to its right. */
 .weather-reading { display: flex; align-items: center; gap: 14px; }
 .weather-reading-body { flex: 1; min-width: 0; }
 .weather-glyph {
   width: 64px;
   height: 64px;
   flex-shrink: 0;
-  /* The SVGs carry a small transparent margin of their own; a touch of
-     negative margin pulls the drawing back to the card's optical edge. */
-  margin: -6px;
 }
 /* Absence is a sentence, not a dash: each case has a different remedy and the
    text is what carries it. */

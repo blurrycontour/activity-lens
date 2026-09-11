@@ -113,19 +113,21 @@ const FIELD_ICONS: Record<WeatherKey, typeof Thermometer> = {
 /**
  * The condition's animated glyph, grouped by the same WMO thresholds as
  * weatherLabel. Files are the free amCharts animated weather icons
- * (Makin-Things/weather-icons), vendored under public/weather.
+ * (CC BY 4.0, https://www.amcharts.com/free-animated-svg-weather-icons/),
+ * vendored under public/weather. amCharts has no dedicated fog icon, so fog
+ * borrows the overcast cloud.
  */
 function conditionIconFile(code: number): string {
-  if (code === 0) return 'clear-day'
-  if (code <= 2) return 'cloudy-1-day'
+  if (code === 0) return 'day'
+  if (code <= 2) return 'cloudy-day-1'
   if (code === 3) return 'cloudy'
-  if (code <= 48) return 'fog'
-  if (code <= 57) return 'rainy-1'
-  if (code <= 67) return 'rainy-3'
-  if (code <= 77) return 'snowy-3'
-  if (code <= 82) return 'rainy-2'
-  if (code <= 86) return 'snowy-2'
-  return 'thunderstorms'
+  if (code <= 48) return 'cloudy'
+  if (code <= 57) return 'rainy-2'
+  if (code <= 67) return 'rainy-5'
+  if (code <= 77) return 'snowy-5'
+  if (code <= 82) return 'rainy-6'
+  if (code <= 86) return 'snowy-6'
+  return 'thunder'
 }
 
 function WeatherReading({ weather, manual }: { weather: Weather; manual?: boolean }) {

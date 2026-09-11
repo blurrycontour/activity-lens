@@ -2294,7 +2294,7 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
         {/* A quiet rule closing the charts off from the sections below. */}
         {hasSeries && (
           <div className="detail-rule detail-rule-labelled">
-            <span className="detail-rule-label"><ClipboardList size={12} /> Details</span>
+            <span className="detail-rule-label"><ClipboardList size={12} /> More</span>
           </div>
         )}
 
