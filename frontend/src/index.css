@@ -1649,6 +1649,19 @@ body {
   color: var(--text-3);
   margin-top: 3px;
 }
+/* The reading: the big animated condition glyph to the left of the label and
+   the five metric values. It wraps under the glyph only if the card is very
+   narrow. */
+.weather-reading { display: flex; align-items: center; gap: 14px; }
+.weather-reading-body { flex: 1; min-width: 0; }
+.weather-glyph {
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+  /* The SVGs carry a small transparent margin of their own; a touch of
+     negative margin pulls the drawing back to the card's optical edge. */
+  margin: -6px;
+}
 /* Absence is a sentence, not a dash: each case has a different remedy and the
    text is what carries it. */
 .weather-absent {
@@ -3406,6 +3419,65 @@ body:has(.overlay) .dial { display: none; }
 }
 .metric-chip.on .metric-chip-dot { opacity: 1; }
 
+/* The workout detail chart controls: the scrolling chip row, then its two
+   switches on their own line below so the chips keep the full width. */
+.detail-chart-controls { margin-bottom: 12px; }
+.detail-chart-switches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-top: 4px;
+}
+/* A hairline that fades out at both ends rather than butting into the padding
+   — a full-width bar reads as a table border; a tapered one reads as a pause. */
+.detail-rule {
+  border: none;
+  height: 1px;
+  margin: 20px 0;
+  background: linear-gradient(to right, transparent, var(--border-strong) 12%, var(--border-strong) 88%, transparent);
+}
+/* The labelled variant: a caption in the middle with the tapered line running
+   out to either side of it, so the rule appears to part around the words. */
+.detail-rule-labelled {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 24px 0;
+  background: none;
+  height: auto;
+}
+.detail-rule-labelled::before,
+.detail-rule-labelled::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+}
+.detail-rule-labelled::before {
+  background: linear-gradient(to right, transparent, var(--border-strong) 90%);
+}
+.detail-rule-labelled::after {
+  background: linear-gradient(to left, transparent, var(--border-strong) 90%);
+}
+.detail-rule-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.detail-rule-label svg { color: var(--text-2); }
+.detail-rule-count {
+  font-style: normal;
+  font-family: var(--font-mono);
+  letter-spacing: 0;
+  color: var(--primary);
+}
+
 .tab-strip-item {
   display: inline-flex;
   align-items: center;
@@ -4001,6 +4073,11 @@ body:has(.overlay) .dial { display: none; }
   border: 1px solid var(--border);
 }
 .maplibregl-ctrl-group button + button { border-top-color: var(--border) !important; }
+/* The "use two fingers" darkening covers the map canvas but not the app chrome
+   floating over it: at MapLibre's default it painted above the playback dock,
+   which sits over the lower edge of the inline map on a phone. Capped just
+   under --z-dock (1050) so it still covers the map's own controls. */
+.maplibregl-cooperative-gesture-screen { z-index: 990; }
 /* The reset-zoom control and the zoom buttons are two MapLibre control groups
    that have to read as one stack of three buttons, so the gap and the facing
    corners between them are removed. Written against the group that follows it

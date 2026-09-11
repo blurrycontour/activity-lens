@@ -110,15 +110,44 @@ const FIELD_ICONS: Record<WeatherKey, typeof Thermometer> = {
   precipMm: CloudRain,
 }
 
+/**
+ * The condition's animated glyph, grouped by the same WMO thresholds as
+ * weatherLabel. Files are the free amCharts animated weather icons
+ * (Makin-Things/weather-icons), vendored under public/weather.
+ */
+function conditionIconFile(code: number): string {
+  if (code === 0) return 'clear-day'
+  if (code <= 2) return 'cloudy-1-day'
+  if (code === 3) return 'cloudy'
+  if (code <= 48) return 'fog'
+  if (code <= 57) return 'rainy-1'
+  if (code <= 67) return 'rainy-3'
+  if (code <= 77) return 'snowy-3'
+  if (code <= 82) return 'rainy-2'
+  if (code <= 86) return 'snowy-2'
+  return 'thunderstorms'
+}
+
 function WeatherReading({ weather, manual }: { weather: Weather; manual?: boolean }) {
+  const label = weatherLabel(weather.code)
   return (
-    <>
-      <div className="weather-sub" style={{ marginTop: 0 }}>
-        {weatherLabel(weather.code)}
-        {/* Said plainly, because it changes what the number means: this one was
-            not measured by the model, and will not be replaced by it. */}
-        {manual && ' · entered by hand'}
-      </div>
+    <div className="weather-reading">
+      <img
+        className="weather-glyph"
+        src={`${import.meta.env.BASE_URL}weather/${conditionIconFile(weather.code)}.svg`}
+        alt={label}
+        width={64}
+        height={64}
+        loading="lazy"
+        decoding="async"
+      />
+      <div className="weather-reading-body">
+        <div className="weather-sub" style={{ marginTop: 0 }}>
+          {label}
+          {/* Said plainly, because it changes what the number means: this one was
+              not measured by the model, and will not be replaced by it. */}
+          {manual && ' · entered by hand'}
+        </div>
       {/* Every field, every time, in two fixed rows: the temperatures are the
           pair a reader compares, and one flowing row separated them at whatever
           width it happened to run out of. The icon is what makes five values
@@ -144,7 +173,8 @@ function WeatherReading({ weather, manual }: { weather: Weather; manual?: boolea
           </div>
         ))}
       </div>
-    </>
+      </div>
+    </div>
   )
 }
 
