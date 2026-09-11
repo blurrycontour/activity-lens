@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Scale, HeartPulse } from 'lucide-react'
+import { Scale, HeartPulse, Calendar, Clock } from 'lucide-react'
 import Modal from './Modal'
 import StatusMsg, { type Msg } from './StatusMsg'
 import { api, ApiError, type Vital } from '../lib/api'
@@ -128,8 +128,19 @@ export default function VitalQuickAdd({ mode: initialMode, onClose, onAdded }: {
           <div className="vital-field">
             <label className="form-label">When</label>
             <div className="vital-datetime">
-              <input className="input" type="date" max={today} value={whenDate} onChange={e => setWhenDate(e.target.value)} />
-              <input className="input" type="time" value={whenTime} onChange={e => setWhenTime(e.target.value)} />
+              {/* The native calendar/clock glyph is drawn by the platform, not
+                  by us, and Android's WebView draws a plain chevron where
+                  desktop Chrome draws an actual calendar — a custom icon on
+                  top of the (hidden but still clickable) native one reads the
+                  same everywhere. */}
+              <span className="vital-dt-wrap">
+                <input className="input" type="date" max={today} value={whenDate} onChange={e => setWhenDate(e.target.value)} />
+                <Calendar size={15} className="vital-dt-icon" aria-hidden />
+              </span>
+              <span className="vital-dt-wrap">
+                <input className="input" type="time" value={whenTime} onChange={e => setWhenTime(e.target.value)} />
+                <Clock size={15} className="vital-dt-icon" aria-hidden />
+              </span>
             </div>
           </div>
 

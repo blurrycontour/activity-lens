@@ -33,7 +33,7 @@ import {
   Scatter, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   BarChart, Bar, Cell, LineChart, Line, ComposedChart, ReferenceArea, ReferenceLine, ReferenceDot,
 } from 'recharts'
-import { Award, Target, Zap, Activity, TrendingUp, Gauge, Flame, CloudSun, Sparkles, CalendarRange, ChevronLeft, ChevronRight, Heart, Scale } from 'lucide-react'
+import { Award, Target, Zap, Activity, TrendingUp, Gauge, Flame, CloudSun, Sparkles, CalendarRange, ChevronLeft, ChevronRight, Heart, Scale, Plus } from 'lucide-react'
 import VitalsSection from '../components/VitalsSection'
 import { type VitalMode } from '../components/VitalQuickAdd'
 
@@ -872,11 +872,19 @@ export default function Analysis() {
   return (
     <div>
       <div className="page-header">
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 16 }}>
-          <h1 className="page-header-title">Analysis</h1>
-          <span style={{ fontSize: 12, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
-            {workouts.length} activities · {scope}
-          </span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
+            <h1 className="page-header-title">Analysis</h1>
+            <span style={{ fontSize: 12, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
+              {workouts.length} activities · {scope}
+            </span>
+          </div>
+          {/* Desktop only: on a phone the same action is the floating button in Vitals. */}
+          {tab === 'vitals' && (
+            <button className="btn btn-primary desktop-only" onClick={() => setVitalAdd('weight')}>
+              <Plus size={16} /> Add measurement
+            </button>
+          )}
         </div>
         {/* One filter row governs every tab below it. */}
         <div className="analysis-filters">

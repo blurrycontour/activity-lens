@@ -4312,8 +4312,14 @@ body:has(.overlay) .dial { display: none; }
   left: 0;
   right: 0;
   bottom: var(--bottombar-h);
-  transition: bottom 0.25s ease, padding-bottom 0.25s ease;
-  padding: 6px max(10px, var(--safe-left)) max(6px, var(--safe-bottom)) max(10px, var(--safe-right));
+  /* Transform, not the bottom offset: the bar it tracks also hides via
+     transform, and only a shared mechanism guarantees the same per-frame
+     position — animating two different properties in parallel drifts out of
+     sync and the page shows through the gap for a frame or two. Padding-bottom
+     rides the same transition so the extra safe-area room while hidden (see
+     body[data-bottombar-hidden] below) eases in and out rather than jumping. */
+  transition: transform 0.25s ease, padding-bottom 0.25s ease;
+  padding: 6px max(10px, var(--safe-left)) 6px max(10px, var(--safe-right));
   /* A drawn edge, not a shadow. A shadow separates this from the page in light
      mode and is invisible in dark, where the page behind it is nearly black
      already — the same thing the FAB's comment records. So the line is what
@@ -5771,19 +5777,26 @@ body:has(.overlay) .dial { display: none; }
 }
 .vital-datetime { display: grid; grid-template-columns: 1.3fr 1fr; gap: 10px; }
 .vital-datetime .input { width: 100%; }
-/* The native calendar/clock glyph sits flush against the field's own edge
-   with no breathing room of its own; padding-right gives it the same margin
-   every other icon in the app gets. Chrome (desktop and Android's WebView)
-   is the only engine exposing this pseudo-element to style. */
+.vital-dt-wrap { position: relative; display: block; }
+.vital-dt-wrap .input { width: 100%; padding-right: 34px; }
+/* Sits over the native indicator, which is left in place — invisible but
+   still the thing that actually opens the picker on click. */
+.vital-dt-icon {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-3);
+  pointer-events: none;
+}
+/* The native calendar/clock glyph differs by platform — Android's WebView
+   draws a plain chevron where desktop Chrome draws an actual calendar — so it
+   is hidden here and a consistent icon of our own sits on top (.vital-dt-icon).
+   The native button stays in place and still opens the picker on click. */
 input[type="date"]::-webkit-calendar-picker-indicator,
 input[type="time"]::-webkit-calendar-picker-indicator {
-  margin-left: 6px;
-  padding: 2px 4px 2px 2px;
-  opacity: 0.75;
-}
-input[type="date"],
-input[type="time"] {
-  padding-right: 10px;
+  opacity: 0;
+  cursor: pointer;
 }
 /* The track-shading picker, pinned inside the map. Above Leaflet's own panes
    and controls, which top out around 1000. */
@@ -5950,17 +5963,16 @@ input[type="time"] {
   }
 
   /* Anything pinned just above the bottom bar drops with it, so a hidden menu
-     leaves no dead strip beneath the player. These sit at bottom:
-     var(--bottombar-h); the override drops them to the true bottom, with the
-     safe-area inset added back as padding rather than as empty space below
-     them — the system's own gesture bar is transparent, so a gap there let the
-     page peek through underneath the player. Padding keeps the bar's own
-     background under the gesture handle instead. */
-  body[data-bottombar-hidden] .playback-dock {
-    bottom: 0;
-  }
+     leaves no dead strip beneath the player. Shifted down by the exact height
+     the bar vacates, with the same transform .bottom-bar itself uses, so both
+     move as one and the page never shows through the gap between them. The
+     safe-area padding only applies here, while hidden — shown, the bar below
+     already clears the gesture area, and a permanent gap under the player was
+     the actual bug the padding used to cause. */
+  body[data-bottombar-hidden] .playback-dock,
   body[data-bottombar-hidden] .plan-player {
-    bottom: 0;
+    transform: translateY(var(--bottombar-h));
+    padding-bottom: max(6px, var(--safe-bottom));
   }
 
   .bottom-bar-item {
@@ -8116,13 +8128,12 @@ input[type="time"] {
   left: 0;
   right: 0;
   bottom: var(--bottombar-h);
-  transition: bottom 0.25s ease, padding-bottom 0.25s ease;
+  transition: transform 0.25s ease, padding-bottom 0.25s ease;
   z-index: var(--z-chrome);
   background: var(--bg-2);
   border-top: 1px solid var(--border);
   padding-left: var(--safe-left);
   padding-right: var(--safe-right);
-  padding-bottom: var(--safe-bottom);
 }
 /* Above the bar on a desktop there is no navigation to sit on, so the safe
    inset is the bar's own. */
