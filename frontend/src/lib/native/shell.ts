@@ -8,6 +8,7 @@ interface ShellPlugin {
   toast(options: { message: string }): Promise<void>
   vibrate(options: { pattern: number[] }): Promise<void>
   setAccent(options: { color: string }): Promise<void>
+  getLaunchAction(): Promise<{ action?: string }>
 }
 
 const Shell = registerPlugin<ShellPlugin>('Shell')
@@ -90,6 +91,23 @@ export async function setNativeAccent(color: string): Promise<void> {
 export async function nativeToast(message: string): Promise<void> {
   if (!isNative()) return
   await Shell.toast({ message }).catch(() => {})
+}
+
+/**
+ * The action a home-screen shortcut launched the app with, consumed once.
+ *
+ * Returns e.g. 'logVital:weight' when the user tapped the "Log weight" shortcut,
+ * or null on the web, on a plain launch, or on an app build older than the
+ * plugin method. Cleared by the read, so a later resume does not repeat it.
+ */
+export async function consumeLaunchAction(): Promise<string | null> {
+  if (!isNative()) return null
+  try {
+    const { action } = await Shell.getLaunchAction()
+    return action ?? null
+  } catch {
+    return null
+  }
 }
 
 export async function saveFileNative(filename: string, blob: Blob): Promise<string> {

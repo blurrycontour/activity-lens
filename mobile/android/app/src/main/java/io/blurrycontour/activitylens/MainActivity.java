@@ -66,6 +66,10 @@ public class MainActivity extends BridgeActivity {
         // content:// URI expires with the intent, so the bytes are copied now
         // rather than whenever the page gets around to asking.
         IncomingFiles.stash(this, getIntent());
+        // A home-screen shortcut (long-press the app icon) launches us with a
+        // private action; stash it so the page can jump to the quick-add.
+        VitalShortcuts.stash(getIntent());
+        VitalShortcuts.register(this);
 
         getOnBackPressedDispatcher().addCallback(this, backCallback);
         askForNotifications();
@@ -88,6 +92,7 @@ public class MainActivity extends BridgeActivity {
         // fires the event. This covers the case where the bridge is not up yet.
         NativeAuthPlugin.stashDeepLink(this, intent);
         IncomingFiles.stash(this, intent);
+        VitalShortcuts.stash(intent);
     }
 
     /**

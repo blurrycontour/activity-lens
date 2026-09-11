@@ -6,8 +6,9 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
   RadialBarChart, RadialBar,
 } from 'recharts'
-import { TrendingUp, Zap, Flame, Clock, Mountain, Heart, Trophy, Target, Activity, Footprints, ChartColumnBig, Play } from 'lucide-react'
+import { TrendingUp, Zap, Flame, Clock, Mountain, Heart, Trophy, Target, Activity, Footprints, ChartColumnBig, Play, Scale, HeartPulse } from 'lucide-react'
 import SpeedDial from '../components/SpeedDial'
+import VitalQuickAdd, { type VitalMode } from '../components/VitalQuickAdd'
 import { PAGE_META } from '../components/Sidebar'
 import Confetti from '../components/Confetti'
 import SportMark, { sportColor } from '../components/SportMark'
@@ -636,6 +637,7 @@ export default function Dashboard({ onSelect, onResumeSession, onImport, onCreat
   const { workouts, loading } = useWorkouts()
   const [cfg] = useLocalStorage<DashboardConfig>(DASHBOARD_CFG_KEY, defaultDashboardConfig())
   const [goals, setGoals] = useState<Goal[]>([])
+  const [vitalAdd, setVitalAdd] = useState<VitalMode | null>(null)
   const [equipment, setEquipment] = useState<Equipment[]>([])
   // A training session left running, so the dashboard can offer the way back
   // into it. Undefined until asked; null once the answer is "none".
@@ -825,8 +827,12 @@ export default function Dashboard({ onSelect, onResumeSession, onImport, onCreat
           { id: 'workout', label: 'Workout', icon: PAGE_META.workouts?.icon(19), onSelect: onImport },
           { id: 'equipment', label: 'Equipment', icon: PAGE_META.equipment?.icon(19), onSelect: () => onCreate('equipment') },
           { id: 'plan', label: 'Plan', icon: PAGE_META.plans?.icon(19), onSelect: () => onCreate('plan') },
+          { id: 'weight', label: 'Weight', icon: <Scale size={19} />, onSelect: () => setVitalAdd('weight') },
+          { id: 'bp', label: 'Blood pressure', icon: <HeartPulse size={19} />, onSelect: () => setVitalAdd('bp') },
         ]}
       />
+
+      {vitalAdd && <VitalQuickAdd mode={vitalAdd} onClose={() => setVitalAdd(null)} />}
 
       <div className="page-content with-fab">
         {/* Above everything, including the empty state: a session in progress

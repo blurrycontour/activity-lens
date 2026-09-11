@@ -187,6 +187,14 @@ export interface StorageSettings {
 export interface UserPreferences {
   calorieMethod: 'heart-rate' | 'distance'
   bodyWeightKg: number
+  /** Desired body weight, drawn as a reference line on the vitals chart. 0 = unset. */
+  targetWeightKg: number
+  /**
+   * Whether the profile weight is hand-entered (used for estimates but kept off
+   * the weight chart) or mirrors the latest logged weigh-in. Absent on records
+   * saved before the toggle existed, which read as false (mirror the log).
+   */
+  bodyWeightManual?: boolean
   sex: 'male' | 'female' | ''
   birthYear: number
   heightCm: number
@@ -714,6 +722,17 @@ export const api = {
   savePreferences: (payload: UserPreferences) =>
     request<UserPreferences>('/api/preferences', { method: 'PUT', body: payload }),
 
+  // --- Body vitals ---
+  listVitals: (days?: number) =>
+    request<Vital[]>(`/api/vitals${days && days > 0 ? `?days=${days}` : ''}`),
+  addVital: (payload: VitalInput) =>
+    request<Vital>('/api/vitals', { method: 'POST', body: payload }),
+  deleteVital: (id: string) =>
+    request<unknown>(`/api/vitals/${id}`, { method: 'DELETE' }),
+  /** The single number Settings needs for "mirror the log" mode, without fetching the whole history. */
+  latestLoggedWeight: () =>
+    request<{ weightKg: number | null }>('/api/vitals/weight/latest'),
+
   // --- Admin ---
   getAdminSettings: () => request<AdminSettings>('/api/admin/settings'),
   saveSMTP: (payload: SmtpInput) =>
@@ -1041,6 +1060,32 @@ export interface Equipment {
   retireAtKm: number
   createdAt: string
   updatedAt: string
+}
+
+/**
+ * A manually recorded body measurement. A weight entry carries weightKg; a
+ * blood-pressure entry carries systolic/diastolic (and optionally pulse). The
+ * nullable readings are how a chart tells the two apart.
+ */
+export interface Vital {
+  id: string
+  measuredAt: string // RFC3339
+  weightKg?: number
+  systolic?: number
+  diastolic?: number
+  pulse?: number
+  note: string
+  createdAt: string
+}
+
+export interface VitalInput {
+  /** RFC3339 timestamp; omit for "now". */
+  measuredAt?: string
+  weightKg?: number
+  systolic?: number
+  diastolic?: number
+  pulse?: number
+  note?: string
 }
 
 export interface EquipmentInput {

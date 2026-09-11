@@ -806,17 +806,21 @@ func (s *Server) handleGetPreferences(w http.ResponseWriter, r *http.Request) {
 // struct has no name for is not ignored, it is a 400 on every save. That is how
 // the weather switch shipped broken: nothing here knew the word.
 type savePrefsRequest struct {
-	CalorieMethod string  `json:"calorieMethod"`
-	BodyWeightKg  float64 `json:"bodyWeightKg"`
-	Sex           string  `json:"sex"`
-	BirthYear     int     `json:"birthYear"`
-	HeightCm      int     `json:"heightCm"`
-	MaxHR         int     `json:"maxHr"`
-	RestingHR     int     `json:"restingHr"`
-	HRZoneMethod  string  `json:"hrZoneMethod"`
-	ThresholdPace string  `json:"thresholdPace"`
-	FTP           int     `json:"ftp"`
-	StepLengthCm  int     `json:"stepLengthCm"`
+	CalorieMethod  string  `json:"calorieMethod"`
+	BodyWeightKg   float64 `json:"bodyWeightKg"`
+	TargetWeightKg float64 `json:"targetWeightKg"`
+	// Whether BodyWeightKg is hand-entered (kept off the chart) or mirrors the
+	// latest logged weigh-in. See settings.UserPrefs.BodyWeightManual.
+	BodyWeightManual bool   `json:"bodyWeightManual"`
+	Sex              string `json:"sex"`
+	BirthYear        int    `json:"birthYear"`
+	HeightCm         int    `json:"heightCm"`
+	MaxHR            int    `json:"maxHr"`
+	RestingHR        int    `json:"restingHr"`
+	HRZoneMethod     string `json:"hrZoneMethod"`
+	ThresholdPace    string `json:"thresholdPace"`
+	FTP              int    `json:"ftp"`
+	StepLengthCm     int    `json:"stepLengthCm"`
 
 	// settings.Goal rather than a struct of its own, so there is one definition
 	// of a goal's wire shape instead of two that have to be kept in step.
@@ -870,6 +874,20 @@ func (s *Server) handleSavePreferences(w http.ResponseWriter, r *http.Request) {
 	if weight <= 0 {
 		weight = 70
 	}
+	// In "logged" mode the profile weight is not hand-entered at all: it mirrors
+	// the latest weigh-in from the vitals log, so the submitted number is
+	// ignored in favour of that. In "manual" mode the submitted number stands
+	// and is never written to the chart. Either way nothing here logs a
+	// weigh-in — that is the quick-add's job now.
+	if !req.BodyWeightManual && s.vitals != nil {
+		if latest, err := s.vitals.LatestWeight(r.Context(), user.ID); err == nil && latest != nil {
+			weight = *latest
+		}
+	}
+	targetWeight := req.TargetWeightKg
+	if targetWeight < 0 || targetWeight > 500 {
+		targetWeight = 0
+	}
 	clampNonNeg := func(n int) int {
 		if n < 0 {
 			return 0
@@ -909,17 +927,19 @@ func (s *Server) handleSavePreferences(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	prefs := settings.UserPrefs{
-		CalorieMethod: method,
-		BodyWeightKg:  weight,
-		Sex:           sex,
-		BirthYear:     birthYear,
-		HeightCm:      clampNonNeg(req.HeightCm),
-		MaxHR:         clampNonNeg(req.MaxHR),
-		RestingHR:     clampNonNeg(req.RestingHR),
-		HRZoneMethod:  hrZoneMethod,
-		ThresholdPace: strings.TrimSpace(req.ThresholdPace),
-		FTP:           clampNonNeg(req.FTP),
-		StepLengthCm:  clampStepLength(req.StepLengthCm),
+		CalorieMethod:    method,
+		BodyWeightKg:     weight,
+		TargetWeightKg:   targetWeight,
+		BodyWeightManual: req.BodyWeightManual,
+		Sex:              sex,
+		BirthYear:        birthYear,
+		HeightCm:         clampNonNeg(req.HeightCm),
+		MaxHR:            clampNonNeg(req.MaxHR),
+		RestingHR:        clampNonNeg(req.RestingHR),
+		HRZoneMethod:     hrZoneMethod,
+		ThresholdPace:    strings.TrimSpace(req.ThresholdPace),
+		FTP:              clampNonNeg(req.FTP),
+		StepLengthCm:     clampStepLength(req.StepLengthCm),
 
 		Goals:          goals,
 		WeatherEnabled: req.WeatherEnabled == nil || *req.WeatherEnabled,
@@ -1083,6 +1103,10 @@ func (s *Server) handleRestoreWorkout(w http.ResponseWriter, r *http.Request) {
 // having been thrown away. Nothing had touched it; the response simply did not
 // mention it.
 func (s *Server) writeOwnedWorkout(w http.ResponseWriter, r *http.Request, wk *workout.Workout) {
+	// The page replaces what it is showing with this response, so the athlete's
+	// HR-zone ceiling and method must ride along or an edit (e.g. distance)
+	// would blank them and the zones would silently fall back to % max.
+	s.attachAthleteHRZones(r, wk)
 	shared := wk.Visibility == workout.VisibilityPublic
 	// One query for both answers: the client splices this back into its cached
 	// list, so the share count has to come along or an unrelated edit would

@@ -122,15 +122,22 @@ func (s *Store) SaveSocial(ctx context.Context, v Social) error {
 type UserPrefs struct {
 	CalorieMethod string  `json:"calorieMethod"`
 	BodyWeightKg  float64 `json:"bodyWeightKg"`
-	Sex           string  `json:"sex"`
-	BirthYear     int     `json:"birthYear"`
-	HeightCm      int     `json:"heightCm"`
-	MaxHR         int     `json:"maxHr"`
-	RestingHR     int     `json:"restingHr"`
-	HRZoneMethod  string  `json:"hrZoneMethod"`
-	ThresholdPace string  `json:"thresholdPace"`
-	FTP           int     `json:"ftp"`
-	StepLengthCm  int     `json:"stepLengthCm"`
+	// TargetWeightKg is the user's desired body weight, shown as a reference
+	// line on the vitals chart. Zero means they have not set one.
+	TargetWeightKg float64 `json:"targetWeightKg"`
+	// BodyWeightManual keeps BodyWeightKg a hand-entered figure used only for
+	// estimates: it is not logged to the weight chart, and a new weigh-in does
+	// not overwrite it. False mirrors the latest logged weight instead.
+	BodyWeightManual bool   `json:"bodyWeightManual"`
+	Sex              string `json:"sex"`
+	BirthYear        int    `json:"birthYear"`
+	HeightCm         int    `json:"heightCm"`
+	MaxHR            int    `json:"maxHr"`
+	RestingHR        int    `json:"restingHr"`
+	HRZoneMethod     string `json:"hrZoneMethod"`
+	ThresholdPace    string `json:"thresholdPace"`
+	FTP              int    `json:"ftp"`
+	StepLengthCm     int    `json:"stepLengthCm"`
 	// Goals the dashboard tracks, e.g. two 5 km runs a week plus two hikes a
 	// month. Empty means the user has not set any.
 	Goals []Goal `json:"goals"`
@@ -319,13 +326,14 @@ func (s *Store) UserPreferences(ctx context.Context, userID int64) (UserPrefs, e
 		legacyMinKm  float64
 		weather      int
 		planWorkouts int
+		weightManual int
 	)
 	err := s.db.QueryRowContext(ctx,
 		`SELECT calorie_method, body_weight_kg, sex, birth_year, height_cm, max_hr, resting_hr, hr_zone_method, threshold_pace, ftp, step_length_cm,
 		        goals, notify_prefs, weekly_goal_count, weekly_goal_type, weekly_goal_min_km, weather_enabled, tagline,
-		        plan_workouts FROM user_prefs WHERE user_id = ?`, userID).
+		        plan_workouts, target_weight_kg, body_weight_manual FROM user_prefs WHERE user_id = ?`, userID).
 		Scan(&v.CalorieMethod, &v.BodyWeightKg, &v.Sex, &v.BirthYear, &v.HeightCm, &v.MaxHR, &v.RestingHR, &v.HRZoneMethod, &v.ThresholdPace, &v.FTP, &v.StepLengthCm,
-			&goalsJSON, &notifyJSON, &legacyCount, &legacyType, &legacyMinKm, &weather, &v.Tagline, &planWorkouts)
+			&goalsJSON, &notifyJSON, &legacyCount, &legacyType, &legacyMinKm, &weather, &v.Tagline, &planWorkouts, &v.TargetWeightKg, &weightManual)
 	if errors.Is(err, sql.ErrNoRows) {
 		return v, nil
 	}
@@ -349,6 +357,7 @@ func (s *Store) UserPreferences(ctx context.Context, userID int64) (UserPrefs, e
 	}
 	v.WeatherEnabled = weather != 0
 	v.PlanWorkouts = planWorkouts != 0
+	v.BodyWeightManual = weightManual != 0
 	return v, nil
 }
 
@@ -363,8 +372,8 @@ func (s *Store) SaveUserPreferences(ctx context.Context, userID int64, v UserPre
 	}
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO user_prefs (user_id, calorie_method, body_weight_kg, sex, birth_year, height_cm, max_hr, resting_hr, hr_zone_method, threshold_pace, ftp, step_length_cm,
-		                         goals, notify_prefs, weather_enabled, tagline, plan_workouts, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		                         goals, notify_prefs, weather_enabled, tagline, plan_workouts, target_weight_kg, body_weight_manual, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(user_id) DO UPDATE SET
 		   calorie_method = excluded.calorie_method,
 		   body_weight_kg = excluded.body_weight_kg,
@@ -382,10 +391,12 @@ func (s *Store) SaveUserPreferences(ctx context.Context, userID int64, v UserPre
 		   weather_enabled = excluded.weather_enabled,
 		   tagline = excluded.tagline,
 		   plan_workouts = excluded.plan_workouts,
+		   target_weight_kg = excluded.target_weight_kg,
+		   body_weight_manual = excluded.body_weight_manual,
 		   updated_at = excluded.updated_at`,
 		userID, v.CalorieMethod, v.BodyWeightKg, v.Sex, v.BirthYear, v.HeightCm, v.MaxHR, v.RestingHR, v.HRZoneMethod, v.ThresholdPace, v.FTP, v.StepLengthCm,
 		string(goalsJSON), string(v.Notify), boolToInt(v.WeatherEnabled), CleanTagline(v.Tagline),
-		boolToInt(v.PlanWorkouts), time.Now().UTC().Format(time.RFC3339))
+		boolToInt(v.PlanWorkouts), v.TargetWeightKg, boolToInt(v.BodyWeightManual), time.Now().UTC().Format(time.RFC3339))
 	return err
 }
 

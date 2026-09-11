@@ -611,6 +611,27 @@ body {
   color: var(--text-3);
 }
 .field-hint { font-size: 11px; color: var(--text-3); line-height: 1.45; }
+.field-hint-inline { font-size: 11px; color: var(--text-3); }
+.weight-logged-display {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-3);
+  color: var(--text-2);
+}
+.weight-logged-old {
+  color: var(--text-4);
+  text-decoration: line-through;
+  opacity: 0.8;
+}
+.weight-logged-value {
+  font-weight: 600;
+  color: var(--text);
+}
 /* Marks a value the environment has taken over, so the disabled input has a
    reason next to it rather than looking broken. */
 .field-badge {
@@ -1627,6 +1648,15 @@ body {
   font-size: 11.5px;
   color: var(--text-3);
   margin-top: 3px;
+}
+/* The reading: the big animated condition glyph, vertically centred against
+   the label and the five metric values to its right. */
+.weather-reading { display: flex; align-items: center; gap: 14px; }
+.weather-reading-body { flex: 1; min-width: 0; }
+.weather-glyph {
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
 }
 /* Absence is a sentence, not a dash: each case has a different remedy and the
    text is what carries it. */
@@ -3385,6 +3415,65 @@ body:has(.overlay) .dial { display: none; }
 }
 .metric-chip.on .metric-chip-dot { opacity: 1; }
 
+/* The workout detail chart controls: the scrolling chip row, then its two
+   switches on their own line below so the chips keep the full width. */
+.detail-chart-controls { margin-bottom: 12px; }
+.detail-chart-switches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-top: 4px;
+}
+/* A hairline that fades out at both ends rather than butting into the padding
+   — a full-width bar reads as a table border; a tapered one reads as a pause. */
+.detail-rule {
+  border: none;
+  height: 1px;
+  margin: 20px 0;
+  background: linear-gradient(to right, transparent, var(--border-strong) 12%, var(--border-strong) 88%, transparent);
+}
+/* The labelled variant: a caption in the middle with the tapered line running
+   out to either side of it, so the rule appears to part around the words. */
+.detail-rule-labelled {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 24px 0;
+  background: none;
+  height: auto;
+}
+.detail-rule-labelled::before,
+.detail-rule-labelled::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+}
+.detail-rule-labelled::before {
+  background: linear-gradient(to right, transparent, var(--border-strong) 90%);
+}
+.detail-rule-labelled::after {
+  background: linear-gradient(to left, transparent, var(--border-strong) 90%);
+}
+.detail-rule-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.detail-rule-label svg { color: var(--text-2); }
+.detail-rule-count {
+  font-style: normal;
+  font-family: var(--font-mono);
+  letter-spacing: 0;
+  color: var(--primary);
+}
+
 .tab-strip-item {
   display: inline-flex;
   align-items: center;
@@ -3980,6 +4069,11 @@ body:has(.overlay) .dial { display: none; }
   border: 1px solid var(--border);
 }
 .maplibregl-ctrl-group button + button { border-top-color: var(--border) !important; }
+/* The "use two fingers" darkening covers the map canvas but not the app chrome
+   floating over it: at MapLibre's default it painted above the playback dock,
+   which sits over the lower edge of the inline map on a phone. Capped just
+   under --z-dock (1050) so it still covers the map's own controls. */
+.maplibregl-cooperative-gesture-screen { z-index: 990; }
 /* The reset-zoom control and the zoom buttons are two MapLibre control groups
    that have to read as one stack of three buttons, so the gap and the facing
    corners between them are removed. Written against the group that follows it
@@ -4291,6 +4385,13 @@ body:has(.overlay) .dial { display: none; }
   left: 0;
   right: 0;
   bottom: var(--bottombar-h);
+  /* Transform, not the bottom offset: the bar it tracks also hides via
+     transform, and only a shared mechanism guarantees the same per-frame
+     position — animating two different properties in parallel drifts out of
+     sync and the page shows through the gap for a frame or two. Padding-bottom
+     rides the same transition so the extra safe-area room while hidden (see
+     body[data-bottombar-hidden] below) eases in and out rather than jumping. */
+  transition: transform 0.25s ease, padding-bottom 0.25s ease;
   padding: 6px max(10px, var(--safe-left)) 6px max(10px, var(--safe-right));
   /* A drawn edge, not a shadow. A shadow separates this from the page in light
      mode and is invisible in dark, where the page behind it is nearly black
@@ -5637,6 +5738,155 @@ body:has(.overlay) .dial { display: none; }
 .workout-row-pace small { font-family: var(--font-mono); font-size: 10px; color: var(--text-3); }
 .route-pin { background: none !important; border: none !important; display: grid; place-items: center; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5)); }
 .route-avatar { background: none !important; border: none !important; }
+/* Per-kilometre dots: a small colour-of-the-metric disc with the km number.
+   The white ring keeps it legible over both the track and the basemap. */
+.route-km-marker {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border-radius: 9px;
+  border: 1px solid #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.55);
+  cursor: default;
+}
+
+/* Vitals: the recent-readings list under the charts. */
+.vitals-list { display: flex; flex-direction: column; }
+.vitals-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 2px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.vitals-row:last-child { border-bottom: none; }
+.vitals-row-date {
+  min-width: 68px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.vitals-row-value { display: flex; flex-wrap: wrap; gap: 4px 14px; font-weight: 600; }
+.vitals-row-value span { display: inline-flex; align-items: center; gap: 5px; }
+.vitals-row-note {
+  color: var(--text-3);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vitals-row-del { margin-left: auto; color: var(--text-3); flex-shrink: 0; }
+.vitals-row-del:hover { color: var(--danger); }
+.vitals-show-more {
+  width: 100%;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  background: transparent;
+}
+
+/* Add-measurement sheet. */
+.vital-add-title { font-size: 16px; font-weight: 700; margin-bottom: 14px; }
+.vital-add-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-3);
+  border-radius: 10px;
+  padding: 4px;
+  margin-bottom: 18px;
+}
+.vital-add-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.vital-add-tab.active {
+  background: var(--bg-2);
+  color: var(--text);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+.vital-add-body { display: flex; flex-direction: column; gap: 14px; }
+.vital-bp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.vital-field .input-unit { width: 100%; }
+.form-label-opt {
+  font-family: var(--font-sans);
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-4, var(--text-3));
+  font-size: 10px;
+  opacity: 0.75;
+}
+.vital-add-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+@media (max-width: 420px) {
+  .vital-bp-grid { grid-template-columns: 1fr; }
+}
+.vital-datetime { display: grid; grid-template-columns: 1.3fr 1fr; gap: 10px; }
+.vital-datetime .input { width: 100%; }
+.vital-dt-wrap { position: relative; display: block; }
+.vital-dt-wrap .input { width: 100%; padding-right: 34px; }
+/* The real trigger for the native picker — see openPicker in VitalQuickAdd.
+   The browser's own indicator, underneath, is inert: reserving this padding
+   for the icon shifts that indicator with it, so a click landing on the icon
+   would otherwise miss it by exactly the width of the shift. */
+.vital-dt-icon {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-3);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+/* The native calendar/clock glyph differs by platform — Android's WebView
+   draws a plain chevron where desktop Chrome draws an actual calendar — so it
+   is hidden and inert here, and a consistent, actually-clickable icon of our
+   own sits on top (.vital-dt-icon). */
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
+  opacity: 0;
+  pointer-events: none;
+}
+/* Android's WebView draws its own dropdown chevron as part of the control's
+   default chrome, outside the indicator pseudo-element above, so hiding that
+   alone still leaves a second glyph showing. Dropping the native appearance
+   removes it; tapping the field still opens Android's date/time picker, which
+   is a whole-field gesture there rather than one aimed at a specific icon. */
+@media (max-width: 768px) {
+  .vital-dt-wrap .input {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+}
 /* The track-shading picker, pinned inside the map. Above Leaflet's own panes
    and controls, which top out around 1000. */
 .map-shade-picker {
@@ -5705,8 +5955,10 @@ body:has(.overlay) .dial { display: none; }
      Capped in pixels as well as in vh so a tall phone does not give the map the
      whole screen and push everything else below the fold. */
   /* Stacked, both are a row of their own rather than a column matching a
-     summary beside them, so both take a share of the screen instead. */
-  .detail-map-card,
+     summary beside them, so both take a share of the screen instead. The map
+     gets ~30% more than the other heroes — it is the thing you came to look at
+     — but stays capped in vh so it never grows past the viewport. */
+  .detail-map-card { min-height: min(73vh, 546px); }
   .detail-hero-card { min-height: min(56vh, 420px); }
   /* Except the standing panel, which is words rather than a drawing. A map or
      an elevation profile is worth a share of the screen because it is the
@@ -5789,6 +6041,27 @@ body:has(.overlay) .dial { display: none; }
     align-items: center;
     justify-content: space-around;
     padding: 0 8px;
+    transition: transform 0.25s ease;
+  }
+
+  /* Standard mobile pattern: scrolling down tucks the bar away to hand the
+     screenful to the content; scrolling up (or reaching the top) brings it
+     back. The attribute is toggled by useHideOnScroll. */
+  body[data-bottombar-hidden] .bottom-bar {
+    transform: translateY(100%);
+  }
+
+  /* Anything pinned just above the bottom bar drops with it, so a hidden menu
+     leaves no dead strip beneath the player. Shifted down by the exact height
+     the bar vacates, with the same transform .bottom-bar itself uses, so both
+     move as one and the page never shows through the gap between them. The
+     safe-area padding only applies here, while hidden — shown, the bar below
+     already clears the gesture area, and a permanent gap under the player was
+     the actual bug the padding used to cause. */
+  body[data-bottombar-hidden] .playback-dock,
+  body[data-bottombar-hidden] .plan-player {
+    transform: translateY(var(--bottombar-h));
+    padding-bottom: max(6px, var(--safe-bottom));
   }
 
   .bottom-bar-item {
@@ -7944,6 +8217,7 @@ body:has(.overlay) .dial { display: none; }
   left: 0;
   right: 0;
   bottom: var(--bottombar-h);
+  transition: transform 0.25s ease, padding-bottom 0.25s ease;
   z-index: var(--z-chrome);
   background: var(--bg-2);
   border-top: 1px solid var(--border);

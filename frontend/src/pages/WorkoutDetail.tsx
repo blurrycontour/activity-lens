@@ -10,7 +10,7 @@ import Dropdown from '../components/Dropdown'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ReferenceDot, ReferenceArea, BarChart, Bar } from 'recharts'
 import {
   Heart, Mountain, Zap, Flame, Clock, TrendingUp, Navigation, Pencil, Trash2, Gauge,
-  Check, X as XIcon, Play, Pause as PauseIcon, LoaderCircle, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, AlertTriangle, Activity, Share2, Lock, FileDown, Plus, Image as ImageIcon, NotebookPen, Images, MessageSquare, ClipboardList, Watch, Undo2, ChevronDown, Thermometer, LineChart, Info } from 'lucide-react'
+  Check, X as XIcon, Play, Pause as PauseIcon, LoaderCircle, RotateCcw, SkipForward, Maximize2, Sigma, Footprints, MoreVertical, AlertTriangle, Activity, Share2, Lock, FileDown, Plus, Image as ImageIcon, NotebookPen, Images, MessageSquare, ClipboardList, Watch, Undo2, ChevronDown, ChevronLeft, ChevronRight, Thermometer, LineChart, Info } from 'lucide-react'
 import { useWorkouts } from '../context/WorkoutsContext'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
@@ -51,6 +51,7 @@ import TabStrip, { type TabStripItem } from '../components/TabStrip'
 import ShareBadge from '../components/ShareBadge'
 import { useRefreshHandler } from '../context/RefreshContext'
 import { inlineTicks } from '../lib/chartTicks'
+import { useEdgeFades } from '../lib/useEdgeFades'
 const WorkoutGallery = lazy(lazyChunk(() => import('../components/WorkoutGallery')))
 const WorkoutSocial = lazy(lazyChunk(() => import('../components/WorkoutSocial')))
 
@@ -297,6 +298,60 @@ function ExtraStats({ points, meta }: { points: { v: number }[]; meta: ExtraSeri
 /** Cadence means steps per minute on foot and crank revolutions on a bike. */
 function cadenceUnit(type: WorkoutType): string {
   return type === 'Ride' ? 'rpm' : 'spm'
+}
+
+/** One toggle chip for the chart controls: id, label, its line's colour, state. */
+interface ChartChip {
+  id: string
+  label: string
+  color: string
+  on: boolean
+  toggle: () => void
+}
+
+/**
+ * The metric toggles as a single scrolling row with edge arrows, matching the
+ * Trends tab: on a phone a wrapping block of chips cost three lines above the
+ * charts they configure, and the same scroller keeps it to one.
+ */
+function ChartToggleChips({ chips }: { chips: ChartChip[] }) {
+  const { ref, fadeClass, edges, measure, scrollByPage } = useEdgeFades<HTMLDivElement>()
+  return (
+    <div className="metric-chips-wrap">
+      <div ref={ref} className={`metric-chips${fadeClass}`} onScroll={measure} role="group" aria-label="Chart measures">
+        {chips.map(c => (
+          <button
+            key={c.id}
+            className={`metric-chip${c.on ? ' on' : ''}`}
+            onClick={c.toggle}
+            aria-pressed={c.on}
+            style={{ '--chip-hue': c.color } as React.CSSProperties}
+          >
+            <span className="metric-chip-dot" aria-hidden />
+            {c.label}
+          </button>
+        ))}
+      </div>
+      <button
+        className={`chip-scroll start${edges.start ? '' : ' off'}`}
+        onClick={() => scrollByPage(-1)}
+        tabIndex={edges.start ? 0 : -1}
+        aria-hidden={!edges.start}
+        aria-label="Show earlier measures"
+      >
+        <ChevronLeft size={15} />
+      </button>
+      <button
+        className={`chip-scroll end${edges.end ? '' : ' off'}`}
+        onClick={() => scrollByPage(1)}
+        tabIndex={edges.end ? 0 : -1}
+        aria-hidden={!edges.end}
+        aria-label="Show more measures"
+      >
+        <ChevronRight size={15} />
+      </button>
+    </div>
+  )
 }
 
 
@@ -904,6 +959,21 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
     w.hrTimeline.length > 0 || w.paceTimeline.length > 0 || speedTimeline.length > 0
     || w.elevTimeline.length > 0 || cadenceTimeline.length > 0 || extraSeries.length > 0
   const playable = w.route.length >= 2 || hasSeries || hydrating
+
+  // The metric toggles, one place so the chip row and the separator's count
+  // read from the same list. Only the measures this workout actually recorded.
+  const chartChips: ChartChip[] = ([
+    { id: 'hr', label: 'Heart', color: 'var(--metric-hr)', available: w.hrTimeline.length > 0, on: selectedMetrics.includes('hr'), toggle: () => toggleMetric('hr') },
+    { id: 'pace', label: 'Pace', color: 'var(--metric-pace)', available: w.paceTimeline.length > 0, on: selectedMetrics.includes('pace'), toggle: () => toggleMetric('pace') },
+    { id: 'speed', label: 'Speed', color: 'var(--metric-speed)', available: speedTimeline.length > 0, on: selectedMetrics.includes('speed'), toggle: () => toggleMetric('speed') },
+    { id: 'elevation', label: 'Elevation', color: 'var(--metric-elev)', available: w.elevTimeline.length > 0, on: selectedMetrics.includes('elevation'), toggle: () => toggleMetric('elevation') },
+    { id: 'cadence', label: 'Cadence', color: CADENCE_COLOR, available: cadenceTimeline.length > 0, on: selectedMetrics.includes('cadence'), toggle: () => toggleMetric('cadence') },
+    // Whatever else the file recorded, only ever present on a workout that has it.
+    ...extraSeries.map(e => ({
+      id: e.key, label: e.meta.label, color: e.meta.color, available: true,
+      on: extraOn(e.key), toggle: () => toggleExtra(e.key),
+    })),
+  ]).filter(m => m.available).map(({ available: _available, ...chip }) => chip)
 
   /** Where this workout stands among the others of its sport. See standing.ts. */
   const standing = useMemo(() => sessionStanding(library, w), [library, w])
@@ -2057,54 +2127,50 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
           </div>
         </div>
 
+        {/* Conditions. Sits with the map it belongs to — the weather is where
+            the workout happened, not an afterthought below the charts. Rendered
+            in every state, including "you have this switched off" — see
+            WeatherCard on why absence needs a voice. */}
+        <WeatherCard
+          workout={w}
+          isOwner={!readOnly}
+          enabled={prefs?.weatherEnabled !== false}
+          onSaved={setW}
+          onOpenSettings={() => onOpenSettings?.()}
+        />
+
+        {/* A quiet rule between the map/conditions block and the charts. */}
+        {hasSeries && (
+          <div className="detail-rule detail-rule-labelled">
+            <span className="detail-rule-label">
+              <LineChart size={12} /> Charts
+              <em className="detail-rule-count">{chartChips.filter(c => c.on).length}/{chartChips.length}</em>
+            </span>
+          </div>
+        )}
+
         {/* Metric toggle row. Its two switches are about the charts, so with no
             charts to configure the row goes with them. */}
         {hasSeries && (
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
-          {([
-            { id: 'hr', label: 'Heart Rate', color: 'var(--metric-hr)', available: w.hrTimeline.length > 0, on: selectedMetrics.includes('hr'), toggle: () => toggleMetric('hr') },
-            { id: 'pace', label: 'Pace', color: 'var(--metric-pace)', available: w.paceTimeline.length > 0, on: selectedMetrics.includes('pace'), toggle: () => toggleMetric('pace') },
-            { id: 'speed', label: 'Speed', color: 'var(--metric-speed)', available: speedTimeline.length > 0, on: selectedMetrics.includes('speed'), toggle: () => toggleMetric('speed') },
-            { id: 'elevation', label: 'Elevation', color: 'var(--metric-elev)', available: w.elevTimeline.length > 0, on: selectedMetrics.includes('elevation'), toggle: () => toggleMetric('elevation') },
-            { id: 'cadence', label: 'Cadence', color: CADENCE_COLOR, available: cadenceTimeline.length > 0, on: selectedMetrics.includes('cadence'), toggle: () => toggleMetric('cadence') },
-            // Whatever else the file recorded. These only ever appear on a
-            // workout that has them, so the row grows for a FIT import and
-            // looks exactly as it did before for everything else.
-            ...extraSeries.map(e => ({
-              id: e.key, label: e.meta.label, color: e.meta.color, available: true,
-              on: extraOn(e.key), toggle: () => toggleExtra(e.key),
-            })),
-          ]).filter(m => m.available).map(m => (
-            <button
-              key={m.id}
-              onClick={m.toggle}
-              className="btn"
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 8, fontSize: 12,
-                border: `1px solid ${m.on ? m.color : 'var(--border)'}`,
-                background: m.on ? `${m.color}18` : 'transparent',
-                color: m.on ? m.color : 'var(--text-3)',
-              }}
-            >
-              <div style={{ width: 8, height: 8, borderRadius: '50%', background: m.color, opacity: m.on ? 1 : 0.3 }} />
-              {m.label}
-            </button>
-          ))}
-          <label className="switch" style={{ marginLeft: 'auto' }} title="Start every chart's Y axis at zero">
-            <input type="checkbox" checked={yFromZero} onChange={e => setYFromZero(e.target.checked)} />
-            <span className="switch-track" />
-            Y axis from 0
-          </label>
-          {/* Only where there is something to show. A toggle that never
-              changes anything is a question about a feature this workout does
-              not have. */}
-          {pauses.length > 0 && (
-            <label className="switch" title="Shade the stretches where the recording stopped">
-              <input type="checkbox" checked={showPauses} onChange={e => setShowPauses(e.target.checked)} />
+        <div className="detail-chart-controls">
+          <ChartToggleChips chips={chartChips} />
+          <div className="detail-chart-switches">
+            <label className="switch" title="Start every chart's Y axis at zero">
+              <input type="checkbox" checked={yFromZero} onChange={e => setYFromZero(e.target.checked)} />
               <span className="switch-track" />
-              Pauses
+              Y axis from 0
             </label>
-          )}
+            {/* Only where there is something to show. A toggle that never
+                changes anything is a question about a feature this workout does
+                not have. */}
+            {pauses.length > 0 && (
+              <label className="switch" title="Shade the stretches where the recording stopped">
+                <input type="checkbox" checked={showPauses} onChange={e => setShowPauses(e.target.checked)} />
+                <span className="switch-track" />
+                Pauses
+              </label>
+            )}
+          </div>
         </div>
         )}
 
@@ -2225,15 +2291,12 @@ export default function WorkoutDetail({ workout: w0, accent, onBack, onOpenSetti
           ))}
         </div>
 
-        {/* Conditions. Rendered in every state, including "you have this
-            switched off" — see WeatherCard on why absence needs a voice. */}
-        <WeatherCard
-          workout={w}
-          isOwner={!readOnly}
-          enabled={prefs?.weatherEnabled !== false}
-          onSaved={setW}
-          onOpenSettings={() => onOpenSettings?.()}
-        />
+        {/* A quiet rule closing the charts off from the sections below. */}
+        {hasSeries && (
+          <div className="detail-rule detail-rule-labelled">
+            <span className="detail-rule-label"><ClipboardList size={12} /> More</span>
+          </div>
+        )}
 
         {!readOnly && (
         <div className="card" style={{ marginTop: 16 }}>

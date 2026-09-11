@@ -33,7 +33,9 @@ import {
   Scatter, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   BarChart, Bar, Cell, LineChart, Line, ComposedChart, ReferenceArea, ReferenceLine, ReferenceDot,
 } from 'recharts'
-import { Award, Target, Zap, Activity, TrendingUp, Gauge, Flame, CloudSun, Sparkles, CalendarRange, ChevronLeft, ChevronRight, Heart } from 'lucide-react'
+import { Award, Target, Zap, Activity, TrendingUp, Gauge, Flame, CloudSun, Sparkles, CalendarRange, ChevronLeft, ChevronRight, Heart, Scale, Plus } from 'lucide-react'
+import VitalsSection from '../components/VitalsSection'
+import { type VitalMode } from '../components/VitalQuickAdd'
 
 type PR = { longest: Workout; longestTime: Workout; fastest: Workout | null; highest: Workout }
 
@@ -51,7 +53,7 @@ function peaksByAxis(rows: Array<Record<string, unknown>>, key: string):
   return min === Infinity ? null : { minKey, minVal: min, maxKey, maxVal: max }
 }
 
-type TabId = 'records' | 'trends' | 'efficiency' | 'load' | 'weather'
+type TabId = 'records' | 'trends' | 'efficiency' | 'load' | 'weather' | 'vitals'
 
 const TABS: { id: TabId; label: string; icon: React.ReactNode; blurb: string }[] = [
   { id: 'records', label: 'Records', icon: <Award size={15} />, blurb: 'Your best single activity in each category, per sport.' },
@@ -59,6 +61,7 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode; blurb: string }[]
   { id: 'efficiency', label: 'Efficiency', icon: <Gauge size={15} />, blurb: 'Whether the same effort is buying you more speed than it used to.' },
   { id: 'load', label: 'Load', icon: <Flame size={15} />, blurb: 'How hard you have been training lately, and whether that is sustainable.' },
   { id: 'weather', label: 'Weather', icon: <CloudSun size={15} />, blurb: 'What heat and humidity do to your pace and heart rate.' },
+  { id: 'vitals', label: 'Vitals', icon: <Scale size={15} />, blurb: 'Weight and blood pressure you have logged over time.' },
 ]
 
 type Metric = 'pace' | 'hr' | 'maxHr' | 'distance' | 'duration' | 'elevation' | 'calories' | 'speed' | 'steps'
@@ -417,6 +420,18 @@ export default function Analysis() {
   const { workouts: allWorkouts } = useWorkouts()
   const [tab, setTab] = useLocalStorage<TabId>('al_an_tab', 'records')
   const [rangeDays, setRangeDays] = useLocalStorage<number>('al_an_range', 30)
+  // An app shortcut / deep link can ask to jump straight to logging a vital:
+  // ?logVital=weight|bp. Read once on mount, then cleared so a refresh does not
+  // reopen the sheet.
+  const [vitalAdd, setVitalAdd] = useState<VitalMode | null>(null)
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search).get('logVital')
+    if (p === 'weight' || p === 'bp') {
+      setTab('vitals')
+      setVitalAdd(p)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [typeFilter, setTypeFilter] = useLocalStorage<WorkoutType | 'All'>('al_an_type', 'All')
   const [selectedMetrics, setSelectedMetrics] = useLocalStorage<Metric[]>('al_tl_metrics', ['pace', 'hr'])
   const [volumeBucket, setVolumeBucket] = useLocalStorage<'week' | 'month'>('al_tl_bucket', 'week')
@@ -857,11 +872,19 @@ export default function Analysis() {
   return (
     <div>
       <div className="page-header">
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 16 }}>
-          <h1 className="page-header-title">Analysis</h1>
-          <span style={{ fontSize: 12, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
-            {workouts.length} activities · {scope}
-          </span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
+            <h1 className="page-header-title">Analysis</h1>
+            <span style={{ fontSize: 12, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
+              {workouts.length} activities · {scope}
+            </span>
+          </div>
+          {/* Desktop only: on a phone the same action is the floating button in Vitals. */}
+          {tab === 'vitals' && (
+            <button className="btn btn-primary desktop-only" onClick={() => setVitalAdd('weight')}>
+              <Plus size={16} /> Add measurement
+            </button>
+          )}
         </div>
         {/* One filter row governs every tab below it. */}
         <div className="analysis-filters">
@@ -1705,6 +1728,11 @@ export default function Analysis() {
             )}
           </ChartCard>
           </div>
+        )}
+
+        {/* ── Vitals: weight and blood pressure you have logged ── */}
+        {tab === 'vitals' && (
+          <VitalsSection openAdd={vitalAdd} onAddHandled={() => setVitalAdd(null)} />
         )}
       </div>
     </div>

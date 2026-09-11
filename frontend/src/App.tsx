@@ -57,6 +57,7 @@ import { useHideOnScroll } from './lib/useHideOnScroll'
 import { consumeShareParam, takeSharedFiles } from './lib/shareTarget'
 import { onNativeIncomingFiles, takeNativeIncomingFiles } from './lib/native/incomingFiles'
 import { applySystemBars } from './lib/native/systemBars'
+import { consumeLaunchAction } from './lib/native/shell'
 import {
   consumeNotificationTap, onNotificationTap, onPushMessage, type NotificationTap,
 } from './lib/native/unifiedPush'
@@ -530,6 +531,25 @@ export default function App({ deferAccentTip = false }: { deferAccentTip?: boole
     // "the URL changed" to whoever cares.
     window.dispatchEvent(new Event(LOCATION_EVENT))
   }, [])
+
+  // A home-screen shortcut (long-press the app icon → "Log weight" / "Blood
+  // pressure") launches the app with an action the native side stashes. Pick it
+  // up on launch and on every return to the foreground — the second covers a
+  // shortcut tapped while the app was already running in the background.
+  useEffect(() => {
+    let cancelled = false
+    const check = () => {
+      if (document.visibilityState !== 'visible') return
+      void consumeLaunchAction().then(action => {
+        if (cancelled || !action) return
+        if (action === 'logVital:weight') openLink('/analysis?logVital=weight')
+        else if (action === 'logVital:bp') openLink('/analysis?logVital=bp')
+      })
+    }
+    check()
+    document.addEventListener('visibilitychange', check)
+    return () => { cancelled = true; document.removeEventListener('visibilitychange', check) }
+  }, [openLink])
 
   // Two things arrive from the service worker: a tapped OS notification asking
   // us to route, and a push that landed while the app was visible, which it

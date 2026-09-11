@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { usePreferences } from '../../context/PreferencesContext'
-import { ApiError } from '../../lib/api'
+import { api, ApiError } from '../../lib/api'
 import SettingsCard from '../../components/SettingsCard'
 import Field from '../../components/Field'
 import StatusMsg, { type Msg } from '../../components/StatusMsg'
@@ -41,15 +41,25 @@ export default function BodySettings() {
   const [heightCm, setHeightCm] = useState('')
   const [stepLengthCm, setStepLengthCm] = useState('')
   const [bodyWeightKg, setBodyWeightKg] = useState('70')
+  const [targetWeightKg, setTargetWeightKg] = useState('')
+  const [weightManual, setWeightManual] = useState(false)
   const [calorieMethod, setCalorieMethod] = useState<CalorieMethod>('heart-rate')
   const [maxHr, setMaxHr] = useState('')
   const [restingHr, setRestingHr] = useState('')
   const [hrZoneMethod, setHrZoneMethod] = useState<HRZoneMethod>('max')
   const [thresholdPace, setThresholdPace] = useState('')
   const [ftp, setFtp] = useState('')
+  /** Fetched once, so "logged" mode can show what it would actually apply. */
+  const [latestLoggedWeight, setLatestLoggedWeight] = useState<number | null>(null)
 
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<Msg | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    api.latestLoggedWeight().then(r => { if (alive) setLatestLoggedWeight(r.weightKg) }).catch(() => {})
+    return () => { alive = false }
+  }, [])
 
   // Seed the inputs once the record arrives. Inputs stay strings so a
   // half-typed number is not coerced to 0 under the user's cursor.
@@ -60,6 +70,8 @@ export default function BodySettings() {
     setHeightCm(prefs.heightCm ? String(prefs.heightCm) : '')
     setStepLengthCm(prefs.stepLengthCm ? String(prefs.stepLengthCm) : '')
     setBodyWeightKg(String(prefs.bodyWeightKg ?? 70))
+    setTargetWeightKg(prefs.targetWeightKg ? String(prefs.targetWeightKg) : '')
+    setWeightManual(prefs.bodyWeightManual ?? false)
     setCalorieMethod(prefs.calorieMethod)
     setMaxHr(prefs.maxHr ? String(prefs.maxHr) : '')
     setRestingHr(prefs.restingHr ? String(prefs.restingHr) : '')
@@ -77,6 +89,8 @@ export default function BodySettings() {
         heightCm: Number(heightCm) || 0,
         stepLengthCm: Number(stepLengthCm) || 0,
         bodyWeightKg: Number(bodyWeightKg) || 70,
+        targetWeightKg: Number(targetWeightKg) || 0,
+        bodyWeightManual: weightManual,
         calorieMethod,
         maxHr: Number(maxHr) || 0,
         restingHr: Number(restingHr) || 0,
@@ -121,9 +135,52 @@ export default function BodySettings() {
               <span>cm</span>
             </div>
           </Field>
-          <Field label="Body weight">
+          <Field label="Body weight" info="Used for calorie and power estimates.">
+            {weightManual ? (
+              <div className="input-unit">
+                <input className="input" type="number" min="25" max="300" placeholder="70" value={bodyWeightKg} onChange={e => setBodyWeightKg(e.target.value)} />
+                <span>kg</span>
+              </div>
+            ) : (
+              <div className="weight-logged-display">
+                {latestLoggedWeight == null ? (
+                  <>
+                    <span className="weight-logged-value">{(Number(bodyWeightKg) || 0).toFixed(1)} kg</span>
+                    <span className="field-hint-inline">no weigh-ins logged yet</span>
+                  </>
+                ) : Number(bodyWeightKg) !== latestLoggedWeight ? (
+                  <>
+                    <span className="weight-logged-old">{(Number(bodyWeightKg) || 0).toFixed(1)} kg</span>
+                    <span className="weight-logged-value">{latestLoggedWeight.toFixed(1)} kg</span>
+                  </>
+                ) : (
+                  <span className="weight-logged-value">{latestLoggedWeight.toFixed(1)} kg</span>
+                )}
+              </div>
+            )}
+          </Field>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <Field label="Weight source">
+              <Dropdown
+                block
+                value={weightManual ? 'manual' : 'logged'}
+                options={[
+                  { value: 'logged', label: 'Latest logged weigh-in' },
+                  { value: 'manual', label: 'Enter manually' },
+                ]}
+                onChange={v => setWeightManual(v === 'manual')}
+                ariaLabel="Weight source"
+              />
+              <p className="field-hint">
+                {weightManual
+                  ? 'Manual weight is used for estimates only — it is not added to your weight chart.'
+                  : 'Body weight follows your latest weigh-in from Analysis → Vitals. Log a new one there to update it.'}
+              </p>
+            </Field>
+          </div>
+          <Field label="Target weight" info="Optional. Drawn as a reference line on the weight chart under Analysis → Vitals.">
             <div className="input-unit">
-              <input className="input" type="number" min="25" max="300" placeholder="70" value={bodyWeightKg} onChange={e => setBodyWeightKg(e.target.value)} />
+              <input className="input" type="number" min="25" max="300" placeholder="—" value={targetWeightKg} onChange={e => setTargetWeightKg(e.target.value)} />
               <span>kg</span>
             </div>
           </Field>

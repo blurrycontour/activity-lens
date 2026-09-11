@@ -28,15 +28,25 @@ export function useHideOnScroll(el: HTMLElement | null) {
     let last = el.scrollTop
     // Only ever cleared here, so a page that unmounts mid-scroll cannot leave
     // the attribute set and every FAB in the app invisible.
-    const show = () => document.body.removeAttribute('data-fab-hidden')
+    const show = () => {
+      document.body.removeAttribute('data-fab-hidden')
+      document.body.removeAttribute('data-bottombar-hidden')
+    }
 
     const onScroll = () => {
       const top = el.scrollTop
       const moved = top - last
       if (Math.abs(moved) < THRESHOLD) return
       last = top
-      if (moved < 0 || top < TOP_GRACE) show()
-      else document.body.setAttribute('data-fab-hidden', '')
+      if (moved < 0 || top < TOP_GRACE) {
+        show()
+      } else {
+        // Scrolling down: tuck away the FAB and, on phones, the bottom bar too
+        // — the standard mobile pattern that hands the screenful back to the
+        // content. CSS ignores the bottom-bar attribute on desktop.
+        document.body.setAttribute('data-fab-hidden', '')
+        document.body.setAttribute('data-bottombar-hidden', '')
+      }
     }
 
     el.addEventListener('scroll', onScroll, { passive: true })
