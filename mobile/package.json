@@ -12,7 +12,7 @@
     "apk:release": "pnpm run sync && cd android && ./gradlew --no-daemon assembleRelease"
   },
   "dependencies": {
-    "@capacitor/android": "8.5.0",
+    "@capacitor/android": "8.5.1",
     "@capacitor/core": "8.5.0",
     "@capacitor/preferences": "8.0.1"
   },
